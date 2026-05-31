@@ -483,8 +483,7 @@ function AuthView({ onAuth }) {
       <style>{CSS}</style>
       <div className="auth-card">
         <div className="auth-logo">
-          <svg viewBox="0 0 36 36" fill="none"><rect width="36" height="36" rx="9" fill="#00C896"/><path d="M9 12h18M9 18h18M9 24h11" stroke="#000" strokeWidth="2.5" strokeLinecap="round"/></svg>
-          Taksyn
+          <img src="/logo.jpeg" alt="Taksyn" style={{height:44,objectFit:'contain'}} />
         </div>
         <div className="auth-title">{mode==='login' ? 'Sign in to your account' : 'Create your account'}</div>
         <div className="auth-sub">{mode==='login' ? 'Task compliance platform' : 'Join your organisation on Taksyn'}</div>
@@ -1261,8 +1260,7 @@ export default function App() {
         {/* TOPBAR */}
         <div className="topbar">
           <div className="tb-logo">
-            <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#00C896"/><path d="M8 11h16M8 16h16M8 21h10" stroke="#000" strokeWidth="2.2" strokeLinecap="round"/></svg>
-            Taksyn
+            <img src="/logo.jpeg" alt="Taksyn" style={{height:28,objectFit:'contain'}} />
           </div>
           <div className="tb-sep"/>
           <span className="tb-org">{user.org}</span>
