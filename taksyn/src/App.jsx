@@ -52,7 +52,7 @@ const CAT_ICONS = {
   NDIS:'♿', Maintenance:'🔧', HR:'👥', General:'📋',
 }
 
-// Demo seed tasks used when Supabase is not configured
+// Demo seed tasks — empty for live use
 const DEMO_TASKS = []
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
