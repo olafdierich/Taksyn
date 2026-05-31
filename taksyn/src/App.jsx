@@ -70,19 +70,19 @@ const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800&family=DM+Mono:wght@400;500&display=swap');
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:#0B0F17;color:#E2E8F4;font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
+html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
 
 :root{
-  --brand:#00C896;--brand-dk:#00A87E;--brand-lt:rgba(0,200,150,.12);
-  --surface:#0B0F17;--s2:#111620;--s3:#181F2E;--s4:#1E2738;
-  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
-  --text:#E2E8F4;--t2:#8B96AA;--t3:#3F4D63;
+  --brand:#00A87E;--brand-dk:#008A68;--brand-lt:rgba(0,168,126,.1);
+  --surface:#F4F6F9;--s2:#FFFFFF;--s3:#F0F2F5;--s4:#E8EBF0;
+  --border:rgba(0,0,0,.08);--border2:rgba(0,0,0,.14);
+  --text:#1A2033;--t2:#5A6478;--t3:#9AA3B2;
   --red:#EF4444;--amber:#F59E0B;--blue:#3B82F6;--green:#10B981;--purple:#8B5CF6;
-  --r:10px;--rs:6px;--shadow:0 8px 32px rgba(0,0,0,.5);
+  --r:10px;--rs:6px;--shadow:0 4px 20px rgba(0,0,0,.08);
 }
 
 /* ── AUTH ── */
-.auth-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(0,200,150,.08) 0%,transparent 70%),var(--surface);padding:20px}
+.auth-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#F0F7F4 0%,#E8F4F0 100%);padding:20px}
 .auth-card{background:var(--s2);border:1px solid var(--border2);border-radius:16px;padding:40px;width:100%;max-width:420px;box-shadow:var(--shadow)}
 .auth-logo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:800;color:var(--brand);letter-spacing:-0.5px;margin-bottom:32px}
 .auth-logo svg{width:36px;height:36px}
