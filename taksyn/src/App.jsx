@@ -53,16 +53,7 @@ const CAT_ICONS = {
 }
 
 // Demo seed tasks used when Supabase is not configured
-const DEMO_TASKS = [
-  { id:'T001', title:'Clean Rooms 301–315',          category:'Housekeeping', assigned_role:'worker',    status:'in_progress',     priority:'high',    due_date:'2026-06-01', compliance:true,  escalation:false, subtasks:[{t:'Strip linen',done:true},{t:'Replace towels',done:true},{t:'Clean bathroom',done:false},{t:'Vacuum floors',done:false}], evidence:[], comments:[] },
-  { id:'T002', title:'Daily Kitchen Compliance',     category:'Kitchen',      assigned_role:'worker',    status:'pending',         priority:'critical', due_date:'2026-06-01', compliance:true,  escalation:false, subtasks:[{t:'Check fridge temp',done:false},{t:'Check freezer',done:false},{t:'Inspect storage',done:false},{t:'Verify labelling',done:false}], evidence:[], comments:[] },
-  { id:'T003', title:'Daily Safety Inspection',      category:'Safety',       assigned_role:'supervisor',status:'completed',        priority:'critical', due_date:'2026-05-31', compliance:true,  escalation:false, subtasks:[{t:'Fire exits clear',done:true},{t:'Extinguishers OK',done:true},{t:'Emergency lighting',done:true}], evidence:['📷 safety_check.jpg'], comments:['All clear'] },
-  { id:'T004', title:'Medication Audit',             category:'Clinical',     assigned_role:'worker',    status:'overdue',         priority:'critical', due_date:'2026-05-30', compliance:true,  escalation:true,  subtasks:[{t:'Verify med chart',done:true},{t:'Confirm dosage',done:true},{t:'Administer',done:false},{t:'Record admin',done:false}], evidence:[], comments:[] },
-  { id:'T005', title:'SIL House Safety Check',       category:'NDIS',         assigned_role:'worker',    status:'pending',         priority:'high',    due_date:'2026-06-01', compliance:true,  escalation:false, subtasks:[{t:'Exits clear',done:false},{t:'Locks working',done:false},{t:'Smoke alarms OK',done:false},{t:'Meds stored correctly',done:false}], evidence:[], comments:[] },
-  { id:'T006', title:'Front Desk Daily Setup',       category:'Housekeeping', assigned_role:'worker',    status:'awaiting_review', priority:'medium',  due_date:'2026-05-31', compliance:false, escalation:false, subtasks:[{t:'Check bookings',done:true},{t:'Prepare keys',done:true},{t:'Payment system',done:true}], evidence:['📷 desk_photo.jpg'], comments:[] },
-  { id:'T007', title:'Property Maintenance Check',   category:'Maintenance',  assigned_role:'supervisor',status:'awaiting_review', priority:'medium',  due_date:'2026-06-01', compliance:false, escalation:false, subtasks:[{t:'Check plumbing',done:true},{t:'Electrical OK',done:true},{t:'AC units',done:true}], evidence:['📷 maintenance.jpg'], comments:['Minor leak fixed'] },
-  { id:'T008', title:'Staff Compliance Audit',       category:'HR',           assigned_role:'manager',   status:'pending',         priority:'medium',  due_date:'2026-06-03', compliance:true,  escalation:false, subtasks:[{t:'Verify certs',done:false},{t:'Check expiry dates',done:false},{t:'Confirm training',done:false}], evidence:[], comments:[] },
-]
+const DEMO_TASKS = []
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 
