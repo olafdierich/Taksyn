@@ -394,6 +394,7 @@ const TaskCard = ({ task, onClick }) => {
       <div className="tc-meta">
         <PriBadge priority={task.priority} />
         <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}</span>
+        {task.assigned_user_name && <span style={{fontSize:11,color:'var(--t2)'}}>👤 {task.assigned_user_name}</span>}
         {task.evidence?.length>0 && <span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance && <span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
         {dur && <span style={{fontSize:11,color:'var(--t2)'}}>⏱ {dur}</span>}
@@ -485,7 +486,12 @@ function AuthView({ onAuth }) {
 // ─── TASK VISIBILITY ──────────────────────────────────────────────────────────
 function visibleTasks(tasks, user) {
   if (['super_admin','client_admin','manager','supervisor'].includes(user.role)) return tasks
-  return tasks.filter(t=>t.assigned_role==='worker'||t.assigned_role===user.role)
+  return tasks.filter(t=>
+    t.assigned_user_id === user.id ||
+    t.assigned_user_email === user.email ||
+    t.assigned_user_name === user.name ||
+    (!t.assigned_user_id && !t.assigned_user_email && !t.assigned_user_name && t.assigned_role === user.role)
+  )
 }
 
 // ─── AWARDS ──────────────────────────────────────────────────────────────────
@@ -643,7 +649,15 @@ function TasksView({ tasks, setTasks, user }) {
   const [comment, setComment] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [celebration, setCelebration] = useState(false)
-  const [newTask, setNewTask] = useState({ title:'', category:'Housekeeping', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker' })
+  const [teamUsers, setTeamUsers] = useState([])
+  const [userSearch, setUserSearch] = useState('')
+  const [newTask, setNewTask] = useState({ title:'', category:'Housekeeping', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'' })
+
+  useEffect(()=>{
+    if (isConfigured()) {
+      supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(data) })
+    }
+  },[])
 
   const visible = visibleTasks(tasks, user)
   const filtered = filter==='all'?visible:filter==='escalated'?visible.filter(t=>t.escalation):visible.filter(t=>t.status===filter)
@@ -714,7 +728,29 @@ function TasksView({ tasks, setTasks, user }) {
               </div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={newTask.due_date} onChange={e=>setNewTask({...newTask,due_date:e.target.value})} /></div>
-                <div className="form-field"><label className="form-label">Assign To</label><select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
+                <div className="form-field">
+                  <label className="form-label">Assign To</label>
+                  {teamUsers.length > 0 ? (
+                    <div>
+                      <input className="form-input" placeholder="Search staff by name…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}} />
+                      <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{
+                        const u = teamUsers.find(u=>u.id===e.target.value)
+                        if (u) setNewTask({...newTask, assigned_user_id:u.id, assigned_user_name:u.name, assigned_user_email:u.email||'', assigned_role:u.role})
+                        else setNewTask({...newTask, assigned_user_id:'', assigned_user_name:'', assigned_user_email:''})
+                      }}>
+                        <option value="">— Select a staff member —</option>
+                        {teamUsers.filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())||u.email?.toLowerCase().includes(userSearch.toLowerCase())).map(u=>(
+                          <option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>
+                        ))}
+                      </select>
+                      {newTask.assigned_user_name && <div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ Assigned to: {newTask.assigned_user_name}</div>}
+                    </div>
+                  ) : (
+                    <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>
+                      {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                    </select>
+                  )}
+                </div>
               </div>
               <div className="form-field">
                 <label className="form-label">Schedule / Recurrence</label>
@@ -822,7 +858,7 @@ function TasksView({ tasks, setTasks, user }) {
             <div className="two-col">
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Due:</span> {sel.due_date}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Compliance:</span> {sel.compliance?'🔒 Yes':'—'}</div>
-              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Assigned to:</span> {ROLE_LABELS[sel.assigned_role]}</div>
+              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Assigned to:</span> {sel.assigned_user_name || ROLE_LABELS[sel.assigned_role]}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
             </div>
           </div>
