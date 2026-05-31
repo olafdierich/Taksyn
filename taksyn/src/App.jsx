@@ -53,7 +53,16 @@ const CAT_ICONS = {
 }
 
 // Demo seed tasks used when Supabase is not configured
-const DEMO_TASKS = []
+const DEMO_TASKS = [
+  { id:'T001', title:'Clean Rooms 301–315',          category:'Housekeeping', assigned_role:'worker',    status:'in_progress',     priority:'high',    due_date:'2026-06-01', compliance:true,  escalation:false, subtasks:[{t:'Strip linen',done:true},{t:'Replace towels',done:true},{t:'Clean bathroom',done:false},{t:'Vacuum floors',done:false}], evidence:[], comments:[] },
+  { id:'T002', title:'Daily Kitchen Compliance',     category:'Kitchen',      assigned_role:'worker',    status:'pending',         priority:'critical', due_date:'2026-06-01', compliance:true,  escalation:false, subtasks:[{t:'Check fridge temp',done:false},{t:'Check freezer',done:false},{t:'Inspect storage',done:false},{t:'Verify labelling',done:false}], evidence:[], comments:[] },
+  { id:'T003', title:'Daily Safety Inspection',      category:'Safety',       assigned_role:'supervisor',status:'completed',        priority:'critical', due_date:'2026-05-31', compliance:true,  escalation:false, subtasks:[{t:'Fire exits clear',done:true},{t:'Extinguishers OK',done:true},{t:'Emergency lighting',done:true}], evidence:['📷 safety_check.jpg'], comments:['All clear'] },
+  { id:'T004', title:'Medication Audit',             category:'Clinical',     assigned_role:'worker',    status:'overdue',         priority:'critical', due_date:'2026-05-30', compliance:true,  escalation:true,  subtasks:[{t:'Verify med chart',done:true},{t:'Confirm dosage',done:true},{t:'Administer',done:false},{t:'Record admin',done:false}], evidence:[], comments:[] },
+  { id:'T005', title:'SIL House Safety Check',       category:'NDIS',         assigned_role:'worker',    status:'pending',         priority:'high',    due_date:'2026-06-01', compliance:true,  escalation:false, subtasks:[{t:'Exits clear',done:false},{t:'Locks working',done:false},{t:'Smoke alarms OK',done:false},{t:'Meds stored correctly',done:false}], evidence:[], comments:[] },
+  { id:'T006', title:'Front Desk Daily Setup',       category:'Housekeeping', assigned_role:'worker',    status:'awaiting_review', priority:'medium',  due_date:'2026-05-31', compliance:false, escalation:false, subtasks:[{t:'Check bookings',done:true},{t:'Prepare keys',done:true},{t:'Payment system',done:true}], evidence:['📷 desk_photo.jpg'], comments:[] },
+  { id:'T007', title:'Property Maintenance Check',   category:'Maintenance',  assigned_role:'supervisor',status:'awaiting_review', priority:'medium',  due_date:'2026-06-01', compliance:false, escalation:false, subtasks:[{t:'Check plumbing',done:true},{t:'Electrical OK',done:true},{t:'AC units',done:true}], evidence:['📷 maintenance.jpg'], comments:['Minor leak fixed'] },
+  { id:'T008', title:'Staff Compliance Audit',       category:'HR',           assigned_role:'manager',   status:'pending',         priority:'medium',  due_date:'2026-06-03', compliance:true,  escalation:false, subtasks:[{t:'Verify certs',done:false},{t:'Check expiry dates',done:false},{t:'Confirm training',done:false}], evidence:[], comments:[] },
+]
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 
@@ -536,21 +545,63 @@ function DashboardView({ tasks, user, setPage }) {
   const rate = pct(done, visible.length)
   const compT = visible.filter(t=>t.compliance)
   const compDone = compT.filter(t=>['completed','approved'].includes(t.status)).length
+  const pending = visible.filter(t=>t.status==='pending').length
+  const review = visible.filter(t=>t.status==='awaiting_review').length
+  const rejected = visible.filter(t=>t.status==='rejected').length
+
+  const isSuperAdmin = user.role==='super_admin'
+  const isClientAdmin = user.role==='client_admin'
+  const isManager = user.role==='manager'
+  const isSupervisor = user.role==='supervisor'
+  const isWorker = user.role==='worker'
 
   return (
     <div className="anim">
       <div className="ph">
         <div className="ph-title">
-          {user.role==='super_admin'?'Platform Overview':user.role==='client_admin'?'Organisation Dashboard':user.role==='manager'?'Team Dashboard':user.role==='supervisor'?'Supervisor Dashboard':'My Tasks Today'}
+          {isSuperAdmin?'Platform Overview':isClientAdmin?'Organisation Dashboard':isManager?'Team Dashboard':isSupervisor?'Supervisor Dashboard':'My Tasks Today'}
         </div>
-        <div className="ph-sub">Welcome back, {user.name.split(' ')[0]} · {user.org}</div>
+        <div className="ph-sub">
+          {isSuperAdmin && `Full visibility across all teams · ${visible.length} total tasks`}
+          {isClientAdmin && `Managing ${user.org} · ${visible.length} tasks across all teams`}
+          {isManager && `Monitor your team's performance and task completion`}
+          {isSupervisor && `Review evidence and approve worker submissions`}
+          {isWorker && `Hello ${user.name.split(' ')[0]} — here is your task list for today`}
+        </div>
       </div>
 
+      {/* ROLE-SPECIFIC STAT CARDS */}
       <div className="stat-grid">
-        <Stat label="Total Tasks" val={visible.length} sub={`${visible.length-done} remaining`} icon="📋" />
-        <Stat label="Completed" val={done} sub={`${rate}% completion rate`} color="#10B981" bg="rgba(16,185,129,.12)" icon="✅" />
-        <Stat label="Overdue" val={overdue} sub={overdue>0?'Action required':'All on track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.12)':'rgba(16,185,129,.12)'} icon="⏰" />
-        <Stat label="Escalations" val={esc} sub={esc>0?'Needs attention':'Clear'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.12)" icon="⚠️" />
+        {isSuperAdmin && <>
+          <Stat label="Total Tasks" val={visible.length} sub={`${visible.length-done} remaining`} icon="📋" />
+          <Stat label="Completion Rate" val={`${rate}%`} sub={`${done} tasks done`} color="#10B981" bg="rgba(16,185,129,.12)" icon="📈" />
+          <Stat label="Overdue" val={overdue} sub={overdue>0?'Needs action':'All on track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.12)':'rgba(16,185,129,.12)'} icon="⏰" />
+          <Stat label="Escalations" val={esc} sub={esc>0?'Active issues':'Clear'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.12)" icon="🚨" />
+        </>}
+        {isClientAdmin && <>
+          <Stat label="Active Tasks" val={visible.length} sub={`${pending} pending start`} icon="📋" />
+          <Stat label="Completion Rate" val={`${rate}%`} sub={`${done} completed`} color="#10B981" bg="rgba(16,185,129,.12)" icon="✅" />
+          <Stat label="Evidence Pending" val={review} sub="Awaiting review" color="#F59E0B" bg="rgba(245,158,11,.12)" icon="📷" />
+          <Stat label="Overdue" val={overdue} sub={overdue>0?'Action required':'All clear'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.12)':'rgba(16,185,129,.12)'} icon="⏰" />
+        </>}
+        {isManager && <>
+          <Stat label="Team Tasks" val={visible.length} sub={`${pending} not started`} icon="👥" />
+          <Stat label="Completed" val={done} sub={`${rate}% completion rate`} color="#10B981" bg="rgba(16,185,129,.12)" icon="✅" />
+          <Stat label="Overdue" val={overdue} sub={overdue>0?'Requires attention':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.12)':'rgba(16,185,129,.12)'} icon="⏰" />
+          <Stat label="Escalations" val={esc} sub={esc>0?'Sent to you':'None active'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.12)" icon="⚠️" />
+        </>}
+        {isSupervisor && <>
+          <Stat label="To Review" val={review} sub="Awaiting your approval" color="#F59E0B" bg="rgba(245,158,11,.12)" icon="🔍" />
+          <Stat label="Approved Today" val={done} sub="Evidence validated" color="#10B981" bg="rgba(16,185,129,.12)" icon="✅" />
+          <Stat label="Escalated" val={esc} sub={esc>0?'Sent to manager':'None'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.12)" icon="⚠️" />
+          <Stat label="Workers" val={3} sub="In your team" icon="👷" />
+        </>}
+        {isWorker && <>
+          <Stat label="My Tasks" val={visible.length} sub={`${visible.length-done} remaining`} icon="📋" />
+          <Stat label="Completed" val={done} sub={`${rate}% done today`} color="#10B981" bg="rgba(16,185,129,.12)" icon="✅" />
+          <Stat label="Overdue" val={overdue} sub={overdue>0?'Complete soon':'All good'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.12)':'rgba(16,185,129,.12)'} icon="⏰" />
+          <Stat label="Rejected" val={rejected} sub="Needs resubmission" color={rejected>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.12)" icon="✗" />
+        </>}
       </div>
 
       {overdue>0 && (
@@ -565,34 +616,69 @@ function DashboardView({ tasks, user, setPage }) {
       )}
 
       <div className="two-col">
+        {/* LEFT PANEL — role specific */}
         <div className="section">
-          <div className="section-title">Compliance Score</div>
-          <div style={{display:'flex',alignItems:'center',gap:18}}>
-            <div className="score-ring">
-              <div className="score-val">{pct(compDone,compT.length)}%</div>
-              <div className="score-lbl">Score</div>
-            </div>
-            <div>
-              <div style={{fontSize:13,marginBottom:4}}>{compDone}/{compT.length} compliance tasks done</div>
-              <div style={{fontSize:12,color:'var(--t2)'}}>{compT.filter(t=>t.status==='overdue').length} critical overdue</div>
-              <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>
-                Plan: <span style={{color:TIERS[user.tier]?.color,fontWeight:700}}>{user.tier}</span>
+          {(isSuperAdmin||isClientAdmin||isManager) && <>
+            <div className="section-title">Compliance Score</div>
+            <div style={{display:'flex',alignItems:'center',gap:18}}>
+              <div className="score-ring">
+                <div className="score-val">{pct(compDone,compT.length)}%</div>
+                <div className="score-lbl">Score</div>
+              </div>
+              <div>
+                <div style={{fontSize:13,marginBottom:4}}>{compDone}/{compT.length} compliance tasks done</div>
+                <div style={{fontSize:12,color:'var(--t2)'}}>{compT.filter(t=>t.status==='overdue').length} critical overdue</div>
+                {isSuperAdmin && <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>Plan: <span style={{color:TIERS[user.tier]?.color,fontWeight:700}}>{user.tier}</span></div>}
               </div>
             </div>
-          </div>
+          </>}
+          {isSupervisor && <>
+            <div className="section-title">Pending Evidence Review</div>
+            {visible.filter(t=>t.status==='awaiting_review').slice(0,4).map(t=>(
+              <div key={t.id} className="notif-item amber" style={{cursor:'pointer'}} onClick={()=>setPage('evidence')}>
+                <div className="notif-title">📷 {t.title}</div>
+                <div className="notif-sub">Submitted by {ROLE_LABELS[t.assigned_role]} · {t.due_date}</div>
+              </div>
+            ))}
+            {visible.filter(t=>t.status==='awaiting_review').length===0 && <div style={{fontSize:13,color:'var(--t2)'}}>No evidence pending review ✅</div>}
+          </>}
+          {isWorker && <>
+            <div className="section-title">My Progress</div>
+            <div style={{display:'flex',alignItems:'center',gap:18}}>
+              <div className="score-ring">
+                <div className="score-val">{rate}%</div>
+                <div className="score-lbl">Done</div>
+              </div>
+              <div>
+                <div style={{fontSize:13,marginBottom:4}}>{done} of {visible.length} tasks completed</div>
+                <div style={{fontSize:12,color:'var(--t2)'}}>{overdue} overdue · {pending} pending</div>
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>Keep it up! 💪</div>
+              </div>
+            </div>
+          </>}
         </div>
+
+        {/* RIGHT PANEL — alerts */}
         <div className="section">
-          <div className="section-title">Alerts</div>
+          <div className="section-title">
+            {isSupervisor ? 'Escalations to Action' : isWorker ? 'My Notifications' : 'Alerts & Activity'}
+          </div>
           {visible.filter(t=>t.status==='overdue').slice(0,2).map(t=>(
             <div key={t.id} className="notif-item urgent">
               <div className="notif-title">⚠️ {t.title}</div>
               <div className="notif-sub">Overdue since {t.due_date}</div>
             </div>
           ))}
-          {visible.filter(t=>t.status==='awaiting_review').slice(0,2).map(t=>(
+          {!isWorker && visible.filter(t=>t.status==='awaiting_review').slice(0,2).map(t=>(
             <div key={t.id} className="notif-item amber">
               <div className="notif-title">🔍 {t.title}</div>
               <div className="notif-sub">Awaiting evidence review</div>
+            </div>
+          ))}
+          {visible.filter(t=>t.escalation).slice(0,1).map(t=>(
+            <div key={t.id} className="notif-item urgent">
+              <div className="notif-title">🚨 {t.title} — Escalated</div>
+              <div className="notif-sub">Requires immediate attention</div>
             </div>
           ))}
           {visible.filter(t=>['completed','approved'].includes(t.status)).slice(0,1).map(t=>(
@@ -601,14 +687,16 @@ function DashboardView({ tasks, user, setPage }) {
               <div className="notif-sub">Completed · {t.due_date}</div>
             </div>
           ))}
-          {visible.filter(t=>t.status==='overdue').length===0&&visible.filter(t=>t.status==='awaiting_review').length===0&&(
+          {visible.filter(t=>t.status==='overdue').length===0&&visible.filter(t=>t.status==='awaiting_review').length===0&&visible.filter(t=>t.escalation).length===0&&(
             <div style={{fontSize:13,color:'var(--t2)'}}>No alerts — everything on track 🎉</div>
           )}
         </div>
       </div>
 
       <div style={{marginTop:4}}>
-        <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>Active Tasks</div>
+        <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>
+          {isSupervisor ? 'Tasks Awaiting Review' : isWorker ? 'My Active Tasks' : 'Active Tasks'}
+        </div>
         {visible.filter(t=>!['completed','approved'].includes(t.status)).slice(0,5).map(t=>(
           <TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')} />
         ))}
