@@ -53,7 +53,7 @@ const CAT_ICONS = {
 }
 
 // Demo seed tasks used when Supabase is not configured
-const DEMO_TASKS = [
+const DEMO_TASKS = []
   { id:'T001', title:'Clean Rooms 301–315',          category:'Housekeeping', assigned_role:'worker',    status:'in_progress',     priority:'high',    due_date:'2026-06-01', compliance:true,  escalation:false, subtasks:[{t:'Strip linen',done:true},{t:'Replace towels',done:true},{t:'Clean bathroom',done:false},{t:'Vacuum floors',done:false}], evidence:[], comments:[] },
   { id:'T002', title:'Daily Kitchen Compliance',     category:'Kitchen',      assigned_role:'worker',    status:'pending',         priority:'critical', due_date:'2026-06-01', compliance:true,  escalation:false, subtasks:[{t:'Check fridge temp',done:false},{t:'Check freezer',done:false},{t:'Inspect storage',done:false},{t:'Verify labelling',done:false}], evidence:[], comments:[] },
   { id:'T003', title:'Daily Safety Inspection',      category:'Safety',       assigned_role:'supervisor',status:'completed',        priority:'critical', due_date:'2026-05-31', compliance:true,  escalation:false, subtasks:[{t:'Fire exits clear',done:true},{t:'Extinguishers OK',done:true},{t:'Emergency lighting',done:true}], evidence:['📷 safety_check.jpg'], comments:['All clear'] },
