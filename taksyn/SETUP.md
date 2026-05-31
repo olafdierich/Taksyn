@@ -1,4 +1,4 @@
-# Taksyn – Setup Guide
+# Taksyn – Setup Guide 
 ## Get your team trialling in ~20 minutes
 
 ---
