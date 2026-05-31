@@ -643,7 +643,7 @@ function DashboardView({ tasks, user, setPage }) {
 }
 
 // ─── TASKS VIEW ───────────────────────────────────────────────────────────────
-function TasksView({ tasks, setTasks, user }) {
+function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTasks }) {
   const [filter, setFilter] = useState('all')
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
@@ -662,7 +662,10 @@ function TasksView({ tasks, setTasks, user }) {
   const visible = visibleTasks(tasks, user)
   const filtered = filter==='all'?visible:filter==='escalated'?visible.filter(t=>t.escalation):visible.filter(t=>t.status===filter)
 
-  const update = (id, changes) => setTasks(prev=>prev.map(t=>t.id===id?{...t,...changes}:t))
+  const update = (id, changes) => {
+    setTasks(prev=>prev.map(t=>t.id===id?{...t,...changes}:t))
+    if (updateTaskRemote) updateTaskRemote(id, changes)
+  }
 
   const toggleSub = (tid, idx) => {
     const task = tasks.find(t=>t.id===tid)
@@ -1242,16 +1245,66 @@ export default function App() {
   const [page, setPage] = useState('dashboard')
   const [tasks, setTasks] = useState(DEMO_TASKS)
   const [loading, setLoading] = useState(true)
+  const [tasksLoading, setTasksLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  // ── LOAD TASKS FROM SUPABASE ──
+  const loadTasks = async () => {
+    if (!isConfigured()) return
+    setTasksLoading(true)
+    const { data, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false })
+    if (data) {
+      // Parse JSONB fields
+      const parsed = data.map(t => ({
+        ...t,
+        subtasks: typeof t.subtasks === 'string' ? JSON.parse(t.subtasks) : (t.subtasks || []),
+        evidence: typeof t.evidence === 'string' ? JSON.parse(t.evidence) : (t.evidence || []),
+        comments: typeof t.comments === 'string' ? JSON.parse(t.comments) : (t.comments || []),
+      }))
+      setTasks(parsed)
+    }
+    setTasksLoading(false)
+  }
+
+  // ── SAVE TASK TO SUPABASE ──
+  const saveTask = async (task) => {
+    if (!isConfigured()) return
+    const { id, ...rest } = task
+    const payload = {
+      ...rest,
+      subtasks: JSON.stringify(task.subtasks || []),
+      evidence: JSON.stringify(task.evidence || []),
+      comments: JSON.stringify(task.comments || []),
+    }
+    if (id && id.startsWith('T')) {
+      // New task with generated ID — insert
+      await supabase.from('tasks').insert({ id, ...payload })
+    } else {
+      await supabase.from('tasks').upsert({ id, ...payload })
+    }
+  }
+
+  // ── UPDATE TASK IN SUPABASE ──
+  const updateTaskRemote = async (id, changes) => {
+    if (!isConfigured()) return
+    const payload = { ...changes }
+    if (changes.subtasks) payload.subtasks = JSON.stringify(changes.subtasks)
+    if (changes.evidence) payload.evidence = JSON.stringify(changes.evidence)
+    if (changes.comments) payload.comments = JSON.stringify(changes.comments)
+    await supabase.from('tasks').update(payload).eq('id', id)
+  }
 
   useEffect(()=>{
     if (isConfigured()) {
       supabase.auth.getSession().then(({data:{session}})=>{
         if (session) {
           supabase.from('profiles').select('*').eq('id',session.user.id).single()
-            .then(({data})=>{ if(data) setUser({...data,email:session.user.email}); setLoading(false) })
+            .then(({data})=>{
+              if(data) setUser({...data,email:session.user.email})
+              setLoading(false)
+            })
         } else setLoading(false)
       })
       const {data:{subscription}} = supabase.auth.onAuthStateChange((_,session)=>{ if(!session) setUser(null) })
@@ -1259,8 +1312,14 @@ export default function App() {
     } else setLoading(false)
   },[])
 
+  // Load tasks when user logs in
+  useEffect(()=>{ if(user && isConfigured()) loadTasks() },[user])
+
   const handleAuth = (userData) => { setUser(userData); setPage('dashboard') }
-  const logout = async () => { if(isConfigured()) await supabase.auth.signOut(); setUser(null); setTasks(DEMO_TASKS); setPage('dashboard') }
+  const logout = async () => {
+    if(isConfigured()) await supabase.auth.signOut()
+    setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
+  }
   useEffect(()=>setPage('dashboard'),[user?.role])
 
   if (loading) return <><style>{CSS}</style><div className="loading"><div className="spinner"/><span>Loading Taksyn…</span></div></>
@@ -1269,7 +1328,7 @@ export default function App() {
   const escalationCount = tasks.filter(t=>t.escalation||t.status==='overdue').length
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage }
+  const pageProps = { tasks, setTasks, user, setPage, saveTask, updateTaskRemote, loadTasks }
 
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
