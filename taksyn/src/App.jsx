@@ -6,11 +6,11 @@ const ROLES = ['super_admin','client_admin','manager','supervisor','worker']
 const ROLE_LABELS = { super_admin:'Super Admin', client_admin:'Client Admin', manager:'Manager', supervisor:'Supervisor', worker:'Worker' }
 const ROLE_COLORS = { super_admin:'#F59E0B', client_admin:'#8B5CF6', manager:'#3B82F6', supervisor:'#10B981', worker:'#6B7280' }
 const TIERS = {
-  Personal:     { color:'#6B7280', price:'$3',    users:'1–3',    features:['Basic task tracking','Simple checklists','Reminders'], locked:['Escalation','Hierarchy','Reporting'] },
-  Starter:      { color:'#3B82F6', price:'$8',    users:'1–10',   features:['Task assignment','Checklists','Photo evidence','Basic reporting'], locked:['Escalation'] },
-  Growth:       { color:'#10B981', price:'$10',   users:'11–30',  features:['Escalation cascade','Supervisor dashboards','Performance tracking','Excel export'], locked:[] },
-  Professional: { color:'#8B5CF6', price:'$10',   users:'31–100', features:['Multi-site support','Advanced escalation','Audit-ready reporting','GPS tracking'], locked:[] },
-  Enterprise:   { color:'#F59E0B', price:'Custom',users:'100+',   features:['Full compliance suite','API integrations','Custom workflows','White-labelling','SLA'], locked:[] },
+  Personal:     { color:'#6B7280', base:'$4',   perUser:'$2', users:'Max 4',    storage:'0.5GB', images:'—',     retention:'30 days',  features:['Basic task tracking','Simple checklists','Reminders','Unlimited tasks'], locked:['Photo evidence','Escalation','Compliance reporting'] },
+  Starter:      { color:'#3B82F6', base:'$19',  perUser:'$9', users:'1–10',     storage:'5GB',   images:'2/task',retention:'6 months', features:['Task assignment','Checklists','Photo evidence (2/task)','Basic reporting','Unlimited tasks'], locked:['Escalation','Advanced reporting'] },
+  Growth:       { color:'#10B981', base:'$39',  perUser:'$8', users:'11–30',    storage:'15GB',  images:'3/task',retention:'12 months',features:['Escalation cascade','Supervisor dashboards','GPS tracking','3 photos/task','12 month retention','Performance tracking'], locked:[] },
+  Professional: { color:'#8B5CF6', base:'$149', perUser:'$7', users:'31–100',   storage:'50GB',  images:'5/task',retention:'24 months',features:['Multi-site support','Advanced escalation','Audit-ready reporting','5 photos/task','24 month retention','Extended storage'], locked:[] },
+  Enterprise:   { color:'#F59E0B', base:'$399', perUser:'$6', users:'Unlimited',storage:'100GB+',images:'5/task',retention:'Custom (up to 7yr)', features:['Full compliance suite','API integrations','Custom workflows','White-labelling','SLA + onboarding','Custom data retention'], locked:[] },
 }
 const STATUS_CFG = {
   pending:         { label:'Pending',         color:'#6B7280', bg:'rgba(107,114,128,.15)' },
@@ -1698,20 +1698,124 @@ function UsersView({ user }) {
 function TiersView({ user }) {
   return (
     <div className="anim">
-      <div className="ph"><div className="ph-title">Subscription Plans</div><div className="ph-sub">Current: <span style={{color:TIERS[user.tier]?.color,fontWeight:700}}>{user.tier}</span></div></div>
+      <div className="ph">
+        <div className="ph-title">Subscription Plans</div>
+        <div className="ph-sub">Hybrid pricing — base subscription + per user. Current: <span style={{color:TIERS[user.tier]?.color,fontWeight:700}}>{user.tier}</span></div>
+      </div>
+
+      {/* PRICING EXPLANATION */}
+      <div className="section" style={{marginBottom:16,background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)'}}>
+        <div style={{display:'flex',gap:16,flexWrap:'wrap',alignItems:'center'}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:700,color:'var(--brand)',marginBottom:4}}>How pricing works</div>
+            <div style={{fontSize:13,color:'var(--t2)',lineHeight:1.6}}>
+              Each plan has a <strong>base monthly fee</strong> for the organisation, plus a <strong>per user fee</strong> for each staff member you add. This keeps costs fair — you only pay for the team size you have.
+            </div>
+          </div>
+          <div style={{background:'#fff',borderRadius:8,padding:'10px 16px',fontSize:12,color:'var(--t2)',textAlign:'center',flexShrink:0}}>
+            <div style={{fontSize:11,marginBottom:2}}>Example: Growth plan, 20 users</div>
+            <div style={{fontWeight:700,color:'var(--text)',fontSize:14}}>$39 + (20 × $8) = <span style={{color:'var(--brand)'}}>$199/mo</span></div>
+          </div>
+        </div>
+      </div>
+
+      {/* TIER CARDS */}
       <div className="tier-grid">
         {Object.entries(TIERS).map(([name,tier])=>(
           <div key={name} className={`tier-card ${user.tier===name?'active':''}`} style={{borderColor:user.tier===name?tier.color:'var(--border)'}}>
-            <div><div className="tier-name" style={{color:tier.color}}>{name}</div><div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>{tier.users} users</div></div>
-            <div className="tier-price">{tier.price}<span>/user/mo</span></div>
-            {user.tier===name&&<span className="badge" style={{background:`${tier.color}22`,color:tier.color,width:'fit-content'}}>Current</span>}
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+            <div>
+              <div className="tier-name" style={{color:tier.color}}>{name}</div>
+              <div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>{tier.users} users</div>
+            </div>
+            {/* BASE PRICE */}
+            <div style={{background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}>
+              <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Base / month</div>
+              <div style={{fontSize:18,fontWeight:800,color:tier.color,letterSpacing:'-1px'}}>{tier.base}</div>
+            </div>
+            {/* PER USER */}
+            <div style={{background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}>
+              <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Per user / month</div>
+              <div style={{fontSize:18,fontWeight:800,color:tier.color,letterSpacing:'-1px'}}>{tier.perUser}</div>
+            </div>
+            {user.tier===name&&<span className="badge" style={{background:`${tier.color}22`,color:tier.color,width:'fit-content'}}>✓ Current Plan</span>}
+            {/* LIMITS */}
+            <div style={{fontSize:11,color:'var(--t2)',display:'flex',flexDirection:'column',gap:3}}>
+              <div>💾 Storage: {tier.storage}</div>
+              <div>📷 Images: {tier.images}</div>
+              <div>🗓 Retention: {tier.retention}</div>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:4,borderTop:'1px solid var(--border)',paddingTop:8}}>
               {tier.features.map(f=><div key={f} className="tier-feat"><div className="tier-dot" style={{background:tier.color}}/>{f}</div>)}
               {tier.locked.map(f=><div key={f} className="tier-feat locked"><div className="tier-dot" style={{background:'var(--t3)'}}/> 🔒 {f}</div>)}
             </div>
             {user.tier!==name&&<button className="btn btn-secondary btn-sm" style={{marginTop:'auto'}}>Upgrade</button>}
           </div>
         ))}
+      </div>
+
+      {/* COMPARISON TABLE */}
+      <div className="section">
+        <div className="section-title">Plan Comparison</div>
+        <div className="tbl-scroll">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Plan</th>
+                <th>Base/mo</th>
+                <th>Per User</th>
+                <th>Users</th>
+                <th>Storage</th>
+                <th>Photos</th>
+                <th>Retention</th>
+                <th>Escalation</th>
+                <th>GPS</th>
+                <th>Reports</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['Personal',     '$4',   '$2', 'Max 4',    '0.5GB', '—',      '30 days',  '—','—','—'],
+                ['Starter',      '$19',  '$9', '1–10',     '5GB',   '2/task', '6 months', '—','—','Basic'],
+                ['Growth',       '$39',  '$8', '11–30',    '15GB',  '3/task', '12 months','✓','✓','Full'],
+                ['Professional', '$149', '$7', '31–100',   '50GB',  '5/task', '24 months','✓','✓','Advanced'],
+                ['Enterprise',   '$399', '$6', 'Unlimited','100GB+','5/task', 'Custom',   '✓','✓','Custom'],
+              ].map(([plan,...vals])=>(
+                <tr key={plan}>
+                  <td><span style={{fontWeight:700,color:TIERS[plan]?.color}}>{plan}</span></td>
+                  {vals.map((v,i)=>(
+                    <td key={i} style={{fontSize:12,color:v==='✓'?'var(--green)':v==='—'?'var(--t3)':'var(--text)',fontWeight:v==='✓'?700:400}}>{v}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* UNIT ECONOMICS */}
+      <div className="section">
+        <div className="section-title">Unit Economics & Margins</div>
+        <div className="tbl-scroll">
+          <table className="tbl">
+            <thead><tr><th>Plan</th><th>Revenue/User</th><th>Cost/User</th><th>Profit/User</th><th>Margin</th></tr></thead>
+            <tbody>
+              {[
+                ['Personal',     '$3',  '$1.65','$1.35','~45%'],
+                ['Starter',      '$11', '$3.15','$7.75','~71%'],
+                ['Growth',       '$11', '$2.75','$7.88','~74%'],
+                ['Professional', '$9',  '$2.35','$6.34','~73%'],
+                ['Enterprise',   '$6',  '$2.25','$3.75','~62%'],
+              ].map(([plan,...vals])=>(
+                <tr key={plan}>
+                  <td><span style={{fontWeight:700,color:TIERS[plan]?.color}}>{plan}</span></td>
+                  {vals.map((v,i)=>(
+                    <td key={i} style={{fontSize:12,color:i===3?(parseFloat(v)>70?'var(--green)':'var(--amber)'):'var(--text)',fontWeight:i===3?700:400}}>{v}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
