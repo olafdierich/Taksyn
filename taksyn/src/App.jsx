@@ -296,6 +296,9 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--s4);border-radius:2px}
 .loading{display:flex;align-items:center;justify-content:center;height:100%;color:var(--t2);font-size:14px;gap:10px}
+.undo-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1A2033;color:#fff;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;font-size:13px;font-weight:500;z-index:500;box-shadow:0 8px 32px rgba(0,0,0,.25);animation:fadeUp .2s ease}
+.undo-btn{background:var(--brand);color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.topbar.sticky{position:sticky;top:0;z-index:200}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite}
 `
@@ -734,14 +737,16 @@ function DashboardView({ tasks, user, setPage }) {
 }
 
 // ─── TASKS VIEW ───────────────────────────────────────────────────────────────
-function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTasks, search }) {
+function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTasks, search, pushUndo }) {
   const [filter, setFilter] = useState('all')
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [celebration, setCelebration] = useState(false)
-  const [showReject, setShowReject] = useState(null) // task id being rejected
+  const [showReject, setShowReject] = useState(null)
   const [rejectNote, setRejectNote] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteScope, setDeleteScope] = useState('')
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
   const [newTask, setNewTask] = useState({ title:'', category:'Housekeeping', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'' })
@@ -1168,12 +1173,32 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
               <button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve Escalation</button>
             )}
             {canApprove&&(
-              <button className="btn btn-danger" onClick={async()=>{
-                if(!confirm('Delete this task? This cannot be undone.')) return
-                setTasks(prev=>prev.filter(t=>t.id!==sel.id))
-                if(isConfigured()) await supabase.from('tasks').delete().eq('id',sel.id)
-                setSelected(null)
-              }}>🗑 Delete Task</button>
+              <div style={{marginLeft:'auto',display:'flex',flexDirection:'column',gap:6,alignItems:'flex-end'}}>
+                {!showDeleteConfirm ? (
+                  <button className="btn btn-danger btn-sm" onClick={()=>setShowDeleteConfirm(true)}>🗑 Delete Task</button>
+                ) : (
+                  <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:8,padding:12,minWidth:220}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'var(--red)',marginBottom:10}}>Delete this task?</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
+                      {[['this','This task only'],['future','This and all future']].map(([v,l])=>(
+                        <label key={v} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12}}>
+                          <input type="radio" name="deleteScope" value={v} checked={deleteScope===v} onChange={()=>setDeleteScope(v)} style={{accentColor:'var(--red)'}} />
+                          {l}
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>{setShowDeleteConfirm(false);setDeleteScope('')}}>Cancel</button>
+                      <button className="btn btn-danger btn-sm" disabled={!deleteScope} onClick={async()=>{
+                        if(pushUndo) pushUndo('Deleted: '+sel.title, tasks)
+                        setTasks(prev=>prev.filter(t=>t.id!==sel.id))
+                        if(isConfigured()) await supabase.from('tasks').delete().eq('id',sel.id)
+                        setShowDeleteConfirm(false); setDeleteScope(''); setSelected(null)
+                      }}>Confirm Delete</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -1711,6 +1736,25 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [undoStack, setUndoStack] = useState([]) // [{tasks, label}]
+  const [showUndo, setShowUndo] = useState(false)
+  const undoTimer = useRef(null)
+
+  const pushUndo = (label, prevTasks) => {
+    setUndoStack(prev=>[...prev.slice(-9), {tasks:prevTasks, label}])
+    setShowUndo(true)
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    undoTimer.current = setTimeout(()=>setShowUndo(false), 5000)
+  }
+  const doUndo = () => {
+    setUndoStack(prev=>{
+      if (!prev.length) return prev
+      const last = prev[prev.length-1]
+      setTasks(last.tasks)
+      setShowUndo(false)
+      return prev.slice(0,-1)
+    })
+  }
 
   // ── LOAD TASKS FROM SUPABASE ──
   const loadTasks = async () => {
@@ -1758,6 +1802,21 @@ export default function App() {
     await supabase.from('tasks').update(payload).eq('id', id)
   }
 
+  // Auto-hide topbar on scroll
+  const [topbarVisible, setTopbarVisible] = useState(true)
+  const lastScrollY = useRef(0)
+  useEffect(()=>{
+    const el = document.querySelector('.content')
+    if (!el) return
+    const onScroll = () => {
+      const y = el.scrollTop
+      setTopbarVisible(y < lastScrollY.current || y < 60)
+      lastScrollY.current = y
+    }
+    el?.addEventListener('scroll', onScroll, {passive:true})
+    return ()=>el?.removeEventListener('scroll', onScroll)
+  },[user])
+
   useEffect(()=>{
     if (isConfigured()) {
       supabase.auth.getSession().then(({data:{session}})=>{
@@ -1803,7 +1862,7 @@ export default function App() {
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected' && visibleTasks([t],user).length>0).length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, saveTask, updateTaskRemote, loadTasks, search }
+  const pageProps = { tasks, setTasks, user, setPage, saveTask, updateTaskRemote, loadTasks, search, pushUndo }
 
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
@@ -1812,7 +1871,16 @@ export default function App() {
       <style>{CSS}</style>
       <div className="app">
         {/* TOPBAR */}
-        <div className="topbar">
+        {/* UNDO TOAST */}
+        {showUndo && undoStack.length>0 && (
+          <div className="undo-toast">
+            <span>↩ {undoStack[undoStack.length-1]?.label}</span>
+            <button className="undo-btn" onClick={doUndo}>Undo</button>
+            <span style={{cursor:'pointer',opacity:.6,fontSize:16}} onClick={()=>setShowUndo(false)}>×</span>
+          </div>
+        )}
+
+        <div className="topbar sticky" style={{transform:topbarVisible?'translateY(0)':'translateY(-100%)',transition:'transform .25s ease'}}>
           <button className="tb-menu-btn" onClick={()=>{ if(window.innerWidth<=768) setSidebarOpen(!sidebarOpen); else setSidebarCollapsed(!sidebarCollapsed) }}>
             <IC n="menu" s={18}/>
           </button>
