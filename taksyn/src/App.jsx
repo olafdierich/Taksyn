@@ -1781,7 +1781,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [page, setPage] = useState('dashboard')
   const [tasks, setTasks] = useState(DEMO_TASKS)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // Don't show loading by default
   const [tasksLoading, setTasksLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -1887,38 +1887,42 @@ export default function App() {
   },[user])
 
   useEffect(()=>{
-    if (isConfigured()) {
-      // Set a timeout so the app never gets stuck loading
-      const timeout = setTimeout(()=>setLoading(false), 5000)
+    if (!isConfigured()) { setLoading(false); return }
 
-      supabase.auth.getSession().then(({data:{session}})=>{
-        if (session) {
-          supabase.from('profiles').select('*').eq('id',session.user.id).single()
-            .then(({data, error})=>{
-              clearTimeout(timeout)
-              if(data) setUser({...data,email:session.user.email})
-              setLoading(false)
-            })
-            .catch(()=>{ clearTimeout(timeout); setLoading(false) })
-        } else {
-          clearTimeout(timeout)
-          setLoading(false)
-        }
-      }).catch(()=>{ clearTimeout(timeout); setLoading(false) })
+    // Never block the UI — always set loading false quickly
+    const bail = setTimeout(()=>setLoading(false), 3000)
 
-      const {data:{subscription}} = supabase.auth.onAuthStateChange(async(_event, session)=>{
-        if (!session) {
-          setUser(null)
-        } else {
-          try {
-            const { data } = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
-            if (data) setUser({...data, email:session.user.email})
-          } catch(e) { console.error('Profile load error:', e) }
-          setLoading(false)
+    supabase.auth.getSession().then(({data:{session}})=>{
+      clearTimeout(bail)
+      if (session?.user) {
+        // Show app immediately, load profile in background
+        setLoading(false)
+        supabase.from('profiles').select('*').eq('id',session.user.id).single()
+          .then(({data})=>{ if(data) setUser({...data,email:session.user.email}) })
+          .catch(()=>{
+            // Profile missing — create a basic one so user can still log in
+            setUser({ id:session.user.id, email:session.user.email, name:session.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' })
+          })
+      } else {
+        setLoading(false)
+      }
+    }).catch(()=>{ clearTimeout(bail); setLoading(false) })
+
+    const {data:{subscription}} = supabase.auth.onAuthStateChange(async(_event, session)=>{
+      if (!session) {
+        setUser(null)
+      } else {
+        setLoading(false)
+        try {
+          const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
+          if (data) setUser({...data, email:session.user.email})
+          else setUser({ id:session.user.id, email:session.user.email, name:session.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' })
+        } catch(e) {
+          setUser({ id:session.user.id, email:session.user.email, name:session.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' })
         }
-      })
-      return ()=>{ subscription.unsubscribe(); clearTimeout(timeout) }
-    } else setLoading(false)
+      }
+    })
+    return ()=>{ subscription.unsubscribe(); clearTimeout(bail) }
   },[])
 
   // Load tasks when user logs in
