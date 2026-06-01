@@ -991,7 +991,7 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
             </div>
           </div>
         </div>
-      )
+      )}
 
       {showCreate && (
         <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
