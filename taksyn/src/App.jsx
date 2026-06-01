@@ -829,14 +829,16 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
 
           {/* TIMING & GPS */}
           <div className="timing-bar">
-            {sel.started_at ? (
-              <div className="timing-chip active"><IC n="clock" s={12}/> Started {fmtTime(sel.started_at)}</div>
-            ) : (
-              <div className="timing-chip">⏱ Not started</div>
+            <div className={`timing-chip ${sel.started_at?'active':''}`}>
+              ⏱ Time In: {sel.started_at ? fmtTime(sel.started_at) : '—'}
+            </div>
+            <div className={`timing-chip ${sel.completed_at?'active':''}`}>
+              ⏹ Time Out: {sel.completed_at ? fmtTime(sel.completed_at) : '—'}
+            </div>
+            {fmtDuration(sel.started_at,sel.completed_at) && (
+              <div className="timing-chip active">⏱ Duration: {fmtDuration(sel.started_at,sel.completed_at)}</div>
             )}
-            {sel.completed_at && <div className="timing-chip active"><IC n="check" s={12}/> Done {fmtTime(sel.completed_at)}</div>}
-            {fmtDuration(sel.started_at,sel.completed_at) && <div className="timing-chip">⏱ {fmtDuration(sel.started_at,sel.completed_at)} duration</div>}
-            {sel.gps_start && <div className="gps-chip"><IC n="gps" s={11}/> GPS: {sel.gps_start}</div>}
+            {sel.gps_start && <div className="gps-chip"><IC n="gps" s={11}/> Start: {sel.gps_start}</div>}
             {sel.gps_end && <div className="gps-chip"><IC n="gps" s={11}/> End: {sel.gps_end}</div>}
           </div>
 
@@ -950,10 +952,21 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
 
           <div className="btn-row">
             {user.role==='worker'&&sel.status==='pending'&&(
-              <button className="btn btn-green" onClick={()=>startTask(sel.id)}>▶ Start Task + GPS</button>
+              <button className="btn btn-green" onClick={()=>startTask(sel.id)}>⏱ Time In — Start Task</button>
             )}
-            {user.role==='worker'&&sel.status==='in_progress'&&(
-              <button className="btn btn-primary" onClick={()=>submitTask(sel.id)}>{taskPct(sel)===100?'✅ Submit for Review':'💾 Save Progress'}</button>
+            {user.role==='worker'&&sel.status==='in_progress'&&!sel.completed_at&&(
+              <button className="btn btn-amber" onClick={()=>{
+                navigator.geolocation?.getCurrentPosition(
+                  pos => update(sel.id,{completed_at:new Date().toISOString(),gps_end:`${pos.coords.latitude.toFixed(4)},${pos.coords.longitude.toFixed(4)}`}),
+                  () => update(sel.id,{completed_at:new Date().toISOString()})
+                )
+              }}>⏹ Time Out — Finish Task</button>
+            )}
+            {user.role==='worker'&&sel.status==='in_progress'&&sel.completed_at&&(
+              <button className="btn btn-primary" onClick={()=>submitTask(sel.id)}>✅ Submit for Review</button>
+            )}
+            {user.role==='worker'&&sel.status==='in_progress'&&!sel.completed_at&&(
+              <button className="btn btn-secondary" onClick={()=>submitTask(sel.id)}>💾 Save Progress</button>
             )}
             {canApprove&&sel.status==='awaiting_review'&&(
               <><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>update(sel.id,{status:'rejected'})}>✗ Reject</button></>
