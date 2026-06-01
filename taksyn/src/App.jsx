@@ -662,9 +662,16 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
   const visible = visibleTasks(tasks, user)
   const filtered = filter==='all'?visible:filter==='escalated'?visible.filter(t=>t.escalation):visible.filter(t=>t.status===filter)
 
-  const update = (id, changes) => {
+  const update = async (id, changes) => {
     setTasks(prev=>prev.map(t=>t.id===id?{...t,...changes}:t))
-    if (updateTaskRemote) updateTaskRemote(id, changes)
+    if (isConfigured()) {
+      const payload = { ...changes }
+      if (changes.subtasks) payload.subtasks = JSON.stringify(changes.subtasks)
+      if (changes.evidence) payload.evidence = JSON.stringify(changes.evidence)
+      if (changes.comments) payload.comments = JSON.stringify(changes.comments)
+      const { error } = await supabase.from('tasks').update(payload).eq('id', id)
+      if (error) console.error('Task update error:', error)
+    }
   }
 
   const toggleSub = (tid, idx) => {
@@ -700,12 +707,36 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
     setComment('')
   }
 
-  const createTask = () => {
+  const createTask = async () => {
     if (!newTask.title.trim()) return
-    const t = { id:`T${String(tasks.length+1).padStart(3,'0')}`, ...newTask, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, created_at:new Date().toISOString() }
+    const taskId = 'T' + Date.now()
+    const t = { 
+      id: taskId, 
+      ...newTask, 
+      status:'pending', 
+      subtasks:[], 
+      evidence:[], 
+      comments:[], 
+      escalation:false, 
+      created_by:user.name, 
+      created_at:new Date().toISOString() 
+    }
+    // Save to Supabase first
+    if (isConfigured()) {
+      const payload = {
+        ...t,
+        subtasks: JSON.stringify([]),
+        evidence: JSON.stringify([]),
+        comments: JSON.stringify([]),
+      }
+      const { error } = await supabase.from('tasks').insert(payload)
+      if (error) console.error('Task save error:', error)
+    }
     setTasks(prev=>[...prev,t])
+    if (loadTasks) await loadTasks()
     setShowCreate(false)
-    setNewTask({title:'',category:'Housekeeping',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker'})
+    setUserSearch('')
+    setNewTask({title:'',category:'Housekeeping',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''})
   }
 
   const canCreate = ['super_admin','client_admin','manager','supervisor'].includes(user.role)
