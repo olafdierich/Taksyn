@@ -398,7 +398,14 @@ const TaskCard = ({ task, onClick }) => {
         {task.evidence?.length>0 && <span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance && <span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
         {dur && <span style={{fontSize:11,color:'var(--t2)'}}>⏱ {dur}</span>}
-        {task.gps_start && <span style={{fontSize:11,color:'var(--blue)'}}>📍 GPS</span>}
+        {task.gps_start && (
+          <a href={`https://www.google.com/maps?q=${task.gps_start}`} target="_blank" rel="noopener noreferrer" 
+            style={{fontSize:11,color:'var(--blue)',textDecoration:'none'}} 
+            onClick={e=>e.stopPropagation()}
+            title="View on Google Maps">
+            📍 GPS ↗
+          </a>
+        )}
       </div>
       {task.subtasks?.length>0 && (
         <div className="tc-progress">
@@ -1211,7 +1218,10 @@ function ReportsView({ tasks, user }) {
                       <td style={{fontSize:11,color:'var(--t2)'}}>{fmtTime(t.started_at)}</td>
                       <td style={{fontSize:11,color:'var(--t2)'}}>{fmtTime(t.completed_at)}</td>
                       <td><span style={{fontSize:12,fontWeight:600,color:'var(--brand)'}}>{fmtDuration(t.started_at,t.completed_at)}</span></td>
-                      <td><span style={{fontSize:11,color:t.gps_start?'var(--blue)':'var(--t3)'}}>{t.gps_start?'📍 Yes':'—'}</span></td>
+                      <td>{t.gps_start 
+                        ? <a href={`https://www.google.com/maps?q=${t.gps_start}`} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'var(--blue)',textDecoration:'none'}}>📍 View ↗</a>
+                        : <span style={{fontSize:11,color:'var(--t3)'}}>—</span>
+                      }</td>
                     </tr>
                   ))}
                 </tbody>
