@@ -1753,70 +1753,7 @@ function TiersView({ user }) {
         ))}
       </div>
 
-      {/* COMPARISON TABLE */}
-      <div className="section">
-        <div className="section-title">Plan Comparison</div>
-        <div className="tbl-scroll">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Plan</th>
-                <th>Base/mo</th>
-                <th>Per User</th>
-                <th>Users</th>
-                <th>Storage</th>
-                <th>Photos</th>
-                <th>Retention</th>
-                <th>Escalation</th>
-                <th>GPS</th>
-                <th>Reports</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                ['Personal',     '$4',   '$2', 'Max 4',    '0.5GB', '—',      '30 days',  '—','—','—'],
-                ['Starter',      '$19',  '$9', '1–10',     '5GB',   '2/task', '6 months', '—','—','Basic'],
-                ['Growth',       '$39',  '$8', '11–30',    '15GB',  '3/task', '12 months','✓','✓','Full'],
-                ['Professional', '$149', '$7', '31–100',   '50GB',  '5/task', '24 months','✓','✓','Advanced'],
-                ['Enterprise',   '$399', '$6', 'Unlimited','100GB+','5/task', 'Custom',   '✓','✓','Custom'],
-              ].map(([plan,...vals])=>(
-                <tr key={plan}>
-                  <td><span style={{fontWeight:700,color:TIERS[plan]?.color}}>{plan}</span></td>
-                  {vals.map((v,i)=>(
-                    <td key={i} style={{fontSize:12,color:v==='✓'?'var(--green)':v==='—'?'var(--t3)':'var(--text)',fontWeight:v==='✓'?700:400}}>{v}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
-      {/* UNIT ECONOMICS */}
-      <div className="section">
-        <div className="section-title">Unit Economics & Margins</div>
-        <div className="tbl-scroll">
-          <table className="tbl">
-            <thead><tr><th>Plan</th><th>Revenue/User</th><th>Cost/User</th><th>Profit/User</th><th>Margin</th></tr></thead>
-            <tbody>
-              {[
-                ['Personal',     '$3',  '$1.65','$1.35','~45%'],
-                ['Starter',      '$11', '$3.15','$7.75','~71%'],
-                ['Growth',       '$11', '$2.75','$7.88','~74%'],
-                ['Professional', '$9',  '$2.35','$6.34','~73%'],
-                ['Enterprise',   '$6',  '$2.25','$3.75','~62%'],
-              ].map(([plan,...vals])=>(
-                <tr key={plan}>
-                  <td><span style={{fontWeight:700,color:TIERS[plan]?.color}}>{plan}</span></td>
-                  {vals.map((v,i)=>(
-                    <td key={i} style={{fontSize:12,color:i===3?(parseFloat(v)>70?'var(--green)':'var(--amber)'):'var(--text)',fontWeight:i===3?700:400}}>{v}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   )
 }
