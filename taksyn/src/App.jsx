@@ -1889,40 +1889,51 @@ export default function App() {
   useEffect(()=>{
     if (!isConfigured()) { setLoading(false); return }
 
-    // Never block the UI — always set loading false quickly
-    const bail = setTimeout(()=>setLoading(false), 3000)
+    // Check localStorage first for instant load
+    const cachedUser = localStorage.getItem('taksyn-user')
+    if (cachedUser) {
+      try {
+        setUser(JSON.parse(cachedUser))
+        setLoading(false)
+      } catch(e) { localStorage.removeItem('taksyn-user') }
+    } else {
+      setLoading(false)
+    }
 
+    // Then verify/refresh from Supabase in background
     supabase.auth.getSession().then(({data:{session}})=>{
-      clearTimeout(bail)
       if (session?.user) {
-        // Show app immediately, load profile in background
-        setLoading(false)
         supabase.from('profiles').select('*').eq('id',session.user.id).single()
-          .then(({data})=>{ if(data) setUser({...data,email:session.user.email}) })
-          .catch(()=>{
-            // Profile missing — create a basic one so user can still log in
-            setUser({ id:session.user.id, email:session.user.email, name:session.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' })
-          })
+          .then(({data})=>{
+            if(data) {
+              const userData = {...data, email:session.user.email}
+              setUser(userData)
+              localStorage.setItem('taksyn-user', JSON.stringify(userData))
+            }
+          }).catch(()=>{})
       } else {
-        setLoading(false)
+        // No session — clear cache
+        localStorage.removeItem('taksyn-user')
+        setUser(null)
       }
-    }).catch(()=>{ clearTimeout(bail); setLoading(false) })
+    }).catch(()=>{})
 
     const {data:{subscription}} = supabase.auth.onAuthStateChange(async(_event, session)=>{
       if (!session) {
         setUser(null)
+        localStorage.removeItem('taksyn-user')
       } else {
-        setLoading(false)
         try {
           const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
-          if (data) setUser({...data, email:session.user.email})
-          else setUser({ id:session.user.id, email:session.user.email, name:session.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' })
-        } catch(e) {
-          setUser({ id:session.user.id, email:session.user.email, name:session.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' })
-        }
+          const userData = data
+            ? {...data, email:session.user.email}
+            : { id:session.user.id, email:session.user.email, name:session.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' }
+          setUser(userData)
+          localStorage.setItem('taksyn-user', JSON.stringify(userData))
+        } catch(e) {}
       }
     })
-    return ()=>{ subscription.unsubscribe(); clearTimeout(bail) }
+    return ()=>subscription.unsubscribe()
   },[])
 
   // Load tasks when user logs in
@@ -1942,6 +1953,7 @@ export default function App() {
   }
   const logout = async () => {
     if(isConfigured()) await supabase.auth.signOut()
+    localStorage.removeItem('taksyn-user')
     setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
   }
   useEffect(()=>setPage('dashboard'),[user?.role])
