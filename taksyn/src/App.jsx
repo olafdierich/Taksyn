@@ -687,15 +687,24 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
 
   const submitTask = (tid) => {
     const task = tasks.find(t=>t.id===tid)
+    // Auto-save comment if there is one
+    const updatedComments = comment.trim()
+      ? [...(task.comments||[]), `${user.name}: ${comment.trim()}`]
+      : task.comments || []
+    const doSubmit = (extraChanges={}) => {
+      update(tid, { 
+        status:'awaiting_review', 
+        completed_by:user.name,
+        comments: updatedComments,
+        ...extraChanges
+      })
+      setCelebration(true)
+      setComment('')
+      setSelected(null) // close task detail and return to list
+    }
     navigator.geolocation?.getCurrentPosition(
-      pos => {
-        update(tid, { status:taskPct(task)===100?'awaiting_review':'in_progress', completed_at:new Date().toISOString(), gps_end:`${pos.coords.latitude.toFixed(4)},${pos.coords.longitude.toFixed(4)}`, completed_by:user.name })
-        if (taskPct(task)===100) setCelebration(true)
-      },
-      () => {
-        update(tid, { status:taskPct(task)===100?'awaiting_review':'in_progress', completed_at:new Date().toISOString(), completed_by:user.name })
-        if (taskPct(task)===100) setCelebration(true)
-      }
+      pos => doSubmit({ gps_end:`${pos.coords.latitude.toFixed(4)},${pos.coords.longitude.toFixed(4)}` }),
+      () => doSubmit()
     )
   }
 
@@ -925,8 +934,7 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
           <div className="section">
             <div className="section-title">Comments & Notes</div>
             {sel.comments?.map((c,i)=><div key={i} className="comment-item">💬 {c}</div>)}
-            <textarea className="comment-box" style={{marginTop:10}} placeholder="Add a note…" value={comment} onChange={e=>setComment(e.target.value)} />
-            <button className="btn btn-secondary btn-sm" style={{marginTop:7}} onClick={()=>addComment(sel.id)}>Post</button>
+            <textarea className="comment-box" style={{marginTop:10}} placeholder="Add a note… (saves automatically when you submit or leave the field)" value={comment} onChange={e=>setComment(e.target.value)} onBlur={()=>{ if(comment.trim()) { addComment(sel.id) } }} />
           </div>
 
           <div className="section">
