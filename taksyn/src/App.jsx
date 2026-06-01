@@ -896,8 +896,24 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
             {fmtDuration(sel.started_at,sel.completed_at) && (
               <div className="timing-chip active">⏱ Duration: {fmtDuration(sel.started_at,sel.completed_at)}</div>
             )}
-            {sel.gps_start && <div className="gps-chip"><IC n="gps" s={11}/> Start: {sel.gps_start}</div>}
-            {sel.gps_end && <div className="gps-chip"><IC n="gps" s={11}/> End: {sel.gps_end}</div>}
+            {sel.gps_start && (
+              <span
+                className="gps-chip"
+                style={{cursor:'pointer',textDecoration:'underline'}}
+                onClick={()=>{ window.location.href=`https://maps.google.com/?q=${sel.gps_start}` }}
+              >
+                <IC n="gps" s={11}/> 📍 Start: {sel.gps_start}
+              </span>
+            )}
+            {sel.gps_end && (
+              <span
+                className="gps-chip"
+                style={{cursor:'pointer',textDecoration:'underline',background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}}
+                onClick={()=>{ window.location.href=`https://maps.google.com/?q=${sel.gps_end}` }}
+              >
+                <IC n="gps" s={11}/> 📍 End: {sel.gps_end}
+              </span>
+            )}
           </div>
 
           {sel.escalation && (
