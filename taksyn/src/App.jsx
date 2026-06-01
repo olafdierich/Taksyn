@@ -2048,7 +2048,7 @@ export default function App() {
     setPage('dashboard')
     // Show onboarding for new users (check localStorage)
     const key = `taksyn_onboarded_${userData.id}`
-    if (!localStorage.getItem(key)) setShowOnboarding(true)
+    if (false) setShowOnboarding(true)
   }
   const completeOnboarding = () => {
     if (user) localStorage.setItem(`taksyn_onboarded_${user.id}`, '1')
