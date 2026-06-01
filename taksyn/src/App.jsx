@@ -564,15 +564,7 @@ function AuthView({ onAuth }) {
         {mode==='register' && <div className="auth-field"><label className="auth-label">Role</label><select className="auth-input" value={role} onChange={e=>setRole(e.target.value)} style={{cursor:'pointer'}}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>}
         <button className="auth-btn" onClick={handleSubmit} disabled={loading}>{loading?'Please wait…':mode==='login'?'Sign In':'Create Account'}</button>
         <div className="auth-toggle">{mode==='login'?<>No account? <a onClick={()=>setMode('register')}>Sign up</a></>:<>Have an account? <a onClick={()=>setMode('login')}>Sign in</a></>}</div>
-        <div className="auth-divider"><span>or try a demo account</span></div>
-        <div className="demo-accounts">
-          {DEMO_ACCOUNTS.map(a=>(
-            <button key={a.role} className="demo-btn" onClick={()=>demoLogin(a)}>
-              <span className="demo-role" style={{background:`${avatarColor(a.role)}22`,color:avatarColor(a.role)}}>{ROLE_LABELS[a.role]}</span>
-              <div><div style={{fontSize:12,fontWeight:600}}>{a.name}</div><div className="demo-info">{a.desc}</div></div>
-            </button>
-          ))}
-        </div>
+
       </div>
     </div>
   )
