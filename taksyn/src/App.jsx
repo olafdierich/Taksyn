@@ -1763,8 +1763,23 @@ const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['users','Team','users'],['tiers','Plans','tier']],
   client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['users','Team','users'],['tiers','Plans','tier']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks']],
+}
+
+// Role hierarchy — what each role can access
+const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
+const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
+
+// Pages each role can access
+const PAGE_ACCESS = {
+  dashboard:   1, // all roles
+  tasks:       1, // all roles
+  evidence:    2, // supervisor and above
+  escalations: 2, // supervisor and above
+  reports:     3, // manager and above
+  users:       4, // client_admin and above
+  tiers:       4, // client_admin and above
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
@@ -1986,13 +2001,24 @@ export default function App() {
 
           {/* CONTENT */}
           <div className="content">
-            {page==='dashboard'   && <DashboardView   {...pageProps}/>}
-            {page==='tasks'       && <TasksView        {...pageProps}/>}
-            {page==='evidence'    && <EvidenceView     {...pageProps}/>}
-            {page==='escalations' && <EscalationsView  {...pageProps}/>}
-            {page==='reports'     && <ReportsView      {...pageProps}/>}
-            {page==='users'       && <UsersView        {...pageProps}/>}
-            {page==='tiers'       && <TiersView        {...pageProps}/>}
+            {/* Access denied component */}
+            {PAGE_ACCESS[page] && !hasAccess(user.role, PAGE_ACCESS[page]) ? (
+              <div className="empty" style={{marginTop:60}}>
+                <div className="empty-icon">🔒</div>
+                <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>Access Restricted</div>
+                <div className="empty-text">Your role ({ROLE_LABELS[user.role]}) does not have access to this section.</div>
+              </div>
+            ) : (
+              <>
+                {page==='dashboard'   && <DashboardView   {...pageProps}/>}
+                {page==='tasks'       && <TasksView        {...pageProps}/>}
+                {page==='evidence'    && hasAccess(user.role,2) && <EvidenceView     {...pageProps}/>}
+                {page==='escalations' && hasAccess(user.role,2) && <EscalationsView  {...pageProps}/>}
+                {page==='reports'     && hasAccess(user.role,3) && <ReportsView      {...pageProps}/>}
+                {page==='users'       && hasAccess(user.role,4) && <UsersView        {...pageProps}/>}
+                {page==='tiers'       && hasAccess(user.role,4) && <TiersView        {...pageProps}/>}
+              </>
+            )}
           </div>
         </div>
       </div>
