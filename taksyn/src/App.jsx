@@ -488,9 +488,8 @@ function visibleTasks(tasks, user) {
   if (['super_admin','client_admin','manager','supervisor'].includes(user.role)) return tasks
   return tasks.filter(t=>
     t.assigned_user_id === user.id ||
-    t.assigned_user_email === user.email ||
     t.assigned_user_name === user.name ||
-    (!t.assigned_user_id && !t.assigned_user_email && !t.assigned_user_name && t.assigned_role === user.role)
+    (!t.assigned_user_id && !t.assigned_user_name && t.assigned_role === user.role)
   )
 }
 
