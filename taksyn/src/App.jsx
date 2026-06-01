@@ -919,14 +919,14 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
               <div className="form-field">
                 <label className="form-label">Add Subtask</label>
                 <div style={{display:'flex',gap:8}}>
-                  <input className="form-input" id="new-subtask" placeholder="e.g. Check temperature log" onKeyDown={e=>{
+                <input className="form-input" id="edit-subtask" placeholder="e.g. Check temperature log" onKeyDown={e=>{
                     if(e.key==='Enter'&&e.target.value.trim()){
                       setEditTask(prev=>({...prev,subtasks:[...(prev.subtasks||[]),{t:e.target.value.trim(),done:false}]}))
                       e.target.value=''
                     }
                   }}/>
                   <button className="btn btn-secondary btn-sm" onClick={()=>{
-                    const inp=document.getElementById('new-subtask')
+                   const inp=document.getElementById('edit-subtask')
                     if(inp.value.trim()){setEditTask(prev=>({...prev,subtasks:[...(prev.subtasks||[]),{t:inp.value.trim(),done:false}]}));inp.value=''}
                   }}>Add</button>
                 </div>
