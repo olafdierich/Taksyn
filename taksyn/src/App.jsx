@@ -2054,10 +2054,10 @@ export default function App() {
     if (user) localStorage.setItem(`taksyn_onboarded_${user.id}`, '1')
     setShowOnboarding(false)
   }
-  const logout = async () => {
-    if(isConfigured()) await supabase.auth.signOut()
-    localStorage.removeItem('taksyn-user')
+ const logout = () => {
+    localStorage.clear()
     setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
+    if(isConfigured()) supabase.auth.signOut().catch(()=>{})
   }
   useEffect(()=>setPage('dashboard'),[user?.role])
 
