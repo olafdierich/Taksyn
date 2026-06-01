@@ -865,15 +865,56 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
             {sel.evidence?.length>0 && (
               <div className="ev-thumbs" style={{marginBottom:10}}>
                 {sel.evidence.map((e,i)=>(
-                  <div key={i} className="ev-thumb">📷{user.role==='worker'&&<div className="ev-rm" onClick={()=>update(sel.id,{evidence:sel.evidence.filter((_,j)=>j!==i)})}>×</div>}</div>
+                  <div key={i} className="ev-thumb" style={{overflow:'hidden'}}>
+                    {e.startsWith('data:image') || e.startsWith('http')
+                      ? <img src={e} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'var(--rs)'}} />
+                      : <span style={{fontSize:18}}>📷</span>
+                    }
+                    {user.role==='worker'&&<div className="ev-rm" onClick={()=>update(sel.id,{evidence:sel.evidence.filter((_,j)=>j!==i)})}>×</div>}
+                  </div>
                 ))}
               </div>
             )}
             {user.role==='worker' && (
-              <div className="evidence-zone" onClick={()=>update(sel.id,{evidence:[...(sel.evidence||[]),`photo_${Date.now()}.jpg`]})}>
-                <div style={{fontSize:24,marginBottom:5}}>📷</div>
-                <div style={{fontSize:13,color:'var(--t2)'}}>Tap to add photo evidence</div>
-                <div style={{fontSize:11,color:'var(--t3)',marginTop:3}}>Connects to device camera in production</div>
+              <div>
+                <div style={{display:'flex',gap:8,marginBottom:10}}>
+                  <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('camera-input').click()}>
+                    📷 Take Photo
+                  </button>
+                  <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('gallery-input').click()}>
+                    🖼 From Gallery
+                  </button>
+                </div>
+                <input id="camera-input" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async(e)=>{
+                  const file = e.target.files[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = async(ev) => {
+                    const dataUrl = ev.target.result
+                    const newEvidence = [...(sel.evidence||[]), dataUrl]
+                    await update(sel.id, {evidence: newEvidence})
+                  }
+                  reader.readAsDataURL(file)
+                  e.target.value = ''
+                }}/>
+                <input id="gallery-input" type="file" accept="image/*" style={{display:'none'}} onChange={async(e)=>{
+                  const file = e.target.files[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = async(ev) => {
+                    const dataUrl = ev.target.result
+                    const newEvidence = [...(sel.evidence||[]), dataUrl]
+                    await update(sel.id, {evidence: newEvidence})
+                  }
+                  reader.readAsDataURL(file)
+                  e.target.value = ''
+                }}/>
+                {(!sel.evidence||sel.evidence.length===0) && (
+                  <div className="evidence-zone" onClick={()=>document.getElementById('camera-input').click()}>
+                    <div style={{fontSize:24,marginBottom:5}}>📷</div>
+                    <div style={{fontSize:13,color:'var(--t2)'}}>Tap to take a photo or choose from gallery</div>
+                  </div>
+                )}
               </div>
             )}
             {user.role!=='worker'&&!sel.evidence?.length&&<div style={{fontSize:13,color:'var(--t2)'}}>No evidence uploaded yet</div>}
@@ -1007,7 +1048,14 @@ function EvidenceView({ tasks, setTasks, user }) {
                 <div style={{display:'flex',gap:5,marginTop:7,flexWrap:'wrap'}}><StatusBadge status={t.status}/>{t.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒 Compliance</span>}</div>
               </div>
               <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                {t.evidence?.length>0?t.evidence.map((e,i)=><div key={i} className="ev-thumb" style={{width:48,height:48,fontSize:16}}>📷</div>):<span style={{fontSize:11,color:'var(--t2)'}}>No photos</span>}
+                {t.evidence?.length>0?t.evidence.map((e,i)=>(
+                  <div key={i} className="ev-thumb" style={{width:48,height:48,overflow:'hidden'}}>
+                    {e.startsWith('data:image')||e.startsWith('http')
+                      ? <img src={e} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'var(--rs)'}}/>
+                      : <span style={{fontSize:16}}>📷</span>
+                    }
+                  </div>
+                )):<span style={{fontSize:11,color:'var(--t2)'}}>No photos</span>}
               </div>
             </div>
             <div className="pb-bg" style={{marginTop:8}}><div className="pb-fill" style={{width:`${taskPct(t)}%`}}/></div>
