@@ -1802,19 +1802,33 @@ export default function App() {
     await supabase.from('tasks').update(payload).eq('id', id)
   }
 
-  // Auto-hide topbar on scroll
+  // Auto-hide topbar on scroll — works everywhere
   const [topbarVisible, setTopbarVisible] = useState(true)
   const lastScrollY = useRef(0)
   useEffect(()=>{
-    const el = document.querySelector('.content')
-    if (!el) return
-    const onScroll = () => {
-      const y = el.scrollTop
+    const handleScroll = (y) => {
       setTopbarVisible(y < lastScrollY.current || y < 60)
       lastScrollY.current = y
     }
-    el?.addEventListener('scroll', onScroll, {passive:true})
-    return ()=>el?.removeEventListener('scroll', onScroll)
+    const onWindowScroll = () => handleScroll(window.scrollY)
+    const onContentScroll = (e) => handleScroll(e.target.scrollTop)
+
+    window.addEventListener('scroll', onWindowScroll, {passive:true})
+
+    // Also attach to content div when it mounts
+    const attachContent = () => {
+      const el = document.querySelector('.content')
+      if (el) el.addEventListener('scroll', onContentScroll, {passive:true})
+    }
+    attachContent()
+    const t = setTimeout(attachContent, 500)
+
+    return ()=>{
+      window.removeEventListener('scroll', onWindowScroll)
+      const el = document.querySelector('.content')
+      if (el) el.removeEventListener('scroll', onContentScroll)
+      clearTimeout(t)
+    }
   },[user])
 
   useEffect(()=>{
