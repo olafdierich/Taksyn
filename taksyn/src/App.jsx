@@ -69,7 +69,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 /* APP SHELL */
 .app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
 /* TOPBAR */
-.topbar{display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;z-index:200}
+.topbar{display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;z-index:300;position:relative}
 .tb-menu-btn{background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:var(--t2);display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
 .tb-menu-btn:hover{background:var(--s3);color:var(--text)}
 .tb-logo{height:30px;object-fit:contain;cursor:pointer}
@@ -92,7 +92,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 /* LAYOUT */
 .main{display:flex;flex:1;overflow:hidden;position:relative}
 /* SIDEBAR */
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:150}
+.sidebar-overlay{display:none;position:fixed;top:52px;left:0;right:0;bottom:0;background:rgba(0,0,0,.3);z-index:150}
 .sidebar-overlay.open{display:block}
 .sidebar{width:var(--sidebar-w);flex-shrink:0;background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;transition:transform .25s ease,width .25s ease;z-index:160}
 .sidebar.collapsed{width:52px}
@@ -298,7 +298,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .loading{display:flex;align-items:center;justify-content:center;height:100%;color:var(--t2);font-size:14px;gap:10px}
 .undo-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1A2033;color:#fff;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;font-size:13px;font-weight:500;z-index:500;box-shadow:0 8px 32px rgba(0,0,0,.25);animation:fadeUp .2s ease}
 .undo-btn{background:var(--brand);color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
-.topbar.sticky{position:sticky;top:0;z-index:200}
+.topbar.sticky{position:sticky;top:0;z-index:300}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite}
 `
@@ -2099,7 +2099,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="topbar sticky" style={{transform:topbarVisible?'translateY(0)':'translateY(-100%)',transition:'transform .25s ease'}}>
+        <div className="topbar sticky">
           <button className="tb-menu-btn" onClick={()=>{ if(window.innerWidth<=768) setSidebarOpen(!sidebarOpen); else setSidebarCollapsed(!sidebarCollapsed) }}>
             <IC n="menu" s={18}/>
           </button>
