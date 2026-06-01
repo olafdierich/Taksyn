@@ -923,6 +923,14 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
             {canApprove&&sel.escalation&&(
               <button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve Escalation</button>
             )}
+            {canApprove&&(
+              <button className="btn btn-danger" onClick={async()=>{
+                if(!confirm('Delete this task? This cannot be undone.')) return
+                setTasks(prev=>prev.filter(t=>t.id!==sel.id))
+                if(isConfigured()) await supabase.from('tasks').delete().eq('id',sel.id)
+                setSelected(null)
+              }}>🗑 Delete Task</button>
+            )}
           </div>
         </div>
       ) : (
