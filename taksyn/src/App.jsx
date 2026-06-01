@@ -350,7 +350,9 @@ const fmtDuration = (start, end) => {
 const StatusBadge = ({ status }) => { const c = STATUS_CFG[status]||STATUS_CFG.pending; return <span className="badge" style={{color:c.color,background:c.bg}}>{c.label}</span> }
 const PriBadge = ({ priority }) => { const c = PRIORITY_CFG[priority]||PRIORITY_CFG.medium; return <span className="badge" style={{color:c.color,background:`${c.color}22`}}>{c.label}</span> }
 const RolePill = ({ role }) => <span className="role-pill" style={{color:avatarColor(role),background:`${avatarColor(role)}22`}}>{ROLE_LABELS[role]||role}</span>
-const Avatar = ({ name, role, size=28 }) => <div className="tb-avatar" style={{width:size,height:size,background:`${avatarColor(role)}22`,color:avatarColor(role)}}>{initials(name)}</div>
+const Avatar = ({ name, role, size=28, avatarUrl=null }) => avatarUrl
+  ? <img src={avatarUrl} alt={name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0}} />
+  : <div className="tb-avatar" style={{width:size,height:size,background:`${avatarColor(role)}22`,color:avatarColor(role)}}>{initials(name)}</div>
 const Stat = ({ label, val, sub, icon, color='#00A87E', bg='rgba(0,168,126,.1)' }) => (
   <div className="stat-card">
     <div className="sc-top"><span className="sc-label">{label}</span><div className="sc-icon" style={{background:bg,color}}>{icon}</div></div>
@@ -1786,6 +1788,11 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [undoStack, setUndoStack] = useState([]) // [{tasks, label}]
   const [showUndo, setShowUndo] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [profileName, setProfileName] = useState('')
+  const [profileMsg, setProfileMsg] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const undoTimer = useRef(null)
 
   const pushUndo = (label, prevTasks) => {
@@ -1890,7 +1897,16 @@ export default function App() {
             })
         } else setLoading(false)
       })
-      const {data:{subscription}} = supabase.auth.onAuthStateChange((_,session)=>{ if(!session) setUser(null) })
+      const {data:{subscription}} = supabase.auth.onAuthStateChange(async(_event, session)=>{
+        if (!session) {
+          setUser(null)
+        } else {
+          // Auto-load profile on any sign in event
+          const { data } = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
+          if (data) setUser({...data, email:session.user.email})
+          setLoading(false)
+        }
+      })
       return ()=>subscription.unsubscribe()
     } else setLoading(false)
   },[])
@@ -1955,11 +1971,105 @@ export default function App() {
             <IC n="bell" s={16}/>
             {escalationCount>0&&<div className="tb-badge">{escalationCount}</div>}
           </button>
-          <div className="tb-user" onClick={logout} title="Click to sign out">
-            <Avatar name={user.name} role={user.role} size={26}/>
+          <div className="tb-user" onClick={()=>{ setShowProfile(true); setProfileName(user.name); setProfileMsg('') }} title="My Profile" style={{cursor:'pointer'}}>
+            <Avatar name={user.name} role={user.role} size={26} avatarUrl={user.avatar_url}/>
             <div><div className="tb-user-name">{user.name.split(' ')[0]}</div><div className="tb-user-role">{ROLE_LABELS[user.role]}</div></div>
           </div>
         </div>
+
+        {/* PROFILE MODAL */}
+        {showProfile && (
+          <div className="modal-overlay" onClick={()=>setShowProfile(false)}>
+            <div className="modal" onClick={e=>e.stopPropagation()}>
+              <div className="modal-hdr">
+                <div className="modal-title">My Profile</div>
+                <button className="modal-close" onClick={()=>setShowProfile(false)}>×</button>
+              </div>
+              <div className="modal-body">
+                {/* PROFILE INFO */}
+                <div style={{display:'flex',alignItems:'center',gap:14,padding:'4px 0 16px',borderBottom:'1px solid var(--border)',marginBottom:16}}>
+                  <div style={{position:'relative',flexShrink:0}}>
+                    {user.avatar_url
+                      ? <img src={user.avatar_url} alt={user.name} style={{width:56,height:56,borderRadius:'50%',objectFit:'cover',border:'2px solid var(--border)'}} />
+                      : <Avatar name={user.name} role={user.role} size={56}/>
+                    }
+                    <button
+                      style={{position:'absolute',bottom:-2,right:-2,width:22,height:22,borderRadius:'50%',background:'var(--brand)',border:'2px solid #fff',color:'#fff',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+                      onClick={()=>document.getElementById('avatar-input').click()}
+                      title="Change photo"
+                    >✏️</button>
+                    <input id="avatar-input" type="file" accept="image/*" style={{display:'none'}} onChange={async(e)=>{
+                      const file = e.target.files[0]
+                      if (!file) return
+                      const reader = new FileReader()
+                      reader.onload = async(ev)=>{
+                        const dataUrl = ev.target.result
+                        setUser(prev=>({...prev, avatar_url:dataUrl}))
+                        if (isConfigured()) {
+                          await supabase.from('profiles').update({avatar_url:dataUrl}).eq('id',user.id)
+                        }
+                        setProfileMsg('✓ Profile photo updated')
+                      }
+                      reader.readAsDataURL(file)
+                      e.target.value=''
+                    }}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:15,fontWeight:700}}>{user.name}</div>
+                    <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{user.email}</div>
+                    <div style={{marginTop:4}}><RolePill role={user.role}/></div>
+                    <div style={{fontSize:11,color:'var(--brand)',marginTop:4,cursor:'pointer'}} onClick={()=>document.getElementById('avatar-input').click()}>📷 Change photo</div>
+                  </div>
+                </div>
+
+                {profileMsg && <div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:6,padding:'8px 12px',fontSize:13,color:'var(--green)',marginBottom:14}}>{profileMsg}</div>}
+
+                {/* UPDATE NAME */}
+                <div className="form-field">
+                  <label className="form-label">Display Name</label>
+                  <input className="form-input" value={profileName} onChange={e=>setProfileName(e.target.value)} placeholder="Your name" />
+                </div>
+                <button className="btn btn-secondary btn-sm" style={{marginBottom:20}} onClick={async()=>{
+                  if (!profileName.trim()) return
+                  if (isConfigured()) {
+                    await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id)
+                    setUser(prev=>({...prev,name:profileName.trim()}))
+                  }
+                  setProfileMsg('✓ Name updated successfully')
+                }}>Update Name</button>
+
+                {/* RESET PASSWORD */}
+                <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginTop:4}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>Reset Password</div>
+                  <div className="form-field">
+                    <label className="form-label">New Password</label>
+                    <input className="form-input" type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Min 6 characters" />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">Confirm Password</label>
+                    <input className="form-input" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repeat new password" />
+                  </div>
+                  <button className="btn btn-secondary btn-sm" style={{marginBottom:20}} disabled={!newPassword||newPassword!==confirmPassword||newPassword.length<6} onClick={async()=>{
+                    if (isConfigured()) {
+                      const {error} = await supabase.auth.updateUser({password:newPassword})
+                      if (error) setProfileMsg('❌ '+error.message)
+                      else { setProfileMsg('✓ Password updated successfully'); setNewPassword(''); setConfirmPassword('') }
+                    } else setProfileMsg('✓ Password reset (demo mode)')
+                  }}>
+                    {newPassword && confirmPassword && newPassword!==confirmPassword ? '⚠️ Passwords do not match' : 'Update Password'}
+                  </button>
+                </div>
+
+                {/* SIGN OUT */}
+                <div style={{borderTop:'1px solid var(--border)',paddingTop:16}}>
+                  <button className="btn btn-danger" style={{width:'100%'}} onClick={()=>{ setShowProfile(false); logout() }}>
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="main">
           {/* MOBILE OVERLAY */}
@@ -1981,7 +2091,7 @@ export default function App() {
             </div>
             <div className="sb-bottom">
               <div className="sb-user-card">
-                <Avatar name={user.name} role={user.role} size={28}/>
+                <Avatar name={user.name} role={user.role} size={28} avatarUrl={user.avatar_url}/>
                 <div className="sb-user-info">
                   <div style={{fontSize:11,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.name}</div>
                   <div style={{fontSize:9,color:TIERS[user.tier]?.color,fontWeight:600}}>{user.tier}</div>
