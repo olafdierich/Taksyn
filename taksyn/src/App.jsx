@@ -953,7 +953,7 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
         </div>
       )}
 
-
+{showReject && (
         <div className="modal-overlay" onClick={()=>{setShowReject(null);setRejectNote('')}}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr">
