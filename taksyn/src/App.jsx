@@ -427,6 +427,91 @@ const DEMO_ACCOUNTS = [
   { email:'worker@taksyn.demo',     password:'Demo1234!', role:'worker',       name:'Worker',       desc:'Complete tasks' },
 ]
 
+// ─── ONBOARDING ───────────────────────────────────────────────────────────────
+function OnboardingView({ user, onComplete }) {
+  const [step, setStep] = useState(0)
+  const steps = [
+    {
+      icon:'👋',
+      title:`Welcome to Taksyn, ${user.name.split(' ')[0]}!`,
+      sub:'Your task compliance and accountability platform.',
+      body: <div style={{display:'flex',flexDirection:'column',gap:12}}>
+        {[['📋','Assign tasks','Create tasks and assign them to specific staff members'],['📷','Capture evidence','Workers submit photo proof of completed work'],['⚡','Auto escalation','Overdue tasks automatically escalate up the management chain'],['🛡️','Compliance audit trail','Every action is timestamped and traceable for audits']].map(([icon,title,desc])=>(
+          <div key={title} style={{display:'flex',gap:12,padding:'10px 12px',background:'var(--s3)',borderRadius:8}}>
+            <span style={{fontSize:20}}>{icon}</span>
+            <div><div style={{fontSize:13,fontWeight:600}}>{title}</div><div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{desc}</div></div>
+          </div>
+        ))}
+      </div>
+    },
+    {
+      icon:'🏢',
+      title:'Your Role: ' + (ROLE_LABELS[user.role]||user.role),
+      sub:'Here is what you can do in Taksyn.',
+      body: <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        {user.role==='super_admin'&&[['👥','Manage all users and teams'],['📊','Full platform reports and analytics'],['🔧','Configure task templates and workflows'],['🏆','View staff performance and awards']].map(([i,t])=><div key={t} style={{display:'flex',gap:10,padding:'8px 10px',background:'var(--s3)',borderRadius:6}}><span>{i}</span><span style={{fontSize:13}}>{t}</span></div>)}
+        {user.role==='worker'&&[['📋','See tasks assigned to you'],['▶️','Time in and time out for each task'],['📷','Upload photo evidence'],['✅','Submit tasks for supervisor review']].map(([i,t])=><div key={t} style={{display:'flex',gap:10,padding:'8px 10px',background:'var(--s3)',borderRadius:6}}><span>{i}</span><span style={{fontSize:13}}>{t}</span></div>)}
+        {user.role==='supervisor'&&[['🔍','Review and approve worker submissions'],['✅','Approve or send tasks back with instructions'],['⚠️','Escalate issues to manager'],['📊','View team performance']].map(([i,t])=><div key={t} style={{display:'flex',gap:10,padding:'8px 10px',background:'var(--s3)',borderRadius:6}}><span>{i}</span><span style={{fontSize:13}}>{t}</span></div>)}
+        {user.role==='manager'&&[['👥','Oversee all team tasks'],['⚠️','Manage escalations'],['📊','View completion rates and performance'],['🏆','Award top performers']].map(([i,t])=><div key={t} style={{display:'flex',gap:10,padding:'8px 10px',background:'var(--s3)',borderRadius:6}}><span>{i}</span><span style={{fontSize:13}}>{t}</span></div>)}
+        {user.role==='client_admin'&&[['🏢','Manage your organisation'],['👥','Invite and manage staff'],['📊','Full reports and compliance tracking'],['📧','Invite via email or WhatsApp']].map(([i,t])=><div key={t} style={{display:'flex',gap:10,padding:'8px 10px',background:'var(--s3)',borderRadius:6}}><span>{i}</span><span style={{fontSize:13}}>{t}</span></div>)}
+      </div>
+    },
+    {
+      icon:'🚀',
+      title:"You're all set!",
+      sub:'Here are your first steps to get started.',
+      body: <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        {(user.role==='super_admin'||user.role==='client_admin')&&[['1','Go to Team','Invite your staff via email or WhatsApp'],['2','Create a Task','Assign it to a staff member with a due date'],['3','Check Reports','Monitor completion rates and compliance']].map(([n,t,d])=>(
+          <div key={n} style={{display:'flex',gap:12,padding:'10px 12px',background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8}}>
+            <div style={{width:24,height:24,borderRadius:'50%',background:'var(--brand)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{n}</div>
+            <div><div style={{fontSize:13,fontWeight:600}}>{t}</div><div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{d}</div></div>
+          </div>
+        ))}
+        {user.role==='worker'&&[['1','Go to My Tasks','See tasks assigned to you'],['2','Tap a task','Press Time In to start, Time Out when done'],['3','Upload a photo','Take a photo as evidence before submitting']].map(([n,t,d])=>(
+          <div key={n} style={{display:'flex',gap:12,padding:'10px 12px',background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8}}>
+            <div style={{width:24,height:24,borderRadius:'50%',background:'var(--brand)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{n}</div>
+            <div><div style={{fontSize:13,fontWeight:600}}>{t}</div><div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{d}</div></div>
+          </div>
+        ))}
+        {(user.role==='supervisor'||user.role==='manager')&&[['1','Check Evidence tab','Review submitted tasks from workers'],['2','Approve or send back','Add instructions if work needs redoing'],['3','Monitor escalations','Act on any overdue or escalated tasks']].map(([n,t,d])=>(
+          <div key={n} style={{display:'flex',gap:12,padding:'10px 12px',background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8}}>
+            <div style={{width:24,height:24,borderRadius:'50%',background:'var(--brand)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{n}</div>
+            <div><div style={{fontSize:13,fontWeight:600}}>{t}</div><div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{d}</div></div>
+          </div>
+        ))}
+      </div>
+    }
+  ]
+  const current = steps[step]
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',padding:20,backdropFilter:'blur(4px)'}}>
+      <style>{CSS}</style>
+      <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:460,maxHeight:'85vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.15)'}}>
+        <div style={{padding:'28px 24px 0',textAlign:'center'}}>
+          <div style={{fontSize:48,marginBottom:12}}>{current.icon}</div>
+          <div style={{fontSize:18,fontWeight:800,marginBottom:6}}>{current.title}</div>
+          <div style={{fontSize:13,color:'var(--t2)',marginBottom:20}}>{current.sub}</div>
+        </div>
+        <div style={{padding:'0 24px 24px'}}>
+          {current.body}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:20}}>
+            <div style={{display:'flex',gap:6}}>
+              {steps.map((_,i)=><div key={i} style={{width:i===step?20:7,height:7,borderRadius:4,background:i===step?'var(--brand)':'var(--s4)',transition:'width .2s'}}/>)}
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              {step>0&&<button className="btn btn-secondary btn-sm" onClick={()=>setStep(s=>s-1)}>Back</button>}
+              {step<steps.length-1
+                ? <button className="btn btn-primary" onClick={()=>setStep(s=>s+1)}>Next →</button>
+                : <button className="btn btn-primary" onClick={onComplete}>Get Started 🚀</button>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AuthView({ onAuth }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
@@ -649,7 +734,7 @@ function DashboardView({ tasks, user, setPage }) {
 }
 
 // ─── TASKS VIEW ───────────────────────────────────────────────────────────────
-function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTasks }) {
+function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTasks, search }) {
   const [filter, setFilter] = useState('all')
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
@@ -668,7 +753,12 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
   },[])
 
   const visible = visibleTasks(tasks, user)
-  const filtered = filter==='all'?visible:filter==='escalated'?visible.filter(t=>t.escalation):visible.filter(t=>t.status===filter)
+  const searchFiltered = search ? visible.filter(t=>
+    t.title?.toLowerCase().includes(search.toLowerCase()) ||
+    t.category?.toLowerCase().includes(search.toLowerCase()) ||
+    t.assigned_user_name?.toLowerCase().includes(search.toLowerCase())
+  ) : visible
+  const filtered = filter==='all'?searchFiltered:filter==='escalated'?searchFiltered.filter(t=>t.escalation):searchFiltered.filter(t=>t.status===filter)
 
   const update = async (id, changes) => {
     setTasks(prev=>prev.map(t=>t.id===id?{...t,...changes}:t))
@@ -915,6 +1005,30 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
               </span>
             )}
           </div>
+
+          {sel.status==='rejected' && (
+            <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back — Action Required</div>
+              {sel.comments?.filter(c=>c.includes('Supervisor:')).slice(-1).map((c,i)=>(
+                <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px',lineHeight:1.5}}>
+                  {c.replace('⚠️ ','').replace(/.*Supervisor\):\s*/,'')}
+                </div>
+              ))}
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>Please complete the required changes and resubmit.</div>
+            </div>
+          )}
+
+          {sel.status==='rejected' && (
+            <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back — Action Required</div>
+              {sel.comments?.filter(c=>c.startsWith('⚠️')).slice(-1).map((c,i)=>(
+                <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px',lineHeight:1.5}}>
+                  {c.replace('⚠️ ','').split(': ').slice(1).join(': ')}
+                </div>
+              ))}
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>Please complete the required changes and resubmit.</div>
+            </div>
+          )}
 
           {sel.escalation && (
             <div className="esc-banner">
@@ -1176,16 +1290,63 @@ function ReportsView({ tasks, user }) {
   // Awards
   const awards = computeAwards(tasks)
 
+  // Weekly chart data — last 7 days
+  const last7 = Array.from({length:7},(_,i)=>{
+    const d = new Date(); d.setDate(d.getDate()-6+i)
+    const dateStr = d.toISOString().split('T')[0]
+    const dayTasks = tasks.filter(t=>t.completed_at?.startsWith(dateStr)||t.due_date===dateStr)
+    const dayDone = tasks.filter(t=>t.completed_at?.startsWith(dateStr)&&['completed','approved','awaiting_review'].includes(t.status))
+    return { label:d.toLocaleDateString([],{weekday:'short'}), total:dayTasks.length, done:dayDone.length }
+  })
+  const maxBar = Math.max(...last7.map(d=>d.total),1)
+
+  // PDF Export
+  const exportPDF = () => {
+    const rows = tasks.map(t=>`
+      <tr>
+        <td>${t.id}</td>
+        <td>${t.title}</td>
+        <td>${t.category}</td>
+        <td>${t.status}</td>
+        <td>${t.compliance?'Yes':'No'}</td>
+        <td>${t.due_date||'—'}</td>
+        <td>${fmtDuration(t.started_at,t.completed_at)||'—'}</td>
+        <td>${t.gps_start||'—'}</td>
+      </tr>`).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title>
+    <style>body{font-family:sans-serif;padding:30px;color:#1a2033}h1{color:#00A87E;margin-bottom:4px}h2{font-size:14px;color:#5a6478;font-weight:400;margin-bottom:24px}.stats{display:flex;gap:20px;margin-bottom:28px}.stat{background:#f4f6f9;border-radius:8px;padding:14px 20px;text-align:center}.stat-val{font-size:24px;font-weight:800;color:#00A87E}.stat-lbl{font-size:12px;color:#5a6478;margin-top:4px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:8px 10px;background:#f4f6f9;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#5a6478}td{padding:8px 10px;border-bottom:1px solid #e8ebf0}.footer{margin-top:30px;font-size:11px;color:#9aa3b2;text-align:center}</style>
+    </head><body>
+    <h1>Taksyn Compliance Report</h1>
+    <h2>${user.org} · Generated ${new Date().toLocaleDateString()}</h2>
+    <div class="stats">
+      <div class="stat"><div class="stat-val">${total}</div><div class="stat-lbl">Total Tasks</div></div>
+      <div class="stat"><div class="stat-val">${pct(done,total)}%</div><div class="stat-lbl">Completion Rate</div></div>
+      <div class="stat"><div class="stat-val">${pct(compDone,compT.length)}%</div><div class="stat-lbl">Compliance Rate</div></div>
+      <div class="stat"><div class="stat-val">${overdue}</div><div class="stat-lbl">Overdue</div></div>
+    </div>
+    <table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Duration</th><th>GPS</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div class="footer">Taksyn — Task Compliance & Accountability Platform · taksyn.vercel.app</div>
+    </body></html>`
+    const w = window.open('','_blank')
+    w.document.write(html)
+    w.document.close()
+    setTimeout(()=>w.print(),500)
+  }
+
   return (
     <div className="anim">
       <div className="ph">
         <div className="ph-top">
           <div><div className="ph-title">Reports & Analytics</div><div className="ph-sub">Audit-ready compliance documentation</div></div>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{
-            const csv = ['ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Started,Completed,Duration,GPS Start'].join(',') + '\n' +
-              tasks.map(t=>[t.id,`"${t.title}"`,t.category,t.status,t.priority,t.compliance,t.evidence?.length||0,t.due_date,t.started_at||'',t.completed_at||'',fmtDuration(t.started_at,t.completed_at)||'',t.gps_start||''].join(',')).join('\n')
-            const a = document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='taksyn-report.csv'; a.click()
-          }}>📥 Export CSV</button>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-secondary btn-sm" onClick={()=>{
+              const csv = ['ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Started,Completed,Duration,GPS Start'].join(',') + '\n' +
+                tasks.map(t=>[t.id,`"${t.title}"`,t.category,t.status,t.priority,t.compliance,t.evidence?.length||0,t.due_date,t.started_at||'',t.completed_at||'',fmtDuration(t.started_at,t.completed_at)||'',t.gps_start||''].join(',')).join('\n')
+              const a = document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='taksyn-report.csv'; a.click()
+            }}>📥 CSV</button>
+            <button className="btn btn-primary btn-sm" onClick={exportPDF}>📄 PDF Report</button>
+          </div>
         </div>
       </div>
 
@@ -1194,6 +1355,27 @@ function ReportsView({ tasks, user }) {
         <Stat label="Compliance" val={`${pct(compDone,compT.length)}%`} sub={`${compDone}/${compT.length}`} color="#8B5CF6" bg="rgba(139,92,246,.1)" icon="🛡️"/>
         <Stat label="Avg Duration" val={avgMins>0?`${avgMins}m`:'—'} sub="per task" color="#3B82F6" bg="rgba(59,130,246,.1)" icon="⏱"/>
         <Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'Clear'} color={overdue>0?'#EF4444':'#10B981'} bg="rgba(239,68,68,.1)" icon="⏰"/>
+      </div>
+
+      {/* WEEKLY BAR CHART */}
+      <div className="section" style={{marginBottom:16}}>
+        <div className="section-title">Task Activity — Last 7 Days</div>
+        <div style={{display:'flex',alignItems:'flex-end',gap:8,height:100,paddingBottom:4}}>
+          {last7.map((d,i)=>(
+            <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+              <div style={{width:'100%',display:'flex',flexDirection:'column',justifyContent:'flex-end',height:80,gap:2}}>
+                {d.total>0&&<div style={{width:'100%',height:`${pct(d.done,d.total)*80/100}px`,background:'var(--green)',borderRadius:'3px 3px 0 0',minHeight:d.done>0?4:0,transition:'height .3s'}}/>}
+                {d.total>0&&<div style={{width:'100%',height:`${pct(d.total-d.done,d.total)*80/100}px`,background:'var(--s4)',borderRadius:d.done>0?'0':'3px 3px 0 0',minHeight:d.total-d.done>0?2:0}}/>}
+                {d.total===0&&<div style={{width:'100%',height:4,background:'var(--s4)',borderRadius:3}}/>}
+              </div>
+              <div style={{fontSize:10,color:'var(--t2)',fontWeight:600}}>{d.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:'flex',gap:16,marginTop:8}}>
+          <div style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--t2)'}}><div style={{width:10,height:10,borderRadius:2,background:'var(--green)'}}/> Completed</div>
+          <div style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--t2)'}}><div style={{width:10,height:10,borderRadius:2,background:'var(--s4)'}}/> Pending</div>
+        </div>
       </div>
 
       <div className="tabs">
@@ -1493,7 +1675,18 @@ export default function App() {
   // Load tasks when user logs in
   useEffect(()=>{ if(user && isConfigured()) loadTasks() },[user])
 
-  const handleAuth = (userData) => { setUser(userData); setPage('dashboard') }
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const handleAuth = (userData) => {
+    setUser(userData)
+    setPage('dashboard')
+    // Show onboarding for new users (check localStorage)
+    const key = `taksyn_onboarded_${userData.id}`
+    if (!localStorage.getItem(key)) setShowOnboarding(true)
+  }
+  const completeOnboarding = () => {
+    if (user) localStorage.setItem(`taksyn_onboarded_${user.id}`, '1')
+    setShowOnboarding(false)
+  }
   const logout = async () => {
     if(isConfigured()) await supabase.auth.signOut()
     setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
@@ -1502,11 +1695,13 @@ export default function App() {
 
   if (loading) return <><style>{CSS}</style><div className="loading"><div className="spinner"/><span>Loading Taksyn…</span></div></>
   if (!user) return <AuthView onAuth={handleAuth} />
+  if (showOnboarding) return <OnboardingView user={user} onComplete={completeOnboarding} />
 
   const escalationCount = tasks.filter(t=>t.escalation||t.status==='overdue').length
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
+  const rejectedCount = tasks.filter(t=>t.status==='rejected' && visibleTasks([t],user).length>0).length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, saveTask, updateTaskRemote, loadTasks }
+  const pageProps = { tasks, setTasks, user, setPage, saveTask, updateTaskRemote, loadTasks, search }
 
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
@@ -1548,6 +1743,7 @@ export default function App() {
                   <span className="nav-item-label">{label}</span>
                   {key==='escalations'&&escalationCount>0&&<span className="nav-badge">{escalationCount}</span>}
                   {key==='evidence'&&reviewCount>0&&<span className="nav-badge amber">{reviewCount}</span>}
+                  {key==='tasks'&&rejectedCount>0&&user.role==='worker'&&<span className="nav-badge">{rejectedCount}</span>}
                 </button>
               ))}
             </div>
