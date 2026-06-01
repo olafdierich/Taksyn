@@ -1275,16 +1275,45 @@ function EvidenceView({ tasks, setTasks, user }) {
 // ─── REPORTS ──────────────────────────────────────────────────────────────────
 function ReportsView({ tasks, user }) {
   const [tab, setTab] = useState('overview')
-  const total = tasks.length, done = tasks.filter(t=>['completed','approved'].includes(t.status)).length
-  const overdue = tasks.filter(t=>t.status==='overdue').length
-  const esc = tasks.filter(t=>t.escalation).length
-  const compT = tasks.filter(t=>t.compliance), compDone = compT.filter(t=>['completed','approved'].includes(t.status)).length
+  const [period, setPeriod] = useState('weekly')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
+
+  const getDateRange = () => {
+    const now = new Date()
+    const end = new Date(now); end.setHours(23,59,59,999)
+    const start = new Date(now)
+    if (period==='weekly') { start.setDate(now.getDate()-7) }
+    else if (period==='monthly') { start.setMonth(now.getMonth()-1) }
+    else if (period==='quarterly') { start.setMonth(now.getMonth()-3) }
+    else if (period==='annual') { start.setFullYear(now.getFullYear()-1) }
+    else if (period==='custom') { 
+      return { start: customStart ? new Date(customStart) : null, end: customEnd ? new Date(customEnd) : null }
+    }
+    return { start, end }
+  }
+
+  const { start: rangeStart, end: rangeEnd } = getDateRange()
+  const filteredByPeriod = tasks.filter(t => {
+    if (!rangeStart || !rangeEnd) return true
+    const taskDate = new Date(t.created_at || t.due_date)
+    return taskDate >= rangeStart && taskDate <= rangeEnd
+  })
+  const pt = filteredByPeriod
+  const total = pt.length
+  const done = pt.filter(t=>['completed','approved'].includes(t.status)).length
+  const approved = pt.filter(t=>t.status==='approved').length
+  const rejected = pt.filter(t=>t.status==='rejected').length
+  const overdue = pt.filter(t=>t.status==='overdue').length
+  const notOnTime = pt.filter(t=>t.due_date && t.completed_at && new Date(t.completed_at) > new Date(t.due_date)).length
+  const esc = pt.filter(t=>t.escalation).length
+  const compT = pt.filter(t=>t.compliance), compDone = compT.filter(t=>['completed','approved'].includes(t.status)).length
 
   const byCat = {}
-  tasks.forEach(t=>{ if(!byCat[t.category]) byCat[t.category]={total:0,done:0}; byCat[t.category].total++; if(['completed','approved'].includes(t.status)) byCat[t.category].done++ })
+  pt.forEach(t=>{ if(!byCat[t.category]) byCat[t.category]={total:0,done:0}; byCat[t.category].total++; if(['completed','approved'].includes(t.status)) byCat[t.category].done++ })
 
   // Duration stats
-  const tasksWithDuration = tasks.filter(t=>t.started_at&&t.completed_at)
+  const tasksWithDuration = pt.filter(t=>t.started_at&&t.completed_at)
   const avgMins = tasksWithDuration.length ? Math.round(tasksWithDuration.reduce((sum,t)=>(new Date(t.completed_at)-new Date(t.started_at))/60000+sum,0)/tasksWithDuration.length) : 0
 
   // Awards
@@ -1300,38 +1329,83 @@ function ReportsView({ tasks, user }) {
   })
   const maxBar = Math.max(...last7.map(d=>d.total),1)
 
-  // PDF Export
+  // PDF Export — with logo, detailed stats, period
   const exportPDF = () => {
-    const rows = tasks.map(t=>`
+    const periodLabel = {weekly:'Last 7 Days',monthly:'Last Month',quarterly:'Last 3 Months',annual:'Last Year',custom:`${customStart} to ${customEnd}`}[period]
+    const rows = pt.map(t=>`
       <tr>
         <td>${t.id}</td>
-        <td>${t.title}</td>
+        <td><strong>${t.title}</strong></td>
         <td>${t.category}</td>
-        <td>${t.status}</td>
-        <td>${t.compliance?'Yes':'No'}</td>
+        <td style="color:${t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':t.status==='overdue'?'#F59E0B':'#1a2033'}">${t.status.replace('_',' ').toUpperCase()}</td>
+        <td>${t.compliance?'✓ Yes':'—'}</td>
         <td>${t.due_date||'—'}</td>
+        <td>${t.completed_at?new Date(t.completed_at).toLocaleDateString():'—'}</td>
         <td>${fmtDuration(t.started_at,t.completed_at)||'—'}</td>
-        <td>${t.gps_start||'—'}</td>
+        <td>${t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—'}</td>
       </tr>`).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title>
-    <style>body{font-family:sans-serif;padding:30px;color:#1a2033}h1{color:#00A87E;margin-bottom:4px}h2{font-size:14px;color:#5a6478;font-weight:400;margin-bottom:24px}.stats{display:flex;gap:20px;margin-bottom:28px}.stat{background:#f4f6f9;border-radius:8px;padding:14px 20px;text-align:center}.stat-val{font-size:24px;font-weight:800;color:#00A87E}.stat-lbl{font-size:12px;color:#5a6478;margin-top:4px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:8px 10px;background:#f4f6f9;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#5a6478}td{padding:8px 10px;border-bottom:1px solid #e8ebf0}.footer{margin-top:30px;font-size:11px;color:#9aa3b2;text-align:center}</style>
+    <style>
+      *{box-sizing:border-box}
+      body{font-family:'Helvetica Neue',sans-serif;padding:40px;color:#1a2033;font-size:13px}
+      .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding-bottom:16px;border-bottom:2px solid #00A87E}
+      .logo-area{display:flex;align-items:center;gap:12px}
+      .logo-text{font-size:24px;font-weight:800;color:#00A87E;letter-spacing:-1px}
+      .report-info{text-align:right;font-size:11px;color:#5a6478}
+      .report-info strong{display:block;font-size:14px;color:#1a2033;margin-bottom:2px}
+      h2{font-size:12px;color:#5a6478;font-weight:400;margin:8px 0 20px}
+      .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+      .stat{background:#f4f6f9;border-radius:8px;padding:14px;text-align:center;border:1px solid #e8ebf0}
+      .stat-val{font-size:22px;font-weight:800;color:#00A87E;line-height:1}
+      .stat-val.red{color:#EF4444}.stat-val.amber{color:#F59E0B}.stat-val.green{color:#10B981}.stat-val.blue{color:#3B82F6}
+      .stat-lbl{font-size:10px;color:#5a6478;margin-top:5px;text-transform:uppercase;letter-spacing:.5px}
+      .section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a6478;margin:20px 0 8px;padding-bottom:6px;border-bottom:1px solid #e8ebf0}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th{text-align:left;padding:7px 8px;background:#f4f6f9;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#5a6478;border-bottom:1px solid #e8ebf0}
+      td{padding:7px 8px;border-bottom:1px solid #f0f2f5;vertical-align:top}
+      tr:hover td{background:#fafbfc}
+      .footer{margin-top:28px;padding-top:14px;border-top:1px solid #e8ebf0;font-size:10px;color:#9aa3b2;display:flex;justify-content:space-between}
+      @media print{body{padding:20px}.summary{grid-template-columns:repeat(4,1fr)}}
+    </style>
     </head><body>
-    <h1>Taksyn Compliance Report</h1>
-    <h2>${user.org} · Generated ${new Date().toLocaleDateString()}</h2>
-    <div class="stats">
-      <div class="stat"><div class="stat-val">${total}</div><div class="stat-lbl">Total Tasks</div></div>
-      <div class="stat"><div class="stat-val">${pct(done,total)}%</div><div class="stat-lbl">Completion Rate</div></div>
-      <div class="stat"><div class="stat-val">${pct(compDone,compT.length)}%</div><div class="stat-lbl">Compliance Rate</div></div>
-      <div class="stat"><div class="stat-val">${overdue}</div><div class="stat-lbl">Overdue</div></div>
+    <div class="header">
+      <div class="logo-area">
+        <img src="https://taksyn.vercel.app/logo.jpeg" height="40" style="object-fit:contain" onerror="this.style.display='none'" />
+        <div class="logo-text">Taksyn</div>
+      </div>
+      <div class="report-info">
+        <strong>Compliance Report</strong>
+        ${user.org}<br/>
+        Period: ${periodLabel}<br/>
+        Generated: ${new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}
+      </div>
     </div>
-    <table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Duration</th><th>GPS</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    <div class="footer">Taksyn — Task Compliance & Accountability Platform · taksyn.vercel.app</div>
+    <h2>Task compliance and accountability summary for ${periodLabel.toLowerCase()}</h2>
+
+    <div class="summary">
+      <div class="stat"><div class="stat-val">${total}</div><div class="stat-lbl">Total Tasks</div></div>
+      <div class="stat"><div class="stat-val green">${done}</div><div class="stat-lbl">Completed</div></div>
+      <div class="stat"><div class="stat-val amber">${total-done}</div><div class="stat-lbl">Not Completed</div></div>
+      <div class="stat"><div class="stat-val red">${overdue}</div><div class="stat-lbl">Overdue</div></div>
+      <div class="stat"><div class="stat-val green">${approved}</div><div class="stat-lbl">Approved</div></div>
+      <div class="stat"><div class="stat-val red">${rejected}</div><div class="stat-lbl">Rejected</div></div>
+      <div class="stat"><div class="stat-val amber">${notOnTime}</div><div class="stat-lbl">Not On Time</div></div>
+      <div class="stat"><div class="stat-val blue">${pct(compDone,compT.length)}%</div><div class="stat-lbl">Compliance Rate</div></div>
+    </div>
+
+    <div class="section-title">Full Task Audit Log (${total} tasks)</div>
+    <table>
+      <thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Completed</th><th>Duration</th><th>Assigned To</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="footer">
+      <span>Taksyn — Task Compliance & Accountability Platform</span>
+      <span>taksyn.vercel.app</span>
+    </div>
     </body></html>`
     const w = window.open('','_blank')
-    w.document.write(html)
-    w.document.close()
-    setTimeout(()=>w.print(),500)
+    if (w) { w.document.write(html); w.document.close(); setTimeout(()=>w.print(),800) }
+    else { const a=document.createElement('a'); a.href='data:text/html;charset=utf-8,'+encodeURIComponent(html); a.download='taksyn-report.html'; a.click() }
   }
 
   return (
@@ -1339,10 +1413,10 @@ function ReportsView({ tasks, user }) {
       <div className="ph">
         <div className="ph-top">
           <div><div className="ph-title">Reports & Analytics</div><div className="ph-sub">Audit-ready compliance documentation</div></div>
-          <div style={{display:'flex',gap:8}}>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             <button className="btn btn-secondary btn-sm" onClick={()=>{
-              const csv = ['ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Started,Completed,Duration,GPS Start'].join(',') + '\n' +
-                tasks.map(t=>[t.id,`"${t.title}"`,t.category,t.status,t.priority,t.compliance,t.evidence?.length||0,t.due_date,t.started_at||'',t.completed_at||'',fmtDuration(t.started_at,t.completed_at)||'',t.gps_start||''].join(',')).join('\n')
+              const csv = ['ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Completed,Duration,Assigned To'].join(',') + '\n' +
+                pt.map(t=>[t.id,`"${t.title}"`,t.category,t.status,t.priority,t.compliance,t.evidence?.length||0,t.due_date,t.completed_at||'',fmtDuration(t.started_at,t.completed_at)||'',t.assigned_user_name||''].join(',')).join('\n')
               const a = document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='taksyn-report.csv'; a.click()
             }}>📥 CSV</button>
             <button className="btn btn-primary btn-sm" onClick={exportPDF}>📄 PDF Report</button>
@@ -1350,11 +1424,39 @@ function ReportsView({ tasks, user }) {
         </div>
       </div>
 
-      <div className="stat-grid">
-        <Stat label="Completion" val={`${pct(done,total)}%`} sub={`${done}/${total}`} color="#10B981" bg="rgba(16,185,129,.1)" icon="📈"/>
+      {/* PERIOD SELECTOR */}
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">Reporting Period</div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom: period==='custom'?12:0}}>
+          {[['weekly','Weekly'],['monthly','Monthly'],['quarterly','3 Months'],['annual','Annual'],['custom','Custom']].map(([k,l])=>(
+            <button key={k} className={`fb ${period===k?'active':''}`} onClick={()=>setPeriod(k)}>{l}</button>
+          ))}
+        </div>
+        {period==='custom' && (
+          <div style={{display:'flex',gap:10,marginTop:12,flexWrap:'wrap'}}>
+            <div className="form-field" style={{marginBottom:0}}>
+              <label className="form-label">From</label>
+              <input className="form-input" type="date" value={customStart} onChange={e=>setCustomStart(e.target.value)} style={{width:160}} />
+            </div>
+            <div className="form-field" style={{marginBottom:0}}>
+              <label className="form-label">To</label>
+              <input className="form-input" type="date" value={customEnd} onChange={e=>setCustomEnd(e.target.value)} style={{width:160}} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="stat-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
+        <Stat label="Total Tasks" val={total} sub={`for this period`} icon="📋"/>
+        <Stat label="Completed" val={done} sub={`${pct(done,total)}% rate`} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/>
+        <Stat label="Approved" val={approved} sub="by supervisor" color="#10B981" bg="rgba(16,185,129,.1)" icon="👍"/>
+        <Stat label="Rejected" val={rejected} sub="sent back" color={rejected>0?'#EF4444':'#6B7280'} bg="rgba(239,68,68,.1)" icon="✗"/>
+      </div>
+      <div className="stat-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginTop:-6}}>
+        <Stat label="Overdue" val={overdue} sub="past due date" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/>
+        <Stat label="Not On Time" val={notOnTime} sub="completed late" color={notOnTime>0?'#F59E0B':'#10B981'} bg="rgba(245,158,11,.1)" icon="⏱"/>
         <Stat label="Compliance" val={`${pct(compDone,compT.length)}%`} sub={`${compDone}/${compT.length}`} color="#8B5CF6" bg="rgba(139,92,246,.1)" icon="🛡️"/>
         <Stat label="Avg Duration" val={avgMins>0?`${avgMins}m`:'—'} sub="per task" color="#3B82F6" bg="rgba(59,130,246,.1)" icon="⏱"/>
-        <Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'Clear'} color={overdue>0?'#EF4444':'#10B981'} bg="rgba(239,68,68,.1)" icon="⏰"/>
       </div>
 
       {/* WEEKLY BAR CHART */}
