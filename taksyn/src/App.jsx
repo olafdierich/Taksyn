@@ -1888,26 +1888,36 @@ export default function App() {
 
   useEffect(()=>{
     if (isConfigured()) {
+      // Set a timeout so the app never gets stuck loading
+      const timeout = setTimeout(()=>setLoading(false), 5000)
+
       supabase.auth.getSession().then(({data:{session}})=>{
         if (session) {
           supabase.from('profiles').select('*').eq('id',session.user.id).single()
-            .then(({data})=>{
+            .then(({data, error})=>{
+              clearTimeout(timeout)
               if(data) setUser({...data,email:session.user.email})
               setLoading(false)
             })
-        } else setLoading(false)
-      })
+            .catch(()=>{ clearTimeout(timeout); setLoading(false) })
+        } else {
+          clearTimeout(timeout)
+          setLoading(false)
+        }
+      }).catch(()=>{ clearTimeout(timeout); setLoading(false) })
+
       const {data:{subscription}} = supabase.auth.onAuthStateChange(async(_event, session)=>{
         if (!session) {
           setUser(null)
         } else {
-          // Auto-load profile on any sign in event
-          const { data } = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
-          if (data) setUser({...data, email:session.user.email})
+          try {
+            const { data } = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
+            if (data) setUser({...data, email:session.user.email})
+          } catch(e) { console.error('Profile load error:', e) }
           setLoading(false)
         }
       })
-      return ()=>subscription.unsubscribe()
+      return ()=>{ subscription.unsubscribe(); clearTimeout(timeout) }
     } else setLoading(false)
   },[])
 
@@ -1932,7 +1942,19 @@ export default function App() {
   }
   useEffect(()=>setPage('dashboard'),[user?.role])
 
-  if (loading) return <><style>{CSS}</style><div className="loading"><div className="spinner"/><span>Loading Taksyn…</span></div></>
+  if (loading) return (
+    <>
+      <style>{CSS}</style>
+      <div className="loading" style={{flexDirection:'column',gap:16}}>
+        <img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}} />
+        <div style={{display:'flex',alignItems:'center',gap:10,color:'var(--t2)',fontSize:14}}>
+          <div className="spinner"/>
+          <span>Loading Taksyn…</span>
+        </div>
+        <div style={{fontSize:12,color:'var(--t3)'}}>If this takes too long, <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setLoading(false)}>click here</span></div>
+      </div>
+    </>
+  )
   if (!user) return <AuthView onAuth={handleAuth} />
   if (showOnboarding) return <OnboardingView user={user} onComplete={completeOnboarding} />
 
