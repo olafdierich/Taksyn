@@ -741,6 +741,8 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
   const [rejectNote, setRejectNote] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteScope, setDeleteScope] = useState('')
+  const [showEdit, setShowEdit] = useState(false)
+  const [editTask, setEditTask] = useState({})
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
   const [newTask, setNewTask] = useState({ title:'', category:'Housekeeping', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'' })
@@ -853,7 +855,105 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
     <div className="anim">
       {celebration && <Celebration onClose={()=>setCelebration(false)} />}
 
-      {showReject && (
+      {showEdit && sel && (
+        <div className="modal-overlay" onClick={()=>setShowEdit(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Edit Task</div>
+              <button className="modal-close" onClick={()=>setShowEdit(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-field">
+                <label className="form-label">Task Title</label>
+                <input className="form-input" value={editTask.title||''} onChange={e=>setEditTask({...editTask,title:e.target.value})} />
+              </div>
+              <div className="two-col">
+                <div className="form-field">
+                  <label className="form-label">Category</label>
+                  <select className="form-select" value={editTask.category||''} onChange={e=>setEditTask({...editTask,category:e.target.value})}>
+                    {Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label className="form-label">Priority</label>
+                  <select className="form-select" value={editTask.priority||''} onChange={e=>setEditTask({...editTask,priority:e.target.value})}>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+              </div>
+              <div className="two-col">
+                <div className="form-field">
+                  <label className="form-label">Due Date</label>
+                  <input className="form-input" type="date" value={editTask.due_date||''} onChange={e=>setEditTask({...editTask,due_date:e.target.value})} />
+                </div>
+                <div className="form-field">
+                  <label className="form-label">Schedule</label>
+                  <select className="form-select" value={editTask.recurrence||'once'} onChange={e=>setEditTask({...editTask,recurrence:e.target.value})}>
+                    {RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Assign To</label>
+                {teamUsers.length > 0 ? (
+                  <select className="form-select" value={editTask.assigned_user_id||''} onChange={e=>{
+                    const u = teamUsers.find(u=>u.id===e.target.value)
+                    if(u) setEditTask({...editTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_role:u.role})
+                  }}>
+                    <option value="">— Select staff member —</option>
+                    {teamUsers.map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
+                  </select>
+                ) : (
+                  <select className="form-select" value={editTask.assigned_role||'worker'} onChange={e=>setEditTask({...editTask,assigned_role:e.target.value})}>
+                    {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </select>
+                )}
+              </div>
+              <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
+                <input type="checkbox" id="edit-comp" checked={editTask.compliance||false} onChange={e=>setEditTask({...editTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}} />
+                <label htmlFor="edit-comp" style={{fontSize:13,cursor:'pointer'}}>Compliance-critical task</label>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Add Subtask</label>
+                <div style={{display:'flex',gap:8}}>
+                  <input className="form-input" id="new-subtask" placeholder="e.g. Check temperature log" onKeyDown={e=>{
+                    if(e.key==='Enter'&&e.target.value.trim()){
+                      setEditTask(prev=>({...prev,subtasks:[...(prev.subtasks||[]),{t:e.target.value.trim(),done:false}]}))
+                      e.target.value=''
+                    }
+                  }}/>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{
+                    const inp=document.getElementById('new-subtask')
+                    if(inp.value.trim()){setEditTask(prev=>({...prev,subtasks:[...(prev.subtasks||[]),{t:inp.value.trim(),done:false}]}));inp.value=''}
+                  }}>Add</button>
+                </div>
+                {editTask.subtasks?.length>0 && (
+                  <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:4}}>
+                    {editTask.subtasks.map((s,i)=>(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',background:'var(--s3)',borderRadius:6,fontSize:13}}>
+                        <span style={{flex:1}}>{s.t}</span>
+                        <span style={{cursor:'pointer',color:'var(--red)',fontSize:16}} onClick={()=>setEditTask(prev=>({...prev,subtasks:prev.subtasks.filter((_,j)=>j!==i)}))}>×</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>setShowEdit(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={()=>{
+                  update(sel.id, editTask)
+                  setShowEdit(false)
+                }}>Save Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
         <div className="modal-overlay" onClick={()=>{setShowReject(null);setRejectNote('')}}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr">
@@ -1137,6 +1237,9 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
           )}
 
           <div className="btn-row">
+            {canApprove && !['approved'].includes(sel.status) && (
+              <button className="btn btn-secondary" onClick={()=>{ setEditTask({...sel}); setShowEdit(true) }}>✏️ Edit Task</button>
+            )}
             {user.role==='worker'&&sel.status==='pending'&&(
               <button className="btn btn-green" onClick={()=>startTask(sel.id)}>⏱ Time In — Start Task</button>
             )}
