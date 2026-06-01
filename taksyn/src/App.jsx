@@ -510,7 +510,7 @@ function computeAwards(tasks) {
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 function DashboardView({ tasks, user, setPage }) {
   const visible = visibleTasks(tasks, user)
-  const done = visible.filter(t=>['completed','approved'].includes(t.status)).length
+  const done = visible.filter(t=>['completed','approved','awaiting_review'].includes(t.status)).length
   const overdue = visible.filter(t=>t.status==='overdue').length
   const esc = visible.filter(t=>t.escalation).length
   const rate = pct(done, visible.length)
@@ -545,10 +545,10 @@ function DashboardView({ tasks, user, setPage }) {
           <Stat label="Overdue" val={overdue} sub="Needs attention" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" />
         </>}
         {isWkr && <>
-          <Stat label="My Tasks" val={visible.length} sub={`${visible.length-done} remaining`} icon="📋" />
-          <Stat label="Completed" val={done} sub={`${rate}% done`} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" />
+          <Stat label="My Tasks" val={visible.filter(t=>!['awaiting_review','approved','completed'].includes(t.status)).length} sub="remaining to do" icon="📋" />
+          <Stat label="Submitted" val={visible.filter(t=>['awaiting_review','approved','completed'].includes(t.status)).length} sub="done or awaiting review" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" />
           <Stat label="Overdue" val={overdue} sub={overdue>0?'Complete soon':'All good'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" />
-          <Stat label="Rejected" val={rejected} sub="Needs resubmission" color={rejected>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.1)" icon="✗" />
+          <Stat label="Rejected" val={rejected} sub={rejected>0?'Action needed':'All good'} color={rejected>0?'#EF4444':'#6B7280'} bg={rejected>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)'} icon="✗" />
         </>}
       </div>
 
@@ -648,6 +648,8 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
   const [comment, setComment] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [celebration, setCelebration] = useState(false)
+  const [showReject, setShowReject] = useState(null) // task id being rejected
+  const [rejectNote, setRejectNote] = useState('')
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
   const [newTask, setNewTask] = useState({ title:'', category:'Housekeeping', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'' })
@@ -754,6 +756,46 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
   return (
     <div className="anim">
       {celebration && <Celebration onClose={()=>setCelebration(false)} />}
+
+      {showReject && (
+        <div className="modal-overlay" onClick={()=>{setShowReject(null);setRejectNote('')}}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Send Task Back to Worker</div>
+              <button className="modal-close" onClick={()=>{setShowReject(null);setRejectNote('')}}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{fontSize:13,color:'var(--t2)',marginBottom:14}}>
+                The task will be sent back to the worker as <span style={{color:'var(--red)',fontWeight:600}}>Rejected</span> with your instructions.
+              </div>
+              <div className="form-field">
+                <label className="form-label">Instructions for Worker</label>
+                <textarea 
+                  className="comment-box" 
+                  style={{minHeight:80}} 
+                  placeholder="e.g. Please re-clean the bathroom and take a clearer photo of the sink area…"
+                  value={rejectNote}
+                  onChange={e=>setRejectNote(e.target.value)}
+                />
+              </div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>{setShowReject(null);setRejectNote('')}}>Cancel</button>
+                <button className="btn btn-danger" disabled={!rejectNote.trim()} onClick={()=>{
+                  const task = tasks.find(t=>t.id===showReject)
+                  const rejectionMsg = `⚠️ ${user.name} (Supervisor): ${rejectNote.trim()}`
+                  update(showReject, {
+                    status:'rejected',
+                    comments:[...(task.comments||[]), rejectionMsg]
+                  })
+                  setShowReject(null)
+                  setRejectNote('')
+                  setSelected(null)
+                }}>Send Back to Worker</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showCreate && (
         <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
@@ -977,7 +1019,10 @@ function TasksView({ tasks, setTasks, user, saveTask, updateTaskRemote, loadTask
               <button className="btn btn-secondary" onClick={()=>submitTask(sel.id)}>💾 Save Progress</button>
             )}
             {canApprove&&sel.status==='awaiting_review'&&(
-              <><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>update(sel.id,{status:'rejected'})}>✗ Reject</button></>
+              <>
+                <button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button>
+                <button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button>
+              </>
             )}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&(
               <button className="btn btn-amber" onClick={()=>update(sel.id,{escalation:true,status:'escalated'})}>⚠️ Escalate</button>
