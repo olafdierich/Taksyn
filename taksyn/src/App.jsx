@@ -484,7 +484,7 @@ function DashboardView({ tasks, user, setPage }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
+function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog }) {
   const [filter, setFilter] = useState('all')
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
@@ -662,7 +662,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
                 <button className="btn btn-danger" disabled={!rejectNote.trim()} onClick={()=>{
                   const task=tasks.find(t=>t.id===showReject)
                   const rejectEntry = { id: Date.now()+'', author: user.name, authorId: user.id, text: '⚠️ Rejected: '+rejectNote.trim(), timestamp: new Date().toISOString(), edits: [], isRejection: true }
-                  update(showReject,{status:'rejected',reviewed_at:new Date().toISOString(),comments:[...(parseSafe(task.comments,[])), rejectEntry]})
+                  const existingComments = Array.isArray(task.comments) ? task.comments : parseSafe(task.comments,[])
+                  update(showReject,{status:'rejected',reviewed_at:new Date().toISOString(),comments:[...existingComments, rejectEntry]})
                   setShowReject(null); setRejectNote('')
                 }}>Reject Task</button>
               </div>
@@ -923,7 +924,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
             </div>
           </div>
           <div className="filter-bar">
-            {['all','pending','in_progress','awaiting_review','completed','overdue','escalated'].map(f=>(
+            {['all','pending','in_progress','awaiting_review','rejected','completed','overdue','escalated'].map(f=>(
               <button key={f} className={"fb "+(filter===f?'active':'')} onClick={()=>setFilter(f)}>
                 {f==='all'?'All':(STATUS_CFG[f]?.label||f)} <span style={{opacity:.6}}>({f==='all'?visible.length:f==='escalated'?visible.filter(t=>t.escalation).length:visible.filter(t=>t.status===f).length})</span>
               </button>
@@ -1637,7 +1638,7 @@ export default function App() {
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
