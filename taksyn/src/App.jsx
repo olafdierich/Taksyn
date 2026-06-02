@@ -1510,6 +1510,7 @@ function UsersView({ user }) {
   const [inviteRole, setInviteRole] = useState('worker')
   const [inviteName, setInviteName] = useState('')
   const [inviteMethod, setInviteMethod] = useState('email')
+  const [inviteOrg, setInviteOrg] = useState('')
   const [realUsers, setRealUsers] = useState([])
 
   useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
@@ -1536,13 +1537,15 @@ function UsersView({ user }) {
   }
 
   const sendInvite = () => {
+    const targetOrg = user.role==='super_admin' ? inviteOrg.trim() : user.org
+    if (user.role==='super_admin' && !targetOrg) { alert('Please enter the organisation name'); return }
     if (inviteMethod==='whatsapp') {
-      const msg=encodeURIComponent('Hi '+inviteName+'! You have been invited to join Taksyn as '+ROLE_LABELS[inviteRole]+'.\n\nSign up here: https://taksyn.vercel.app\n\nUse your email: '+inviteEmail)
+      const msg=encodeURIComponent('Hi '+inviteName+'! You have been invited to join Taksyn as '+ROLE_LABELS[inviteRole]+' at '+targetOrg+'.\n\nSign up here: https://taksyn.vercel.app\n\nUse your email: '+inviteEmail+'\n\nOrganisation name to enter: '+targetOrg)
       window.open('https://wa.me/?text='+msg,'_blank')
     } else {
-      alert('Invite email sent to '+inviteEmail+' (simulated)')
+      alert('Invite sent to '+inviteEmail+' for organisation: '+targetOrg)
     }
-    setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker')
+    setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg('')
   }
 
   return (
@@ -1555,6 +1558,7 @@ function UsersView({ user }) {
               <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Emma Wilson"/></div>
               <div className="form-field"><label className="form-label">Email Address</label><input className="form-input" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="emma@yourorg.com"/></div>
               <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
+              {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
               <div className="form-field">
                 <label className="form-label">Send Via</label>
                 <div style={{display:'flex',gap:8}}>
