@@ -489,7 +489,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
-  const [auditLog, setAuditLog] = useState([])
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [editTask, setEditTask] = useState({})
@@ -1563,6 +1562,7 @@ export default function App() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [undoStack, setUndoStack] = useState([])
   const [showUndo, setShowUndo] = useState(false)
+  const [auditLog, setAuditLog] = useState([])
   const undoTimer = useRef(null)
 
   const pushUndo = (label, prevTasks) => {
