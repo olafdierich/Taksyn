@@ -487,6 +487,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
   const [filter, setFilter] = useState('all')
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
+  const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [editTask, setEditTask] = useState({})
@@ -547,7 +548,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
   const addComment = (tid) => {
     if (!comment.trim()) return
     const task = tasks.find(t=>t.id===tid)
-    update(tid, { comments:[...(task.comments||[]), user.name+': '+comment.trim()] })
+    const entry = { id: Date.now()+'', author: user.name, authorId: user.id, text: comment.trim(), timestamp: new Date().toISOString(), edits: [] }
+    update(tid, { comments:[...(parseSafe(task.comments)||[]), entry] })
     setComment('')
   }
 
@@ -753,8 +755,71 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
           </div>
 
           <div className="section">
+            {/*Comments*/}
             <div className="section-title">Comments & Notes</div>
-            {parseSafe(sel.comments,[]).map((c,i)=><div key={i} className="comment-item">💬 {c}</div>)}
+            {parseSafe(sel.comments,[]).map((c,i)=>{
+              const isObj = c && typeof c==='object'
+              const author = isObj ? c.author : (c.split(':')[0]||'')
+              const text = isObj ? c.text : c.split(':').slice(1).join(':').trim()
+              const ts = isObj ? c.timestamp : null
+              const edits = isObj ? (c.edits||[]) : []
+              const isAmendment = isObj && c.isAmendment
+              const isOwn = isObj ? c.authorId===user.id : author===user.name
+              const tsDate = ts ? new Date(ts) : null
+              const isToday = tsDate ? tsDate.toDateString()===new Date().toDateString() : false
+              const fmtTs = (d) => new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+              const commentId = isObj ? c.id : i+''
+              const isEditing = editingComment && editingComment.taskId===sel.id && editingComment.commentId===commentId
+              return (
+                <div key={i} className="comment-item" style={{borderLeft: isAmendment?'3px solid #6366F1':'3px solid var(--border)',paddingLeft:10,marginBottom:8,background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                    <div style={{flex:1}}>
+                      <span style={{fontWeight:700,fontSize:12,color:isAmendment?'#6366F1':'var(--brand)'}}>{isAmendment?'✏️ Amendment':'💬'} {author}</span>
+                      {tsDate&&<span style={{fontSize:10,color:'var(--t2)',marginLeft:8}}>{fmtTs(ts)}</span>}
+                    </div>
+                    {isOwn&&!isEditing&&(
+                      <div style={{display:'flex',gap:4,flexShrink:0}}>
+                        <button style={{fontSize:10,padding:'2px 7px',borderRadius:4,border:'1px solid var(--border)',background:'none',cursor:'pointer',color:'var(--t2)'}}
+                          onClick={()=>setEditingComment({taskId:sel.id,commentId,text})}>✏️</button>
+                        {isToday&&<button style={{fontSize:10,padding:'2px 7px',borderRadius:4,border:'1px solid rgba(239,68,68,.3)',background:'none',cursor:'pointer',color:'var(--red)'}}
+                          onClick={()=>{
+                            const updated=parseSafe(sel.comments,[]).filter((_,j)=>j!==i)
+                            update(sel.id,{comments:updated})
+                          }}>🗑</button>}
+                      </div>
+                    )}
+                  </div>
+                  {isEditing ? (
+                    <div style={{marginTop:6}}>
+                      <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:56,fontFamily:'inherit',boxSizing:'border-box'}}
+                        value={editingComment.text} onChange={e=>setEditingComment({...editingComment,text:e.target.value})}/>
+                      <div style={{display:'flex',gap:6,marginTop:6}}>
+                        <button className="btn btn-primary btn-sm" onClick={()=>{
+                          const all=parseSafe(sel.comments,[])
+                          const updated=all.map((cm,j)=>{
+                            if(j!==i) return cm
+                            const orig=typeof cm==='object'?cm:{id:i+'',author:cm.split(':')[0],authorId:user.id,text:cm.split(':').slice(1).join(':').trim(),timestamp:new Date().toISOString(),edits:[]}
+                            return {...orig, edits:[...(orig.edits||[]),{text:orig.text,editedAt:new Date().toISOString()}], text:editingComment.text}
+                          })
+                          update(sel.id,{comments:updated})
+                          setEditingComment(null)
+                        }}>Save</button>
+                        <button className="btn btn-secondary btn-sm" onClick={()=>setEditingComment(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{marginTop:4,fontSize:13}}>{text}</div>
+                  )}
+                  {edits.length>0&&<div style={{marginTop:6,paddingTop:6,borderTop:'1px dashed var(--border)'}}>
+                    {edits.map((ed,ei)=>(
+                      <div key={ei} style={{fontSize:11,color:'var(--t2)',marginBottom:2}}>
+                        <span style={{color:'#F59E0B'}}>📝 Original{edits.length>1?' v'+(ei+1):''}:</span> {ed.text} <span style={{fontSize:10}}>({fmtTs(ed.editedAt)})</span>
+                      </div>
+                    ))}
+                  </div>}
+                </div>
+              )
+            })}
             <textarea className="comment-box" style={{marginTop:10}} placeholder="Add a note…" value={comment} onChange={e=>setComment(e.target.value)} onBlur={()=>{ if(comment.trim()) addComment(sel.id) }}/>
           </div>
 
@@ -786,6 +851,39 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
               {sel.started_at&&sel.completed_at&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:10,textAlign:'center'}}>⏱ Duration: <span style={{fontWeight:700,color:'var(--brand)'}}>{fmtDuration(sel.started_at,sel.completed_at)}</span></div>}
               {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&<button className="btn btn-primary" style={{width:'100%'}} onClick={()=>submitTask(sel.id)}>✅ Submit Task for Review</button>}
               {sel.status==='awaiting_review'&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>📋 Submitted — awaiting supervisor review</div>}
+              {sel.status==='awaiting_review'&&user.role==='worker'&&sel.assigned_user_id===user.id&&(
+                <div style={{marginTop:10,background:'rgba(99,102,241,.08)',border:'1px solid rgba(99,102,241,.25)',borderRadius:8,padding:12}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'#6366F1',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:8}}>✏️ Add Amendment</div>
+                  <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>You can add notes or additional evidence. Each amendment is date & time stamped and cannot be edited once saved.</div>
+                  <textarea
+                    placeholder="Add amendment note..."
+                    style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:64,fontFamily:'inherit',boxSizing:'border-box'}}
+                    id="amendment-note"
+                  />
+                  <div style={{display:'flex',gap:8,marginTop:8}}>
+                    <button className="btn btn-secondary" style={{flex:1,fontSize:12}} onClick={()=>document.getElementById('amend-img').click()}>📎 Attach Photo</button>
+                    <button className="btn btn-primary" style={{flex:1,fontSize:12}} onClick={()=>{
+                      const note = document.getElementById('amendment-note').value.trim()
+                      if (!note) return
+                      const amendEntry = { id: Date.now()+'', author: user.name, authorId: user.id, text: note, timestamp: new Date().toISOString(), edits: [], isAmendment: true }
+                      update(sel.id, { comments:[...(parseSafe(sel.comments)||[]), amendEntry] })
+                      document.getElementById('amendment-note').value = ''
+                    }}>Save Amendment</button>
+                  </div>
+                  <input id="amend-img" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{
+                    const f=e.target.files[0]; if(!f) return
+                    const r=new FileReader()
+                    r.onload=async ev=>{
+                      const curr=parseSafe(sel.evidence)
+                      if(curr.length>=5) return alert('Maximum 5 images reached')
+                      await update(sel.id,{evidence:[...curr,ev.target.result]})
+                      const note={ id: Date.now()+'', author: user.name, authorId: user.id, text:'📎 Amendment photo attached', timestamp: new Date().toISOString(), edits: [], isAmendment: true }
+                      update(sel.id,{comments:[...(parseSafe(sel.comments)||[]),note]})
+                    }
+                    r.readAsDataURL(f); e.target.value=''
+                  }}/>
+                </div>
+              )}
               {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✅ Task approved by supervisor</div>}
             </div>
           )}
