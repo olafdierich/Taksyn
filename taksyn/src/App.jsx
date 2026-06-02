@@ -558,8 +558,6 @@ function AuthView({ onAuth }) {
       setError(e.message||'Something went wrong. Try again.')
     } finally { setLoading(false) }
   }
-    finally { setLoading(false) }
-  }
 
   return (
     <div className="auth-bg">
