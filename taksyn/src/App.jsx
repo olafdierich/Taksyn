@@ -369,7 +369,7 @@ function AuthView({ onAuth }) {
           })
         }
         setSuccess(signupType==='organisation'
-          ? 'Account created! Check your email to confirm, then sign in as your organisation's admin.'
+          ? 'Account created! Check your email to confirm, then sign in as your org admin.'
           : 'Account created! Check your email to confirm, then sign in.')
         setMode('login'); setLoading(false)
       } else {
@@ -491,7 +491,7 @@ function AuthView({ onAuth }) {
         <div className="auth-field"><label className="auth-label">Email</label><input className="auth-input" type="email" placeholder="you@organisation.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} /></div>
         {mode!=='forgot'&&<div className="auth-field"><label className="auth-label">Password</label><input className="auth-input" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} /></div>}
         {mode==='register'&&signupType==='organisation'&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="e.g. Sunrise Aged Care" value={org} onChange={e=>setOrg(e.target.value)} /></div>}
-        {mode==='register'&&signupType==='staff'&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="Enter your organisation's exact name" value={inviteCode} onChange={e=>setInviteCode(e.target.value)} /><div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>Must match exactly — ask your admin for the organisation name</div></div>}
+        {mode==='register'&&signupType==='staff'&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="Enter your exact organisation name" value={inviteCode} onChange={e=>setInviteCode(e.target.value)} /><div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>Must match exactly — ask your admin for the organisation name</div></div>}
         {mode==='register'&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>{signupType==='organisation'?'🏢 You will be set up as the Client Admin for your organisation':'👤 You will join as a Worker — your admin can change your role'}</div>}
         {mode==='forgot'
           ? <button className="auth-btn" onClick={handleForgotPassword} disabled={loading}>{loading?'Sending…':'Send Reset Email'}</button>
@@ -793,7 +793,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             </div>
             <div className="modal-body">
               <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',borderRadius:8,padding:12,marginBottom:14,fontSize:12,color:'var(--text)'}}>
-                <div style={{fontWeight:700,marginBottom:4}}>⚠️ You are about to modify an organisation's data</div>
+                <div style={{fontWeight:700,marginBottom:4}}>⚠️ You are about to modify an organisation data</div>
                 <div style={{color:'var(--t2)'}}>Action: <strong>{interventionModal?.action}</strong></div>
                 <div style={{color:'var(--t2)',marginTop:4}}>This will be permanently recorded in the audit log as a Platform Admin Intervention and will be visible to the organisation.</div>
               </div>
