@@ -571,7 +571,7 @@ function AuthView({ onAuth }) {
         {mode==='register' && <div className="auth-field"><label className="auth-label">Role</label><select className="auth-input" value={role} onChange={e=>setRole(e.target.value)} style={{cursor:'pointer'}}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>}
         <button className="auth-btn" onClick={handleSubmit} disabled={loading}>{loading?'Please wait…':mode==='login'?'Sign In':'Create Account'}</button>
         <div className="auth-toggle">{mode==='login'?<>No account? <a onClick={()=>setMode('register')}>Sign up</a></>:<>Have an account? <a onClick={()=>setMode('login')}>Sign in</a></>}</div>
-
+<div style={{textAlign:'center',marginTop:16}}><span style={{fontSize:11,color:'var(--t3)',cursor:'pointer'}} onClick={()=>{try{indexedDB.deleteDatabase('supabase')}catch(e){};localStorage.clear();sessionStorage.clear();location.reload()}}>Having trouble signing in? Tap here to reset</span></div>
       </div>
     </div>
   )
