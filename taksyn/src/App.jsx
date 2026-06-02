@@ -493,6 +493,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
+  const [interventionModal, setInterventionModal] = useState(null) // {action, label, changes, taskId}
+  const [interventionReason, setInterventionReason] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [editTask, setEditTask] = useState({})
@@ -511,9 +513,18 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const searchFiltered = search ? visible.filter(t=>t.title?.toLowerCase().includes(search.toLowerCase())||t.category?.toLowerCase().includes(search.toLowerCase())||t.assigned_user_name?.toLowerCase().includes(search.toLowerCase())) : visible
   const filtered = filter==='all'?searchFiltered:filter==='escalated'?searchFiltered.filter(t=>t.escalation):searchFiltered.filter(t=>t.status===filter)
 
-  const update = async (id, changes) => {
+  const update = async (id, changes, _interventionReason=null) => {
+    // If super admin acting on another org's data, require reason
+    if (user?.role==='super_admin' && !_interventionReason) {
+      const task = tasks.find(t=>t.id===id)
+      const actionLabel = changes.status ? 'Change status to '+changes.status.replace(/_/g,' ') : 'Edit task'
+      setInterventionModal({ action: actionLabel, changes, taskId: id })
+      setInterventionReason('')
+      return
+    }
     if (changes.status) {
       const prev = tasks.find(t=>t.id===id)
+      const task = tasks.find(t=>t.id===id)
       const entry = {
         id: Date.now()+'',
         taskId: id,
@@ -522,7 +533,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         toStatus: changes.status,
         by: user?.name||'System',
         byRole: user?.role||'',
-        org: user?.org||'',
+        org: task?.org||user?.org||'',
+        isIntervention: user?.role==='super_admin',
+        interventionReason: _interventionReason||null,
         at: new Date().toISOString()
       }
       setAuditLog(log=>[entry,...log])
@@ -530,7 +543,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         await supabase.from('audit_log').insert(entry).then(()=>{})
       }
     }
-    setTasks(prev=>prev.map(t=>t.id===id?{...t,...changes}:t))
+    const interventionTag = user?.role==='super_admin' ? { lastIntervention: { by: user.name, reason: _interventionReason, at: new Date().toISOString() } } : {}
+    setTasks(prev=>prev.map(t=>t.id===id?{...t,...changes,...interventionTag}:t))
     if (isConfigured()) {
       const payload = {...changes}
       if (changes.subtasks) payload.subtasks = JSON.stringify(changes.subtasks)
@@ -677,6 +691,36 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         </div>
       )}
 
+      {interventionModal&&(
+        <div className="modal-overlay" onClick={()=>{setInterventionModal(null);setInterventionReason('')}}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{borderTop:'4px solid #F59E0B'}}>
+            <div className="modal-hdr">
+              <div className="modal-title" style={{color:'#F59E0B'}}>🔧 Platform Admin Intervention</div>
+              <button className="modal-close" onClick={()=>{setInterventionModal(null);setInterventionReason('')}}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',borderRadius:8,padding:12,marginBottom:14,fontSize:12,color:'var(--text)'}}>
+                <div style={{fontWeight:700,marginBottom:4}}>⚠️ You are about to modify an organisation's data</div>
+                <div style={{color:'var(--t2)'}}>Action: <strong>{interventionModal?.action}</strong></div>
+                <div style={{color:'var(--t2)',marginTop:4}}>This will be permanently recorded in the audit log as a Platform Admin Intervention and will be visible to the organisation.</div>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Reason for Intervention <span style={{color:'var(--red)'}}>*</span></label>
+                <textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Fixing incorrect status after system error reported by client…" value={interventionReason} onChange={e=>setInterventionReason(e.target.value)}/>
+              </div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
+                <button className="btn btn-secondary" onClick={()=>{setInterventionModal(null);setInterventionReason('')}}>Cancel</button>
+                <button className="btn btn-amber" disabled={!interventionReason.trim()} onClick={()=>{
+                  const {taskId, changes} = interventionModal
+                  update(taskId, changes, interventionReason.trim())
+                  setInterventionModal(null); setInterventionReason('')
+                }}>🔧 Confirm Intervention</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCreate&&(
         <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -754,6 +798,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           )}
 
           {sel.escalation&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Task escalated — supervisor notified</div><div className="esc-banner-sub">Immediate attention required</div></div></div>}
+          {sel.lastIntervention&&<div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.3)',borderRadius:8,padding:'10px 14px',marginBottom:12,display:'flex',gap:10,alignItems:'flex-start'}}>
+            <span style={{fontSize:16}}>🔧</span>
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:'#F59E0B'}}>Platform Admin Intervention</div>
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>Modified by {sel.lastIntervention.by} on {new Date(sel.lastIntervention.at).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+              <div style={{fontSize:11,color:'var(--text)',marginTop:3}}>Reason: {sel.lastIntervention.reason}</div>
+            </div>
+          </div>}
 
           <div className="section">
             <div className="section-title">Evidence / Photo Proof {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}</div>
@@ -1530,9 +1582,15 @@ function AuditLogView({ tasks, user, auditLog }) {
               </thead>
               <tbody>
                 {filtered.map((e,i)=>(
-                  <tr key={e.id||i} style={{borderBottom:'1px solid var(--border)',background:i%2===0?'transparent':'var(--s3)'}}>
-                    <td style={{padding:'9px 12px',color:'var(--t2)',whiteSpace:'nowrap'}}>{fmtTs(e.at)}</td>
-                    <td style={{padding:'9px 12px',fontWeight:600,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.taskTitle||e.taskId}</td>
+                  <tr key={e.id||i} style={{borderBottom:'1px solid var(--border)',background:e.isIntervention?'rgba(245,158,11,.06)':i%2===0?'transparent':'var(--s3)',borderLeft:e.isIntervention?'3px solid #F59E0B':'3px solid transparent'}}>
+                    <td style={{padding:'9px 12px',color:'var(--t2)',whiteSpace:'nowrap'}}>
+                      {fmtTs(e.at)}
+                      {e.isIntervention&&<div style={{fontSize:9,color:'#F59E0B',fontWeight:700,marginTop:2}}>🔧 PLATFORM INTERVENTION</div>}
+                    </td>
+                    <td style={{padding:'9px 12px',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      <div style={{fontWeight:600}}>{e.taskTitle||e.taskId}</div>
+                      {e.interventionReason&&<div style={{fontSize:10,color:'var(--t2)',marginTop:2}}>Reason: {e.interventionReason}</div>}
+                    </td>
                     <td style={{padding:'9px 12px'}}>{e.by}</td>
                     <td style={{padding:'9px 12px'}}>
                       <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:ROLE_COLORS[e.byRole]||'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>{ROLE_LABELS[e.byRole]||e.byRole}</span>
