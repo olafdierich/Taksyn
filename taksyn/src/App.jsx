@@ -919,23 +919,40 @@ function EvidenceView({ tasks, setTasks, user }) {
 }
 
 function ReportsView({ tasks, user }) {
-  const [tab, setTab] = useState('overview')
+  const [reportType, setReportType] = useState('compliance')
   const [period, setPeriod] = useState('weekly')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
+  const isClientAdmin = ['client_admin','super_admin'].includes(user.role)
+  const isSupervisorUp = ['supervisor','manager','client_admin','super_admin'].includes(user.role)
+
+  const reportOptions = [
+    ...(isSupervisorUp ? [{ value:'compliance', label:'📋 Compliance Report' }] : []),
+    ...(isClientAdmin ? [
+      { value:'worker', label:'👷 Worker Performance Report' },
+      { value:'org', label:'🏢 Organisation Overview Report' },
+    ] : []),
+  ]
+
   const getRange = () => {
-    const now = new Date(), end = new Date(now), start = new Date(now)
-    end.setHours(23,59,59,999)
-    if (period==='weekly') start.setDate(now.getDate()-7)
-    else if (period==='monthly') start.setMonth(now.getMonth()-1)
-    else if (period==='quarterly') start.setMonth(now.getMonth()-3)
-    else if (period==='annual') start.setFullYear(now.getFullYear()-1)
-    else if (period==='custom') return { start:customStart?new Date(customStart):null, end:customEnd?new Date(customEnd):null }
-    return { start, end }
+    const now = new Date(), end = new Date(now)
+    if (period==='weekly') { const s=new Date(now); s.setDate(s.getDate()-6); return [s,end] }
+    if (period==='monthly') { const s=new Date(now); s.setDate(s.getDate()-29); return [s,end] }
+    if (period==='quarterly') { const s=new Date(now); s.setDate(s.getDate()-89); return [s,end] }
+    if (period==='annual') { const s=new Date(now); s.setDate(s.getDate()-364); return [s,end] }
+    if (period==='custom' && customStart && customEnd) return [new Date(customStart), new Date(customEnd)]
+    return [new Date(0), end]
   }
-  const { start:rs, end:re } = getRange()
-  const pt = tasks.filter(t=>{ if(!rs||!re) return true; const d=new Date(t.created_at||t.due_date); return d>=rs&&d<=re })
+  const [rs,re] = getRange()
+  const pt = tasks.filter(t => { const d = new Date(t.created_at||t.due_date||0); return d>=rs && d<=re })
+
+  // --- Shared stats helpers ---
+  const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0
+  const fmtDur = (s,e) => { if(!s||!e) return '—'; const m=Math.round((new Date(e)-new Date(s))/60000); return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m' }
+  const pl = {weekly:'Last 7 Days',monthly:'Last Month',quarterly:'Last 3 Months',annual:'Last Year',custom:customStart+' to '+customEnd}[period]
+
+  // --- Compliance report stats ---
   const total=pt.length, done=pt.filter(t=>['completed','approved'].includes(t.status)).length
   const approved=pt.filter(t=>t.status==='approved').length, rejected=pt.filter(t=>t.status==='rejected').length
   const overdue=pt.filter(t=>t.status==='overdue').length
@@ -945,93 +962,233 @@ function ReportsView({ tasks, user }) {
   const reviewed=pt.filter(t=>['approved','rejected'].includes(t.status)).length
   const totalToReview=pt.filter(t=>['awaiting_review','approved','rejected'].includes(t.status)).length
   const reviewedInTime=pt.filter(t=>t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000).length
-  const reviewedInTimePct=totalToReview>0?Math.round((reviewedInTime/totalToReview)*100):0
+  const reviewedInTimePct=pct(reviewedInTime,totalToReview)
   const doneOnDay=pt.filter(t=>t.due_date&&t.completed_at&&new Date(t.completed_at).toDateString()===new Date(t.due_date).toDateString()).length
   const tasksDueToday=pt.filter(t=>t.due_date).length
-  const doneOnDayPct=tasksDueToday>0?Math.round((doneOnDay/tasksDueToday)*100):0
+  const doneOnDayPct=pct(doneOnDay,tasksDueToday)
   const reviewWithin1Day=pt.filter(t=>t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000).length
-  const reviewWithin1DayPct=totalToReview>0?Math.round((reviewWithin1Day/totalToReview)*100):0
+  const reviewWithin1DayPct=pct(reviewWithin1Day,totalToReview)
   const reportWithinWeek=pt.filter(t=>t.reviewed_at&&t.created_at&&(new Date(t.reviewed_at)-new Date(t.created_at))<=604800000).length
-  const reportWithinWeekPct=pt.length>0?Math.round((reportWithinWeek/pt.length)*100):0
-  const byCat={}
-  pt.forEach(t=>{ if(!byCat[t.category]) byCat[t.category]={total:0,done:0}; byCat[t.category].total++; if(['completed','approved'].includes(t.status)) byCat[t.category].done++ })
-  const withDur=pt.filter(t=>t.started_at&&t.completed_at)
-  const avgMins=withDur.length?Math.round(withDur.reduce((s,t)=>(new Date(t.completed_at)-new Date(t.started_at))/60000+s,0)/withDur.length):0
-  const awards=computeAwards(tasks)
-  const last7=Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-6+i); const ds=d.toISOString().split('T')[0]; return { label:d.toLocaleDateString([],{weekday:'short'}), total:tasks.filter(t=>t.completed_at?.startsWith(ds)||t.due_date===ds).length, done:tasks.filter(t=>t.completed_at?.startsWith(ds)&&['completed','approved','awaiting_review'].includes(t.status)).length } })
+  const reportWithinWeekPct=pct(reportWithinWeek,pt.length)
 
-  const exportPDF = () => {
-    const pl={weekly:'Last 7 Days',monthly:'Last Month',quarterly:'Last 3 Months',annual:'Last Year',custom:customStart+' to '+customEnd}[period]
-    const rows=pt.map(t=>'<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td>'+t.category+'</td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.completed_at?new Date(t.completed_at).toLocaleDateString():'—')+'</td><td>'+(fmtDuration(t.started_at,t.completed_at)||'—')+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>').join('')
-    const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>*{box-sizing:border-box}body{font-family:Helvetica Neue,sans-serif;padding:40px;color:#1a2033;font-size:13px}.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:16px;border-bottom:2px solid #2D3180}.lt{font-size:24px;font-weight:800;color:#2D3180}.ri{text-align:right;font-size:11px;color:#5a6478}.ri strong{display:block;font-size:14px;color:#1a2033;margin-bottom:2px}.sg{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px}.st{background:#f4f6f9;border-radius:8px;padding:14px;text-align:center}.sv{font-size:22px;font-weight:800;color:#5BC8C0;line-height:1}.sv.r{color:#EF4444}.sv.g{color:#10B981}.sv.a{color:#F59E0B}.sl{font-size:10px;color:#5a6478;margin-top:5px;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;padding:7px 8px;background:#f4f6f9;font-size:9px;text-transform:uppercase;color:#5a6478;border-bottom:1px solid #e8ebf0}td{padding:7px 8px;border-bottom:1px solid #f0f2f5}.ft{margin-top:28px;padding-top:14px;border-top:1px solid #e8ebf0;font-size:10px;color:#9aa3b2;display:flex;justify-content:space-between}</style></head><body><div class="hdr"><div><img src="https://taksyn.vercel.app/logo.jpeg" height="40" style="object-fit:contain"/></div><div class="ri"><strong>Compliance Report</strong>'+user.org+'<br/>Period: '+pl+'<br/>Generated: '+new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})+'</div></div><div class="sg"><div class="st"><div class="sv">'+total+'</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">'+done+'</div><div class="sl">Completed</div></div><div class="st"><div class="sv a">'+(total-done)+'</div><div class="sl">Not Completed</div></div><div class="st"><div class="sv r">'+overdue+'</div><div class="sl">Overdue</div></div><div class="st"><div class="sv" style="color:#8B5CF6">'+pct(compDone,compT.length)+'%</div><div class="sl">Compliance Rate</div></div><div class="st"><div class="sv a">'+totalToReview+'</div><div class="sl">Total for Review</div></div><div class="st"><div class="sv a">'+pendingReview+'</div><div class="sl">Pending Review</div></div><div class="st"><div class="sv g">'+reviewed+'</div><div class="sl">Reviewed</div></div><div class="st"><div class="sv g">'+reviewedInTimePct+'%</div><div class="sl">Reviewed in Time</div></div><div class="st"><div class="sv g">'+approved+'</div><div class="sl">Approved</div></div><div class="st"><div class="sv r">'+rejected+'</div><div class="sl">Rejected</div></div><div class="st"><div class="sv a">'+notOnTime+'</div><div class="sl">Not On Time</div></div><div class="st"><div class="sv g">'+doneOnDayPct+'%</div><div class="sl">Done Same Day</div></div><div class="st"><div class="sv g">'+reviewWithin1DayPct+'%</div><div class="sl">Review Within 1 Day</div></div><div class="st"><div class="sv g">'+reportWithinWeekPct+'%</div><div class="sl">Supervisor Review ≤1 Week</div></div></div><table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Completed</th><th>Duration</th><th>Assigned To</th></tr></thead><tbody>'+rows+'</tbody></table><div class="ft"><span>Taksyn — Task Compliance & Accountability Platform</span><span>taksyn.vercel.app</span></div></body></html>'
-    const w=window.open('','_blank')
-    if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),800)}
-    else{const a=document.createElement('a');a.href='data:text/html;charset=utf-8,'+encodeURIComponent(html);a.download='taksyn-report.html';a.click()}
+  // --- Worker performance stats ---
+  const workerRoles = ['worker','supervisor','manager']
+  const workerMap = {}
+  pt.forEach(t => {
+    const key = t.assigned_user_name || t.assigned_user_id || 'Unassigned'
+    const role = t.assigned_role || 'worker'
+    if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
+    workerMap[key].total++
+    if (['completed','approved'].includes(t.status)) {
+      workerMap[key].done++
+      if (t.due_date && t.completed_at && new Date(t.completed_at) <= new Date(t.due_date)) workerMap[key].onTime++
+      if (t.started_at && t.completed_at) workerMap[key].avgMins.push((new Date(t.completed_at)-new Date(t.started_at))/60000)
+    }
+    if (['awaiting_review','approved','rejected'].includes(t.status)) workerMap[key].toReview++
+    if (t.reviewed_at && t.submitted_at && (new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) workerMap[key].reviewedInTime++
+  })
+  const workerRows = Object.values(workerMap).sort((a,b) => b.total-a.total)
+
+  // --- Org overview stats ---
+  const uniqueWorkers = new Set(pt.map(t=>t.assigned_user_id||t.assigned_user_name).filter(Boolean))
+  const byRole = {}
+  workerRoles.forEach(r => {
+    const roleTasks = pt.filter(t=>t.assigned_role===r)
+    const compRoleTasks = roleTasks.filter(t=>t.compliance)
+    byRole[r] = {
+      tasks: roleTasks.length,
+      done: roleTasks.filter(t=>['completed','approved'].includes(t.status)).length,
+      compRate: pct(compRoleTasks.filter(t=>['completed','approved'].includes(t.status)).length, compRoleTasks.length),
+    }
+  })
+
+  const baseStyle = `*{box-sizing:border-box}body{font-family:Helvetica Neue,sans-serif;padding:40px;color:#1a2033;font-size:13px}.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:16px;border-bottom:2px solid #2D3180}.lt{font-size:24px;font-weight:800;color:#2D3180}.ri{text-align:right;font-size:11px;color:#5a6478}.ri strong{display:block;font-size:14px;color:#1a2033;margin-bottom:2px}.sg{display:grid;gap:12px;margin-bottom:24px}.st{background:#f4f6f9;border-radius:8px;padding:14px;text-align:center}.sv{font-size:22px;font-weight:800;color:#5BC8C0;line-height:1}.sv.r{color:#EF4444}.sv.g{color:#10B981}.sv.a{color:#F59E0B}.sl{font-size:10px;color:#5a6478;margin-top:5px;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;padding:7px 8px;background:#f4f6f9;font-size:9px;text-transform:uppercase;color:#5a6478;border-bottom:1px solid #e8ebf0}td{padding:7px 8px;border-bottom:1px solid #f0f2f5}.ft{margin-top:28px;padding-top:14px;border-top:1px solid #e8ebf0;font-size:10px;color:#9aa3b2;display:flex;justify-content:space-between}.sec{margin-bottom:24px}.sec-title{font-size:13px;font-weight:700;color:#2D3180;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e8ebf0}`
+
+  const reportHeader = (title) => `<div class="hdr"><div><img src="https://taksyn.vercel.app/logo.jpeg" height="40" style="object-fit:contain"/></div><div class="ri"><strong>${title}</strong>${user.org}<br/>Period: ${pl}<br/>Generated: ${new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}</div></div>`
+  const reportFooter = `<div class="ft"><span>Taksyn — Task Compliance & Accountability Platform</span><span>taksyn.vercel.app</span></div>`
+
+  const openReport = (html) => {
+    const w = window.open('','_blank')
+    if (w) { w.document.write(html); w.document.close(); setTimeout(()=>w.print(),800) }
+    else { const a=document.createElement('a'); a.href='data:text/html;charset=utf-8,'+encodeURIComponent(html); a.download='taksyn-report.html'; a.click() }
   }
+
+  const exportCompliancePDF = () => {
+    const rows = pt.map(t=>'<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td>'+t.category+'</td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.completed_at?new Date(t.completed_at).toLocaleDateString():'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>').join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>${baseStyle}.sg{grid-template-columns:repeat(5,1fr)}</style></head><body>${reportHeader('Compliance Report')}<div class="sg"><div class="st"><div class="sv">${total}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed</div></div><div class="st"><div class="sv a">${total-done}</div><div class="sl">Not Completed</div></div><div class="st"><div class="sv r">${overdue}</div><div class="sl">Overdue</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Compliance Rate</div></div><div class="st"><div class="sv a">${totalToReview}</div><div class="sl">Total for Review</div></div><div class="st"><div class="sv a">${pendingReview}</div><div class="sl">Pending Review</div></div><div class="st"><div class="sv g">${reviewed}</div><div class="sl">Reviewed</div></div><div class="st"><div class="sv g">${reviewedInTimePct}%</div><div class="sl">Reviewed in Time</div></div><div class="st"><div class="sv g">${approved}</div><div class="sl">Approved</div></div><div class="st"><div class="sv r">${rejected}</div><div class="sl">Rejected</div></div><div class="st"><div class="sv a">${notOnTime}</div><div class="sl">Not On Time</div></div><div class="st"><div class="sv g">${doneOnDayPct}%</div><div class="sl">Done Same Day</div></div><div class="st"><div class="sv g">${reviewWithin1DayPct}%</div><div class="sl">Review Within 1 Day</div></div><div class="st"><div class="sv g">${reportWithinWeekPct}%</div><div class="sl">Supervisor Review ≤1 Week</div></div></div><table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Completed</th><th>Duration</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+    openReport(html)
+  }
+
+  const exportWorkerPDF = () => {
+    const rows = workerRows.map(w => {
+      const compPct = pct(w.done,w.total)
+      const onTimePct = pct(w.onTime,w.done)
+      const avg = w.avgMins.length ? Math.round(w.avgMins.reduce((a,b)=>a+b,0)/w.avgMins.length) : 0
+      const avgStr = avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
+      return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+onTimePct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
+    }).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Worker Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Worker Performance Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Workers</div></div><div class="st"><div class="sv">${pt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>On Time %</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+    openReport(html)
+  }
+
+  const exportOrgPDF = () => {
+    const roleRows = workerRoles.map(r => '<tr><td><strong>'+ROLE_LABELS[r]+'</strong></td><td>'+byRole[r].tasks+'</td><td>'+byRole[r].done+'</td><td style="color:'+(pct(byRole[r].done,byRole[r].tasks)>=80?'#10B981':pct(byRole[r].done,byRole[r].tasks)>=50?'#F59E0B':'#EF4444')+'">'+pct(byRole[r].done,byRole[r].tasks)+'%</td><td style="color:'+(byRole[r].compRate>=80?'#10B981':byRole[r].compRate>=50?'#F59E0B':'#EF4444')+'">'+byRole[r].compRate+'%</td></tr>').join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${pt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${pt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(t.assigned_user_name||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
+    openReport(html)
+  }
+
+  const handleExport = () => {
+    if (reportType==='compliance') exportCompliancePDF()
+    else if (reportType==='worker') exportWorkerPDF()
+    else if (reportType==='org') exportOrgPDF()
+  }
+
+  // Summary stats for screen preview
+  const tab = reportType
+  const [chartTab, setChartTab] = useState('overview')
+  const last7=Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-6+i); const ds=d.toISOString().split('T')[0]; return { label:d.toLocaleDateString([],{weekday:'short'}), total:tasks.filter(t=>t.completed_at?.startsWith(ds)||t.due_date===ds).length, done:tasks.filter(t=>t.completed_at?.startsWith(ds)&&['completed','approved','awaiting_review'].includes(t.status)).length } })
+  const maxBar=Math.max(...last7.map(d=>d.total),1)
 
   return (
     <div className="anim">
       <div className="ph">
-        <div className="ph-top">
-          <div><div className="ph-title">Reports & Analytics</div><div className="ph-sub">Audit-ready compliance documentation</div></div>
-          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Completed,Duration,Assigned To\n'+pt.map(t=>[t.id,'"'+t.title+'"',t.category,t.status,t.priority,t.compliance,parseSafe(t.evidence).length,t.due_date,t.completed_at||'',fmtDuration(t.started_at,t.completed_at)||'',t.assigned_user_name||''].join(',')).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
-            <button className="btn btn-primary btn-sm" onClick={exportPDF}>📄 PDF Report</button>
-          </div>
+        <div className="ph-title">Reports</div>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <select
+            value={reportType}
+            onChange={e=>setReportType(e.target.value)}
+            className="form-input"
+            style={{fontSize:13,padding:'6px 10px',minWidth:240}}
+          >
+            {reportOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <button className="btn btn-primary btn-sm" onClick={handleExport}>📄 Generate PDF</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Completed,Duration,Assigned To\n'+pt.map(t=>[t.id,t.title,t.category,t.status,t.priority,t.compliance,parseSafe(t.evidence).length,t.due_date,t.completed_at||'',fmtDur(t.started_at,t.completed_at)||'',t.assigned_user_name||''].join(',')).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
         </div>
       </div>
+
       <div className="section" style={{marginBottom:14}}>
         <div className="section-title">Reporting Period</div>
         <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:period==='custom'?12:0}}>
-          {[['weekly','Weekly'],['monthly','Monthly'],['quarterly','3 Months'],['annual','Annual'],['custom','Custom']].map(([k,l])=>(
-            <button key={k} className={"fb "+(period===k?'active':'')} onClick={()=>setPeriod(k)}>{l}</button>
+          {[['weekly','Weekly'],['monthly','Monthly'],['quarterly','3 Months'],['annual','Annual'],['custom','Custom']].map(([v,l])=>(
+            <button key={v} className={'btn btn-sm '+(period===v?'btn-primary':'btn-secondary')} onClick={()=>setPeriod(v)}>{l}</button>
           ))}
         </div>
-        {period==='custom'&&<div style={{display:'flex',gap:10,marginTop:12,flexWrap:'wrap'}}>
-          <div className="form-field" style={{marginBottom:0}}><label className="form-label">From</label><input className="form-input" type="date" value={customStart} onChange={e=>setCustomStart(e.target.value)} style={{width:160}}/></div>
-          <div className="form-field" style={{marginBottom:0}}><label className="form-label">To</label><input className="form-input" type="date" value={customEnd} onChange={e=>setCustomEnd(e.target.value)} style={{width:160}}/></div>
-        </div>}
+        {period==='custom'&&<div style={{display:'flex',gap:8,marginTop:8}}><input type="date" className="form-input" style={{fontSize:12}} value={customStart} onChange={e=>setCustomStart(e.target.value)}/><input type="date" className="form-input" style={{fontSize:12}} value={customEnd} onChange={e=>setCustomEnd(e.target.value)}/></div>}
       </div>
-      <div className="stat-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
-        <Stat label="Total Tasks" val={total} sub="for this period" icon="📋"/>
-        <Stat label="Completed" val={done} sub={pct(done,total)+"% rate"} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/>
-        <Stat label="Approved" val={approved} sub="by supervisor" color="#10B981" bg="rgba(16,185,129,.1)" icon="👍"/>
-        <Stat label="Rejected" val={rejected} sub="sent back" color={rejected>0?'#EF4444':'#6B7280'} bg="rgba(239,68,68,.1)" icon="✗"/>
-      </div>
-      <div className="stat-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginTop:-6}}>
-        <Stat label="Overdue" val={overdue} sub="past due date" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/>
-        <Stat label="Not On Time" val={notOnTime} sub="completed late" color={notOnTime>0?'#F59E0B':'#10B981'} bg="rgba(245,158,11,.1)" icon="⏱"/>
-        <Stat label="Compliance" val={pct(compDone,compT.length)+"%"} sub={compDone+"/"+compT.length} color="#8B5CF6" bg="rgba(139,92,246,.1)" icon="🛡️"/>
-        <Stat label="Avg Duration" val={avgMins>0?avgMins+'m':'—'} sub="per task" color="#3B82F6" bg="rgba(59,130,246,.1)" icon="⏱"/>
-      </div>
-      <div className="section" style={{marginBottom:16}}>
-        <div className="section-title">Task Activity — Last 7 Days</div>
-        <div style={{display:'flex',alignItems:'flex-end',gap:8,height:100,paddingBottom:4}}>
-          {last7.map((d,i)=>(
-            <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
-              <div style={{width:'100%',display:'flex',flexDirection:'column',justifyContent:'flex-end',height:80,gap:2}}>
-                {d.total>0&&<div style={{width:'100%',height:pct(d.done,d.total)*80/100+'px',background:'var(--green)',borderRadius:'3px 3px 0 0',minHeight:d.done>0?4:0}}/>}
-                {d.total>0&&<div style={{width:'100%',height:pct(d.total-d.done,d.total)*80/100+'px',background:'var(--s4)',minHeight:d.total-d.done>0?2:0}}/>}
-                {d.total===0&&<div style={{width:'100%',height:4,background:'var(--s4)',borderRadius:3}}/>}
-              </div>
-              <div style={{fontSize:10,color:'var(--t2)',fontWeight:600}}>{d.label}</div>
+
+      {/* Compliance Report Preview */}
+      {reportType==='compliance' && (
+        <>
+          <div className="section">
+            <div className="section-title">Compliance Overview — {pt.length} tasks</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(110px,1fr))',gap:10,marginTop:10}}>
+              {[['Total',total,''],['Completed',done,'g'],['Overdue',overdue,'r'],['Approved',approved,'g'],['Rejected',rejected,'r'],['Pending Review',pendingReview,'a'],['Total for Review',totalToReview,'a'],['Reviewed in Time',reviewedInTimePct+'%','g'],['Done Same Day',doneOnDayPct+'%','g'],['Review ≤1 Day',reviewWithin1DayPct+'%','g'],['Supervisor ≤1wk',reportWithinWeekPct+'%','g'],['Compliance Rate',pct(compDone,compT.length)+'%','p']].map(([l,v,c])=>(
+                <div key={l} className="st" style={{background:'var(--s3)',borderRadius:8,padding:12,textAlign:'center'}}>
+                  <div style={{fontSize:20,fontWeight:800,color:c==='g'?'var(--green)':c==='r'?'var(--red)':c==='a'?'#F59E0B':c==='p'?'#8B5CF6':'#5BC8C0',lineHeight:1}}>{v}</div>
+                  <div style={{fontSize:10,color:'var(--t2)',marginTop:4,textTransform:'uppercase'}}>{l}</div>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+          <div className="section">
+            <div className="section-title">Activity — Last 7 Days</div>
+            <div style={{display:'flex',gap:4,alignItems:'flex-end',height:80,marginTop:10}}>
+              {last7.map((d,i)=>(
+                <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+                  <div style={{width:'100%',background:'var(--s3)',borderRadius:3,position:'relative',height:60,display:'flex',alignItems:'flex-end'}}>
+                    <div style={{width:'100%',background:'var(--brand)',borderRadius:3,height:(d.total/maxBar*56)+'px',opacity:.3}}/>
+                    <div style={{position:'absolute',bottom:0,width:'100%',background:'var(--brand)',borderRadius:3,height:(d.done/maxBar*56)+'px'}}/>
+                  </div>
+                  <div style={{fontSize:9,color:'var(--t2)'}}>{d.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Worker Performance Preview */}
+      {reportType==='worker' && isClientAdmin && (
+        <div className="section">
+          <div className="section-title">Worker Performance — {pl}</div>
+          <div style={{overflowX:'auto',marginTop:10}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead>
+                <tr style={{background:'var(--s3)'}}>
+                  {['Name','Role','Tasks','Done','Rate','On Time %','Avg Duration','Reviews 24h'].map(h=>(
+                    <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {workerRows.length===0 && <tr><td colSpan={8} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No worker data for this period</td></tr>}
+                {workerRows.map((w,i)=>{
+                  const cp=pct(w.done,w.total)
+                  const avg=w.avgMins.length?Math.round(w.avgMins.reduce((a,b)=>a+b,0)/w.avgMins.length):0
+                  return (
+                    <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
+                      <td style={{padding:'8px 10px',fontWeight:600}}>{w.name}</td>
+                      <td style={{padding:'8px 10px',color:'var(--t2)',fontSize:11}}>{ROLE_LABELS[w.role]||w.role}</td>
+                      <td style={{padding:'8px 10px'}}>{w.total}</td>
+                      <td style={{padding:'8px 10px'}}>{w.done}</td>
+                      <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
+                      <td style={{padding:'8px 10px'}}>{pct(w.onTime,w.done)}%</td>
+                      <td style={{padding:'8px 10px',color:'var(--t2)'}}>{avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'}</td>
+                      <td style={{padding:'8px 10px'}}>{w.reviewedInTime}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div style={{display:'flex',gap:16,marginTop:8}}>
-          <div style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--t2)'}}><div style={{width:10,height:10,borderRadius:2,background:'var(--green)'}}/> Completed</div>
-          <div style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--t2)'}}><div style={{width:10,height:10,borderRadius:2,background:'var(--s4)'}}/> Pending</div>
-        </div>
-      </div>
-      <div className="tabs">
-        {[['overview','By Category'],['performance','Staff Performance'],['audit','Audit Log'],['awards','Awards']].map(([k,l])=>(
-          <button key={k} className={"tab "+(tab===k?'active':'')} onClick={()=>setTab(k)}>{l}</button>
-        ))}
-      </div>
-      {tab==='overview'&&<div className="section"><div className="section-title">Completion by Category</div><div className="tbl-scroll"><table className="tbl"><thead><tr><th>Category</th><th>Total</th><th>Done</th><th>Rate</th></tr></thead><tbody>{Object.entries(byCat).map(([cat,d])=>{ const r=pct(d.done,d.total); return <tr key={cat}><td><span className="cat-tag">{CAT_ICONS[cat]||'📋'} {cat}</span></td><td style={{fontSize:13}}>{d.total}</td><td style={{fontSize:13}}>{d.done}</td><td><div className="mini-prog"><div className="mini-prog-bar"><div className="mini-prog-fill" style={{width:r+'%',background:r>=80?'var(--green)':r>=50?'var(--amber)':'var(--red)'}}/></div><span style={{fontSize:11,color:'var(--t2)'}}>{r}%</span></div></td></tr> })}</tbody></table></div></div>}
-      {tab==='performance'&&<div className="section"><div className="section-title">Staff Task Duration Performance</div>{withDur.length===0?<div style={{fontSize:13,color:'var(--t2)'}}>No timing data yet.</div>:<div className="tbl-scroll"><table className="tbl"><thead><tr><th>Task</th><th>Worker</th><th>Started</th><th>Completed</th><th>Duration</th><th>GPS</th></tr></thead><tbody>{withDur.map(t=><tr key={t.id}><td style={{fontSize:12,fontWeight:500,maxWidth:140}}>{t.title}</td><td style={{fontSize:12}}>{t.completed_by||'—'}</td><td style={{fontSize:11,color:'var(--t2)'}}>{fmtTime(t.started_at)}</td><td style={{fontSize:11,color:'var(--t2)'}}>{fmtTime(t.completed_at)}</td><td><span style={{fontSize:12,fontWeight:600,color:'var(--brand)'}}>{fmtDuration(t.started_at,t.completed_at)}</span></td><td>{t.gps_start?<a href={"https://www.google.com/maps?q="+t.gps_start} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'var(--blue)',textDecoration:'none'}}>📍 View ↗</a>:<span style={{fontSize:11,color:'var(--t3)'}}>—</span>}</td></tr>)}</tbody></table></div>}</div>}
-      {tab==='audit'&&<div className="section"><div className="section-title">Full Audit Log</div><div className="tbl-scroll"><table className="tbl"><thead><tr><th>ID</th><th>Task</th><th>Status</th><th>Compliance</th><th>Evidence</th><th>Due</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id}><td><span style={{fontFamily:'monospace',fontSize:11,color:'var(--t2)'}}>{t.id}</span></td><td style={{fontSize:12,fontWeight:500,maxWidth:160}}>{t.title}</td><td><StatusBadge status={t.status}/></td><td>{t.compliance?<span style={{color:'#8B5CF6',fontSize:11,fontWeight:700}}>🔒 Yes</span>:<span style={{color:'var(--t2)',fontSize:11}}>—</span>}</td><td style={{fontSize:11,color:'var(--t2)'}}>{parseSafe(t.evidence).length} files</td><td style={{fontSize:11,color:'var(--t2)'}}>{t.due_date}</td></tr>)}</tbody></table></div></div>}
-      {tab==='awards'&&<div className="section"><div className="section-title">🏆 Staff Recognition Awards</div>{awards.week?<><div className="award-card"><div className="award-icon">🥇</div><div><div className="award-title">Worker of the Week</div><div className="award-name">{awards.week.name}</div><div className="award-sub">{awards.week.count} tasks completed</div></div></div><div className="award-card" style={{background:'linear-gradient(135deg,#F0F4FF,#E8EEFF)',borderColor:'#3B82F6'}}><div className="award-icon">🌟</div><div><div className="award-title" style={{color:'#1E40AF'}}>Worker of the Month</div><div className="award-name" style={{color:'#1E3A8A'}}>{awards.month?.name}</div></div></div></>:<div style={{fontSize:13,color:'var(--t2)'}}>Awards appear once workers start completing tasks.</div>}</div>}
+      )}
+
+      {/* Org Overview Preview */}
+      {reportType==='org' && isClientAdmin && (
+        <>
+          <div className="section">
+            <div className="section-title">Organisation Summary — {pl}</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10,marginTop:10}}>
+              {[['Active Workers',uniqueWorkers.size,''],['Total Tasks',pt.length,''],['Completed',done,'g'],['Compliance Rate',pct(compDone,compT.length)+'%','p']].map(([l,v,c])=>(
+                <div key={l} className="st" style={{background:'var(--s3)',borderRadius:8,padding:14,textAlign:'center'}}>
+                  <div style={{fontSize:22,fontWeight:800,color:c==='g'?'var(--green)':c==='p'?'#8B5CF6':'#5BC8C0',lineHeight:1}}>{v}</div>
+                  <div style={{fontSize:10,color:'var(--t2)',marginTop:5,textTransform:'uppercase'}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="section">
+            <div className="section-title">Compliance Rate by Role</div>
+            <div style={{overflowX:'auto',marginTop:10}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead>
+                  <tr style={{background:'var(--s3)'}}>
+                    {['Role','Tasks Assigned','Completed','Completion Rate','Compliance Rate'].map(h=>(
+                      <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {workerRoles.map(r=>{
+                    const cp=pct(byRole[r].done,byRole[r].tasks)
+                    return (
+                      <tr key={r} style={{borderBottom:'1px solid var(--border)'}}>
+                        <td style={{padding:'8px 10px',fontWeight:600}}>{ROLE_LABELS[r]}</td>
+                        <td style={{padding:'8px 10px'}}>{byRole[r].tasks}</td>
+                        <td style={{padding:'8px 10px'}}>{byRole[r].done}</td>
+                        <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
+                        <td style={{padding:'8px 10px',fontWeight:700,color:byRole[r].compRate>=80?'var(--green)':byRole[r].compRate>=50?'#F59E0B':'var(--red)'}}>{byRole[r].compRate}%</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
