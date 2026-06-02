@@ -1552,11 +1552,13 @@ function UsersView({ user }) {
     if (!isConfigured()) { alert('Supabase not configured'); return }
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(import.meta.env.VITE_SUPABASE_URL+'/functions/v1/invite-user', {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
+      const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer '+session?.access_token
+          'Authorization': 'Bearer '+session?.access_token,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || ''
         },
         body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg })
       })
