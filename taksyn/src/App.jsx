@@ -1082,6 +1082,7 @@ function ReportsView({ tasks, user }) {
   const [period, setPeriod] = useState('weekly')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
+  const [chartTab, setChartTab] = useState('overview')
 
   const isClientAdmin = ['client_admin','super_admin'].includes(user.role)
   const isSupervisorUp = ['supervisor','manager','client_admin','super_admin'].includes(user.role)
@@ -1204,7 +1205,6 @@ function ReportsView({ tasks, user }) {
 
   // Summary stats for screen preview
   const tab = reportType
-  const [chartTab, setChartTab] = useState('overview')
   const last7=Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-6+i); const ds=d.toISOString().split('T')[0]; return { label:d.toLocaleDateString([],{weekday:'short'}), total:tasks.filter(t=>t.completed_at?.startsWith(ds)||t.due_date===ds).length, done:tasks.filter(t=>t.completed_at?.startsWith(ds)&&['completed','approved','awaiting_review'].includes(t.status)).length } })
   const maxBar=Math.max(...last7.map(d=>d.total),1)
 
