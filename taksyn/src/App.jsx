@@ -329,6 +329,8 @@ function AuthView({ onAuth }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [orgChoices, setOrgChoices] = useState(null) // [{org, role, tier, name}] for org picker
+  const [pendingAuthUser, setPendingAuthUser] = useState(null) // auth user waiting for org pick
 
   const handleSubmit = async () => {
     setError(''); setSuccess('')
@@ -358,6 +360,13 @@ function AuthView({ onAuth }) {
             org: orgName,
             tier: 'Growth'
           })
+          // Create org_members entry
+          await supabase.from('org_members').upsert({
+            user_id: signUpData.user.id,
+            org: orgName,
+            role: assignedRole,
+            tier: 'Growth'
+          })
         }
         setSuccess(signupType==='organisation'
           ? 'Account created! Check your email to confirm, then sign in as your organisation's admin.'
@@ -380,11 +389,27 @@ function AuthView({ onAuth }) {
         if (data?.user) {
           const { data:profile } = await freshClient.from('profiles').select('*').eq('id',data.user.id).single()
           if (profile) {
-            const userData = {...profile, email:data.user.email}
-            localStorage.setItem('taksyn-user', JSON.stringify(userData))
-            onAuth(userData)
+            // Check org_members for multiple org memberships
+            const { data:memberships } = await freshClient.from('org_members').select('*').eq('user_id',data.user.id)
+            if (memberships && memberships.length > 1) {
+              // Multiple orgs — show picker
+              setPendingAuthUser({...profile, email:data.user.email})
+              setOrgChoices(memberships)
+              setLoading(false)
+              return
+            } else if (memberships && memberships.length === 1) {
+              // Single org from org_members — use that role/org
+              const m = memberships[0]
+              const userData = {...profile, email:data.user.email, role:m.role, org:m.org, tier:m.tier||'Growth'}
+              localStorage.setItem('taksyn-user', JSON.stringify(userData))
+              onAuth(userData)
+            } else {
+              // No org_members entry — use profile directly (legacy/super_admin)
+              const userData = {...profile, email:data.user.email}
+              localStorage.setItem('taksyn-user', JSON.stringify(userData))
+              onAuth(userData)
+            }
           } else {
-            // Profile not found - create basic user
             const userData = { id:data.user.id, email:data.user.email, name:data.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' }
             localStorage.setItem('taksyn-user', JSON.stringify(userData))
             onAuth(userData)
@@ -406,6 +431,37 @@ function AuthView({ onAuth }) {
       setSuccess('Password reset email sent! Check your inbox.')
     } catch(e) { setError(e.message||'Failed to send reset email') }
     finally { setLoading(false) }
+  }
+
+  // Org picker screen
+  if (orgChoices && pendingAuthUser) {
+    return (
+      <div className="auth-bg">
+        <style>{CSS}</style>
+        <div className="auth-card">
+          <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
+          <div className="auth-title">Select Organisation</div>
+          <div className="auth-sub">You are a member of multiple organisations. Choose which one to sign in to.</div>
+          <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16}}>
+            {orgChoices.map((m,i)=>(
+              <button key={i} onClick={()=>{
+                const userData = {...pendingAuthUser, role:m.role, org:m.org, tier:m.tier||'Growth'}
+                localStorage.setItem('taksyn-user', JSON.stringify(userData))
+                onAuth(userData)
+              }} style={{padding:'14px 16px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',textAlign:'left',transition:'all .15s'}}
+              onMouseOver={e=>e.currentTarget.style.borderColor='var(--brand)'}
+              onMouseOut={e=>e.currentTarget.style.borderColor='var(--border)'}>
+                <div style={{fontWeight:700,fontSize:14}}>{m.org}</div>
+                <div style={{fontSize:12,color:'var(--t2)',marginTop:3}}>{ROLE_LABELS[m.role]||m.role}</div>
+              </button>
+            ))}
+          </div>
+          <div style={{textAlign:'center',marginTop:16}}>
+            <a style={{fontSize:12,color:'var(--t2)',cursor:'pointer'}} onClick={()=>{setOrgChoices(null);setPendingAuthUser(null)}}>← Back to sign in</a>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1459,9 +1515,24 @@ function UsersView({ user }) {
   useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
 
   const deleteUser = async (id) => {
-    if (!confirm('Remove this user?')) return
-    if(isConfigured()) await supabase.from('profiles').delete().eq('id',id)
+    if (!confirm('Remove this user from your organisation?')) return
+    if(isConfigured()) {
+      // Remove from org_members for this org only — preserves their account in other orgs
+      await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
+    }
     setRealUsers(prev=>prev.filter(u=>u.id!==id))
+  }
+
+  const addExistingUserToOrg = async (email, role) => {
+    if (!isConfigured()) { alert('Supabase not configured'); return }
+    const { data:profiles } = await supabase.from('profiles').select('*')
+    const profile = profiles?.find(p=>p.email===email||p.id===email)
+    if (!profile) { alert('No user found with that email. They need to sign up to Taksyn first.'); return }
+    const { data:existing } = await supabase.from('org_members').select('*').eq('user_id',profile.id).eq('org',user.org)
+    if (existing?.length) { alert('This user is already in your organisation.'); return }
+    await supabase.from('org_members').insert({ user_id:profile.id, org:user.org, role, tier:user.tier||'Growth' })
+    setRealUsers(prev=>[...prev,{...profile,role,org:user.org}])
+    alert(profile.name+' added to your organisation as '+ROLE_LABELS[role])
   }
 
   const sendInvite = () => {
