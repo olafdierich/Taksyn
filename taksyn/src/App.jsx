@@ -530,6 +530,8 @@ function AuthView({ onAuth }) {
 
   const handleSubmit = async () => {
     setError('')
+    try{indexedDB.deleteDatabase('supabase')}catch(e){}
+    localStorage.removeItem('taksyn-auth')
     if (!email||!password) { setError('Please fill in all fields'); return }
     setLoading(true)
     try {
