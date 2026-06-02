@@ -1064,11 +1064,7 @@ function UsersView({ user }) {
 
   const sendInvite = () => {
     if (inviteMethod==='whatsapp') {
-      const msg=encodeURIComponent('Hi '+inviteName+'! You've been invited to join Taksyn as '+ROLE_LABELS[inviteRole]+'.
-
-Sign up here: https://taksyn.vercel.app
-
-Use your email: '+inviteEmail)
+      const msg=encodeURIComponent('Hi '+inviteName+'! You have been invited to join Taksyn as '+ROLE_LABELS[inviteRole]+'.\n\nSign up here: https://taksyn.vercel.app\n\nUse your email: '+inviteEmail)
       window.open('https://wa.me/?text='+msg,'_blank')
     } else {
       alert('Invite email sent to '+inviteEmail+' (simulated)')
