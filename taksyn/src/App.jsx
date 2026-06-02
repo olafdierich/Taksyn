@@ -258,6 +258,7 @@ const IC = ({ n, s=16 }) => {
     check:'M5 13l4 4L19 7',plus:'M12 4v16m8-8H4',menu:'M4 6h16M4 12h16M4 18h16',x:'M6 18L18 6M6 6l12 12',
     clock:'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0',
     gps:'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z',
+    audit:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
   }
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={paths[n]||paths.check} /></svg>
 }
@@ -488,6 +489,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
+  const [auditLog, setAuditLog] = useState([])
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [editTask, setEditTask] = useState({})
@@ -507,6 +509,23 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
   const filtered = filter==='all'?searchFiltered:filter==='escalated'?searchFiltered.filter(t=>t.escalation):searchFiltered.filter(t=>t.status===filter)
 
   const update = async (id, changes) => {
+    if (changes.status) {
+      const prev = tasks.find(t=>t.id===id)
+      const entry = {
+        id: Date.now()+'',
+        taskId: id,
+        taskTitle: prev?.title||id,
+        fromStatus: prev?.status||'—',
+        toStatus: changes.status,
+        by: user?.name||'System',
+        byRole: user?.role||'',
+        at: new Date().toISOString()
+      }
+      setAuditLog(log=>[entry,...log])
+      if (isConfigured()) {
+        await supabase.from('audit_log').insert(entry).then(()=>{})
+      }
+    }
     setTasks(prev=>prev.map(t=>t.id===id?{...t,...changes}:t))
     if (isConfigured()) {
       const payload = {...changes}
@@ -563,7 +582,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
       if (error) console.error('Task save error:', error)
     }
     setTasks(prev=>[...prev,t])
-    if (loadTasks) await loadTasks()
+    if (loadTasks) { await loadTasks(); await loadAuditLog() }
     setShowCreate(false); setUserSearch('')
     setNewTask({title:'',category:'Housekeeping',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''})
   }
@@ -1441,12 +1460,94 @@ function TiersView({ user }) {
 }
 
 const NAV = {
-  super_admin:  [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['users','Team','users'],['tiers','Plans','tier']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['users','Team','users'],['tiers','Plans','tier']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert']],
+  super_admin:  [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['audit','Audit Log','audit']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks']],
 }
+
+function AuditLogView({ tasks, user, auditLog }) {
+  const [filter, setFilter] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+
+  const STATUS_COLORS = {
+    pending:'#6B7280', in_progress:'#3B82F6', awaiting_review:'#F59E0B',
+    completed:'#10B981', approved:'#10B981', rejected:'#EF4444',
+    overdue:'#EF4444', escalated:'#EF4444'
+  }
+
+  const fmtTs = (d) => new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+
+  const filtered = auditLog.filter(e => {
+    const matchText = !filter || e.taskTitle?.toLowerCase().includes(filter.toLowerCase()) || e.by?.toLowerCase().includes(filter.toLowerCase())
+    const matchRole = roleFilter==='all' || e.byRole===roleFilter
+    return matchText && matchRole
+  })
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Audit Log</div>
+        <div className="ph-sub">{auditLog.length} status changes recorded — read only</div>
+      </div>
+
+      <div className="section" style={{marginBottom:14}}>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <input
+            className="form-input"
+            placeholder="Search task or person..."
+            value={filter}
+            onChange={e=>setFilter(e.target.value)}
+            style={{flex:1,minWidth:180,fontSize:13}}
+          />
+          <select className="form-input" value={roleFilter} onChange={e=>setRoleFilter(e.target.value)} style={{fontSize:13,padding:'6px 10px'}}>
+            <option value="all">All Roles</option>
+            {ROLES.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {filtered.length===0 ? (
+        <div className="empty"><div className="empty-icon">📋</div><div style={{fontSize:15,fontWeight:700,marginBottom:6}}>No audit entries yet</div><div className="empty-text">Status changes will appear here as tasks are updated.</div></div>
+      ) : (
+        <div className="section">
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead>
+                <tr style={{background:'var(--s3)'}}>
+                  {['Date & Time','Task','Changed By','Role','From','To'].map(h=>(
+                    <th key={h} style={{padding:'8px 12px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:700,whiteSpace:'nowrap',borderBottom:'2px solid var(--border)'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((e,i)=>(
+                  <tr key={e.id||i} style={{borderBottom:'1px solid var(--border)',background:i%2===0?'transparent':'var(--s3)'}}>
+                    <td style={{padding:'9px 12px',color:'var(--t2)',whiteSpace:'nowrap'}}>{fmtTs(e.at)}</td>
+                    <td style={{padding:'9px 12px',fontWeight:600,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.taskTitle||e.taskId}</td>
+                    <td style={{padding:'9px 12px'}}>{e.by}</td>
+                    <td style={{padding:'9px 12px'}}>
+                      <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:ROLE_COLORS[e.byRole]||'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>{ROLE_LABELS[e.byRole]||e.byRole}</span>
+                    </td>
+                    <td style={{padding:'9px 12px'}}>
+                      <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:STATUS_COLORS[e.fromStatus]||'var(--t2)',fontWeight:600}}>{e.fromStatus?.replace(/_/g,' ')}</span>
+                    </td>
+                    <td style={{padding:'9px 12px'}}>
+                      <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:STATUS_COLORS[e.toStatus]+'18'||'var(--s3)',color:STATUS_COLORS[e.toStatus]||'var(--t2)',fontWeight:700,border:'1px solid '+(STATUS_COLORS[e.toStatus]||'var(--border)')+'44'}}>{e.toStatus?.replace(/_/g,' ')}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{marginTop:10,fontSize:11,color:'var(--t2)',textAlign:'right'}}>Showing {filtered.length} of {auditLog.length} entries · Read only</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -1476,6 +1577,12 @@ export default function App() {
       setTasks(prev[prev.length-1].tasks); setShowUndo(false)
       return prev.slice(0,-1)
     })
+  }
+
+  const loadAuditLog = async () => {
+    if (!isConfigured()) return
+    const { data } = await supabase.from('audit_log').select('*').order('at', { ascending: false }).limit(500)
+    if (data) setAuditLog(data)
   }
 
   const loadTasks = async () => {
@@ -1527,7 +1634,7 @@ export default function App() {
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
@@ -1628,6 +1735,7 @@ export default function App() {
                 {page==='evidence'    && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
                 {page==='escalations' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
                 {page==='reports'     && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
+                {page==='audit'       && hasAccess(user.role,2) && <AuditLogView   {...pageProps}/>}
                 {page==='users'       && hasAccess(user.role,4) && <UsersView      {...pageProps}/>}
                 {page==='tiers'       && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
               </>
