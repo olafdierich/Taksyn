@@ -852,37 +852,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
               {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&<button className="btn btn-primary" style={{width:'100%'}} onClick={()=>submitTask(sel.id)}>✅ Submit Task for Review</button>}
               {sel.status==='awaiting_review'&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>📋 Submitted — awaiting supervisor review</div>}
               {sel.status==='awaiting_review'&&user.role==='worker'&&sel.assigned_user_id===user.id&&(
-                <div style={{marginTop:10,background:'rgba(99,102,241,.08)',border:'1px solid rgba(99,102,241,.25)',borderRadius:8,padding:12}}>
-                  <div style={{fontSize:11,fontWeight:700,color:'#6366F1',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:8}}>✏️ Add Amendment</div>
-                  <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>You can add notes or additional evidence. Each amendment is date & time stamped and cannot be edited once saved.</div>
-                  <textarea
-                    placeholder="Add amendment note..."
-                    style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:64,fontFamily:'inherit',boxSizing:'border-box'}}
-                    id="amendment-note"
-                  />
-                  <div style={{display:'flex',gap:8,marginTop:8}}>
-                    <button className="btn btn-secondary" style={{flex:1,fontSize:12}} onClick={()=>document.getElementById('amend-img').click()}>📎 Attach Photo</button>
-                    <button className="btn btn-primary" style={{flex:1,fontSize:12}} onClick={()=>{
-                      const note = document.getElementById('amendment-note').value.trim()
-                      if (!note) return
-                      const amendEntry = { id: Date.now()+'', author: user.name, authorId: user.id, text: note, timestamp: new Date().toISOString(), edits: [], isAmendment: true }
-                      update(sel.id, { comments:[...(parseSafe(sel.comments)||[]), amendEntry] })
-                      document.getElementById('amendment-note').value = ''
-                    }}>Save Amendment</button>
-                  </div>
-                  <input id="amend-img" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{
-                    const f=e.target.files[0]; if(!f) return
-                    const r=new FileReader()
-                    r.onload=async ev=>{
-                      const curr=parseSafe(sel.evidence)
-                      if(curr.length>=5) return alert('Maximum 5 images reached')
-                      await update(sel.id,{evidence:[...curr,ev.target.result]})
-                      const note={ id: Date.now()+'', author: user.name, authorId: user.id, text:'📎 Amendment photo attached', timestamp: new Date().toISOString(), edits: [], isAmendment: true }
-                      update(sel.id,{comments:[...(parseSafe(sel.comments)||[]),note]})
-                    }
-                    r.readAsDataURL(f); e.target.value=''
-                  }}/>
-                </div>
+                <AmendmentPanel sel={sel} user={user} update={update} parseSafe={parseSafe} />
               )}
               {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✅ Task approved by supervisor</div>}
             </div>
@@ -1015,6 +985,79 @@ function EvidenceView({ tasks, setTasks, user }) {
     </div>
   )
 }
+
+function AmendmentPanel({ sel, user, update, parseSafe }) {
+  const [open, setOpen] = useState(false)
+  const [note, setNote] = useState('')
+  const [hasAmendment, setHasAmendment] = useState(false)
+
+  const fmtTs = (d) => new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+
+  const saveAmendment = () => {
+    if (!note.trim()) return
+    const entry = { id: Date.now()+'', author: user.name, authorId: user.id, text: note.trim(), timestamp: new Date().toISOString(), edits: [], isAmendment: true }
+    update(sel.id, { comments: [...(parseSafe(sel.comments)||[]), entry] })
+    setNote('')
+    setHasAmendment(true)
+  }
+
+  const resubmit = () => {
+    if (note.trim()) saveAmendment()
+    update(sel.id, { status: 'awaiting_review', submitted_at: new Date().toISOString() })
+    setOpen(false)
+    setHasAmendment(false)
+  }
+
+  return (
+    <div style={{marginTop:10}}>
+      {!open ? (
+        <button className="btn btn-secondary" style={{width:'100%',fontSize:13,borderColor:'#6366F1',color:'#6366F1'}} onClick={()=>setOpen(true)}>
+          ✏️ Add Amendment
+        </button>
+      ) : (
+        <div style={{background:'rgba(99,102,241,.08)',border:'1px solid rgba(99,102,241,.25)',borderRadius:8,padding:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#6366F1',textTransform:'uppercase',letterSpacing:'.8px'}}>✏️ Amendment</div>
+            <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1}} onClick={()=>setOpen(false)}>×</button>
+          </div>
+          <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>Each amendment is date & time stamped and cannot be edited once saved. Use Resubmit to notify your supervisor.</div>
+          <textarea
+            placeholder="Describe your amendment..."
+            value={note}
+            onChange={e=>setNote(e.target.value)}
+            style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:72,fontFamily:'inherit',boxSizing:'border-box'}}
+          />
+          <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+            <button className="btn btn-secondary" style={{flex:1,fontSize:12,minWidth:120}} onClick={()=>document.getElementById('amend-img-'+sel.id).click()}>
+              📎 Attach Photo
+            </button>
+            <button className="btn btn-secondary" style={{flex:1,fontSize:12,minWidth:120}} onClick={saveAmendment} disabled={!note.trim()}>
+              💾 Save Amendment
+            </button>
+            <button className="btn btn-primary" style={{width:'100%',fontSize:13,marginTop:4,background:'#6366F1',borderColor:'#6366F1'}} onClick={resubmit}>
+              🔄 Resubmit for Supervisor Review
+            </button>
+          </div>
+          {hasAmendment&&<div style={{marginTop:8,fontSize:11,color:'var(--green)',fontWeight:600}}>✓ Amendment saved — press Resubmit to notify supervisor</div>}
+          <input id={'amend-img-'+sel.id} type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{
+            const f=e.target.files[0]; if(!f) return
+            const r=new FileReader()
+            r.onload=async ev=>{
+              const curr=parseSafe(sel.evidence)
+              if(curr.length>=5){ alert('Maximum 5 images reached'); return }
+              await update(sel.id,{evidence:[...curr,ev.target.result]})
+              const photoEntry={ id: Date.now()+'', author: user.name, authorId: user.id, text:'📎 Amendment photo attached', timestamp: new Date().toISOString(), edits:[], isAmendment:true }
+              update(sel.id,{comments:[...(parseSafe(sel.comments)||[]),photoEntry]})
+              setHasAmendment(true)
+            }
+            r.readAsDataURL(f); e.target.value=''
+          }}/>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 function ReportsView({ tasks, user }) {
   const [reportType, setReportType] = useState('compliance')
