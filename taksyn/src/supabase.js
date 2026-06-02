@@ -20,3 +20,16 @@ export const supabase = createClient(
     }
   }
 )
+
+// Auto-recovery: track last successful auth time
+// If app loads and last auth was > 7 days ago, clear stale tokens
+const LAST_AUTH_KEY = 'taksyn-last-auth'
+const lastAuth = localStorage.getItem(LAST_AUTH_KEY)
+const sevenDays = 7 * 24 * 60 * 60 * 1000
+if (lastAuth && Date.now() - parseInt(lastAuth) > sevenDays) {
+  console.log('Clearing stale auth tokens')
+  localStorage.removeItem('taksyn-user')
+  localStorage.removeItem('taksyn-auth')
+  try { indexedDB.deleteDatabase('supabase') } catch(e) {}
+}
+export const markAuthSuccess = () => localStorage.setItem(LAST_AUTH_KEY, Date.now().toString())
