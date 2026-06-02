@@ -548,7 +548,12 @@ function AuthView({ onAuth }) {
         const { error:e } = await supabase.auth.signInWithPassword({ email, password })
         if (e) throw e
       }
-    } catch(e) { setError(e.message||'Something went wrong') }
+    } catch(e) { 
+      // Auto-clear stuck auth on error
+      try { indexedDB.deleteDatabase('supabase') } catch(_) {}
+      localStorage.removeItem('taksyn-auth')
+      setError(e.message||'Something went wrong. Try again.') 
+    }
     finally { setLoading(false) }
   }
 
