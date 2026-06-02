@@ -530,10 +530,14 @@ function AuthView({ onAuth }) {
 
   const handleSubmit = async () => {
     setError('')
-    try{indexedDB.deleteDatabase('supabase')}catch(e){}
-    localStorage.removeItem('taksyn-auth')
     if (!email||!password) { setError('Please fill in all fields'); return }
     setLoading(true)
+    // Always clear stale auth before attempting login
+    try{indexedDB.deleteDatabase('supabase')}catch(_){}
+    localStorage.clear()
+    sessionStorage.clear()
+    // Wait for clear to complete
+    await new Promise(r=>setTimeout(r,500))
     try {
       if (!isConfigured()) {
         const found = DEMO_ACCOUNTS.find(a=>a.email===email&&a.password===password)
@@ -547,18 +551,13 @@ function AuthView({ onAuth }) {
         setError('Check your email to confirm your account, then sign in.')
         setMode('login')
       } else {
-        try{indexedDB.deleteDatabase('supabase')}catch(_){}
-      localStorage.removeItem('taksyn-auth')
-      await new Promise(r=>setTimeout(r,300))
-      const { error:e } = await supabase.auth.signInWithPassword({ email, password })
+        const { error:e } = await supabase.auth.signInWithPassword({ email, password })
         if (e) throw e
       }
-    } catch(e) { 
-      // Auto-clear stuck auth on error
-      try { indexedDB.deleteDatabase('supabase') } catch(_) {}
-      localStorage.removeItem('taksyn-auth')
-      setError(e.message||'Something went wrong. Try again.') 
-    }
+    } catch(e) {
+      setError(e.message||'Something went wrong. Try again.')
+    } finally { setLoading(false) }
+  }
     finally { setLoading(false) }
   }
 
