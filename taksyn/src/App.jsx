@@ -359,12 +359,22 @@ function AuthView({ onAuth }) {
           import.meta.env.VITE_SUPABASE_ANON_KEY,
           { auth: { persistSession: false, autoRefreshToken: false } }
         )
-        const { data, error:e } = await freshClient.auth.signInWithPassword({ email, password })
+        // Race login against 10s timeout
+        const loginResult = await Promise.race([
+          freshClient.auth.signInWithPassword({ email, password }),
+          new Promise((_,reject) => setTimeout(()=>reject(new Error('Login timed out. Please try again.')), 10000))
+        ])
+        const { data, error:e } = loginResult
         if (e) throw e
         if (data?.user) {
           const { data:profile } = await freshClient.from('profiles').select('*').eq('id',data.user.id).single()
           if (profile) {
             const userData = {...profile, email:data.user.email}
+            localStorage.setItem('taksyn-user', JSON.stringify(userData))
+            onAuth(userData)
+          } else {
+            // Profile not found - create basic user
+            const userData = { id:data.user.id, email:data.user.email, name:data.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' }
             localStorage.setItem('taksyn-user', JSON.stringify(userData))
             onAuth(userData)
           }
