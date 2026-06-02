@@ -741,7 +741,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
           {sel.status==='rejected'&&(
             <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back — Action Required</div>
-              {parseSafe(sel.comments,[]).filter(c=>c.startsWith('⚠️')).slice(-1).map((c,i)=><div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px',lineHeight:1.5}}>{c.replace('⚠️ ','').split(': ').slice(1).join(': ')}</div>)}
+              {parseSafe(sel.comments,[]).filter(c=>{ const txt=typeof c==='object'?c.text:c; return txt?.startsWith('⚠️') }).slice(-1).map((c,i)=>{ const txt=typeof c==='object'?c.text:c; return <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px',lineHeight:1.5}}>{txt.replace('⚠️ ','').split(': ').slice(1).join(': ')}</div> })}
               <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>Please complete the required changes and resubmit.</div>
             </div>
           )}
@@ -777,8 +777,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
             <div className="section-title">Comments & Notes</div>
             {parseSafe(sel.comments,[]).map((c,i)=>{
               const isObj = c && typeof c==='object'
-              const author = isObj ? c.author : (c.split(':')[0]||'')
-              const text = isObj ? c.text : c.split(':').slice(1).join(':').trim()
+              const cStr = (!isObj && c != null) ? String(c) : ''
+              const author = isObj ? c.author : (cStr.split(':')[0]||'')
+              const text = isObj ? c.text : cStr.split(':').slice(1).join(':').trim()
               const ts = isObj ? c.timestamp : null
               const edits = isObj ? (c.edits||[]) : []
               const isAmendment = isObj && c.isAmendment
@@ -879,7 +880,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
 
           <div className="btn-row">
             {canApprove&&sel.status!=='approved'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit Task</button>}
-            {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
+            {canApprove&&['awaiting_review','rejected'].includes(sel.status)&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button>{sel.status==='awaiting_review'&&<button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button>}</>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<button className="btn btn-amber" onClick={()=>update(sel.id,{escalation:true,status:'escalated'})}>⚠️ Escalate</button>}
             {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve Escalation</button>}
             {canApprove&&(
