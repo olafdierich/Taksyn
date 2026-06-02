@@ -523,9 +523,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
   }
 
   const startTask = (tid) => {
-    navigator.geolocation?.getCurrentPosition(
-      pos => update(tid, { status:'in_progress', started_at:new Date().toISOString(), gps_start:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4) }),
-      () => update(tid, { status:'in_progress', started_at:new Date().toISOString() })
+    if (!navigator.geolocation) { alert("GPS is required to start a task but your device does not support location services."); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => update(tid, { status:"in_progress", started_at:new Date().toISOString(), gps_start:pos.coords.latitude.toFixed(4)+","+pos.coords.longitude.toFixed(4) }),
+      () => alert("GPS location is required to start a task. Please enable location permissions and try again.")
     )
   }
 
@@ -536,9 +537,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
       update(tid, { status:'awaiting_review', completed_by:user.name, comments:updatedComments, ...extra })
       setCelebration(true); setComment(''); setSelected(null)
     }
-    navigator.geolocation?.getCurrentPosition(
-      pos => doSubmit({ gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4) }),
-      () => doSubmit()
+    if (!navigator.geolocation) { alert("GPS is required to complete a task but your device does not support location services."); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => doSubmit({ gps_end:pos.coords.latitude.toFixed(4)+","+pos.coords.longitude.toFixed(4) }),
+      () => alert("GPS location is required to complete a task. Please enable location permissions and try again.")
     )
   }
 
@@ -776,7 +778,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
                   <div style={{flex:1,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✓ Time In: {fmtTime(sel.started_at)}</div>
                 )}
                 {sel.started_at&&!sel.completed_at ? (
-                  <button className="btn btn-amber" style={{flex:1}} onClick={()=>{ navigator.geolocation?.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>
+                  <button className="btn btn-amber" style={{flex:1}} onClick={()=>{ if(!navigator.geolocation){alert("GPS is required but your device does not support location services.");return} navigator.geolocation.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+","+pos.coords.longitude.toFixed(4)}),()=>alert("GPS location is required to complete a task. Please enable location permissions and try again.")) }}>⏹ Time Out</button>
                 ) : sel.completed_at ? (
                   <div style={{flex:1,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>✓ Time Out: {fmtTime(sel.completed_at)}</div>
                 ) : null}
