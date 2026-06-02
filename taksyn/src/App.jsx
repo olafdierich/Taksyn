@@ -342,7 +342,6 @@ function AuthView({ onAuth }) {
     setError(''); setSuccess('')
     if (!email||!password) { setError('Please fill in all fields'); return }
     setLoading(true)
-    clearAuthCache()
     try {
       if (!isConfigured()) {
         onAuth({ id:email, email, name:name||email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' })
@@ -354,10 +353,16 @@ function AuthView({ onAuth }) {
         setSuccess('Check your email to confirm your account, then sign in.')
         setMode('login'); setLoading(false)
       } else {
-        const { data, error:e } = await supabase.auth.signInWithPassword({ email, password })
+        const { createClient } = await import('@supabase/supabase-js')
+        const freshClient = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_ANON_KEY,
+          { auth: { persistSession: false, autoRefreshToken: false } }
+        )
+        const { data, error:e } = await freshClient.auth.signInWithPassword({ email, password })
         if (e) throw e
         if (data?.user) {
-          const { data:profile } = await supabase.from('profiles').select('*').eq('id',data.user.id).single()
+          const { data:profile } = await freshClient.from('profiles').select('*').eq('id',data.user.id).single()
           if (profile) {
             const userData = {...profile, email:data.user.email}
             localStorage.setItem('taksyn-user', JSON.stringify(userData))
