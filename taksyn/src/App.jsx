@@ -653,7 +653,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
       {showReject&&(
         <div className="modal-overlay" onClick={()=>{setShowReject(null);setRejectNote('')}}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-hdr"><div className="modal-title">Send Task Back to Worker</div><button className="modal-close" onClick={()=>{setShowReject(null);setRejectNote('')}}>×</button></div>
+            <div className="modal-hdr"><div className="modal-title">Reject Task</div><button className="modal-close" onClick={()=>{setShowReject(null);setRejectNote('')}}>×</button></div>
             <div className="modal-body">
               <div style={{fontSize:13,color:'var(--t2)',marginBottom:14}}>The task will be sent back as <span style={{color:'var(--red)',fontWeight:600}}>Rejected</span> with your instructions.</div>
               <div className="form-field"><label className="form-label">Instructions for Worker</label><textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Please re-clean the bathroom…" value={rejectNote} onChange={e=>setRejectNote(e.target.value)}/></div>
@@ -661,9 +661,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
                 <button className="btn btn-secondary" onClick={()=>{setShowReject(null);setRejectNote('')}}>Cancel</button>
                 <button className="btn btn-danger" disabled={!rejectNote.trim()} onClick={()=>{
                   const task=tasks.find(t=>t.id===showReject)
-                  update(showReject,{status:'rejected',reviewed_at:new Date().toISOString(),comments:[...(task.comments||[]),'⚠️ '+user.name+' (Supervisor): '+rejectNote.trim()]})
-                  setShowReject(null); setRejectNote(''); setSelected(null)
-                }}>Send Back to Worker</button>
+                  const rejectEntry = { id: Date.now()+'', author: user.name, authorId: user.id, text: '⚠️ Rejected: '+rejectNote.trim(), timestamp: new Date().toISOString(), edits: [], isRejection: true }
+                  update(showReject,{status:'rejected',reviewed_at:new Date().toISOString(),comments:[...(parseSafe(task.comments,[])), rejectEntry]})
+                  setShowReject(null); setRejectNote('')
+                }}>Reject Task</button>
               </div>
             </div>
           </div>
@@ -790,10 +791,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
               const commentId = isObj ? c.id : i+''
               const isEditing = editingComment && editingComment.taskId===sel.id && editingComment.commentId===commentId
               return (
-                <div key={i} className="comment-item" style={{borderLeft: isAmendment?'3px solid #6366F1':'3px solid var(--border)',paddingLeft:10,marginBottom:8,background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}>
+                <div key={i} className="comment-item" style={{borderLeft: isAmendment?'3px solid #6366F1':isObj&&c.isRejection?'3px solid var(--red)':'3px solid var(--border)',paddingLeft:10,marginBottom:8,background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
                     <div style={{flex:1}}>
-                      <span style={{fontWeight:700,fontSize:12,color:isAmendment?'#6366F1':'var(--brand)'}}>{isAmendment?'✏️ Amendment':'💬'} {author}</span>
+                      <span style={{fontWeight:700,fontSize:12,color:isAmendment?'#6366F1':isObj&&c.isRejection?'var(--red)':'var(--brand)'}}>{isAmendment?'✏️ Amendment':isObj&&c.isRejection?'⚠️ Rejection':'💬'} {author}</span>
                       {tsDate&&<span style={{fontSize:10,color:'var(--t2)',marginLeft:8}}>{fmtTs(ts)}</span>}
                     </div>
                     {isOwn&&!isEditing&&(
@@ -880,7 +881,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
 
           <div className="btn-row">
             {canApprove&&sel.status!=='approved'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit Task</button>}
-            {canApprove&&['awaiting_review','rejected'].includes(sel.status)&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button>{sel.status==='awaiting_review'&&<button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button>}</>}
+            {canApprove&&['awaiting_review','rejected'].includes(sel.status)&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Reject</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<button className="btn btn-amber" onClick={()=>update(sel.id,{escalation:true,status:'escalated'})}>⚠️ Escalate</button>}
             {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve Escalation</button>}
             {canApprove&&(
