@@ -323,7 +323,9 @@ function AuthView({ onAuth }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
-  const [role, setRole] = useState('worker')
+  const [org, setOrg] = useState('')
+  const [signupType, setSignupType] = useState('organisation') // 'organisation' or 'staff'
+  const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -338,9 +340,28 @@ function AuthView({ onAuth }) {
         return
       }
       if (mode==='register') {
-        const { error:e } = await supabase.auth.signUp({ email, password, options:{ data:{name,role} } })
+        if (signupType==='organisation' && !org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
+        if (!name.trim()) { setError('Please enter your full name'); setLoading(false); return }
+        const orgName = signupType==='organisation' ? org.trim() : inviteCode.trim()
+        const assignedRole = signupType==='organisation' ? 'client_admin' : 'worker'
+        const { data:signUpData, error:e } = await supabase.auth.signUp({
+          email, password,
+          options:{ data:{ name:name.trim(), role:assignedRole, org:orgName } }
+        })
         if (e) throw e
-        setSuccess('Check your email to confirm your account, then sign in.')
+        // Create profile immediately
+        if (signUpData?.user) {
+          await supabase.from('profiles').upsert({
+            id: signUpData.user.id,
+            name: name.trim(),
+            role: assignedRole,
+            org: orgName,
+            tier: 'Growth'
+          })
+        }
+        setSuccess(signupType==='organisation'
+          ? 'Account created! Check your email to confirm, then sign in as your organisation's admin.'
+          : 'Account created! Check your email to confirm, then sign in.')
         setMode('login'); setLoading(false)
       } else {
         const { createClient } = await import('@supabase/supabase-js')
@@ -396,10 +417,26 @@ function AuthView({ onAuth }) {
         <div className="auth-sub">Task compliance & accountability platform</div>
         {error&&<div className="auth-error">{error}</div>}
         {success&&<div className="auth-success">{success}</div>}
-        {mode==='register'&&<div className="auth-field"><label className="auth-label">Full Name</label><input className="auth-input" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} /></div>}
+        {mode==='register'&&(
+          <div style={{display:'flex',gap:8,marginBottom:4}}>
+            <button
+              onClick={()=>setSignupType('organisation')}
+              style={{flex:1,padding:'8px',borderRadius:6,border:'2px solid '+(signupType==='organisation'?'var(--brand)':'var(--border)'),background:signupType==='organisation'?'var(--brand-lt)':'none',color:signupType==='organisation'?'var(--brand)':'var(--t2)',cursor:'pointer',fontSize:12,fontWeight:600}}>
+              🏢 New Organisation
+            </button>
+            <button
+              onClick={()=>setSignupType('staff')}
+              style={{flex:1,padding:'8px',borderRadius:6,border:'2px solid '+(signupType==='staff'?'var(--brand)':'var(--border)'),background:signupType==='staff'?'var(--brand-lt)':'none',color:signupType==='staff'?'var(--brand)':'var(--t2)',cursor:'pointer',fontSize:12,fontWeight:600}}>
+              👤 Join Organisation
+            </button>
+          </div>
+        )}
+        {mode==='register'&&<div className="auth-field"><label className="auth-label">Full Name</label><input className="auth-input" placeholder="Your full name" value={name} onChange={e=>setName(e.target.value)} /></div>}
         <div className="auth-field"><label className="auth-label">Email</label><input className="auth-input" type="email" placeholder="you@organisation.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} /></div>
         {mode!=='forgot'&&<div className="auth-field"><label className="auth-label">Password</label><input className="auth-input" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} /></div>}
-        {mode==='register'&&<div className="auth-field"><label className="auth-label">Role</label><select className="auth-input" value={role} onChange={e=>setRole(e.target.value)} style={{cursor:'pointer'}}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>}
+        {mode==='register'&&signupType==='organisation'&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="e.g. Sunrise Aged Care" value={org} onChange={e=>setOrg(e.target.value)} /></div>}
+        {mode==='register'&&signupType==='staff'&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="Enter your organisation's exact name" value={inviteCode} onChange={e=>setInviteCode(e.target.value)} /><div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>Must match exactly — ask your admin for the organisation name</div></div>}
+        {mode==='register'&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>{signupType==='organisation'?'🏢 You will be set up as the Client Admin for your organisation':'👤 You will join as a Worker — your admin can change your role'}</div>}
         {mode==='forgot'
           ? <button className="auth-btn" onClick={handleForgotPassword} disabled={loading}>{loading?'Sending…':'Send Reset Email'}</button>
           : <button className="auth-btn" onClick={handleSubmit} disabled={loading}>{loading?'Please wait…':mode==='login'?'Sign In':'Create Account'}</button>
@@ -938,7 +975,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           )}
 
           <div className="btn-row">
-            {canApprove&&sel.status!=='approved'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit Task</button>}
+            {canApprove&&sel.status!=='approved'&&user.role!=='super_admin'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit Task</button>}}
             {canApprove&&['awaiting_review','rejected'].includes(sel.status)&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Reject</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<button className="btn btn-amber" onClick={()=>update(sel.id,{escalation:true,status:'escalated'})}>⚠️ Escalate</button>}
             {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve Escalation</button>}
@@ -977,7 +1014,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           <div className="ph">
             <div className="ph-top">
               <div><div className="ph-title">Tasks</div><div className="ph-sub">{visible.length} tasks · {visible.filter(t=>t.compliance).length} compliance-critical</div></div>
-              {canCreate&&<button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>}
+              {canCreate&&(user.role==='super_admin' ? <div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:6,border:'1px solid rgba(245,158,11,.2)'}}>🔧 View only — use intervention to edit</div> : <button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}}
             </div>
           </div>
           <div className="filter-bar">
