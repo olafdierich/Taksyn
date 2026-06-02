@@ -149,12 +149,8 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .role-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}
 .back-btn{display:inline-flex;align-items:center;gap:6px;color:var(--t2);font-size:13px;font-weight:500;cursor:pointer;background:none;border:none;font-family:inherit;margin-bottom:14px;padding:0}
 .detail-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
-.subtask-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer}
-.subtask-row:last-child{border-bottom:none}
 .checkbox{width:18px;height:18px;border-radius:4px;border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
 .checkbox.checked{background:var(--brand);border-color:var(--brand)}
-.subtask-text{font-size:13px;flex:1}
-.subtask-text.done{text-decoration:line-through;color:var(--t2)}
 .evidence-zone{border:2px dashed var(--border);border-radius:var(--r);padding:22px;text-align:center;cursor:pointer}
 .ev-thumbs{display:flex;gap:8px;flex-wrap:wrap}
 .ev-thumb{width:60px;height:60px;border-radius:var(--rs);background:var(--s3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;position:relative;overflow:hidden}
@@ -293,8 +289,6 @@ function Celebration({ onClose }) {
 }
 
 const TaskCard = ({ task, onClick }) => {
-  const subs = parseSafe(task.subtasks)
-  const p = pct(subs.filter(s=>s.done).length, subs.length)
   const dur = fmtDuration(task.started_at, task.completed_at)
   return (
     <div className={"task-card "+task.priority} onClick={onClick}>
@@ -317,12 +311,7 @@ const TaskCard = ({ task, onClick }) => {
         {dur&&<span style={{fontSize:11,color:'var(--t2)'}}>⏱ {dur}</span>}
         {task.gps_start&&<a href={"https://www.google.com/maps?q="+task.gps_start} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'var(--blue)',textDecoration:'none'}} onClick={e=>e.stopPropagation()}>📍 GPS ↗</a>}
       </div>
-      {subs.length>0&&(
-        <div style={{marginTop:8}}>
-          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--t2)'}}><span>{subs.filter(s=>s.done).length}/{subs.length}</span><span>{p}%</span></div>
-          <div className="pb-bg"><div className="pb-fill" style={{width:p+'%'}}/></div>
-        </div>
-      )}
+
       {task.escalation&&<div className="esc-flag">⚠️ Escalated</div>}
     </div>
   )
@@ -564,7 +553,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
     if (!newTask.title.trim()) return
     const t = { id:'T'+Date.now(), ...newTask, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, created_at:new Date().toISOString() }
     if (isConfigured()) {
-      const { error } = await supabase.from('tasks').insert({ ...t, subtasks:'[]', evidence:'[]', comments:'[]' })
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      const assigned_user_id = authUser?.id ?? null
+      const { error } = await supabase.from('tasks').insert({ ...t, subtasks:'[]', evidence:'[]', comments:'[]', assigned_user_id })
       if (error) console.error('Task save error:', error)
     }
     setTasks(prev=>[...prev,t])
@@ -576,7 +567,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
   const canCreate = hasAccess(user.role, 2)
   const canApprove = hasAccess(user.role, 2)
   const sel = selected ? tasks.find(t=>t.id===selected) : null
-  const selSubs = sel ? parseSafe(sel.subtasks) : []
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
@@ -628,21 +618,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
                 <input type="checkbox" id="edit-comp" checked={editTask.compliance||false} onChange={e=>setEditTask({...editTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
                 <label htmlFor="edit-comp" style={{fontSize:13,cursor:'pointer'}}>Compliance-critical task</label>
-              </div>
-              <div className="form-field">
-                <label className="form-label">Add Subtask</label>
-                <div style={{display:'flex',gap:8}}>
-                  <input className="form-input" id="edit-subtask" placeholder="e.g. Check temperature log" onKeyDown={e=>{ if(e.key==='Enter'&&e.target.value.trim()){ setEditTask(prev=>({...prev,subtasks:[...(prev.subtasks||[]),{t:e.target.value.trim(),done:false}]})); e.target.value='' }}}/>
-                  <button className="btn btn-secondary btn-sm" onClick={()=>{ const inp=document.getElementById('edit-subtask'); if(inp.value.trim()){ setEditTask(prev=>({...prev,subtasks:[...(prev.subtasks||[]),{t:inp.value.trim(),done:false}]})); inp.value='' }}}>Add</button>
-                </div>
-                {(editTask.subtasks||[]).length>0&&<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:4}}>
-                  {(editTask.subtasks||[]).map((s,i)=>(
-                    <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',background:'var(--s3)',borderRadius:6,fontSize:13}}>
-                      <span style={{flex:1}}>{s.t}</span>
-                      <span style={{cursor:'pointer',color:'var(--red)',fontSize:16}} onClick={()=>setEditTask(prev=>({...prev,subtasks:prev.subtasks.filter((_,j)=>j!==i)}))}>×</span>
-                    </div>
-                  ))}
-                </div>}
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowEdit(false)}>Cancel</button>
@@ -750,20 +725,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
           )}
 
           {sel.escalation&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Task escalated — supervisor notified</div><div className="esc-banner-sub">Immediate attention required</div></div></div>}
-
-          <div className="section">
-            <div className="section-title">Checklist ({selSubs.filter(s=>s.done).length}/{selSubs.length})</div>
-            {selSubs.length===0
-              ? <div style={{fontSize:13,color:'var(--t2)'}}>No subtasks — mark complete directly.</div>
-              : selSubs.map((s,i)=>(
-                <div key={i} className="subtask-row" onClick={()=>user.role==='worker'&&toggleSub(sel.id,i)}>
-                  <div className={"checkbox "+(s.done?'checked':'')}>{s.done&&<IC n="check" s={10}/>}</div>
-                  <span className={"subtask-text "+(s.done?'done':'')}>{s.t}</span>
-                </div>
-              ))
-            }
-            <div className="pb-bg" style={{marginTop:10}}><div className="pb-fill" style={{width:pct(selSubs.filter(s=>s.done).length,selSubs.length)+'%'}}/></div>
-          </div>
 
           <div className="section">
             <div className="section-title">Evidence / Photo Proof {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}</div>
