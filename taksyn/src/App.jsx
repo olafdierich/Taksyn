@@ -418,8 +418,12 @@ function AuthView({ onAuth }) {
 }
 
 function visibleTasks(tasks, user) {
-  if (['super_admin','client_admin','manager','supervisor'].includes(user.role)) return tasks
-  return tasks.filter(t=>
+  // Super admin sees all orgs
+  if (user.role==='super_admin') return tasks
+  // All other roles only see their own org's tasks
+  const orgTasks = tasks.filter(t => !t.org || t.org===user.org)
+  if (['client_admin','manager','supervisor'].includes(user.role)) return orgTasks
+  return orgTasks.filter(t=>
     t.assigned_user_id===user.id ||
     t.assigned_user_name===user.name ||
     (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role===user.role)
@@ -501,7 +505,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [userSearch, setUserSearch] = useState('')
   const [newTask, setNewTask] = useState({ title:'', category:'Housekeeping', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'' })
 
-  useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(data) }) },[])
+  useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
 
   const visible = visibleTasks(tasks, user)
   const searchFiltered = search ? visible.filter(t=>t.title?.toLowerCase().includes(search.toLowerCase())||t.category?.toLowerCase().includes(search.toLowerCase())||t.assigned_user_name?.toLowerCase().includes(search.toLowerCase())) : visible
@@ -518,6 +522,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         toStatus: changes.status,
         by: user?.name||'System',
         byRole: user?.role||'',
+        org: user?.org||'',
         at: new Date().toISOString()
       }
       setAuditLog(log=>[entry,...log])
@@ -573,7 +578,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
 
   const createTask = async () => {
     if (!newTask.title.trim()) return
-    const t = { id:'T'+Date.now(), ...newTask, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, created_at:new Date().toISOString() }
+    const t = { id:'T'+Date.now(), ...newTask, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       const assigned_user_id = authUser?.id ?? null
@@ -1362,7 +1367,7 @@ function UsersView({ user }) {
   const [inviteMethod, setInviteMethod] = useState('email')
   const [realUsers, setRealUsers] = useState([])
 
-  useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(data) }) },[])
+  useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
 
   const deleteUser = async (id) => {
     if (!confirm('Remove this user?')) return
@@ -1585,7 +1590,7 @@ export default function App() {
   const loadAuditLog = async () => {
     if (!isConfigured()) return
     const { data } = await supabase.from('audit_log').select('*').order('at', { ascending: false }).limit(500)
-    if (data) setAuditLog(data)
+    if (data) setAuditLog(user.role==='super_admin'?data:data.filter(e=>e.org===user.org))
   }
 
   const loadTasks = async () => {
