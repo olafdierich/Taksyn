@@ -1589,6 +1589,7 @@ export default function App() {
     if(!isConfigured()) return
     const { data } = await supabase.from('tasks').select('*').order('created_at',{ascending:false})
     if(data) setTasks(data.map(t=>({...t, subtasks:parseSafe(t.subtasks), evidence:parseSafe(t.evidence), comments:parseSafe(t.comments,[])})))
+    loadAuditLog()
   }
 
   useEffect(()=>{
