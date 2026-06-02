@@ -547,7 +547,10 @@ function AuthView({ onAuth }) {
         setError('Check your email to confirm your account, then sign in.')
         setMode('login')
       } else {
-        const { error:e } = await supabase.auth.signInWithPassword({ email, password })
+        try{indexedDB.deleteDatabase('supabase')}catch(_){}
+      localStorage.removeItem('taksyn-auth')
+      await new Promise(r=>setTimeout(r,300))
+      const { error:e } = await supabase.auth.signInWithPassword({ email, password })
         if (e) throw e
       }
     } catch(e) { 
