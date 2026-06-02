@@ -1536,16 +1536,37 @@ function UsersView({ user }) {
     alert(profile.name+' added to your organisation as '+ROLE_LABELS[role])
   }
 
-  const sendInvite = () => {
+  const sendInvite = async () => {
     const targetOrg = user.role==='super_admin' ? inviteOrg.trim() : user.org
     if (user.role==='super_admin' && !targetOrg) { alert('Please enter the organisation name'); return }
+    if (!inviteEmail.trim() || !inviteName.trim()) { alert('Please enter name and email'); return }
+
     if (inviteMethod==='whatsapp') {
       const msg=encodeURIComponent('Hi '+inviteName+'! You have been invited to join Taksyn as '+ROLE_LABELS[inviteRole]+' at '+targetOrg+'.\n\nSign up here: https://taksyn.vercel.app\n\nUse your email: '+inviteEmail+'\n\nOrganisation name to enter: '+targetOrg)
       window.open('https://wa.me/?text='+msg,'_blank')
-    } else {
-      alert('Invite sent to '+inviteEmail+' for organisation: '+targetOrg)
+      setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg('')
+      return
     }
-    setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg('')
+
+    // Email invite via Supabase Edge Function
+    if (!isConfigured()) { alert('Supabase not configured'); return }
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(import.meta.env.VITE_SUPABASE_URL+'/functions/v1/invite-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer '+session?.access_token
+        },
+        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg })
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error||'Invite failed')
+      alert('Invite email sent to '+inviteEmail+'!')
+      setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg('')
+    } catch(e) {
+      alert('Failed to send invite: '+e.message)
+    }
   }
 
   return (
