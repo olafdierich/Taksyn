@@ -525,38 +525,29 @@ function AuthView({ onAuth }) {
   const [role, setRole] = useState('worker')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
+useEffect(()=>{
+    const pending = sessionStorage.getItem('taksyn-pending-login')
+    if (!pending) return
+    sessionStorage.removeItem('taksyn-pending-login')
+    const {email:e,password:p} = JSON.parse(pending)
+    setEmail(e); setPassword(p)
+    setTimeout(async()=>{
+      setLoading(true)
+      try {
+        const {error:err} = await supabase.auth.signInWithPassword({email:e,password:p})
+        if (err) throw err
+      } catch(err) { setError(err.message||'Sign in failed'); setLoading(false) }
+    },500)
+  },[])
   const demoLogin = (a) => onAuth({ id:a.role, email:a.email, name:a.name, role:a.role, tier:a.role==='super_admin'?'Enterprise':a.role==='client_admin'?'Professional':'Growth', org:'BrightCare Operations' })
 
-  const handleSubmit = async () => {
+const handleSubmit = async () => {
     setError('')
     if (!email||!password) { setError('Please fill in all fields'); return }
-    setLoading(true)
-    // Always clear stale auth before attempting login
+    // Clear stale Supabase state then reload and auto-sign in
     try{indexedDB.deleteDatabase('supabase')}catch(_){}
-    localStorage.clear()
-    sessionStorage.clear()
-    // Wait for clear to complete
-    await new Promise(r=>setTimeout(r,500))
-    try {
-      if (!isConfigured()) {
-        const found = DEMO_ACCOUNTS.find(a=>a.email===email&&a.password===password)
-        if (found) { demoLogin(found); return }
-        onAuth({ id:email, email, name:name||email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' })
-        return
-      }
-      if (mode==='register') {
-        const { error:e } = await supabase.auth.signUp({ email, password, options:{ data:{name,role} } })
-        if (e) throw e
-        setError('Check your email to confirm your account, then sign in.')
-        setMode('login')
-      } else {
-        const { error:e } = await supabase.auth.signInWithPassword({ email, password })
-        if (e) throw e
-      }
-    } catch(e) {
-      setError(e.message||'Something went wrong. Try again.')
-    } finally { setLoading(false) }
+    sessionStorage.setItem('taksyn-pending-login', JSON.stringify({email,password,mode,name,role}))
+    location.reload()
   }
 
   return (
