@@ -851,7 +851,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo }) {
               {sel.started_at&&sel.completed_at&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:10,textAlign:'center'}}>⏱ Duration: <span style={{fontWeight:700,color:'var(--brand)'}}>{fmtDuration(sel.started_at,sel.completed_at)}</span></div>}
               {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&<button className="btn btn-primary" style={{width:'100%'}} onClick={()=>submitTask(sel.id)}>✅ Submit Task for Review</button>}
               {sel.status==='awaiting_review'&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>📋 Submitted — awaiting supervisor review</div>}
-              {sel.status==='awaiting_review'&&user.role==='worker'&&sel.assigned_user_id===user.id&&(
+              {sel.status==='awaiting_review'&&user.role==='worker'&&<button className="btn btn-primary" style={{width:'100%',marginTop:8,background:'#6366F1',borderColor:'#6366F1'}} onClick={()=>update(sel.id,{submitted_at:new Date().toISOString()})}>🔄 Resubmit for Supervisor Review</button>}
+              {sel.status==='awaiting_review'&&user.role==='worker'&&(
                 <AmendmentPanel sel={sel} user={user} update={update} parseSafe={parseSafe} />
               )}
               {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✅ Task approved by supervisor</div>}
@@ -1034,9 +1035,7 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
             <button className="btn btn-secondary" style={{flex:1,fontSize:12,minWidth:120}} onClick={saveAmendment} disabled={!note.trim()}>
               💾 Save Amendment
             </button>
-            <button className="btn btn-primary" style={{width:'100%',fontSize:13,marginTop:4,background:'#6366F1',borderColor:'#6366F1'}} onClick={resubmit}>
-              🔄 Resubmit for Supervisor Review
-            </button>
+
           </div>
           {hasAmendment&&<div style={{marginTop:8,fontSize:11,color:'var(--green)',fontWeight:600}}>✓ Amendment saved — press Resubmit to notify supervisor</div>}
           <input id={'amend-img-'+sel.id} type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{
