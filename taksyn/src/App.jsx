@@ -332,6 +332,22 @@ function AuthView({ onAuth }) {
   const [success, setSuccess] = useState('')
   const [orgChoices, setOrgChoices] = useState(null) // [{org, role, tier, name}] for org picker
   const [pendingAuthUser, setPendingAuthUser] = useState(null) // auth user waiting for org pick
+  const [inviteToken, setInviteToken] = useState(null) // invite token from URL
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  // Check for invite/recovery token in URL on mount
+  useEffect(()=>{
+    const hash = window.location.hash
+    const params = new URLSearchParams(hash.replace('#','?').replace('#','&'))
+    const accessToken = params.get('access_token')
+    const type = params.get('type')
+    if (accessToken && (type==='invite' || type==='recovery')) {
+      setInviteToken(accessToken)
+      // Clear hash from URL
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   const handleSubmit = async () => {
     setError(''); setSuccess('')
@@ -432,6 +448,64 @@ function AuthView({ onAuth }) {
       setSuccess('Password reset email sent! Check your inbox.')
     } catch(e) { setError(e.message||'Failed to send reset email') }
     finally { setLoading(false) }
+  }
+
+  // Invite / password setup screen
+  if (inviteToken) {
+    return (
+      <div className="auth-bg">
+        <style>{CSS}</style>
+        <div className="auth-card">
+          <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
+          <div className="auth-title">Set Your Password</div>
+          <div className="auth-sub">Welcome to Taksyn! Please set a password to activate your account.</div>
+          {error&&<div className="auth-error">{error}</div>}
+          {success&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:8,padding:'10px 14px',fontSize:13,color:'var(--green)',marginBottom:12}}>{success}</div>}
+          <div className="auth-field">
+            <label className="auth-label">New Password</label>
+            <input className="auth-input" type="password" placeholder="Min 6 characters" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/>
+          </div>
+          <div className="auth-field">
+            <label className="auth-label">Confirm Password</label>
+            <input className="auth-input" type="password" placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/>
+          </div>
+          <button className="auth-btn" disabled={loading||!newPassword||newPassword!==confirmPassword} onClick={async()=>{
+            if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return }
+            if (newPassword !== confirmPassword) { setError('Passwords do not match'); return }
+            setLoading(true); setError('')
+            try {
+              // Set session from invite token first
+              const { error: sessionError } = await supabase.auth.setSession({
+                access_token: inviteToken,
+                refresh_token: inviteToken
+              })
+              if (sessionError) throw sessionError
+              // Update password
+              const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+              if (updateError) throw updateError
+              // Get profile and sign in
+              const { data: { user } } = await supabase.auth.getUser()
+              if (user) {
+                const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+                if (profile) {
+                  const userData = {...profile, email: user.email}
+                  localStorage.setItem('taksyn-user', JSON.stringify(userData))
+                  onAuth(userData)
+                }
+              }
+            } catch(e) {
+              setError(e.message||'Failed to set password')
+              setLoading(false)
+            }
+          }}>
+            {loading ? 'Setting up...' : 'Activate Account'}
+          </button>
+          {newPassword && confirmPassword && newPassword !== confirmPassword && (
+            <div style={{fontSize:11,color:'var(--red)',marginTop:4,textAlign:'center'}}>Passwords do not match</div>
+          )}
+        </div>
+      </div>
+    )
   }
 
   // Org picker screen
