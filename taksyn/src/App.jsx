@@ -78,7 +78,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .tb-menu-btn{background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:var(--t2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .tb-logo{height:30px;object-fit:contain;cursor:pointer}
 .tb-sep{width:1px;height:18px;background:var(--border);margin:0 2px}
-.tb-org{font-size:12px;color:var(--t2);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.tb-org{font-size:13px;color:var(--text);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
 .tb-space{flex:1}
 .tb-search{display:flex;align-items:center;gap:7px;background:var(--s3);border:1px solid var(--border);border-radius:8px;padding:5px 10px;width:180px}
 .tb-search input{background:none;border:none;outline:none;color:var(--text);font-size:13px;width:100%;font-family:inherit}
@@ -331,6 +331,7 @@ function AuthView({ onAuth }) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [orgChoices, setOrgChoices] = useState(null) // [{org, role, tier, name}] for org picker
+  const [showPw, setShowPw] = useState(false)
   const [pendingAuthUser, setPendingAuthUser] = useState(null) // auth user waiting for org pick
   const [inviteToken, setInviteToken] = useState(null) // invite token from URL
   const [newPassword, setNewPassword] = useState('')
@@ -463,7 +464,7 @@ function AuthView({ onAuth }) {
           {success&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:8,padding:'10px 14px',fontSize:13,color:'var(--green)',marginBottom:12}}>{success}</div>}
           <div className="auth-field">
             <label className="auth-label">New Password</label>
-            <input className="auth-input" type="password" placeholder="Min 6 characters" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/>
+            <div style={{position:'relative'}}><input className="auth-input" type={showPw1?'text':'password'} placeholder="Min 6 characters" value={newPassword} onChange={e=>setNewPassword(e.target.value)} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw1(!showPw1)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw1?'👁':'🔒'}</button></div>
           </div>
           <div className="auth-field">
             <label className="auth-label">Confirm Password</label>
@@ -564,7 +565,7 @@ function AuthView({ onAuth }) {
         )}
         {mode==='register'&&<div className="auth-field"><label className="auth-label">Full Name</label><input className="auth-input" placeholder="Your full name" value={name} onChange={e=>setName(e.target.value)} /></div>}
         <div className="auth-field"><label className="auth-label">Email</label><input className="auth-input" type="email" placeholder="you@organisation.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} /></div>
-        {mode!=='forgot'&&<div className="auth-field"><label className="auth-label">Password</label><input className="auth-input" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} /></div>}
+        {mode!=='forgot'&&<div className="auth-field"><label className="auth-label">Password</label><div style={{position:'relative'}}><input className="auth-input" type={showPw?'text':'password'} placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw(!showPw)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw?'👁':'🔒'}</button></div></div>}
         {mode==='register'&&signupType==='organisation'&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="e.g. Sunrise Aged Care" value={org} onChange={e=>setOrg(e.target.value)} /></div>}
         {mode==='register'&&signupType==='staff'&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="Enter your exact organisation name" value={inviteCode} onChange={e=>setInviteCode(e.target.value)} /><div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>Must match exactly — ask your admin for the organisation name</div></div>}
         {mode==='register'&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>{signupType==='organisation'?'🏢 You will be set up as the Client Admin for your organisation':'👤 You will join as a Worker — your admin can change your role'}</div>}
@@ -1740,6 +1741,8 @@ function PasswordSetupView({ onDone }) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showPw1, setShowPw1] = useState(false)
+  const [showPw2, setShowPw2] = useState(false)
 
   const handleSetPassword = async () => {
     if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return }
@@ -1765,11 +1768,11 @@ function PasswordSetupView({ onDone }) {
         {error&&<div className="auth-error">{error}</div>}
         <div className="auth-field">
           <label className="auth-label">New Password</label>
-          <input className="auth-input" type="password" placeholder="Min 6 characters" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/>
+          <div style={{position:'relative'}}><input className="auth-input" type={showPw1?'text':'password'} placeholder="Min 6 characters" value={newPassword} onChange={e=>setNewPassword(e.target.value)} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw1(!showPw1)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw1?'👁':'🔒'}</button></div>
         </div>
         <div className="auth-field">
           <label className="auth-label">Confirm Password</label>
-          <input className="auth-input" type="password" placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSetPassword()}/>
+          <div style={{position:'relative'}}><input className="auth-input" type={showPw2?'text':'password'} placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSetPassword()} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw2(!showPw2)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw2?'👁':'🔒'}</button></div>
         </div>
         {newPassword&&confirmPassword&&newPassword!==confirmPassword&&(
           <div style={{fontSize:11,color:'var(--red)',marginBottom:8}}>Passwords do not match</div>
