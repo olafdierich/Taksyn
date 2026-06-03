@@ -761,8 +761,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   }
 
   const createTask = async () => {
-    if (!newTask.title.trim()) return
-    const t = { id:'T'+Date.now(), ...newTask, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
+    if (!newTask.title.trim() || creating) return
+    setCreating(true)
+    // Close and reset immediately to prevent double-submit
+    const taskData = {...newTask}
+    setShowCreate(false)
+    setUserSearch('')
+    setNewTask({title:'',category:'Housekeeping',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''})
+    const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       const assigned_user_id = authUser?.id ?? null
@@ -771,8 +777,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     }
     setTasks(prev=>[...prev,t])
     if (loadTasks) { await loadTasks(); await loadAuditLog() }
-    setShowCreate(false); setUserSearch('')
-    setNewTask({title:'',category:'Housekeeping',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''})
+    setCreating(false)
   }
 
   const canCreate = hasAccess(user.role, 2)
@@ -929,7 +934,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowCreate(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={createTask}>Create Task</button>
+                <button className="btn btn-primary" disabled={creating||!newTask.title.trim()} onClick={createTask}>{creating?'Creating…':'Create Task'}</button>
               </div>
             </div>
           </div>
