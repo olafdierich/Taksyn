@@ -1726,6 +1726,7 @@ function OrganisationsView({ user }) {
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
       const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
+      console.log('Secret being sent:', inviteSecret, 'Length:', inviteSecret.length)
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
