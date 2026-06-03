@@ -666,6 +666,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [interventionModal, setInterventionModal] = useState(null) // {action, label, changes, taskId}
   const [interventionReason, setInterventionReason] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [editTask, setEditTask] = useState({})
   const [showReject, setShowReject] = useState(null)
