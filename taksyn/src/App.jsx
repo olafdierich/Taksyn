@@ -1552,7 +1552,6 @@ function UsersView({ user }) {
     // Email invite via Supabase Edge Function
     if (!isConfigured()) { alert('Supabase not configured'); return }
     try {
-      const { data: { session } } = await supabase.auth.getSession()
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
@@ -1564,8 +1563,6 @@ function UsersView({ user }) {
         body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg })
       })
       const result = await res.json()
-      console.log('Invite response status:', res.status)
-      console.log('Invite response:', JSON.stringify(result))
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
       alert('Invite email sent to '+inviteEmail+'!')
       setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg('')
@@ -1699,12 +1696,8 @@ function OrganisationsView({ user }) {
       created_by: user.name
     }
     if (isConfigured()) {
-      const { data: { session } } = await supabase.auth.getSession()
-      console.log('Session user:', session?.user?.id)
-      console.log('Entry:', JSON.stringify(entry))
       const { error } = await supabase.from('organisations').insert(entry)
-      console.log('Insert error:', error)
-      if (error) { alert('Error: '+error.message+' | User: '+session?.user?.id); setLoading(false); return }
+      if (error) { alert('Error: '+error.message); setLoading(false); return }
     }
     setOrgs(prev=>[entry,...prev])
     setShowCreate(false)
@@ -1726,15 +1719,12 @@ function OrganisationsView({ user }) {
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
       const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
-      console.log('Secret being sent:', inviteSecret, 'Length:', inviteSecret.length)
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, secret:inviteSecret })
       })
       const result = await res.json()
-      console.log('Invite response status:', res.status)
-      console.log('Invite response:', JSON.stringify(result))
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
       // Update org user count
       await supabase.from('organisations').update({admin_email:inviteEmail.trim(),admin_name:inviteName.trim()}).eq('id',showInvite.id)
