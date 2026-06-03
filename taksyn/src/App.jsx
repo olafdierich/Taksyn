@@ -344,6 +344,7 @@ function AuthView({ onAuth }) {
     const accessToken = params.get('access_token')
     const type = params.get('type')
     if (accessToken && (type==='invite' || type==='recovery')) {
+      window.__taksyn_invite_flow = true
       setInviteToken(accessToken)
       // Clear hash from URL
       window.history.replaceState(null, '', window.location.pathname)
@@ -1630,11 +1631,7 @@ function UsersView({ user }) {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer '+session?.access_token,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg })
       })
       const result = await res.json()
@@ -2152,9 +2149,14 @@ export default function App() {
         } catch(e) {}
       }
       else if(event==='SIGNED_IN') {
-        // Check if this is an invite — user has no password set yet
-        const isInvite = session.user.app_metadata?.provider==='email' && !session.user.last_sign_in_at
+        // Check if this is an invite or recovery — block auto sign-in and show password setup
+        const isInvite = session.user.app_metadata?.provider==='email' && 
+          (session.user.last_sign_in_at === null || 
+           session.user.last_sign_in_at === session.user.created_at ||
+           !session.user.confirmed_at ||
+           window.__taksyn_invite_flow)
         if(isInvite) {
+          window.__taksyn_invite_flow = false
           setNeedsPasswordSetup(true)
           return
         }
