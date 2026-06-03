@@ -1792,6 +1792,7 @@ function OrganisationsView({ user }) {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [search, setSearch] = useState('')
+  const [dragOver, setDragOver] = useState(null) // org id being dragged over
 
   const INDUSTRIES = ['Hospitality','Aged Care','Disability Care','Healthcare / Clinic','Wedding & Events','Facilities Management','Other']
 
@@ -1918,8 +1919,21 @@ function OrganisationsView({ user }) {
                 </div>
                 <div style={{display:'flex',gap:6,flexShrink:0}}>
                   <button className="btn btn-primary btn-sm" onClick={()=>{ setShowInvite(org); setInviteEmail(''); setInviteName('') }}>✉️ Invite Admin</button>
-                  <label className="btn btn-secondary btn-sm" style={{cursor:'pointer'}} title="Upload organisation logo">
-                    🖼 Logo
+                  <label
+                    style={{
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      gap:6,padding:'5px 10px',borderRadius:6,fontSize:12,fontWeight:600,
+                      cursor:'pointer',transition:'all .15s',
+                      border:'2px dashed '+(dragOver===org.id?'var(--brand)':'var(--border)'),
+                      background:dragOver===org.id?'var(--brand-lt)':'var(--s3)',
+                      color:dragOver===org.id?'var(--brand)':'var(--t2)',
+                      minWidth:80,textAlign:'center'
+                    }}
+                    onDragOver={e=>{ e.preventDefault(); setDragOver(org.id) }}
+                    onDragLeave={()=>setDragOver(null)}
+                    onDrop={e=>{ e.preventDefault(); setDragOver(null); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/')) uploadOrgLogo(org.id,f) }}
+                  >
+                    {org.logo ? '🖼 Update Logo' : '🖼 Add Logo'}
                     <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(f) uploadOrgLogo(org.id,f); e.target.value='' }}/>
                   </label>
                   <button className="btn btn-secondary btn-sm" style={{color:org.status==='active'?'var(--red)':'var(--green)'}} onClick={()=>toggleStatus(org)}>
@@ -2103,6 +2117,7 @@ export default function App() {
   const [page, setPage] = useState('dashboard')
   const [tasks, setTasks] = useState(DEMO_TASKS)
   const [search, setSearch] = useState('')
+  const [dragOver, setDragOver] = useState(null) // org id being dragged over
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
