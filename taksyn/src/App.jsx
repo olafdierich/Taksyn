@@ -778,7 +778,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         supabase.from('tasks').insert({ ...t, subtasks:'[]', evidence:'[]', comments:'[]', assigned_user_id })
           .then(({error})=>{
             if (error) console.error('Task save error:', error)
-            if (loadTasks) loadTasks().then(()=>loadAuditLog())
+            if (loadTasks) loadTasks()
           })
       }).finally(()=>setCreating(false))
     } else {
