@@ -1564,7 +1564,9 @@ function UsersView({ user }) {
         body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg })
       })
       const result = await res.json()
-      if (!res.ok) throw new Error(result.error||'Invite failed')
+      console.log('Invite response status:', res.status)
+      console.log('Invite response:', JSON.stringify(result))
+      if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
       alert('Invite email sent to '+inviteEmail+'!')
       setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg('')
     } catch(e) {
@@ -1697,8 +1699,12 @@ function OrganisationsView({ user }) {
       created_by: user.name
     }
     if (isConfigured()) {
+      const { data: { session } } = await supabase.auth.getSession()
+      console.log('Session user:', session?.user?.id)
+      console.log('Entry:', JSON.stringify(entry))
       const { error } = await supabase.from('organisations').insert(entry)
-      if (error) { alert('Error: '+error.message); setLoading(false); return }
+      console.log('Insert error:', error)
+      if (error) { alert('Error: '+error.message+' | User: '+session?.user?.id); setLoading(false); return }
     }
     setOrgs(prev=>[entry,...prev])
     setShowCreate(false)
@@ -1730,7 +1736,9 @@ function OrganisationsView({ user }) {
         body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name })
       })
       const result = await res.json()
-      if (!res.ok) throw new Error(result.error||'Invite failed')
+      console.log('Invite response status:', res.status)
+      console.log('Invite response:', JSON.stringify(result))
+      if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
       // Update org user count
       await supabase.from('organisations').update({admin_email:inviteEmail.trim(),admin_name:inviteName.trim()}).eq('id',showInvite.id)
       setOrgs(prev=>prev.map(o=>o.id===showInvite.id?{...o,admin_email:inviteEmail.trim(),admin_name:inviteName.trim()}:o))
