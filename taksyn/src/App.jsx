@@ -760,24 +760,29 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     setComment('')
   }
 
-  const createTask = async () => {
+  const createTask = () => {
     if (!newTask.title.trim() || creating) return
     setCreating(true)
-    // Close and reset immediately to prevent double-submit
     const taskData = {...newTask}
+    // Close and reset immediately — no await before this
     setShowCreate(false)
     setUserSearch('')
     setNewTask({title:'',category:'Housekeeping',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''})
+    // Do the async work in background
     const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
-    if (isConfigured()) {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      const assigned_user_id = authUser?.id ?? null
-      const { error } = await supabase.from('tasks').insert({ ...t, subtasks:'[]', evidence:'[]', comments:'[]', assigned_user_id })
-      if (error) console.error('Task save error:', error)
-    }
     setTasks(prev=>[...prev,t])
-    if (loadTasks) { await loadTasks(); await loadAuditLog() }
-    setCreating(false)
+    if (isConfigured()) {
+      supabase.auth.getUser().then(({data:{user:authUser}})=>{
+        const assigned_user_id = authUser?.id ?? null
+        supabase.from('tasks').insert({ ...t, subtasks:'[]', evidence:'[]', comments:'[]', assigned_user_id })
+          .then(({error})=>{
+            if (error) console.error('Task save error:', error)
+            if (loadTasks) loadTasks().then(()=>loadAuditLog())
+          })
+      }).finally(()=>setCreating(false))
+    } else {
+      setCreating(false)
+    }
   }
 
   const canCreate = hasAccess(user.role, 2)
