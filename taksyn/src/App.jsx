@@ -1311,6 +1311,7 @@ function ReportsView({ tasks, user }) {
   const [period, setPeriod] = useState('weekly')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
+  const [orgLogo, setOrgLogo] = useState(null)
   const [chartTab, setChartTab] = useState('overview')
 
   const isClientAdmin = ['client_admin','super_admin'].includes(user.role)
@@ -1323,6 +1324,13 @@ function ReportsView({ tasks, user }) {
       { value:'org', label:'🏢 Organisation Overview Report' },
     ] : []),
   ]
+
+  useEffect(()=>{
+    if(isConfigured() && user.org) {
+      supabase.from('organisations').select('logo').eq('name', user.org).single()
+        .then(({data})=>{ if(data?.logo) setOrgLogo(data.logo) })
+    }
+  },[user.org])
 
   const getRange = () => {
     const now = new Date(), end = new Date(now)
@@ -1393,7 +1401,7 @@ function ReportsView({ tasks, user }) {
 
   const baseStyle = `*{box-sizing:border-box}body{font-family:Helvetica Neue,sans-serif;padding:40px;color:#1a2033;font-size:13px}.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:16px;border-bottom:2px solid #2D3180}.lt{font-size:24px;font-weight:800;color:#2D3180}.ri{text-align:right;font-size:11px;color:#5a6478}.ri strong{display:block;font-size:14px;color:#1a2033;margin-bottom:2px}.sg{display:grid;gap:12px;margin-bottom:24px}.st{background:#f4f6f9;border-radius:8px;padding:14px;text-align:center}.sv{font-size:22px;font-weight:800;color:#5BC8C0;line-height:1}.sv.r{color:#EF4444}.sv.g{color:#10B981}.sv.a{color:#F59E0B}.sl{font-size:10px;color:#5a6478;margin-top:5px;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;padding:7px 8px;background:#f4f6f9;font-size:9px;text-transform:uppercase;color:#5a6478;border-bottom:1px solid #e8ebf0}td{padding:7px 8px;border-bottom:1px solid #f0f2f5}.ft{margin-top:28px;padding-top:14px;border-top:1px solid #e8ebf0;font-size:10px;color:#9aa3b2;display:flex;justify-content:space-between}.sec{margin-bottom:24px}.sec-title{font-size:13px;font-weight:700;color:#2D3180;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e8ebf0}`
 
-  const reportHeader = (title) => { const orgName = user.role==='super_admin' ? 'Taksyn' : (user.org||'My Organisation'); const logoSrc = user.avatar_url ? user.avatar_url : 'https://taksyn.vercel.app/logo.jpeg'; return `<div class="hdr"><div><img src="${logoSrc}" height="40" style="object-fit:contain;border-radius:6px"/><div style="font-size:14px;font-weight:700;color:#2D3180;margin-top:4px">${orgName}</div></div><div class="ri"><strong>${title}</strong>${orgName}<br/>Period: ${pl}<br/>Generated: ${new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}</div></div>` }
+  const reportHeader = (title) => { const orgName = user.role==='super_admin' ? 'Taksyn' : (user.org||'My Organisation'); const logoSrc = orgLogo || user.avatar_url || 'https://taksyn.vercel.app/logo.jpeg'; return `<div class="hdr"><div><img src="${logoSrc}" height="40" style="object-fit:contain;border-radius:6px"/><div style="font-size:14px;font-weight:700;color:#2D3180;margin-top:4px">${orgName}</div></div><div class="ri"><strong>${title}</strong>${orgName}<br/>Period: ${pl}<br/>Generated: ${new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}</div></div>` }
   const reportFooter = `<div class="ft"><span>Taksyn — Task Compliance & Accountability Platform</span><span>taksyn.vercel.app</span></div>`
 
   const openReport = (html) => {
