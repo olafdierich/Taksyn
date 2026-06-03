@@ -1735,6 +1735,54 @@ const NAV = {
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks']],
 }
 
+function PasswordSetupView({ onDone }) {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSetPassword = async () => {
+    if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return }
+    if (newPassword !== confirmPassword) { setError('Passwords do not match'); return }
+    setLoading(true); setError('')
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+      if (updateError) throw updateError
+      onDone()
+    } catch(e) {
+      setError(e.message || 'Failed to set password')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="auth-bg">
+      <style>{CSS}</style>
+      <div className="auth-card">
+        <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}}/></div>
+        <div className="auth-title">Set Your Password</div>
+        <div className="auth-sub">Welcome to Taksyn! Please set a password to activate your account.</div>
+        {error&&<div className="auth-error">{error}</div>}
+        <div className="auth-field">
+          <label className="auth-label">New Password</label>
+          <input className="auth-input" type="password" placeholder="Min 6 characters" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/>
+        </div>
+        <div className="auth-field">
+          <label className="auth-label">Confirm Password</label>
+          <input className="auth-input" type="password" placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSetPassword()}/>
+        </div>
+        {newPassword&&confirmPassword&&newPassword!==confirmPassword&&(
+          <div style={{fontSize:11,color:'var(--red)',marginBottom:8}}>Passwords do not match</div>
+        )}
+        <button className="auth-btn" disabled={loading||!newPassword||!confirmPassword||newPassword!==confirmPassword} onClick={handleSetPassword}>
+          {loading?'Activating...':'Activate Account'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+
 function OrganisationsView({ user }) {
   const [orgs, setOrgs] = useState([])
   const [showCreate, setShowCreate] = useState(false)
@@ -2048,6 +2096,7 @@ export default function App() {
   const [undoStack, setUndoStack] = useState([])
   const [showUndo, setShowUndo] = useState(false)
   const [auditLog, setAuditLog] = useState([])
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
   const undoTimer = useRef(null)
 
   const pushUndo = (label, prevTasks) => {
@@ -2090,9 +2139,22 @@ export default function App() {
       } else { localStorage.removeItem('taksyn-user'); setUser(null) }
     }).catch(()=>{})
 
-    const {data:{subscription}} = supabase.auth.onAuthStateChange(async(_,session)=>{
+    const {data:{subscription}} = supabase.auth.onAuthStateChange(async(event, session)=>{
       if(!session) { setUser(null); localStorage.removeItem('taksyn-user') }
-      else {
+      else if(event==='USER_UPDATED') {
+        // Password was just set — now log them in properly
+        try {
+          const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
+          if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)); setNeedsPasswordSetup(false) }
+        } catch(e) {}
+      }
+      else if(event==='SIGNED_IN') {
+        // Check if this is an invite — user has no password set yet
+        const isInvite = session.user.app_metadata?.provider==='email' && !session.user.last_sign_in_at
+        if(isInvite) {
+          setNeedsPasswordSetup(true)
+          return
+        }
         try {
           const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
           if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
@@ -2114,6 +2176,7 @@ export default function App() {
 
   useEffect(()=>setPage('dashboard'),[user?.role])
 
+  if(needsPasswordSetup) return <PasswordSetupView onDone={()=>setNeedsPasswordSetup(false)}/>
   if(!user) return <AuthView onAuth={handleAuth}/>
 
   const escalationCount = tasks.filter(t=>t.escalation||t.status==='overdue').length
