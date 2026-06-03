@@ -1729,10 +1729,10 @@ function TiersView({ user }) {
 }
 
 const NAV = {
-  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['audit','Audit Log','audit']],
+  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks']],
 }
 
