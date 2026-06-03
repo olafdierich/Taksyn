@@ -28,7 +28,7 @@ const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (M
 const DEMO_TASKS = []
 const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
 const avatarColor = role => ROLE_COLORS[role] || '#6B7280'
@@ -259,6 +259,7 @@ const IC = ({ n, s=16 }) => {
     clock:'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0',
     gps:'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z',
     audit:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+    org:'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
   }
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={paths[n]||paths.check} /></svg>
 }
@@ -1654,12 +1655,226 @@ function TiersView({ user }) {
 }
 
 const NAV = {
-  super_admin:  [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
+  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
   client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['evidence','Evidence','img'],['escalations','Escalations','alert'],['audit','Audit Log','audit']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks']],
 }
+
+function OrganisationsView({ user }) {
+  const [orgs, setOrgs] = useState([])
+  const [showCreate, setShowCreate] = useState(false)
+  const [showInvite, setShowInvite] = useState(null) // org object
+  const [loading, setLoading] = useState(false)
+  const [newOrg, setNewOrg] = useState({ name:'', industry:'', tier:'Growth', notes:'' })
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteName, setInviteName] = useState('')
+  const [search, setSearch] = useState('')
+
+  const INDUSTRIES = ['Hospitality','Aged Care','Disability Care','Healthcare / Clinic','Wedding & Events','Facilities Management','Other']
+
+  useEffect(()=>{
+    if(isConfigured()) loadOrgs()
+  },[])
+
+  const loadOrgs = async () => {
+    const { data } = await supabase.from('organisations').select('*').order('created_at',{ascending:false})
+    if (data) setOrgs(data)
+  }
+
+  const createOrg = async () => {
+    if (!newOrg.name.trim()) return
+    setLoading(true)
+    const entry = {
+      id: 'ORG'+Date.now(),
+      name: newOrg.name.trim(),
+      industry: newOrg.industry||'Other',
+      tier: newOrg.tier||'Growth',
+      notes: newOrg.notes.trim(),
+      status: 'active',
+      created_at: new Date().toISOString(),
+      created_by: user.name
+    }
+    if (isConfigured()) {
+      const { error } = await supabase.from('organisations').insert(entry)
+      if (error) { alert('Error: '+error.message); setLoading(false); return }
+    }
+    setOrgs(prev=>[entry,...prev])
+    setShowCreate(false)
+    setNewOrg({ name:'', industry:'', tier:'Growth', notes:'' })
+    setLoading(false)
+  }
+
+  const toggleStatus = async (org) => {
+    const newStatus = org.status==='active' ? 'inactive' : 'active'
+    if (!confirm((newStatus==='inactive'?'Deactivate':'Reactivate')+' '+org.name+'?')) return
+    await supabase.from('organisations').update({status:newStatus}).eq('id',org.id)
+    setOrgs(prev=>prev.map(o=>o.id===org.id?{...o,status:newStatus}:o))
+  }
+
+  const sendInviteToOrg = async () => {
+    if (!inviteEmail.trim()||!inviteName.trim()) { alert('Please enter name and email'); return }
+    if (!showInvite) return
+    setLoading(true)
+    try {
+      const { data:{session} } = await supabase.auth.getSession()
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
+      const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer '+session?.access_token,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY||''
+        },
+        body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name })
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error||'Invite failed')
+      // Update org user count
+      await supabase.from('organisations').update({admin_email:inviteEmail.trim(),admin_name:inviteName.trim()}).eq('id',showInvite.id)
+      setOrgs(prev=>prev.map(o=>o.id===showInvite.id?{...o,admin_email:inviteEmail.trim(),admin_name:inviteName.trim()}:o))
+      alert('Invite sent to '+inviteEmail+'!')
+      setShowInvite(null); setInviteEmail(''); setInviteName('')
+    } catch(e) {
+      alert('Failed: '+e.message)
+    }
+    setLoading(false)
+  }
+
+  const filtered = orgs.filter(o=>!search||o.name.toLowerCase().includes(search.toLowerCase())||o.industry?.toLowerCase().includes(search.toLowerCase()))
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div>
+          <div className="ph-title">Organisations</div>
+          <div className="ph-sub">{orgs.length} organisations · {orgs.filter(o=>o.status==='active').length} active</div>
+        </div>
+        <button className="btn btn-primary" onClick={()=>setShowCreate(true)}>+ New Organisation</button>
+      </div>
+
+      <div className="section" style={{marginBottom:14}}>
+        <input className="form-input" placeholder="Search organisations..." value={search} onChange={e=>setSearch(e.target.value)} style={{fontSize:13}}/>
+      </div>
+
+      {filtered.length===0 ? (
+        <div className="empty">
+          <div className="empty-icon">🏢</div>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>No organisations yet</div>
+          <div className="empty-text">Create your first organisation to get started.</div>
+        </div>
+      ) : (
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {filtered.map(org=>(
+            <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16,borderLeft:'4px solid '+(org.status==='active'?'var(--green)':'var(--border)')}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}>
+                <div style={{flex:1}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                    <div style={{fontWeight:700,fontSize:15}}>{org.name}</div>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,
+                      background:org.status==='active'?'rgba(16,185,129,.12)':'var(--s3)',
+                      color:org.status==='active'?'var(--green)':'var(--t2)'
+                    }}>{org.status?.toUpperCase()}</span>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:TIERS[org.tier]?.color||'var(--t2)',fontWeight:600}}>{org.tier}</span>
+                  </div>
+                  <div style={{fontSize:12,color:'var(--t2)',display:'flex',gap:16,flexWrap:'wrap'}}>
+                    <span>🏭 {org.industry||'—'}</span>
+                    {org.admin_name&&<span>👤 {org.admin_name}</span>}
+                    {org.admin_email&&<span>✉️ {org.admin_email}</span>}
+                    <span>📅 {new Date(org.created_at).toLocaleDateString('en-AU')}</span>
+                  </div>
+                  {org.notes&&<div style={{fontSize:11,color:'var(--t2)',marginTop:6,fontStyle:'italic'}}>{org.notes}</div>}
+                </div>
+                <div style={{display:'flex',gap:6,flexShrink:0}}>
+                  <button className="btn btn-primary btn-sm" onClick={()=>{ setShowInvite(org); setInviteEmail(''); setInviteName('') }}>✉️ Invite Admin</button>
+                  <button className="btn btn-secondary btn-sm" style={{color:org.status==='active'?'var(--red)':'var(--green)'}} onClick={()=>toggleStatus(org)}>
+                    {org.status==='active'?'Deactivate':'Reactivate'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create Organisation Modal */}
+      {showCreate&&(
+        <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">New Organisation</div>
+              <button className="modal-close" onClick={()=>setShowCreate(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-field">
+                <label className="form-label">Organisation Name <span style={{color:'var(--red)'}}>*</span></label>
+                <input className="form-input" placeholder="e.g. Sunrise Aged Care" value={newOrg.name} onChange={e=>setNewOrg({...newOrg,name:e.target.value})}/>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Industry</label>
+                <select className="form-input" value={newOrg.industry} onChange={e=>setNewOrg({...newOrg,industry:e.target.value})}>
+                  <option value="">Select industry...</option>
+                  {INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}
+                </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Plan / Tier</label>
+                <select className="form-input" value={newOrg.tier} onChange={e=>setNewOrg({...newOrg,tier:e.target.value})}>
+                  {Object.keys(TIERS).map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Notes</label>
+                <textarea className="comment-box" placeholder="Any notes about this organisation..." value={newOrg.notes} onChange={e=>setNewOrg({...newOrg,notes:e.target.value})}/>
+              </div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>setShowCreate(false)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!newOrg.name.trim()||loading} onClick={createOrg}>
+                  {loading?'Creating...':'Create Organisation'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Admin Modal */}
+      {showInvite&&(
+        <div className="modal-overlay" onClick={()=>setShowInvite(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Invite Client Admin</div>
+              <button className="modal-close" onClick={()=>setShowInvite(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:13}}>
+                <span style={{color:'var(--t2)'}}>Organisation: </span>
+                <strong>{showInvite.name}</strong>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Full Name <span style={{color:'var(--red)'}}>*</span></label>
+                <input className="form-input" placeholder="Admin full name" value={inviteName} onChange={e=>setInviteName(e.target.value)}/>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Email <span style={{color:'var(--red)'}}>*</span></label>
+                <input className="form-input" type="email" placeholder="admin@organisation.com" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)}/>
+              </div>
+              <div style={{fontSize:11,color:'var(--t2)',marginBottom:14}}>They will receive an email invite and be set up as Client Admin for {showInvite.name}.</div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>setShowInvite(null)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!inviteEmail.trim()||!inviteName.trim()||loading} onClick={sendInviteToOrg}>
+                  {loading?'Sending...':'✉️ Send Invite'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 function AuditLogView({ tasks, user, auditLog }) {
   const [filter, setFilter] = useState('')
@@ -1938,6 +2153,7 @@ export default function App() {
                 {page==='escalations' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
                 {page==='reports'     && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
                 {page==='audit'       && hasAccess(user.role,2) && <AuditLogView   {...pageProps}/>}
+                {page==='orgs'        && user.role==='super_admin' && <OrganisationsView {...pageProps}/>}
                 {page==='users'       && hasAccess(user.role,4) && <UsersView      {...pageProps}/>}
                 {page==='tiers'       && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
               </>
