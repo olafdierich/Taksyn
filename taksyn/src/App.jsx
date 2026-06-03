@@ -2091,6 +2091,7 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false)
   const [profileName, setProfileName] = useState('')
   const [profileMsg, setProfileMsg] = useState('')
+  const [newEmail, setNewEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [undoStack, setUndoStack] = useState([])
@@ -2236,7 +2237,31 @@ export default function App() {
                 </div>
                 {profileMsg&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:6,padding:'8px 12px',fontSize:13,color:'var(--green)',marginBottom:14}}>{profileMsg}</div>}
                 <div className="form-field"><label className="form-label">Display Name</label><input className="form-input" value={profileName} onChange={e=>setProfileName(e.target.value)}/></div>
-                <button className="btn btn-secondary btn-sm" style={{marginBottom:20}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
+                <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
+
+                <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Organisation</span>
+                    <span style={{fontWeight:700,color:'var(--brand)'}}>{user.org||'—'}</span>
+                  </div>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
+                    <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Role</span>
+                    <RolePill role={user.role}/>
+                  </div>
+                </div>
+
+                <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:4}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>Update Email</div>
+                  <div className="form-field"><label className="form-label">New Email Address</label><input className="form-input" type="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder={user.email}/></div>
+                  <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} disabled={!newEmail.trim()||newEmail===user.email} onClick={async()=>{
+                    if(!newEmail.trim()||newEmail===user.email) return
+                    const {error} = await supabase.auth.updateUser({email:newEmail.trim()})
+                    if(error) { setProfileMsg('✗ '+error.message); return }
+                    setProfileMsg('✓ Confirmation sent to '+newEmail+' — check your inbox to confirm the change')
+                    setNewEmail('')
+                  }}>Update Email</button>
+                </div>
+
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16}}>
                   <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>Reset Password</div>
                   <div className="form-field"><label className="form-label">New Password</label><input className="form-input" type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Min 6 characters"/></div>
