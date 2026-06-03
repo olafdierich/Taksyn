@@ -1312,6 +1312,23 @@ function ReportsView({ tasks, user }) {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [orgLogo, setOrgLogo] = useState(null)
+  const DEFAULT_STAT_ORDER = [
+    {id:'total',l:'Total Tasks',v:()=>total,c:'b'},
+    {id:'done',l:'Completed',v:()=>done,c:'g'},
+    {id:'notdone',l:'Not Completed',v:()=>total-done,c:'a'},
+    {id:'overdue',l:'Overdue',v:()=>overdue,c:'r'},
+    {id:'compliance',l:'Compliance Rate',v:()=>pct(compDone,compT.length)+'%',c:'p'},
+    {id:'toreview',l:'Total for Review',v:()=>totalToReview,c:'b'},
+    {id:'reviewed',l:'Reviewed',v:()=>reviewed,c:'g'},
+    {id:'pending',l:'Pending Reviews',v:()=>pendingReview,c:'a'},
+    {id:'reviewtime',l:'Reviewed in Time',v:()=>reviewedInTimePct+'%',c:'p'},
+    {id:'sameday',l:'Tasks Done Same Day',v:()=>doneOnDayPct+'%',c:'g'},
+    {id:'empty1',l:'',v:()=>'',c:'x'},
+    {id:'reporttime',l:'Report Reviewed in Time',v:()=>reportWithinWeekPct+'%',c:'g'},
+    {id:'empty2',l:'',v:()=>'',c:'x'},
+  ]
+  const [statOrder, setStatOrder] = useState(DEFAULT_STAT_ORDER)
+  const [dragStatId, setDragStatId] = useState(null)
   const [chartTab, setChartTab] = useState('overview')
 
   const isClientAdmin = ['client_admin','super_admin'].includes(user.role)
@@ -1412,7 +1429,12 @@ function ReportsView({ tasks, user }) {
 
   const exportCompliancePDF = () => {
     const rows = pt.map(t=>'<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td>'+t.category+'</td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.completed_at?new Date(t.completed_at).toLocaleDateString():'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>').join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>${baseStyle}.sg{grid-template-columns:repeat(5,1fr)}</style></head><body>${reportHeader('Compliance Report')}<div class="sg"><div class="st"><div class="sv" style="color:#3B82F6">${total}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed</div></div><div class="st"><div class="sv a">${total-done}</div><div class="sl">Not Completed</div></div><div class="st"><div class="sv r">${overdue}</div><div class="sl">Overdue</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Compliance Rate</div></div><div class="st"><div class="sv" style="color:#3B82F6">${totalToReview}</div><div class="sl">Total for Review</div></div><div class="st"><div class="sv g">${reviewed}</div><div class="sl">Reviewed</div></div><div class="st"><div class="sv a">${pendingReview}</div><div class="sl">Pending Reviews</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${reviewedInTimePct}%</div><div class="sl">Reviewed in Time</div></div><div class="st"><div class="sv g">${doneOnDayPct}%</div><div class="sl">Tasks Done Same Day</div></div><div class="st" style="background:transparent;border:1px dashed #e8ebf0"></div><div class="st"><div class="sv g">${reportWithinWeekPct}%</div><div class="sl">Report Reviewed in Time</div></div><div class="st" style="background:transparent;border:1px dashed #e8ebf0"></div></div><table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Completed</th><th>Duration</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>${baseStyle}.sg{grid-template-columns:repeat(5,1fr)}</style></head><body>${reportHeader('Compliance Report')}<div class="sg">${statOrder.map(s=>{
+        if(s.c==='x') return '<div class="st" style="background:transparent;border:1px dashed #e8ebf0"></div>'
+        const colorMap={g:'#10B981',r:'#EF4444',a:'#F59E0B',p:'#8B5CF6',b:'#3B82F6'}
+        const col=colorMap[s.c]||'#5BC8C0'
+        return '<div class="st"><div class="sv" style="color:'+col+'">'+s.v()+'</div><div class="sl">'+s.l+'</div></div>'
+      }).join('')}</div><table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Completed</th><th>Duration</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
     openReport(html)
   }
 
@@ -1478,13 +1500,43 @@ function ReportsView({ tasks, user }) {
         <>
           <div className="section">
             <div className="section-title">Compliance Overview — {pt.length} tasks</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(110px,1fr))',gap:10,marginTop:10}}>
-              {[['Total',total,'b'],['Completed',done,'g'],['Not Completed',total-done,'a'],['Overdue',overdue,'r'],['Compliance Rate',pct(compDone,compT.length)+'%','p'],['Total for Review',totalToReview,'b'],['Reviewed',reviewed,'g'],['Pending Reviews',pendingReview,'a'],['Reviewed in Time',reviewedInTimePct+'%','p'],['Tasks Done Same Day',doneOnDayPct+'%','g'],['','','x'],['Report Reviewed in Time',reportWithinWeekPct+'%','g'],['','','x']].map(([l,v,c])=>(
-                <div key={l} className="st" style={{background:c==='x'?'transparent':undefined,border:c==='x'?'1px dashed var(--border)':undefined,borderRadius:8,padding:12,textAlign:'center'}}>
-                  <div style={{fontSize:20,fontWeight:800,color:c==='g'?'var(--green)':c==='r'?'var(--red)':c==='a'?'#F59E0B':c==='p'?'#8B5CF6':c==='b'?'#3B82F6':c==='x'?'transparent':'#5BC8C0',lineHeight:1}}>{v}</div>
-                  <div style={{fontSize:10,color:'var(--t2)',marginTop:4,textTransform:'uppercase'}}>{c!=='x'?l:''}</div>
-                </div>
-              ))}
+            <div style={{fontSize:10,color:'var(--t2)',marginBottom:6,marginTop:10}}>✋ Drag blocks to rearrange — order is reflected in the PDF report</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(110px,1fr))',gap:10}}>
+              {statOrder.map((s,i)=>{
+                const c=s.c, v=s.v(), l=s.l
+                return (
+                  <div key={s.id}
+                    draggable={c!=='x'}
+                    onDragStart={()=>setDragStatId(s.id)}
+                    onDragOver={e=>e.preventDefault()}
+                    onDrop={()=>{
+                      if(!dragStatId||dragStatId===s.id) return
+                      setStatOrder(prev=>{
+                        const arr=[...prev]
+                        const fromIdx=arr.findIndex(x=>x.id===dragStatId)
+                        const toIdx=arr.findIndex(x=>x.id===s.id)
+                        const [moved]=arr.splice(fromIdx,1)
+                        arr.splice(toIdx,0,moved)
+                        return arr
+                      })
+                      setDragStatId(null)
+                    }}
+                    style={{
+                      background:c==='x'?'transparent':dragStatId===s.id?'var(--brand-lt)':'var(--s3)',
+                      border:c==='x'?'1px dashed var(--border)':dragStatId===s.id?'2px solid var(--brand)':'1px solid transparent',
+                      borderRadius:8,padding:12,textAlign:'center',
+                      cursor:c!=='x'?'grab':'default',
+                      opacity:dragStatId===s.id?0.5:1,
+                      transition:'all .15s',userSelect:'none'
+                    }}>
+                    <div style={{fontSize:20,fontWeight:800,lineHeight:1,color:c==='g'?'var(--green)':c==='r'?'var(--red)':c==='a'?'#F59E0B':c==='p'?'#8B5CF6':c==='b'?'#3B82F6':c==='x'?'transparent':'#5BC8C0'}}>{c!=='x'?v:''}</div>
+                    <div style={{fontSize:10,color:'var(--t2)',marginTop:4,textTransform:'uppercase'}}>{c!=='x'?l:''}</div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}>
+              <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setStatOrder(DEFAULT_STAT_ORDER)}>↺ Reset Order</button>
             </div>
           </div>
           <div className="section">
