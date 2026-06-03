@@ -1724,16 +1724,12 @@ function OrganisationsView({ user }) {
     if (!showInvite) return
     setLoading(true)
     try {
-      const { data:{session} } = await supabase.auth.getSession()
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
+      const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer '+session?.access_token,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY||''
-        },
-        body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, secret:inviteSecret })
       })
       const result = await res.json()
       console.log('Invite response status:', res.status)
