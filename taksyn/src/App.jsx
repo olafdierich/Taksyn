@@ -2283,7 +2283,16 @@ export default function App() {
     return ()=>subscription.unsubscribe()
   },[])
 
-  useEffect(()=>{ if(user&&isConfigured()) loadTasks() },[user])
+  useEffect(()=>{
+    if(user&&isConfigured()) {
+      loadTasks()
+      const channel = supabase
+        .channel('tasks-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, ()=>{ loadTasks() })
+        .subscribe()
+      return ()=>{ supabase.removeChannel(channel) }
+    }
+  },[user])
 
   const handleAuth = (userData) => { setUser(userData); setPage('dashboard') }
 
