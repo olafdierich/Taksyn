@@ -22,7 +22,19 @@ const STATUS_CFG = {
   rejected:        { label:'Rejected',        color:'#EF4444', bg:'rgba(239,68,68,.15)'   },
 }
 const PRIORITY_CFG = { critical:{label:'Critical',color:'#EF4444'}, high:{label:'High',color:'#F97316'}, medium:{label:'Medium',color:'#F59E0B'}, low:{label:'Low',color:'#10B981'} }
-const CAT_ICONS = { Housekeeping:'🏨', Kitchen:'🍽️', Safety:'🛡️', Clinical:'🏥', NDIS:'♿', Maintenance:'🔧', HR:'👥', General:'📋' }
+const DEPARTMENTS = {
+  Hospitality: ['Front of House','Housekeeping','Kitchen','Bar','Restaurant','Concierge','Maintenance','Management','Security','Events','Reservations','Laundry'],
+  Clinical: ['Nurse','Doctor','General Practitioner','Reception','Administration','Pharmacy','Allied Health','Pathology','Radiology','Management','Cleaning','Security','IT'],
+  NDIS: ['Support Worker','Team Leader','Service Delivery Manager','Coordinator','Finance','Rostering','Administration','Allied Health','Transport','Management','Compliance'],
+  Aged_Care: ['Carer','Registered Nurse','Enrolled Nurse','Physiotherapist','Occupational Therapist','Lifestyle','Administration','Kitchen','Cleaning','Management','Rostering','Finance'],
+  Wedding_Events: ['Event Coordinator','Catering','Decorations','Photography','AV & Sound','Setup & Bump Out','Florals','Management','Administration'],
+  Facilities: ['Cleaning','Grounds','Maintenance','Security','Reception','Management','Administration'],
+  Safety: ['Safety Officer','Supervisor','Inspector','Compliance','Management'],
+  Maintenance: ['Electrician','Plumber','Carpenter','General Maintenance','Grounds','Management'],
+  HR: ['HR Officer','Payroll','Recruitment','Training','Management'],
+  General: ['Staff','Supervisor','Management','Administration']
+}
+const CAT_ICONS = { Hospitality:'🏨', Clinical:'🏥', NDIS:'♿', Aged_Care:'👴', Wedding_Events:'💍', Facilities:'🏢', Safety:'🛡️', Maintenance:'🔧', HR:'👥', General:'📋' }
 const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','monthly','quarterly','annually']
 const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' }
 const DEMO_TASKS = []
@@ -683,7 +695,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'Housekeeping', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'' })
+  const [newTask, setNewTask] = useState({ title:'', category:'Hospitality', department:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'' })
 
   useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
@@ -785,7 +797,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     // Close and reset immediately — no await before this
     setShowCreate(false)
     setUserSearch('')
-    setNewTask({title:'',category:'Housekeeping',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''})
+    setNewTask({title:'',category:'Hospitality',department:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''})
     // Do the async work in background
     const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     setTasks(prev=>[...prev,t])
@@ -834,7 +846,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             <div className="modal-body">
               <div className="form-field"><label className="form-label">Title</label><input className="form-input" value={editTask.title||''} onChange={e=>setEditTask({...editTask,title:e.target.value})}/></div>
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={editTask.category||''} onChange={e=>setEditTask({...editTask,category:e.target.value})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={editTask.category||''} onChange={e=>setEditTask({...editTask,category:e.target.value,department:''})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
+              <div className="form-field"><label className="form-label">Department / Position</label><select className="form-select" value={editTask.department||''} onChange={e=>setEditTask({...editTask,department:e.target.value})}><option value="">— Select department —</option>{(DEPARTMENTS[editTask.category||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={editTask.priority||''} onChange={e=>setEditTask({...editTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
               <div className="two-col">
@@ -926,7 +939,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             <div className="modal-body">
               <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/></div>
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={newTask.category} onChange={e=>setNewTask({...newTask,category:e.target.value})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={newTask.category} onChange={e=>setNewTask({...newTask,category:e.target.value,department:''})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Department / Position</label><select className="form-select" value={newTask.department||''} onChange={e=>setNewTask({...newTask,department:e.target.value})}><option value="">— Select department —</option>{(DEPARTMENTS[newTask.category]||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
               <div className="two-col">
@@ -970,7 +984,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           <div className="detail-header">
             <div style={{flex:1}}>
               <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
-                <span className="cat-tag">{CAT_ICONS[sel.category]||'📋'} {sel.category}</span>
+                <span className="cat-tag">{CAT_ICONS[sel.category]||'📋'} {sel.category}</span>{sel.department&&<span className="cat-tag" style={{background:'var(--s3)',color:'var(--t2)'}}>🏢 {sel.department}</span>}
                 {sel.recurrence&&sel.recurrence!=='once'&&<span className="recurrence-tag">🔁 {RECURRENCE_LABELS[sel.recurrence]}</span>}
               </div>
               <div style={{fontSize:17,fontWeight:800,letterSpacing:'-.5px'}}>{sel.title}</div>
@@ -2381,10 +2395,36 @@ export default function App() {
                     <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{user.email}</div>
                     <div style={{marginTop:4}}><RolePill role={user.role}/></div>
                   </div>
+                  {user.department&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}><span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Department</span><span style={{fontSize:12,fontWeight:600}}>{user.department}</span></div>}
                 </div>
                 {profileMsg&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:6,padding:'8px 12px',fontSize:13,color:'var(--green)',marginBottom:14}}>{profileMsg}</div>}
                 <div className="form-field"><label className="form-label">Display Name</label><input className="form-input" value={profileName} onChange={e=>setProfileName(e.target.value)}/></div>
                 <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
+
+                <div className="form-field">
+                  <label className="form-label">Your Department / Position</label>
+                  <select className="form-input" value={user.department||''} onChange={async e=>{
+                    const dept = e.target.value
+                    setUser(prev=>({...prev,department:dept}))
+                    if(isConfigured()) await supabase.from('profiles').update({department:dept}).eq('id',user.id)
+                    setProfileMsg('✓ Department updated')
+                  }}>
+                    <option value="">— Select your department —</option>
+                    {(DEPARTMENTS[user.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label className="form-label">Industry</label>
+                  <select className="form-input" value={user.industry||''} onChange={async e=>{
+                    const ind = e.target.value
+                    setUser(prev=>({...prev,industry:ind,department:''}))
+                    if(isConfigured()) await supabase.from('profiles').update({industry:ind,department:''}).eq('id',user.id)
+                    setProfileMsg('✓ Industry updated')
+                  }}>
+                    <option value="">— Select industry —</option>
+                    {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
+                  </select>
+                </div>
 
                 <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -2394,6 +2434,18 @@ export default function App() {
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
                     <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Role</span>
                     <RolePill role={user.role}/>
+                  </div>
+                  {user.department&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
+                    <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Department</span>
+                    <span style={{fontSize:12,fontWeight:600}}>{user.department}</span>
+                  </div>}
+                  <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid var(--border)'}}>
+                    <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Department / Position</div>
+                    <select className="form-input" style={{fontSize:12}} value={user.department||''} onChange={async e=>{ const d=e.target.value; setUser(prev=>({...prev,department:d})); if(isConfigured()) await supabase.from('profiles').update({department:d}).eq('id',user.id) }}>
+                      <option value="">— Not set —</option>
+                      {(DEPARTMENTS[user.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
+                      {Object.values(DEPARTMENTS).flat().filter((d,i,a)=>a.indexOf(d)===i).sort().map(d=><option key={'all-'+d} value={d}>{d}</option>)}
+                    </select>
                   </div>
                   {['client_admin','manager'].includes(user.role)&&(
                     <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)'}}>
