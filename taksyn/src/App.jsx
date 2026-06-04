@@ -1163,7 +1163,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             )}
           </div>
         </div>
-      ) : (
+      )}
       {sel ? (
         <div className="anim">
           <button className="back-btn" onClick={()=>{setSelected(null);setShowDeleteConfirm(false);setDeleteScope('')}}><IC n="x" s={14}/> Close</button>
