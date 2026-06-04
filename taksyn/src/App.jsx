@@ -664,6 +664,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [filter, setFilter] = useState('all')
   const [selectedOrg, setSelectedOrg] = useState('all')
   const [orgSearch, setOrgSearch] = useState('')
+  const [orgsList, setOrgsList] = useState([])
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
@@ -683,6 +684,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [newTask, setNewTask] = useState({ title:'', category:'Housekeeping', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'' })
 
   useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
+  useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
 
   const visible = visibleTasks(tasks, user)
   // Super admin: filter by selected org
@@ -690,8 +692,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     ? visible.filter(t=>t.org===selectedOrg)
     : visible
   // Get unique orgs for super admin dropdown
+  const taskOrgs = [...new Set(tasks.map(t=>t.org).filter(Boolean))]
   const allOrgs = user.role==='super_admin'
-    ? [...new Set(tasks.map(t=>t.org).filter(Boolean))].sort()
+    ? [...new Set([...orgsList,...taskOrgs])].sort()
     : []
   const searchFiltered = search ? orgFiltered.filter(t=>t.title?.toLowerCase().includes(search.toLowerCase())||t.category?.toLowerCase().includes(search.toLowerCase())||t.assigned_user_name?.toLowerCase().includes(search.toLowerCase())) : orgFiltered
   const filtered = filter==='all'?searchFiltered:filter==='escalated'?searchFiltered.filter(t=>t.escalation):searchFiltered.filter(t=>t.status===filter)
@@ -997,7 +1000,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             {parseSafe(sel.evidence).length>0&&<div className="ev-thumbs" style={{marginBottom:10}}>
               {parseSafe(sel.evidence).map((e,i)=>(
                 <div key={i} className="ev-thumb">
-                  {e.startsWith('data:image')||e.startsWith('http') ? <img src={e} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:18}}>📷</span>}
+                  {typeof e==='string'&&(e.startsWith('data:image')||e.startsWith('http')) ? <img src={e} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:18}}>📷</span>}
                   {user.role==='worker'&&<div className="ev-rm" onClick={()=>update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}>×</div>}
                 </div>
               ))}
