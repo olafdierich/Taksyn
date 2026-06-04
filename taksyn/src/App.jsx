@@ -612,6 +612,14 @@ function computeAwards(tasks) {
 
 function DashboardView({ tasks, user, setPage }) {
   const visible = visibleTasks(tasks, user)
+  // Super admin: filter by selected org
+  const orgFiltered = user.role==='super_admin' && selectedOrg!=='all'
+    ? visible.filter(t=>t.org===selectedOrg)
+    : visible
+  // Get unique orgs for super admin dropdown
+  const allOrgs = user.role==='super_admin'
+    ? [...new Set(tasks.map(t=>t.org).filter(Boolean))].sort()
+    : []
   const done = visible.filter(t=>['completed','approved','awaiting_review'].includes(t.status)).length
   const overdue = visible.filter(t=>t.status==='overdue').length
   const esc = visible.filter(t=>t.escalation).length
@@ -681,7 +689,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
 
   const visible = visibleTasks(tasks, user)
-  const searchFiltered = search ? visible.filter(t=>t.title?.toLowerCase().includes(search.toLowerCase())||t.category?.toLowerCase().includes(search.toLowerCase())||t.assigned_user_name?.toLowerCase().includes(search.toLowerCase())) : visible
+  // Super admin: filter by selected org
+  const orgFiltered = user.role==='super_admin' && selectedOrg!=='all'
+    ? visible.filter(t=>t.org===selectedOrg)
+    : visible
+  // Get unique orgs for super admin dropdown
+  const allOrgs = user.role==='super_admin'
+    ? [...new Set(tasks.map(t=>t.org).filter(Boolean))].sort()
+    : []
+  const searchFiltered = search ? orgFiltered.filter(t=>t.title?.toLowerCase().includes(search.toLowerCase())||t.category?.toLowerCase().includes(search.toLowerCase())||t.assigned_user_name?.toLowerCase().includes(search.toLowerCase())) : orgFiltered
   const filtered = filter==='all'?searchFiltered:filter==='escalated'?searchFiltered.filter(t=>t.escalation):searchFiltered.filter(t=>t.status===filter)
 
   const update = async (id, changes, _interventionReason=null) => {
@@ -1157,14 +1173,43 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         <>
           <div className="ph">
             <div className="ph-top">
-              <div><div className="ph-title">Tasks</div><div className="ph-sub">{visible.length} tasks · {visible.filter(t=>t.compliance).length} compliance-critical</div></div>
-              {canCreate&&(user.role==='super_admin' ? <div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:6,border:'1px solid rgba(245,158,11,.2)'}}>🔧 View only — use intervention to edit</div> : <button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}}
+              <div>
+                <div className="ph-title">Tasks</div>
+                <div className="ph-sub">
+                  {user.role==='super_admin' ? (selectedOrg==='all' ? `All organisations · ${orgFiltered.length} tasks` : `${selectedOrg} · ${orgFiltered.length} tasks`) : `${visible.length} tasks · ${visible.filter(t=>t.compliance).length} compliance-critical`}
+                </div>
+              </div>
+              {canCreate&&(user.role==='super_admin' ? <div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:6,border:'1px solid rgba(245,158,11,.2)'}}>🔧 View only — use intervention to edit</div> : <button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}
             </div>
+            {user.role==='super_admin'&&(
+              <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
+                <select
+                  className="form-input"
+                  value={selectedOrg}
+                  onChange={e=>{setSelectedOrg(e.target.value);setOrgSearch('')}}
+                  style={{fontSize:13,padding:'6px 10px',minWidth:200}}
+                >
+                  <option value="all">🏢 All Organisations ({allOrgs.length})</option>
+                  {allOrgs
+                    .filter(o=>!orgSearch||o.toLowerCase().includes(orgSearch.toLowerCase()))
+                    .map(o=><option key={o} value={o}>{o} ({tasks.filter(t=>t.org===o).length})</option>)
+                  }
+                </select>
+                <input
+                  className="form-input"
+                  placeholder="Search organisations..."
+                  value={orgSearch}
+                  onChange={e=>setOrgSearch(e.target.value)}
+                  style={{fontSize:13,padding:'6px 10px',minWidth:180}}
+                />
+                {selectedOrg!=='all'&&<button className="btn btn-secondary btn-sm" onClick={()=>{setSelectedOrg('all');setOrgSearch('')}}>✕ Clear</button>}
+              </div>
+            )}
           </div>
           <div className="filter-bar">
             {['all','pending','in_progress','awaiting_review','rejected','completed','overdue','escalated'].map(f=>(
               <button key={f} className={"fb "+(filter===f?'active':'')} onClick={()=>setFilter(f)}>
-                {f==='all'?'All':(STATUS_CFG[f]?.label||f)} <span style={{opacity:.6}}>({f==='all'?visible.length:f==='escalated'?visible.filter(t=>t.escalation).length:visible.filter(t=>t.status===f).length})</span>
+                {f==='all'?'All':(STATUS_CFG[f]?.label||f)} <span style={{opacity:.6}}>({f==='all'?orgFiltered.length:f==='escalated'?orgFiltered.filter(t=>t.escalation).length:orgFiltered.filter(t=>t.status===f).length})</span>
               </button>
             ))}
           </div>
