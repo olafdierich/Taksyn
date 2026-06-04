@@ -522,7 +522,7 @@ function AuthView({ onAuth }) {
           <div className="auth-title">Select Organisation</div>
           <div className="auth-sub">You are a member of multiple organisations. Choose which one to sign in to.</div>
           <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16,maxHeight:'60vh',overflowY:'auto',paddingRight:4}}>
-            {orgChoices.map((m,i)=>(
+            {[...orgChoices].sort((a,b)=>a.org.localeCompare(b.org)||(a.role.localeCompare(b.role))).map((m,i)=>(
               <button key={i} onClick={()=>{
                 const userData = {...pendingAuthUser, role:m.role, org:m.org, tier:m.tier||'Growth'}
                 localStorage.setItem('taksyn-user', JSON.stringify(userData))
