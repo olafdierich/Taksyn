@@ -662,6 +662,8 @@ function DashboardView({ tasks, user, setPage }) {
 
 function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog }) {
   const [filter, setFilter] = useState('all')
+  const [selectedOrg, setSelectedOrg] = useState('all')
+  const [orgSearch, setOrgSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
