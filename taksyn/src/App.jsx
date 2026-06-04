@@ -588,10 +588,10 @@ function AuthView({ onAuth }) {
 }
 
 function visibleTasks(tasks, user) {
-  // Super admin sees all orgs
+  // Super admin sees all orgs via org dropdown filter in TasksView
   if (user.role==='super_admin') return tasks
   // All other roles only see their own org's tasks
-  const orgTasks = tasks.filter(t => !t.org || t.org===user.org)
+  const orgTasks = tasks.filter(t => t.org===user.org)
   if (['client_admin','manager','supervisor'].includes(user.role)) return orgTasks
   return orgTasks.filter(t=>
     t.assigned_user_id===user.id ||
@@ -991,20 +991,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           )}
 
           {sel.escalation&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Task escalated — supervisor notified</div><div className="esc-banner-sub">Immediate attention required</div></div></div>}
-
-          <div className="section">
-            <div className="section-title">Checklist ({selSubs.filter(s=>s.done).length}/{selSubs.length})</div>
-            {selSubs.length===0
-              ? <div style={{fontSize:13,color:'var(--t2)'}}>No subtasks — mark complete directly.</div>
-              : selSubs.map((s,i)=>(
-                <div key={i} className="subtask-row" onClick={()=>user.role==='worker'&&toggleSub(sel.id,i)}>
-                  <div className={"checkbox "+(s.done?'checked':'')}>{s.done&&<IC n="check" s={10}/>}</div>
-                  <span className={"subtask-text "+(s.done?'done':'')}>{s.t}</span>
-                </div>
-              ))
-            }
-            <div className="pb-bg" style={{marginTop:10}}><div className="pb-fill" style={{width:pct(selSubs.filter(s=>s.done).length,selSubs.length)+'%'}}/></div>
-          </div>
 
           <div className="section">
             <div className="section-title">Evidence / Photo Proof {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}</div>
