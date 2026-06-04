@@ -1871,8 +1871,8 @@ function UsersView({ user }) {
                 {u.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {u.department}</div>}
               </div>
               <RolePill role={u.role}/>
-              <button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||''}) }}>✏️ Edit</button>
-              <button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>
+              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||''}) }}>✏️ Edit</button>}
+              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
             </div>
           ))
         }
