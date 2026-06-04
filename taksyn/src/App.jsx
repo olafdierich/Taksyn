@@ -988,7 +988,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           {sel.status==='rejected'&&(
             <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back — Action Required</div>
-              {parseSafe(sel.comments,[]).filter(c=>c.startsWith('⚠️')).slice(-1).map((c,i)=><div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px',lineHeight:1.5}}>{c.replace('⚠️ ','').split(': ').slice(1).join(': ')}</div>)}
+              {parseSafe(sel.comments,[]).filter(c=>{ const txt=typeof c==='object'?c.text:String(c||''); return txt.startsWith('⚠️') || (c?.isRejection) }).slice(-1).map((c,i)=>{ const txt=typeof c==='object'?c.text:String(c||''); return <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px',lineHeight:1.5}}>{txt.replace('⚠️ ','').replace('⚠️ Rejected: ','').split(': ').slice(typeof c==='object'?0:1).join(': ')}</div> })}
               <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>Please complete the required changes and resubmit.</div>
             </div>
           )}
