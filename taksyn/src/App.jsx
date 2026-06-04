@@ -448,6 +448,7 @@ function AuthView({ onAuth }) {
       const { error:e } = await supabase.auth.resetPasswordForEmail(email, { redirectTo:'https://taksyn.vercel.app' })
       if (e) throw e
       setSuccess('Password reset email sent! Check your inbox.')
+      setLoading(false)
     } catch(e) { setError(e.message||'Failed to send reset email') }
     finally { setLoading(false) }
   }
