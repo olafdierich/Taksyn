@@ -2401,18 +2401,7 @@ export default function App() {
                 <div className="form-field"><label className="form-label">Display Name</label><input className="form-input" value={profileName} onChange={e=>setProfileName(e.target.value)}/></div>
                 <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
 
-                <div className="form-field">
-                  <label className="form-label">Your Department / Position</label>
-                  <select className="form-input" value={user.department||''} onChange={async e=>{
-                    const dept = e.target.value
-                    setUser(prev=>({...prev,department:dept}))
-                    if(isConfigured()) await supabase.from('profiles').update({department:dept}).eq('id',user.id)
-                    setProfileMsg('✓ Department updated')
-                  }}>
-                    <option value="">— Select your department —</option>
-                    {(DEPARTMENTS[user.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
+                {['client_admin','super_admin'].includes(user.role)&&<>
                 <div className="form-field">
                   <label className="form-label">Industry</label>
                   <select className="form-input" value={user.industry||''} onChange={async e=>{
@@ -2425,6 +2414,19 @@ export default function App() {
                     {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
                   </select>
                 </div>
+                <div className="form-field">
+                  <label className="form-label">Department / Position</label>
+                  <select className="form-input" value={user.department||''} onChange={async e=>{
+                    const dept = e.target.value
+                    setUser(prev=>({...prev,department:dept}))
+                    if(isConfigured()) await supabase.from('profiles').update({department:dept}).eq('id',user.id)
+                    setProfileMsg('✓ Department updated')
+                  }}>
+                    <option value="">— Select department —</option>
+                    {(DEPARTMENTS[user.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                </>}
 
                 <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
