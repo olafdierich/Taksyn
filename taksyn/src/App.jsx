@@ -1712,7 +1712,28 @@ function UsersView({ user }) {
   const [editingUser, setEditingUser] = useState(null)
   const [editForm, setEditForm] = useState({})
 
-  useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
+  useEffect(()=>{
+    if(!isConfigured()) return
+    if(user.role==='super_admin') {
+      supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(data) })
+    } else {
+      // Load members from org_members joined with profiles
+      supabase.from('org_members').select('user_id, role, org, tier').eq('org', user.org)
+        .then(async ({data:members})=>{
+          if(!members?.length) return
+          const ids = members.map(m=>m.user_id)
+          const {data:profiles} = await supabase.from('profiles').select('*').in('id', ids)
+          if(profiles) {
+            // Merge profile with org-specific role from org_members
+            const merged = profiles.map(p=>{
+              const m = members.find(m=>m.user_id===p.id)
+              return {...p, role: m?.role||p.role}
+            })
+            setRealUsers(merged)
+          }
+        })
+    }
+  },[])
 
   const deleteUser = async (id) => {
     if (!confirm('Remove this user from your organisation?')) return
