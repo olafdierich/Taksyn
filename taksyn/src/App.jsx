@@ -1709,6 +1709,8 @@ function UsersView({ user }) {
   const [inviteMethod, setInviteMethod] = useState('email')
   const [inviteOrg, setInviteOrg] = useState('')
   const [realUsers, setRealUsers] = useState([])
+  const [editingUser, setEditingUser] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
   useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
 
@@ -1719,6 +1721,24 @@ function UsersView({ user }) {
       await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
     }
     setRealUsers(prev=>prev.filter(u=>u.id!==id))
+  }
+
+  const saveEditUser = async () => {
+    if (!editForm.name?.trim()) return
+    const { id } = editingUser
+    const updates = {
+      name: editForm.name.trim(),
+      role: editForm.role,
+      department: editForm.department||'',
+      industry: editForm.industry||''
+    }
+    if (isConfigured()) {
+      await supabase.from('profiles').update(updates).eq('id', id)
+      await supabase.from('org_members').update({ role: editForm.role }).eq('user_id', id).eq('org', user.org)
+    }
+    setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...updates}:u))
+    setEditingUser(null)
+    setEditForm({})
   }
 
   const addExistingUserToOrg = async (email, role) => {
@@ -1765,6 +1785,54 @@ function UsersView({ user }) {
 
   return (
     <div className="anim">
+      {editingUser&&(
+        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditForm({}) }}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Edit Team Member</div>
+              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditForm({}) }}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--s3)',borderRadius:8}}>
+                <Avatar name={editingUser.name} role={editingUser.role} size={40} avatarUrl={editingUser.avatar_url}/>
+                <div>
+                  <div style={{fontWeight:700}}>{editingUser.name}</div>
+                  <div style={{fontSize:12,color:'var(--t2)'}}>{editingUser.email||'—'}</div>
+                </div>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Full Name</label>
+                <input className="form-input" value={editForm.name||''} onChange={e=>setEditForm({...editForm,name:e.target.value})}/>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Role</label>
+                <select className="form-input" value={editForm.role||'worker'} onChange={e=>setEditForm({...editForm,role:e.target.value})}>
+                  {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Industry</label>
+                <select className="form-input" value={editForm.industry||''} onChange={e=>setEditForm({...editForm,industry:e.target.value,department:''})}>
+                  <option value="">— Select industry —</option>
+                  {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
+                </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Department / Position</label>
+                <select className="form-input" value={editForm.department||''} onChange={e=>setEditForm({...editForm,department:e.target.value})}>
+                  <option value="">— Select department —</option>
+                  {(DEPARTMENTS[editForm.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
+                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditForm({}) }}>Cancel</button>
+                <button className="btn btn-primary" disabled={!editForm.name?.trim()} onClick={saveEditUser}>Save Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showInvite&&(
         <div className="modal-overlay" onClick={()=>setShowInvite(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -1795,10 +1863,15 @@ function UsersView({ user }) {
         {realUsers.length===0
           ? <div style={{fontSize:13,color:'var(--t2)'}}>No users yet. Invite staff or ask them to sign up at taksyn.vercel.app</div>
           : realUsers.map((u,i)=>(
-            <div key={i} className="user-row">
+            <div key={i} className="user-row" style={{flexWrap:'wrap',gap:8}}>
               <Avatar name={u.name} role={u.role} size={34} avatarUrl={u.avatar_url}/>
-              <div className="user-info"><div className="user-name">{u.name}</div><div className="user-email">{u.email||u.org||'—'}</div></div>
+              <div className="user-info" style={{flex:1}}>
+                <div className="user-name">{u.name}</div>
+                <div className="user-email">{u.email||'—'}</div>
+                {u.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {u.department}</div>}
+              </div>
               <RolePill role={u.role}/>
+              <button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||''}) }}>✏️ Edit</button>
               <button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>
             </div>
           ))
