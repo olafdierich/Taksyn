@@ -612,14 +612,6 @@ function computeAwards(tasks) {
 
 function DashboardView({ tasks, user, setPage }) {
   const visible = visibleTasks(tasks, user)
-  // Super admin: filter by selected org
-  const orgFiltered = user.role==='super_admin' && selectedOrg!=='all'
-    ? visible.filter(t=>t.org===selectedOrg)
-    : visible
-  // Get unique orgs for super admin dropdown
-  const allOrgs = user.role==='super_admin'
-    ? [...new Set(tasks.map(t=>t.org).filter(Boolean))].sort()
-    : []
   const done = visible.filter(t=>['completed','approved','awaiting_review'].includes(t.status)).length
   const overdue = visible.filter(t=>t.status==='overdue').length
   const esc = visible.filter(t=>t.escalation).length
