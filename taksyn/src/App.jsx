@@ -152,8 +152,8 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .checkbox{width:18px;height:18px;border-radius:4px;border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
 .checkbox.checked{background:var(--brand);border-color:var(--brand)}
 .evidence-zone{border:2px dashed var(--border);border-radius:var(--r);padding:22px;text-align:center;cursor:pointer}
-.ev-thumbs{display:flex;gap:8px;flex-wrap:wrap}
-.ev-thumb{width:60px;height:60px;border-radius:var(--rs);background:var(--s3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;position:relative;overflow:hidden}
+.ev-thumbs{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+.ev-thumb{width:60px;height:60px;border-radius:var(--rs);background:var(--s3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;position:relative}
 .ev-rm{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .comment-box{width:100%;background:var(--s3);border:1px solid var(--border);border-radius:var(--rs);padding:9px 11px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;min-height:52px;outline:none}
 .comment-item{padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--t2)}
@@ -1000,12 +1000,22 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           <div className="section">
             <div className="section-title">Evidence / Photo Proof {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}</div>
             {parseSafe(sel.evidence).length>0&&<div className="ev-thumbs" style={{marginBottom:10}}>
-              {parseSafe(sel.evidence).map((e,i)=>(
-                <div key={i} className="ev-thumb">
-                  {typeof e==='string'&&(e.startsWith('data:image')||e.startsWith('http')) ? <img src={e} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:18}}>📷</span>}
-                  {user.role==='worker'&&<div className="ev-rm" onClick={()=>update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}>×</div>}
-                </div>
-              ))}
+              {parseSafe(sel.evidence).map((e,i)=>{
+                const isObj = e && typeof e==='object'
+                const url = isObj ? e.url : e
+                const ts = isObj ? e.ts : null
+                const by = isObj ? e.by : null
+                const fmtTs = ts ? new Date(ts).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : null
+                return (
+                  <div key={i} style={{position:'relative',marginBottom:4}}>
+                    <div className="ev-thumb">
+                      {typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http')) ? <img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:18}}>📷</span>}
+                      {user.role==='worker'&&<div className="ev-rm" onClick={()=>update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}>×</div>}
+                    </div>
+                    {fmtTs&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2,lineHeight:1.2,maxWidth:60,wordBreak:'break-word'}}>{fmtTs}</div>}
+                  </div>
+                )
+              })}
             </div>}
             {user.role==='worker'&&parseSafe(sel.evidence).length<5&&(
               <div>
@@ -1013,8 +1023,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('cam-inp').click()}>📷 Take Photo</button>
                   <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('gal-inp').click()}>🖼 Gallery</button>
                 </div>
-                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),ev.target.result]}) }; r.readAsDataURL(f); e.target.value='' }}/>
-                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),ev.target.result]}) }; r.readAsDataURL(f); e.target.value='' }}/>
+                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ const entry={url:ev.target.result,ts:new Date().toISOString(),by:user.name}; await update(sel.id,{evidence:[...parseSafe(sel.evidence),entry]}) }; r.readAsDataURL(f); e.target.value='' }}/>
+                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ const entry={url:ev.target.result,ts:new Date().toISOString(),by:user.name}; await update(sel.id,{evidence:[...parseSafe(sel.evidence),entry]}) }; r.readAsDataURL(f); e.target.value='' }}/>
                 {parseSafe(sel.evidence).length===0&&<div className="evidence-zone" onClick={()=>document.getElementById('cam-inp').click()}><div style={{fontSize:24,marginBottom:5}}>📷</div><div style={{fontSize:13,color:'var(--t2)'}}>Tap to add photo (max 5)</div></div>}
               </div>
             )}
