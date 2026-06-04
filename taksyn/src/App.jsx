@@ -611,7 +611,9 @@ function computeAwards(tasks) {
 }
 
 function DashboardView({ tasks, user, setPage }) {
-  const visible = visibleTasks(tasks, user)
+  // Filter tasks by org - super admin sees no org's tasks on dashboard (use Organisations page)
+  const visibleAll = visibleTasks(tasks, user)
+  const visible = user.role==='super_admin' ? [] : visibleAll
   const done = visible.filter(t=>['completed','approved','awaiting_review'].includes(t.status)).length
   const overdue = visible.filter(t=>t.status==='overdue').length
   const esc = visible.filter(t=>t.escalation).length
@@ -1129,6 +1131,151 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           <div className="btn-row">
             {canApprove&&sel.status!=='approved'&&user.role!=='super_admin'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit Task</button>}}
             {canApprove&&['awaiting_review','rejected'].includes(sel.status)&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Reject</button></>}
+            {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<button className="btn btn-amber" onClick={()=>update(sel.id,{escalation:true,status:'escalated'})}>⚠️ Escalate</button>}
+            {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve Escalation</button>}
+            {canApprove&&(
+              <div style={{marginLeft:'auto'}}>
+                {!showDeleteConfirm ? (
+                  <button className="btn btn-danger btn-sm" onClick={()=>setShowDeleteConfirm(true)}>🗑 Delete</button>
+                ) : (
+                  <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:8,padding:12,minWidth:220}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'var(--red)',marginBottom:10}}>Delete this task?</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
+                      {[['this','This task only'],['future','This and all future']].map(([v,l])=>(
+                        <label key={v} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12}}>
+                          <input type="radio" name="deleteScope" value={v} checked={deleteScope===v} onChange={()=>setDeleteScope(v)} style={{accentColor:'var(--red)'}}/>
+                          {l}
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>{setShowDeleteConfirm(false);setDeleteScope('')}}>Cancel</button>
+                      <button className="btn btn-danger btn-sm" disabled={!deleteScope} onClick={async()=>{
+                        if(pushUndo) pushUndo('Deleted: '+sel.title, tasks)
+                        setTasks(prev=>prev.filter(t=>t.id!==sel.id))
+                        if(isConfigured()) await supabase.from('tasks').delete().eq('id',sel.id)
+                        setShowDeleteConfirm(false); setDeleteScope(''); setSelected(null)
+                      }}>Confirm Delete</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+      {sel ? (
+        <div className="anim">
+          <button className="back-btn" onClick={()=>{setSelected(null);setShowDeleteConfirm(false);setDeleteScope('')}}><IC n="x" s={14}/> Close</button>
+          <div className="detail-header">
+            <div style={{flex:1}}>
+              <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+                <span className="cat-tag">{CAT_ICONS[sel.category]||'📋'} {sel.category}</span>
+                {sel.recurrence&&sel.recurrence!=='once'&&<span className="recurrence-tag">🔁 {RECURRENCE_LABELS[sel.recurrence]}</span>}
+              </div>
+              <div style={{fontSize:17,fontWeight:800,letterSpacing:'-.5px'}}>{sel.title}</div>
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>{sel.id} · Due {sel.due_date}{sel.created_by&&' · Created by '+sel.created_by}</div>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end'}}><StatusBadge status={sel.status}/><PriBadge priority={sel.priority}/></div>
+          </div>
+
+          <div className="timing-bar">
+            <div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ Time In: {sel.started_at?fmtTime(sel.started_at):'—'}</div>
+            <div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Time Out: {sel.completed_at?fmtTime(sel.completed_at):'—'}</div>
+            {fmtDuration(sel.started_at,sel.completed_at)&&<div className="timing-chip active">⏱ Duration: {fmtDuration(sel.started_at,sel.completed_at)}</div>}
+            {sel.gps_start&&<span className="gps-chip" onClick={()=>{ window.location.href='https://maps.google.com/?q='+sel.gps_start }}>📍 Start: {sel.gps_start}</span>}
+            {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>{ window.location.href='https://maps.google.com/?q='+sel.gps_end }}>📍 End: {sel.gps_end}</span>}
+          </div>
+
+          {sel.status==='rejected'&&(
+            <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back — Action Required</div>
+              {parseSafe(sel.comments,[]).filter(c=>c.startsWith('⚠️')).slice(-1).map((c,i)=><div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px',lineHeight:1.5}}>{c.replace('⚠️ ','').split(': ').slice(1).join(': ')}</div>)}
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>Please complete the required changes and resubmit.</div>
+            </div>
+          )}
+
+          {sel.escalation&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Task escalated — supervisor notified</div><div className="esc-banner-sub">Immediate attention required</div></div></div>}
+
+          <div className="section">
+            <div className="section-title">Checklist ({selSubs.filter(s=>s.done).length}/{selSubs.length})</div>
+            {selSubs.length===0
+              ? <div style={{fontSize:13,color:'var(--t2)'}}>No subtasks — mark complete directly.</div>
+              : selSubs.map((s,i)=>(
+                <div key={i} className="subtask-row" onClick={()=>user.role==='worker'&&toggleSub(sel.id,i)}>
+                  <div className={"checkbox "+(s.done?'checked':'')}>{s.done&&<IC n="check" s={10}/>}</div>
+                  <span className={"subtask-text "+(s.done?'done':'')}>{s.t}</span>
+                </div>
+              ))
+            }
+            <div className="pb-bg" style={{marginTop:10}}><div className="pb-fill" style={{width:pct(selSubs.filter(s=>s.done).length,selSubs.length)+'%'}}/></div>
+          </div>
+
+          <div className="section">
+            <div className="section-title">Evidence / Photo Proof {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}</div>
+            {parseSafe(sel.evidence).length>0&&<div className="ev-thumbs" style={{marginBottom:10}}>
+              {parseSafe(sel.evidence).map((e,i)=>(
+                <div key={i} className="ev-thumb">
+                  {e.startsWith('data:image')||e.startsWith('http') ? <img src={e} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:18}}>📷</span>}
+                  {user.role==='worker'&&<div className="ev-rm" onClick={()=>update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}>×</div>}
+                </div>
+              ))}
+            </div>}
+            {user.role==='worker'&&parseSafe(sel.evidence).length<5&&(
+              <div>
+                <div style={{display:'flex',gap:8,marginBottom:10}}>
+                  <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('cam-inp').click()}>📷 Take Photo</button>
+                  <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('gal-inp').click()}>🖼 Gallery</button>
+                </div>
+                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),ev.target.result]}) }; r.readAsDataURL(f); e.target.value='' }}/>
+                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),ev.target.result]}) }; r.readAsDataURL(f); e.target.value='' }}/>
+                {parseSafe(sel.evidence).length===0&&<div className="evidence-zone" onClick={()=>document.getElementById('cam-inp').click()}><div style={{fontSize:24,marginBottom:5}}>📷</div><div style={{fontSize:13,color:'var(--t2)'}}>Tap to add photo (max 5)</div></div>}
+              </div>
+            )}
+            {user.role!=='worker'&&!parseSafe(sel.evidence).length&&<div style={{fontSize:13,color:'var(--t2)'}}>No evidence uploaded yet</div>}
+          </div>
+
+          <div className="section">
+            <div className="section-title">Comments & Notes</div>
+            {parseSafe(sel.comments,[]).map((c,i)=><div key={i} className="comment-item">💬 {c}</div>)}
+            <textarea className="comment-box" style={{marginTop:10}} placeholder="Add a note…" value={comment} onChange={e=>setComment(e.target.value)} onBlur={()=>{ if(comment.trim()) addComment(sel.id) }}/>
+          </div>
+
+          <div className="section">
+            <div className="section-title">Details</div>
+            <div className="two-col">
+              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Due:</span> {sel.due_date}</div>
+              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Compliance:</span> {sel.compliance?'🔒 Yes':'—'}</div>
+              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Assigned to:</span> {sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</div>
+              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
+            </div>
+          </div>
+
+          {user.role==='worker'&&(
+            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+                {!sel.started_at ? (
+                  <button className="btn btn-green" style={{flex:1}} onClick={()=>startTask(sel.id)}>▶ Time In</button>
+                ) : (
+                  <div style={{flex:1,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✓ Time In: {fmtTime(sel.started_at)}</div>
+                )}
+                {sel.started_at&&!sel.completed_at ? (
+                  <button className="btn btn-amber" style={{flex:1}} onClick={()=>{ navigator.geolocation?.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>
+                ) : sel.completed_at ? (
+                  <div style={{flex:1,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>✓ Time Out: {fmtTime(sel.completed_at)}</div>
+                ) : null}
+              </div>
+              {sel.started_at&&sel.completed_at&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:10,textAlign:'center'}}>⏱ Duration: <span style={{fontWeight:700,color:'var(--brand)'}}>{fmtDuration(sel.started_at,sel.completed_at)}</span></div>}
+              {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&<button className="btn btn-primary" style={{width:'100%'}} onClick={()=>submitTask(sel.id)}>✅ Submit Task for Review</button>}
+              {sel.status==='awaiting_review'&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>📋 Submitted — awaiting supervisor review</div>}
+              {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✅ Task approved by supervisor</div>}
+            </div>
+          )}
+
+          <div className="btn-row">
+            {canApprove&&sel.status!=='approved'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit Task</button>}
+            {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<button className="btn btn-amber" onClick={()=>update(sel.id,{escalation:true,status:'escalated'})}>⚠️ Escalate</button>}
             {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve Escalation</button>}
             {canApprove&&(
