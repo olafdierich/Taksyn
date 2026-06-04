@@ -447,7 +447,8 @@ function AuthView({ onAuth }) {
     try {
       const { error:e } = await supabase.auth.resetPasswordForEmail(email, { redirectTo:'https://taksyn.vercel.app' })
       if (e) throw e
-      setSuccess('Password reset email sent! Check your inbox.')
+      setSuccess('✅ Password reset email sent! Check your inbox at ' + email)
+      setEmail('')
       setLoading(false)
     } catch(e) { setError(e.message||'Failed to send reset email') }
     finally { setLoading(false) }
@@ -550,7 +551,7 @@ function AuthView({ onAuth }) {
         <div className="auth-title">{mode==='login'?'Sign in to your account':mode==='register'?'Create your account':'Reset your password'}</div>
         <div className="auth-sub">Task compliance & accountability platform</div>
         {error&&<div className="auth-error">{error}</div>}
-        {success&&<div className="auth-success">{success}</div>}
+        {success&&<div className="auth-success" style={{fontSize:14,fontWeight:600,padding:'14px 16px',textAlign:'center'}}>{success}</div>}
         {mode==='register'&&(
           <div style={{display:'flex',gap:8,marginBottom:4}}>
             <button
