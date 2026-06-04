@@ -521,7 +521,7 @@ function AuthView({ onAuth }) {
           <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
           <div className="auth-title">Select Organisation</div>
           <div className="auth-sub">You are a member of multiple organisations. Choose which one to sign in to.</div>
-          <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16,maxHeight:'60vh',overflowY:'auto',paddingRight:4}}>
+          <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16,maxHeight:'50vh',overflowY:'auto',paddingRight:4}}>
             {[...orgChoices].sort((a,b)=>a.org.localeCompare(b.org)||(a.role.localeCompare(b.role))).map((m,i)=>(
               <button key={i} onClick={()=>{
                 const userData = {...pendingAuthUser, role:m.role, org:m.org, tier:m.tier||'Growth'}
