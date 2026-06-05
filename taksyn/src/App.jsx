@@ -67,7 +67,7 @@ const parseSafe = (val, fallback=[]) => {
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;touch-action:manipulation}
+html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
 :root{--brand:#00A87E;--brand-dk:#008A68;--brand-lt:rgba(0,168,126,.1);--s3:#F0F2F5;--s4:#E8EBF0;--border:rgba(0,0,0,.08);--border2:rgba(0,0,0,.14);--text:#1A2033;--t2:#5A6478;--t3:#9AA3B2;--red:#EF4444;--amber:#F59E0B;--blue:#3B82F6;--green:#10B981;--r:10px;--rs:6px;--shadow:0 4px 20px rgba(0,0,0,.08);--sidebar-w:214px}
 .auth-bg{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;background:linear-gradient(135deg,#F0F7F4,#E8F4F0);padding:20px;overflow-y:auto}
 .auth-card{background:#fff;border:1px solid var(--border2);border-radius:16px;padding:36px;width:100%;max-width:420px;box-shadow:var(--shadow)}
@@ -85,7 +85,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .auth-success{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:var(--rs);padding:10px 14px;font-size:13px;color:var(--green);margin-bottom:14px}
 .auth-toggle{text-align:center;font-size:13px;color:var(--t2);margin-top:14px}
 .auth-toggle a{color:var(--brand);cursor:pointer;font-weight:600}
-.app{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;width:100%;top:0;left:0}
+.app{display:flex;flex-direction:column;height:100vh}
 .topbar{display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;z-index:300;position:fixed;top:0;left:0;right:0}
 .tb-menu-btn{background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:var(--t2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .tb-logo{height:30px;object-fit:contain;cursor:pointer}
@@ -103,7 +103,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .tb-user-name{font-size:12px;font-weight:600}
 .tb-user-role{font-size:10px;color:var(--t2)}
 @media(max-width:480px){.tb-user-name,.tb-user-role{display:none}}
-.main{display:flex;flex:1;overflow:hidden;margin-top:52px;height:calc(100vh - 52px)}
+.main{display:flex;flex:1;overflow:hidden;margin-top:52px}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:150}
 .sidebar-overlay.open{display:block}
 .sidebar{width:var(--sidebar-w);flex-shrink:0;background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;transition:transform .25s,width .25s;z-index:160}
@@ -124,7 +124,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .sb-user-info{overflow:hidden;transition:opacity .2s,width .2s}
 .sidebar.collapsed .sb-user-info{opacity:0;width:0}
 .sb-logout{width:100%;margin-top:6px;padding:7px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-.content{flex:1;overflow-y:scroll;padding:20px;-webkit-overflow-scrolling:touch;touch-action:pan-y;will-change:scroll-position}
+.content{flex:1;overflow-y:auto;padding:20px;-webkit-overflow-scrolling:touch}
 @media(max-width:768px){.content{padding:14px}}
 .ph{margin-bottom:20px}
 .ph-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -2533,11 +2533,7 @@ export default function App() {
     loadAuditLog()
   }
 
-  // Prevent pull-to-refresh on iOS Safari only at very top
-  useEffect(()=>{
-    document.body.style.overscrollBehaviorY = 'none'
-    return ()=>{ document.body.style.overscrollBehaviorY = '' }
-  },[])
+  // keep topbar fixed on mobile
 
   useEffect(()=>{
     if(!isConfigured()) return
