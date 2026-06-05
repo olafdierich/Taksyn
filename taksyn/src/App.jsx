@@ -2393,6 +2393,21 @@ export default function App() {
     loadAuditLog()
   }
 
+  // Prevent pull-to-refresh on iOS Safari
+  useEffect(()=>{
+    let lastY = 0
+    const preventPull = (e) => {
+      const y = e.touches[0].clientY
+      const scrollable = e.target.closest('.content,.anim,[class*="scroll"]')
+      const atTop = !scrollable || scrollable.scrollTop === 0
+      if (atTop && y > lastY) e.preventDefault()
+      lastY = y
+    }
+    document.addEventListener('touchstart', e=>{ lastY = e.touches[0]?.clientY||0 }, {passive:true})
+    document.addEventListener('touchmove', preventPull, {passive:false})
+    return ()=>{ document.removeEventListener('touchmove', preventPull) }
+  },[])
+
   useEffect(()=>{
     if(!isConfigured()) return
     const cached = localStorage.getItem('taksyn-user')
