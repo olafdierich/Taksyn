@@ -1234,11 +1234,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
                       <div style={{flex:1,minWidth:140}}>
                         <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:3}}>📅 FROM DATE</div>
-                        <input type="date" className="form-input" value={archiveDateFrom} onChange={e=>setArchiveDateFrom(e.target.value)} style={{fontSize:12}}/>
+                        <input type="date" className="form-input" value={archiveDateFrom} onChange={e=>{ setArchiveDateFrom(e.target.value); if(e.target.value) setTimeout(()=>document.getElementById('archive-date-to')?.showPicker?.(),100) }} style={{fontSize:12}}/>
                       </div>
                       <div style={{flex:1,minWidth:140}}>
                         <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:3}}>📅 TO DATE</div>
-                        <input type="date" className="form-input" value={archiveDateTo} onChange={e=>setArchiveDateTo(e.target.value)} style={{fontSize:12}}/>
+                        <input id="archive-date-to" type="date" className="form-input" value={archiveDateTo} onChange={e=>setArchiveDateTo(e.target.value)} min={archiveDateFrom||undefined} style={{fontSize:12}}/>
                       </div>
                     </div>
                     {(archiveSearch||archiveCategory||archiveWorker||archiveDateFrom||archiveDateTo)&&(
