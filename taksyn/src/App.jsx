@@ -859,25 +859,16 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               <div className="form-field"><label className="form-label">Title</label><input className="form-input" value={editTask.title||''} onChange={e=>setEditTask({...editTask,title:e.target.value})}/></div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={editTask.category||''} onChange={e=>setEditTask({...editTask,category:e.target.value,department:''})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
-              <div className="form-field"><label className="form-label">Department / Position</label><select className="form-select" value={editTask.department||''} onChange={e=>setEditTask({...editTask,department:e.target.value})}><option value="">— Select department —</option>{(DEPARTMENTS[editTask.category||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Department</label><select className="form-select" value={editTask.department||''} onChange={e=>setEditTask({...editTask,department:e.target.value})}><option value="">— Select —</option>{(DEPARTMENTS[editTask.category||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={editTask.priority||''} onChange={e=>setEditTask({...editTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={editTask.due_date||''} onChange={e=>setEditTask({...editTask,due_date:e.target.value})}/></div>
                 <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={editTask.recurrence||'once'} onChange={e=>setEditTask({...editTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               </div>
-              <div className="form-field">
-                <label className="form-label">Assign To</label>
-                {teamUsers.length>0 ? (
-                  <select className="form-select" value={editTask.assigned_user_id||''} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setEditTask({...editTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_role:u.role}) }}>
-                    <option value="">— Select staff member —</option>
-                    {teamUsers.map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
-                  </select>
-                ) : (
-                  <select className="form-select" value={editTask.assigned_role||'worker'} onChange={e=>setEditTask({...editTask,assigned_role:e.target.value})}>
-                    {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                  </select>
-                )}
+              <div className="form-field"><label className="form-label">Assign To</label>
+                {teamUsers.length>0 ? <select className="form-select" value={editTask.assigned_user_id||''} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setEditTask({...editTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_role:u.role}) }}><option value="">— Select —</option>{teamUsers.map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}</select>
+                : <select className="form-select" value={editTask.assigned_role||'worker'} onChange={e=>setEditTask({...editTask,assigned_role:e.target.value})}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>}
               </div>
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
                 <input type="checkbox" id="edit-comp" checked={editTask.compliance||false} onChange={e=>setEditTask({...editTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
@@ -903,9 +894,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 <button className="btn btn-secondary" onClick={()=>{setShowReject(null);setRejectNote('')}}>Cancel</button>
                 <button className="btn btn-danger" disabled={!rejectNote.trim()} onClick={()=>{
                   const task=tasks.find(t=>t.id===showReject)
-                  const rejectEntry = { id: Date.now()+'', author: user.name, authorId: user.id, text: '⚠️ Rejected: '+rejectNote.trim(), timestamp: new Date().toISOString(), edits: [], isRejection: true }
-                  const existingComments = Array.isArray(task.comments) ? task.comments : parseSafe(task.comments,[])
-                  update(showReject,{status:'rejected',reviewed_at:new Date().toISOString(),comments:[...existingComments, rejectEntry]})
+                  const rejectEntry={id:Date.now()+'',author:user.name,authorId:user.id,text:'⚠️ Rejected: '+rejectNote.trim(),timestamp:new Date().toISOString(),edits:[],isRejection:true}
+                  update(showReject,{status:'rejected',reviewed_at:new Date().toISOString(),comments:[...parseSafe(task.comments,[]),rejectEntry]})
                   setShowReject(null); setRejectNote('')
                 }}>Reject Task</button>
               </div>
@@ -917,27 +907,16 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       {interventionModal&&(
         <div className="modal-overlay" onClick={()=>{setInterventionModal(null);setInterventionReason('')}}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{borderTop:'4px solid #F59E0B'}}>
-            <div className="modal-hdr">
-              <div className="modal-title" style={{color:'#F59E0B'}}>🔧 Platform Admin Intervention</div>
-              <button className="modal-close" onClick={()=>{setInterventionModal(null);setInterventionReason('')}}>×</button>
-            </div>
+            <div className="modal-hdr"><div className="modal-title" style={{color:'#F59E0B'}}>🔧 Platform Admin Intervention</div><button className="modal-close" onClick={()=>{setInterventionModal(null);setInterventionReason('')}}>×</button></div>
             <div className="modal-body">
-              <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',borderRadius:8,padding:12,marginBottom:14,fontSize:12,color:'var(--text)'}}>
-                <div style={{fontWeight:700,marginBottom:4}}>⚠️ You are about to modify an organisation data</div>
+              <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',borderRadius:8,padding:12,marginBottom:14,fontSize:12}}>
+                <div style={{fontWeight:700,marginBottom:4}}>⚠️ You are about to modify organisation data</div>
                 <div style={{color:'var(--t2)'}}>Action: <strong>{interventionModal?.action}</strong></div>
-                <div style={{color:'var(--t2)',marginTop:4}}>This will be permanently recorded in the audit log as a Platform Admin Intervention and will be visible to the organisation.</div>
               </div>
-              <div className="form-field">
-                <label className="form-label">Reason for Intervention <span style={{color:'var(--red)'}}>*</span></label>
-                <textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Fixing incorrect status after system error reported by client…" value={interventionReason} onChange={e=>setInterventionReason(e.target.value)}/>
-              </div>
+              <div className="form-field"><label className="form-label">Reason for Intervention <span style={{color:'var(--red)'}}>*</span></label><textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Fixing incorrect status…" value={interventionReason} onChange={e=>setInterventionReason(e.target.value)}/></div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
                 <button className="btn btn-secondary" onClick={()=>{setInterventionModal(null);setInterventionReason('')}}>Cancel</button>
-                <button className="btn btn-amber" disabled={!interventionReason.trim()} onClick={()=>{
-                  const {taskId, changes} = interventionModal
-                  update(taskId, changes, interventionReason.trim())
-                  setInterventionModal(null); setInterventionReason('')
-                }}>🔧 Confirm Intervention</button>
+                <button className="btn btn-amber" disabled={!interventionReason.trim()} onClick={()=>{ update(interventionModal.taskId,interventionModal.changes,interventionReason.trim()); setInterventionModal(null); setInterventionReason('') }}>🔧 Confirm Intervention</button>
               </div>
             </div>
           </div>
@@ -952,31 +931,27 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/></div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={newTask.category} onChange={e=>setNewTask({...newTask,category:e.target.value,department:''})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
-                <div className="form-field"><label className="form-label">Department / Position</label><select className="form-select" value={newTask.department||''} onChange={e=>setNewTask({...newTask,department:e.target.value})}><option value="">— Select department —</option>{(DEPARTMENTS[newTask.category]||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Department</label><select className="form-select" value={newTask.department||''} onChange={e=>setNewTask({...newTask,department:e.target.value})}><option value="">— Select —</option>{(DEPARTMENTS[newTask.category]||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={newTask.due_date} onChange={e=>setNewTask({...newTask,due_date:e.target.value})}/></div>
                 <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={newTask.recurrence} onChange={e=>setNewTask({...newTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               </div>
-              <div className="form-field">
-                <label className="form-label">Assign To</label>
+              <div className="form-field"><label className="form-label">Assign To</label>
                 {teamUsers.length>0 ? (
                   <div>
-                    <input className="form-input" placeholder="Search staff by name…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>
+                    <input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>
                     <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
                       <option value="">— Select a staff member —</option>
                       {teamUsers.filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
                     </select>
-                    {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ Assigned to: {newTask.assigned_user_name}</div>}
+                    {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
                   </div>
                 ) : (
-                  <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>
-                    {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                  </select>
+                  <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
                 )}
               </div>
-              {newTask.recurrence!=='once'&&<div style={{background:'rgba(0,168,126,.08)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--brand)'}}>🔁 This task will repeat {RECURRENCE_LABELS[newTask.recurrence].toLowerCase()}</div>}
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
                 <input type="checkbox" id="comp" checked={newTask.compliance} onChange={e=>setNewTask({...newTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
                 <label htmlFor="comp" style={{fontSize:13,cursor:'pointer'}}>Mark as compliance-critical</label>
@@ -996,7 +971,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           <div className="detail-header">
             <div style={{flex:1}}>
               <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
-                <span className="cat-tag">{CAT_ICONS[sel.category]||'📋'} {sel.category}</span>{sel.department&&<span className="cat-tag" style={{background:'var(--s3)',color:'var(--t2)'}}>🏢 {sel.department}</span>}
+                <span className="cat-tag">{CAT_ICONS[sel.category]||'📋'} {sel.category}</span>
+                {sel.department&&<span className="cat-tag">🏢 {sel.department}</span>}
                 {sel.recurrence&&sel.recurrence!=='once'&&<span className="recurrence-tag">🔁 {RECURRENCE_LABELS[sel.recurrence]}</span>}
               </div>
               <div style={{fontSize:17,fontWeight:800,letterSpacing:'-.5px'}}>{sel.title}</div>
@@ -1004,41 +980,36 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end'}}><StatusBadge status={sel.status}/><PriBadge priority={sel.priority}/></div>
           </div>
-
           <div className="timing-bar">
-            <div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ Time In: {sel.started_at?fmtTime(sel.started_at):'—'}</div>
-            <div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Time Out: {sel.completed_at?fmtTime(sel.completed_at):'—'}</div>
-            {fmtDuration(sel.started_at,sel.completed_at)&&<div className="timing-chip active">⏱ Duration: {fmtDuration(sel.started_at,sel.completed_at)}</div>}
-            {sel.gps_start&&<span className="gps-chip" onClick={()=>{ window.location.href='https://maps.google.com/?q='+sel.gps_start }}>📍 Start: {sel.gps_start}</span>}
-            {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>{ window.location.href='https://maps.google.com/?q='+sel.gps_end }}>📍 End: {sel.gps_end}</span>}
+            <div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {sel.started_at?fmtTime(sel.started_at):'—'}</div>
+            <div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {sel.completed_at?fmtTime(sel.completed_at):'—'}</div>
+            {fmtDuration(sel.started_at,sel.completed_at)&&<div className="timing-chip active">⏱ {fmtDuration(sel.started_at,sel.completed_at)}</div>}
+            {sel.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_start)}>📍 Start</span>}
+            {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
           </div>
-
           {sel.status==='rejected'&&(
             <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:10,padding:14,marginBottom:14}}>
-              <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back — Action Required</div>
-              {parseSafe(sel.comments,[]).filter(c=>{ const txt=typeof c==='object'?c.text:String(c||''); return txt.startsWith('⚠️') || (c?.isRejection) }).slice(-1).map((c,i)=>{ const txt=typeof c==='object'?c.text:String(c||''); return <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px',lineHeight:1.5}}>{txt.replace('⚠️ ','').replace('⚠️ Rejected: ','').split(': ').slice(typeof c==='object'?0:1).join(': ')}</div> })}
-              <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>Please complete the required changes and resubmit.</div>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back</div>
+              {parseSafe(sel.comments,[]).filter(c=>(typeof c==='object'?c.isRejection:String(c||'').startsWith('⚠️'))).slice(-1).map((c,i)=>{
+                const txt=typeof c==='object'?c.text:String(c||'').split(': ').slice(1).join(': ')
+                return <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px'}}>{txt}</div>
+              })}
             </div>
           )}
-
-          {sel.escalation&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Task escalated — supervisor notified</div><div className="esc-banner-sub">Immediate attention required</div></div></div>}
-
+          {sel.escalation&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Escalated</div></div></div>}
+          {sel.lastIntervention&&<div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12}}><span style={{color:'#F59E0B',fontWeight:700}}>🔧 Platform Intervention</span> by {sel.lastIntervention.by} — {sel.lastIntervention.reason}</div>}
           <div className="section">
-            <div className="section-title">Evidence / Photo Proof {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}</div>
+            <div className="section-title">Evidence {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}</div>
             {parseSafe(sel.evidence).length>0&&<div className="ev-thumbs" style={{marginBottom:10}}>
               {parseSafe(sel.evidence).map((e,i)=>{
-                const isObj = e && typeof e==='object'
-                const url = isObj ? e.url : e
-                const ts = isObj ? e.ts : null
-                const by = isObj ? e.by : null
-                const fmtTs = ts ? new Date(ts).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : null
+                const url=typeof e==='object'?e.url:e
+                const ts=typeof e==='object'?e.ts:null
                 return (
                   <div key={i} style={{position:'relative',marginBottom:4}}>
-                    <div className="ev-thumb">
-                      {typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http')) ? <img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:18}}>📷</span>}
+                    <div className="ev-thumb">{typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http'))?<img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18}}>📷</span>}
                       {user.role==='worker'&&<div className="ev-rm" onClick={()=>update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}>×</div>}
                     </div>
-                    {fmtTs&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2,lineHeight:1.2,maxWidth:60,wordBreak:'break-word'}}>{fmtTs}</div>}
+                    {ts&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2}}>{new Date(ts).toLocaleDateString('en-AU')}</div>}
                   </div>
                 )
               })}
@@ -1049,125 +1020,104 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('cam-inp').click()}>📷 Take Photo</button>
                   <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('gal-inp').click()}>🖼 Gallery</button>
                 </div>
-                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ const entry={url:ev.target.result,ts:new Date().toISOString(),by:user.name}; await update(sel.id,{evidence:[...parseSafe(sel.evidence),entry]}) }; r.readAsDataURL(f); e.target.value='' }}/>
-                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ const entry={url:ev.target.result,ts:new Date().toISOString(),by:user.name}; await update(sel.id,{evidence:[...parseSafe(sel.evidence),entry]}) }; r.readAsDataURL(f); e.target.value='' }}/>
+                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name}]}) }; r.readAsDataURL(f); e.target.value='' }}/>
+                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name}]}) }; r.readAsDataURL(f); e.target.value='' }}/>
                 {parseSafe(sel.evidence).length===0&&<div className="evidence-zone" onClick={()=>document.getElementById('cam-inp').click()}><div style={{fontSize:24,marginBottom:5}}>📷</div><div style={{fontSize:13,color:'var(--t2)'}}>Tap to add photo (max 5)</div></div>}
               </div>
             )}
             {user.role!=='worker'&&!parseSafe(sel.evidence).length&&<div style={{fontSize:13,color:'var(--t2)'}}>No evidence uploaded yet</div>}
           </div>
-
           <div className="section">
             <div className="section-title">Comments & Notes</div>
-            {/*Comments*/}
-            <div className="section-title">Comments & Notes</div>
             {parseSafe(sel.comments,[]).map((c,i)=>{
-              const isObj = c && typeof c==='object'
-              const cStr = (!isObj && c != null) ? String(c) : ''
-              const author = isObj ? c.author : (cStr.split(':')[0]||'')
-              const text = isObj ? c.text : cStr.split(':').slice(1).join(':').trim()
-              const ts = isObj ? c.timestamp : null
-              const edits = isObj ? (c.edits||[]) : []
-              const isAmendment = isObj && c.isAmendment
-              const isRejection = isObj && c.isRejection
-              const isOwn = isObj ? c.authorId===user.id : author===user.name
-              const tsDate = ts ? new Date(ts) : null
-              const isToday = tsDate ? tsDate.toDateString()===new Date().toDateString() : false
-              const fmtTs = (d) => new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
-              const commentId = isObj ? c.id : i+''
-              const isEditing = editingComment && editingComment.taskId===sel.id && editingComment.commentId===commentId
+              const isObj=c&&typeof c==='object'
+              const author=isObj?c.author:(String(c||'').split(':')[0]||'')
+              const text=isObj?c.text:String(c||'').split(':').slice(1).join(':').trim()
+              const ts=isObj?c.timestamp:null
+              const isAmendment=isObj&&c.isAmendment
+              const isRejection=isObj&&c.isRejection
+              const isOwn=isObj?c.authorId===user.id:author===user.name
+              const tsDate=ts?new Date(ts):null
+              const isToday=tsDate?tsDate.toDateString()===new Date().toDateString():false
+              const fmtTs=d=>new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})
+              const commentId=isObj?c.id:i+''
+              const isEditing=editingComment&&editingComment.taskId===sel.id&&editingComment.commentId===commentId
               return (
-                <div key={i} className="comment-item" style={{borderLeft:isAmendment?'3px solid #6366F1':isRejection?'3px solid var(--red)':'3px solid var(--border)',paddingLeft:10,marginBottom:8,background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}>
+                <div key={i} style={{borderLeft:isAmendment?'3px solid #6366F1':isRejection?'3px solid var(--red)':'3px solid var(--border)',marginBottom:8,background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
                     <div style={{flex:1}}>
-                      <span style={{fontWeight:700,fontSize:12,color:isAmendment?'#6366F1':isRejection?'var(--red)':'var(--brand)'}}>{isAmendment?'✏️ Amendment':isRejection?'⚠️ Rejection':'💬'} {author}</span>
+                      <span style={{fontWeight:700,fontSize:12,color:isAmendment?'#6366F1':isRejection?'var(--red)':'var(--brand)'}}>{isAmendment?'✏️':isRejection?'⚠️':'💬'} {author}</span>
                       {tsDate&&<span style={{fontSize:10,color:'var(--t2)',marginLeft:8}}>{fmtTs(ts)}</span>}
                     </div>
                     {isOwn&&!isEditing&&(
-                      <div style={{display:'flex',gap:4,flexShrink:0}}>
+                      <div style={{display:'flex',gap:4}}>
                         <button style={{fontSize:10,padding:'2px 7px',borderRadius:4,border:'1px solid var(--border)',background:'none',cursor:'pointer',color:'var(--t2)'}} onClick={()=>setEditingComment({taskId:sel.id,commentId,text})}>✏️</button>
-                        {isToday&&<button style={{fontSize:10,padding:'2px 7px',borderRadius:4,border:'1px solid rgba(239,68,68,.3)',background:'none',cursor:'pointer',color:'var(--red)'}} onClick={()=>{ const updated=parseSafe(sel.comments,[]).filter((_,j)=>j!==i); update(sel.id,{comments:updated}) }}>🗑</button>}
+                        {isToday&&<button style={{fontSize:10,padding:'2px 7px',borderRadius:4,border:'1px solid rgba(239,68,68,.3)',background:'none',cursor:'pointer',color:'var(--red)'}} onClick={()=>update(sel.id,{comments:parseSafe(sel.comments,[]).filter((_,j)=>j!==i)})}>🗑</button>}
                       </div>
                     )}
                   </div>
-                  {isEditing ? (
+                  {isEditing?(
                     <div style={{marginTop:6}}>
                       <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:56,fontFamily:'inherit',boxSizing:'border-box'}} value={editingComment.text} onChange={e=>setEditingComment({...editingComment,text:e.target.value})}/>
                       <div style={{display:'flex',gap:6,marginTop:6}}>
-                        <button className="btn btn-primary btn-sm" onClick={()=>{ const all=parseSafe(sel.comments,[]); const updated=all.map((cm,j)=>{ if(j!==i) return cm; const orig=typeof cm==='object'?cm:{id:i+'',author:cm.split(':')[0],authorId:user.id,text:cm.split(':').slice(1).join(':').trim(),timestamp:new Date().toISOString(),edits:[]}; return {...orig,edits:[...(orig.edits||[]),{text:orig.text,editedAt:new Date().toISOString()}],text:editingComment.text} }); update(sel.id,{comments:updated}); setEditingComment(null) }}>Save</button>
+                        <button className="btn btn-primary btn-sm" onClick={()=>{ const all=parseSafe(sel.comments,[]); update(sel.id,{comments:all.map((cm,j)=>j!==i?cm:{...(typeof cm==='object'?cm:{id:i+'',author,authorId:user.id,text,timestamp:new Date().toISOString(),edits:[]}),edits:[...((typeof cm==='object'?cm.edits:null)||[]),{text:typeof cm==='object'?cm.text:text,editedAt:new Date().toISOString()}],text:editingComment.text})}); setEditingComment(null) }}>Save</button>
                         <button className="btn btn-secondary btn-sm" onClick={()=>setEditingComment(null)}>Cancel</button>
                       </div>
                     </div>
-                  ) : (
+                  ):(
                     <div style={{marginTop:4,fontSize:13}}>{text}</div>
                   )}
-                  {edits.length>0&&<div style={{marginTop:6,paddingTop:6,borderTop:'1px dashed var(--border)'}}>{edits.map((ed,ei)=><div key={ei} style={{fontSize:11,color:'var(--t2)',marginBottom:2}}><span style={{color:'#F59E0B'}}>📝 Original{edits.length>1?' v'+(ei+1):''}:</span> {ed.text} <span style={{fontSize:10}}>({fmtTs(ed.editedAt)})</span></div>)}</div>}
                 </div>
               )
             })}
             <textarea className="comment-box" style={{marginTop:10}} placeholder="Add a note…" value={comment} onChange={e=>setComment(e.target.value)} onBlur={()=>{ if(comment.trim()) addComment(sel.id) }}/>
           </div>
-
           <div className="section">
             <div className="section-title">Details</div>
             <div className="two-col">
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Due:</span> {sel.due_date}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Compliance:</span> {sel.compliance?'🔒 Yes':'—'}</div>
-              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Assigned to:</span> {sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</div>
+              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Assigned:</span> {sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
             </div>
           </div>
-
           {user.role==='worker'&&(
             <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
-                {!sel.started_at ? (
-                  <button className="btn btn-green" style={{flex:1}} onClick={()=>startTask(sel.id)}>▶ Time In</button>
-                ) : (
-                  <div style={{flex:1,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✓ Time In: {fmtTime(sel.started_at)}</div>
-                )}
-                {sel.started_at&&!sel.completed_at ? (
-                  <button className="btn btn-amber" style={{flex:1}} onClick={()=>{ navigator.geolocation?.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>
-                ) : sel.completed_at ? (
-                  <div style={{flex:1,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>✓ Time Out: {fmtTime(sel.completed_at)}</div>
-                ) : null}
+                {!sel.started_at?<button className="btn btn-green" style={{flex:1}} onClick={()=>startTask(sel.id)}>▶ Time In</button>:<div style={{flex:1,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✓ In: {fmtTime(sel.started_at)}</div>}
+                {sel.started_at&&!sel.completed_at?<button className="btn btn-amber" style={{flex:1}} onClick={()=>{ navigator.geolocation?.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>:sel.completed_at?<div style={{flex:1,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>✓ Out: {fmtTime(sel.completed_at)}</div>:null}
               </div>
-              {sel.started_at&&sel.completed_at&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:10,textAlign:'center'}}>⏱ Duration: <span style={{fontWeight:700,color:'var(--brand)'}}>{fmtDuration(sel.started_at,sel.completed_at)}</span></div>}
-              {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&<button className="btn btn-primary" style={{width:'100%'}} onClick={()=>submitTask(sel.id)}>✅ Submit Task for Review</button>}
-              {sel.status==='awaiting_review'&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>📋 Submitted — awaiting supervisor review</div>}
-              {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✅ Task approved by supervisor</div>}
+              {sel.started_at&&sel.completed_at&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:10,textAlign:'center'}}>⏱ Duration: <strong>{fmtDuration(sel.started_at,sel.completed_at)}</strong></div>}
+              {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&<button className="btn btn-primary" style={{width:'100%'}} onClick={()=>submitTask(sel.id)}>✅ Submit for Review</button>}
+              {sel.status==='awaiting_review'&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>📋 Awaiting review</div>}
+              {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✅ Approved</div>}
             </div>
           )}
-
           <div className="btn-row">
-            {canApprove&&sel.status!=='approved'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit Task</button>}
+            {canApprove&&sel.status!=='approved'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit</button>}
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<button className="btn btn-amber" onClick={()=>update(sel.id,{escalation:true,status:'escalated'})}>⚠️ Escalate</button>}
-            {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve Escalation</button>}
+            {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve</button>}
             {canApprove&&(
               <div style={{marginLeft:'auto'}}>
-                {!showDeleteConfirm ? (
-                  <button className="btn btn-danger btn-sm" onClick={()=>setShowDeleteConfirm(true)}>🗑 Delete</button>
-                ) : (
-                  <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:8,padding:12,minWidth:220}}>
+                {!showDeleteConfirm?<button className="btn btn-danger btn-sm" onClick={()=>setShowDeleteConfirm(true)}>🗑 Delete</button>:(
+                  <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:8,padding:12,minWidth:200}}>
                     <div style={{fontSize:12,fontWeight:700,color:'var(--red)',marginBottom:10}}>Delete this task?</div>
-                    <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
-                      {[['this','This task only'],['future','This and all future']].map(([v,l])=>(
-                        <label key={v} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12}}>
-                          <input type="radio" name="deleteScope" value={v} checked={deleteScope===v} onChange={()=>setDeleteScope(v)} style={{accentColor:'var(--red)'}}/>
-                          {l}
-                        </label>
-                      ))}
-                    </div>
-                    <div style={{display:'flex',gap:6}}>
+                    {[['this','This task only'],['future','This and future']].map(([v,l])=>(
+                      <label key={v} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,marginBottom:6}}>
+                        <input type="radio" name="deleteScope" value={v} checked={deleteScope===v} onChange={()=>setDeleteScope(v)} style={{accentColor:'var(--red)'}}/>
+                        {l}
+                      </label>
+                    ))}
+                    <div style={{display:'flex',gap:6,marginTop:8}}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>{setShowDeleteConfirm(false);setDeleteScope('')}}>Cancel</button>
                       <button className="btn btn-danger btn-sm" disabled={!deleteScope} onClick={async()=>{
-                        if(pushUndo) pushUndo('Deleted: '+sel.title, tasks)
+                        if(pushUndo) pushUndo('Deleted: '+sel.title,tasks)
                         setTasks(prev=>prev.filter(t=>t.id!==sel.id))
                         if(isConfigured()) await supabase.from('tasks').delete().eq('id',sel.id)
                         setShowDeleteConfirm(false); setDeleteScope(''); setSelected(null)
-                      }}>Confirm Delete</button>
+                      }}>Confirm</button>
                     </div>
                   </div>
                 )}
@@ -1176,51 +1126,34 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           </div>
         </div>
       ) : (
-        <>
+        <div>
           <div className="ph">
             <div className="ph-top">
               <div>
                 <div className="ph-title">Tasks</div>
-                <div className="ph-sub">
-                  {user.role==='super_admin' ? (selectedOrg==='all' ? `All organisations · ${orgFiltered.length} tasks` : `${selectedOrg} · ${orgFiltered.length} tasks`) : `${visible.length} tasks · ${visible.filter(t=>t.compliance).length} compliance-critical`}
-                </div>
+                <div className="ph-sub">{user.role==='super_admin'?(selectedOrg==='all'?`All orgs · ${orgFiltered.length} tasks`:`${selectedOrg} · ${orgFiltered.length} tasks`):`${visible.length} tasks · ${visible.filter(t=>t.compliance).length} compliance`}</div>
               </div>
               <div style={{display:'flex',gap:8,alignItems:'center'}}>
-              <button className={'btn btn-sm '+(showArchive?'btn-primary':'btn-secondary')} onClick={()=>setShowArchive(!showArchive)}>📦 {showArchive?'Active Tasks':'Archive'}</button>
-              {canCreate&&(user.role==='super_admin' ? <div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:6,border:'1px solid rgba(245,158,11,.2)'}}>🔧 View only</div> : <button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}
-            </div>
+                <button className={'btn btn-sm '+(showArchive?'btn-primary':'btn-secondary')} onClick={()=>setShowArchive(!showArchive)}>📦 {showArchive?'Active':'Archive'}</button>
+                {canCreate&&(user.role==='super_admin'?<div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:6}}>🔧 View only</div>:<button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}
+              </div>
             </div>
             {user.role==='super_admin'&&(
               <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
-                <select
-                  className="form-input"
-                  value={selectedOrg}
-                  onChange={e=>{setSelectedOrg(e.target.value);setOrgSearch('')}}
-                  style={{fontSize:13,padding:'6px 10px',minWidth:200}}
-                >
+                <select className="form-input" value={selectedOrg} onChange={e=>{setSelectedOrg(e.target.value);setOrgSearch('')}} style={{fontSize:13,padding:'6px 10px',minWidth:200}}>
                   <option value="all">🏢 All Organisations ({allOrgs.length})</option>
-                  {allOrgs
-                    .filter(o=>!orgSearch||o.toLowerCase().includes(orgSearch.toLowerCase()))
-                    .map(o=><option key={o} value={o}>{o} ({tasks.filter(t=>t.org===o).length})</option>)
-                  }
+                  {allOrgs.filter(o=>!orgSearch||o.toLowerCase().includes(orgSearch.toLowerCase())).map(o=><option key={o} value={o}>{o} ({tasks.filter(t=>t.org===o).length})</option>)}
                 </select>
-                <input
-                  className="form-input"
-                  placeholder="Search organisations..."
-                  value={orgSearch}
-                  onChange={e=>setOrgSearch(e.target.value)}
-                  style={{fontSize:13,padding:'6px 10px',minWidth:180}}
-                />
-                {selectedOrg!=='all'&&<button className="btn btn-secondary btn-sm" onClick={()=>{setSelectedOrg('all');setOrgSearch('')}}>✕ Clear</button>}
+                <input className="form-input" placeholder="Search organisations..." value={orgSearch} onChange={e=>setOrgSearch(e.target.value)} style={{fontSize:13,padding:'6px 10px',minWidth:160}}/>
+                {selectedOrg!=='all'&&<button className="btn btn-secondary btn-sm" onClick={()=>{setSelectedOrg('all');setOrgSearch('')}}>✕</button>}
               </div>
             )}
           </div>
+
           {showArchive ? (
             <div className="anim">
               <div className="section">
                 <div className="section-title" style={{marginBottom:12}}>📦 Archive — Completed & Approved Tasks</div>
-
-                {/* Search Box */}
                 <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Search & Filter</div>
                   <div style={{display:'flex',flexDirection:'column',gap:8}}>
@@ -1235,35 +1168,35 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         {[...new Set(orgFiltered.map(t=>t.assigned_user_name).filter(Boolean))].sort().map(n=><option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
-                    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-                      <div style={{width:'100%'}}>
-                        <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6}}>📅 DATE RANGE</div>
-                        {(()=>{
-                          const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-                          const firstDay=new Date(calYear,calMonth,1).getDay()
-                          const daysInMonth=new Date(calYear,calMonth+1,0).getDate()
-                          const toKey=d=>{ const dt=new Date(calYear,calMonth,d); return dt.toISOString().split('T')[0] }
-                          const fmt=d=>d?new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'—'
-                          const inRange=d=>{ const k=toKey(d); return archiveDateFrom&&archiveDateTo&&k>archiveDateFrom&&k<archiveDateTo }
-                          return (
-                            <div>
-                              <div style={{display:'flex',gap:8,marginBottom:8}}>
-                                <div onClick={()=>setCalPicking('from')} style={{flex:1,padding:'8px 12px',borderRadius:8,border:'2px solid '+(calPicking==='from'?'var(--brand)':'var(--border)'),background:calPicking==='from'?'var(--brand-lt)':'var(--s3)',cursor:'pointer'}}>
-                                  <div style={{fontSize:9,color:'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>From</div>
-                                  <div style={{fontSize:13,fontWeight:700,color:archiveDateFrom?'var(--text)':'var(--t3)',marginTop:2}}>{archiveDateFrom?fmt(archiveDateFrom):'Tap to select'}</div>
-                                </div>
-                                <div style={{display:'flex',alignItems:'center',color:'var(--t3)',fontSize:16}}>→</div>
-                                <div onClick={()=>setCalPicking('to')} style={{flex:1,padding:'8px 12px',borderRadius:8,border:'2px solid '+(calPicking==='to'?'var(--brand)':'var(--border)'),background:calPicking==='to'?'var(--brand-lt)':'var(--s3)',cursor:'pointer'}}>
-                                  <div style={{fontSize:9,color:'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>To</div>
-                                  <div style={{fontSize:13,fontWeight:700,color:archiveDateTo?'var(--text)':'var(--t3)',marginTop:2}}>{archiveDateTo?fmt(archiveDateTo):'Tap to select'}</div>
-                                </div>
-                                {(archiveDateFrom||archiveDateTo)&&<button className="btn btn-secondary btn-sm" style={{alignSelf:'center'}} onClick={()=>{setArchiveDateFrom('');setArchiveDateTo('');setCalPicking('from')}}>✕</button>}
+                    <div style={{width:'100%'}}>
+                      <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6}}>📅 DATE RANGE</div>
+                      {(()=>{
+                        const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+                        const firstDay=new Date(calYear,calMonth,1).getDay()
+                        const daysInMonth=new Date(calYear,calMonth+1,0).getDate()
+                        const toKey=d=>new Date(calYear,calMonth,d).toISOString().split('T')[0]
+                        const fmt=d=>d?new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'—'
+                        const inRange=d=>{ const k=toKey(d); return archiveDateFrom&&archiveDateTo&&k>archiveDateFrom&&k<archiveDateTo }
+                        return (
+                          <div>
+                            <div style={{display:'flex',gap:8,marginBottom:8}}>
+                              <div onClick={()=>setCalPicking('from')} style={{flex:1,padding:'8px 12px',borderRadius:8,border:'2px solid '+(calPicking==='from'?'var(--brand)':'var(--border)'),background:calPicking==='from'?'var(--brand-lt)':'var(--s3)',cursor:'pointer'}}>
+                                <div style={{fontSize:9,color:'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>From</div>
+                                <div style={{fontSize:13,fontWeight:700,color:archiveDateFrom?'var(--text)':'var(--t3)',marginTop:2}}>{archiveDateFrom?fmt(archiveDateFrom):'Tap to select'}</div>
                               </div>
+                              <div style={{display:'flex',alignItems:'center',color:'var(--t3)',fontSize:18}}>→</div>
+                              <div onClick={()=>setCalPicking('to')} style={{flex:1,padding:'8px 12px',borderRadius:8,border:'2px solid '+(calPicking==='to'?'var(--brand)':'var(--border)'),background:calPicking==='to'?'var(--brand-lt)':'var(--s3)',cursor:'pointer'}}>
+                                <div style={{fontSize:9,color:'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>To</div>
+                                <div style={{fontSize:13,fontWeight:700,color:archiveDateTo?'var(--text)':'var(--t3)',marginTop:2}}>{archiveDateTo?fmt(archiveDateTo):'Tap to select'}</div>
+                              </div>
+                              {(archiveDateFrom||archiveDateTo)&&<button className="btn btn-secondary btn-sm" style={{alignSelf:'center'}} onClick={()=>{setArchiveDateFrom('');setArchiveDateTo('');setCalPicking('from')}}>✕</button>}
+                            </div>
+                            {calPicking&&(
                               <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:12}}>
                                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                                  <button className="btn btn-secondary btn-sm" onClick={()=>{ if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1)}else setCalMonth(m=>m-1) }}>‹</button>
+                                  <button className="btn btn-secondary btn-sm" onClick={()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1)}else setCalMonth(m=>m-1)}}>‹</button>
                                   <span style={{fontWeight:700,fontSize:13}}>{months[calMonth]} {calYear}</span>
-                                  <button className="btn btn-secondary btn-sm" onClick={()=>{ if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1)}else setCalMonth(m=>m+1) }}>›</button>
+                                  <button className="btn btn-secondary btn-sm" onClick={()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1)}else setCalMonth(m=>m+1)}}>›</button>
                                 </div>
                                 <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,marginBottom:4,textAlign:'center'}}>
                                   {['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={{fontSize:10,color:'var(--t2)',fontWeight:700,padding:'3px 0'}}>{d}</div>)}
@@ -1272,122 +1205,104 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                                   {Array.from({length:firstDay}).map((_,i)=><div key={'e'+i}/>)}
                                   {Array.from({length:daysInMonth},(_,i)=>i+1).map(d=>{
                                     const k=toKey(d)
-                                    const isFr=k===archiveDateFrom
-                                    const isTo=k===archiveDateTo
-                                    const inR=inRange(d)
+                                    const isFr=k===archiveDateFrom, isTo=k===archiveDateTo, inR=inRange(d)
                                     const isDisabled=calPicking==='to'&&archiveDateFrom&&k<archiveDateFrom
                                     return (
                                       <div key={d} onClick={()=>{
                                         if(isDisabled) return
-                                        if(calPicking==='from'){
-                                          setArchiveDateFrom(k)
-                                          setArchiveDateTo('')
-                                          setCalPicking('to') // auto-switch to To!
-                                        } else {
-                                          setArchiveDateTo(k)
-                                          setCalPicking(null) // done
-                                        }
-                                      }} style={{
-                                        textAlign:'center',padding:'7px 2px',borderRadius:6,fontSize:12,
-                                        cursor:isDisabled?'default':'pointer',
-                                        background:isFr||isTo?'var(--brand)':inR?'rgba(0,168,126,.15)':'transparent',
-                                        color:isFr||isTo?'#fff':isDisabled?'var(--t3)':'var(--text)',
-                                        fontWeight:isFr||isTo?700:400,
-                                        opacity:isDisabled?0.3:1,
-                                        transition:'background .1s'
-                                      }}>{d}</div>
+                                        if(calPicking==='from'){setArchiveDateFrom(k);setArchiveDateTo('');setCalPicking('to')}
+                                        else{setArchiveDateTo(k);setCalPicking(null)}
+                                      }} style={{textAlign:'center',padding:'7px 2px',borderRadius:6,fontSize:12,cursor:isDisabled?'default':'pointer',background:isFr||isTo?'var(--brand)':inR?'rgba(0,168,126,.15)':'transparent',color:isFr||isTo?'#fff':isDisabled?'var(--t3)':'var(--text)',fontWeight:isFr||isTo?700:400,opacity:isDisabled?0.3:1}}>{d}</div>
                                     )
                                   })}
                                 </div>
-                                <div style={{marginTop:8,textAlign:'center',fontSize:11,color:'var(--brand)',fontWeight:600}}>
-                                  {calPicking==='from'?'👆 Tap a day for start date':calPicking==='to'?'👆 Now tap end date':'✓ Range selected'}
-                                </div>
+                                <div style={{marginTop:8,textAlign:'center',fontSize:11,color:'var(--brand)',fontWeight:600}}>{calPicking==='from'?'👆 Tap start date':calPicking==='to'?'👆 Now tap end date':'✓ Done'}</div>
                               </div>
-                            </div>
-                          )
-                        })()}
-                      </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </div>
                     {(archiveSearch||archiveCategory||archiveWorker||archiveDateFrom||archiveDateTo)&&(
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:'var(--brand-lt)',borderRadius:6,border:'1px solid rgba(0,168,126,.2)'}}>
                         <span style={{fontSize:12,color:'var(--brand)',fontWeight:600}}>✓ Filters active</span>
-                        <button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveDateFrom('');setArchiveDateTo('')}}>✕ Clear All</button>
+                        <button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveDateFrom('');setArchiveDateTo('');setCalPicking('from')}}>✕ Clear All</button>
                       </div>
                     )}
                   </div>
                 </div>
-
-                {/* Results Box */}
                 <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 Results</div>
-                {(()=>{
-                  const archived = orgFiltered.filter(t=>{
-                    if(!['completed','approved','rejected'].includes(t.status)) return false
-                    if(archiveSearch && !t.title?.toLowerCase().includes(archiveSearch.toLowerCase()) && !t.assigned_user_name?.toLowerCase().includes(archiveSearch.toLowerCase())) return false
-                    if(archiveCategory && t.category!==archiveCategory) return false
-                    if(archiveWorker && t.assigned_user_name!==archiveWorker) return false
-                    if(archiveDateFrom && new Date(t.completed_at||t.created_at) < new Date(archiveDateFrom)) return false
-                    if(archiveDateTo && new Date(t.completed_at||t.created_at) > new Date(archiveDateTo+'T23:59:59')) return false
-                    return true
-                  }).sort((a,b)=>new Date(b.completed_at||b.created_at)-new Date(a.completed_at||a.created_at))
-                  const groups = {}
-                  archived.forEach(t=>{ const dept=t.department||t.category||'General'; if(!groups[dept]) groups[dept]=[]; groups[dept].push(t) })
-                  if(archived.length===0) return <div className="empty"><div className="empty-icon">📦</div><div style={{fontSize:14,fontWeight:700,marginBottom:6}}>No archived tasks</div><div className="empty-text">Completed and approved tasks will appear here.</div></div>
-                  return Object.keys(groups).sort().map(dept=>(
-                    <div key={dept} style={{marginBottom:14}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setArchiveCollapsed(prev=>({...prev,[dept]:!prev[dept]}))}>
-                        <span style={{fontSize:12,fontWeight:700,color:'var(--t2)',flex:1}}>{dept} <span style={{fontWeight:400}}>({groups[dept].length})</span></span>
-                        <span style={{fontSize:11,color:'var(--t2)'}}>{archiveCollapsed[dept]?'▶':'▼'}</span>
-                      </div>
-                      {!archiveCollapsed[dept]&&groups[dept].map(t=>(
-                        <div key={t.id} onClick={()=>setSelected(t.id)} style={{padding:'10px 14px',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:'pointer',display:'flex',gap:12,alignItems:'flex-start'}}>
-                          <div style={{flex:1}}>
-                            <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
-                            <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
-                              <span>👤 {t.assigned_user_name||'—'}</span>
-                              {t.completed_at&&<span>✅ {new Date(t.completed_at).toLocaleDateString('en-AU')}</span>}
-                              {t.due_date&&<span>📅 Due {t.due_date}</span>}
-                            </div>
-                          </div>
-                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='approved'?'rgba(16,185,129,.12)':t.status==='rejected'?'rgba(239,68,68,.12)':'var(--s3)',color:t.status==='approved'?'var(--green)':t.status==='rejected'?'var(--red)':'var(--t2)'}}>{t.status.replace('_',' ').toUpperCase()}</span>
+                  {(()=>{
+                    const archived=orgFiltered.filter(t=>{
+                      if(!['completed','approved','rejected'].includes(t.status)) return false
+                      if(archiveSearch&&!t.title?.toLowerCase().includes(archiveSearch.toLowerCase())&&!t.assigned_user_name?.toLowerCase().includes(archiveSearch.toLowerCase())) return false
+                      if(archiveCategory&&t.category!==archiveCategory) return false
+                      if(archiveWorker&&t.assigned_user_name!==archiveWorker) return false
+                      if(archiveDateFrom&&new Date(t.completed_at||t.created_at)<new Date(archiveDateFrom)) return false
+                      if(archiveDateTo&&new Date(t.completed_at||t.created_at)>new Date(archiveDateTo+'T23:59:59')) return false
+                      return true
+                    }).sort((a,b)=>new Date(b.completed_at||b.created_at)-new Date(a.completed_at||a.created_at))
+                    const groups={}
+                    archived.forEach(t=>{ const dept=t.department||t.category||'General'; if(!groups[dept]) groups[dept]=[]; groups[dept].push(t) })
+                    if(archived.length===0) return <div className="empty"><div className="empty-icon">📦</div><div className="empty-text">No archived tasks match your filters</div></div>
+                    return Object.keys(groups).sort().map(dept=>(
+                      <div key={dept} style={{marginBottom:14}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setArchiveCollapsed(prev=>({...prev,[dept]:!prev[dept]}))}>
+                          <span style={{fontSize:12,fontWeight:700,color:'var(--t2)',flex:1}}>{dept} ({groups[dept].length})</span>
+                          <span style={{fontSize:11,color:'var(--t2)'}}>{archiveCollapsed[dept]?'▶':'▼'}</span>
                         </div>
-                      ))}
-                    </div>
-                  ))
-                })()}
-                </div>{/* end results box */}
-              </div>{/* end section */}
+                        {!archiveCollapsed[dept]&&groups[dept].map(t=>(
+                          <div key={t.id} onClick={()=>setSelected(t.id)} style={{padding:'10px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:'pointer',display:'flex',gap:12,alignItems:'flex-start'}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
+                              <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
+                                <span>👤 {t.assigned_user_name||'—'}</span>
+                                {t.completed_at&&<span>✅ {new Date(t.completed_at).toLocaleDateString('en-AU')}</span>}
+                                {t.due_date&&<span>📅 {t.due_date}</span>}
+                              </div>
+                            </div>
+                            <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='approved'?'rgba(16,185,129,.12)':t.status==='rejected'?'rgba(239,68,68,.12)':'var(--s3)',color:t.status==='approved'?'var(--green)':t.status==='rejected'?'var(--red)':'var(--t2)'}}>{t.status.replace('_',' ').toUpperCase()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  })()}
+                </div>
+              </div>
             </div>
           ) : (
-            <>
-            <div className="filter-bar">
-            {['all','pending','in_progress','awaiting_review','rejected','completed','overdue','escalated'].map(f=>(
-              <button key={f} className={"fb "+(filter===f?'active':'')} onClick={()=>setFilter(f)}>
-                {f==='all'?'All':(STATUS_CFG[f]?.label||f)} <span style={{opacity:.6}}>({f==='all'?orgFiltered.length:f==='escalated'?orgFiltered.filter(t=>t.escalation).length:orgFiltered.filter(t=>t.status===f).length})</span>
-              </button>
-            ))}
-          </div>
-          {filtered.length===0
-            ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>
-            : (()=>{
-                const groups = {}
-                filtered.forEach(t=>{ const dept=t.department||t.category||'General'; if(!groups[dept]) groups[dept]=[]; groups[dept].push(t) })
-                const depts = Object.keys(groups).sort()
-                if(depts.length<=1) return filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
-                return depts.map(dept=>(
-                  <div key={dept} style={{marginBottom:16}}>
-                    <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',padding:'4px 0',borderBottom:'1px solid var(--border)',marginBottom:8}}>{dept} <span style={{fontWeight:400,color:'var(--t3)'}}>({groups[dept].length})</span></div>
-                    {groups[dept].map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                  </div>
-                ))
-              })()
-          }
-            </>
+            <div>
+              <div className="filter-bar">
+                {['all','pending','in_progress','awaiting_review','rejected','completed','overdue','escalated'].map(f=>(
+                  <button key={f} className={"fb "+(filter===f?'active':'')} onClick={()=>setFilter(f)}>
+                    {f==='all'?'All':(STATUS_CFG[f]?.label||f)} <span style={{opacity:.6}}>({f==='all'?orgFiltered.length:f==='escalated'?orgFiltered.filter(t=>t.escalation).length:orgFiltered.filter(t=>t.status===f).length})</span>
+                  </button>
+                ))}
+              </div>
+              {filtered.length===0
+                ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>
+                : (()=>{
+                    const groups={}
+                    filtered.forEach(t=>{ const dept=t.department||t.category||'General'; if(!groups[dept]) groups[dept]=[]; groups[dept].push(t) })
+                    const depts=Object.keys(groups).sort()
+                    if(depts.length<=1) return filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
+                    return depts.map(dept=>(
+                      <div key={dept} style={{marginBottom:16}}>
+                        <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',padding:'4px 0',borderBottom:'1px solid var(--border)',marginBottom:8}}>{dept} <span style={{fontWeight:400,color:'var(--t3)'}}>({groups[dept].length})</span></div>
+                        {groups[dept].map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                      </div>
+                    ))
+                  })()
+              }
+            </div>
           )}
-        </>
+        </div>
       )}
     </div>
   )
 }
+
 
 function EscalationsView({ tasks, setTasks, user }) {
   const esc = tasks.filter(t=>t.escalation||t.status==='overdue'||t.status==='escalated')
