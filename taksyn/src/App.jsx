@@ -1711,6 +1711,8 @@ function UsersView({ user }) {
   const [realUsers, setRealUsers] = useState([])
   const [editingUser, setEditingUser] = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [userSearch, setUserSearch] = useState('')
+  const [collapsedRoles, setCollapsedRoles] = useState({})
 
   useEffect(()=>{
     if(!isConfigured()) return
@@ -1879,10 +1881,26 @@ function UsersView({ user }) {
       )}
       <div className="ph"><div className="ph-top"><div><div className="ph-title">Team Members</div><div className="ph-sub">Manage staff access and roles</div></div><button className="btn btn-primary" onClick={()=>setShowInvite(true)}><IC n="plus" s={13}/> Invite</button></div></div>
       <div className="section">
-        <div className="section-title">Active Users ({realUsers.length})</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div className="section-title" style={{margin:0}}>Active Users ({realUsers.length})</div>
+          <input className="form-input" placeholder="Search by name or role..." value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{fontSize:12,padding:'5px 10px',maxWidth:220}}/>
+        </div>
         {realUsers.length===0
           ? <div style={{fontSize:13,color:'var(--t2)'}}>No users yet. Invite staff or ask them to sign up at taksyn.vercel.app</div>
-          : realUsers.map((u,i)=>(
+          : (() => {
+              const filtered = [...realUsers]
+                .filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())||u.role?.toLowerCase().includes(userSearch.toLowerCase()))
+                .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+              const groups = {}
+              filtered.forEach(u=>{ const r=u.role||'worker'; if(!groups[r]) groups[r]=[]; groups[r].push(u) })
+              const roleOrder = ['client_admin','manager','supervisor','worker']
+              return roleOrder.filter(r=>groups[r]?.length).map(role=>(
+                <div key={role} style={{marginBottom:12}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setCollapsedRoles(prev=>({...prev,[role]:!prev[role]}))}>
+                    <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>{ROLE_LABELS[role]} ({groups[role].length})</span>
+                    <span style={{fontSize:12,color:'var(--t2)'}}>{collapsedRoles[role]?'▶':'▼'}</span>
+                  </div>
+                  {!collapsedRoles[role]&&groups[role].map((u,i)=>(
             <div key={i} className="user-row" style={{flexWrap:'wrap',gap:8}}>
               <Avatar name={u.name} role={u.role} size={34} avatarUrl={u.avatar_url}/>
               <div className="user-info" style={{flex:1}}>
@@ -1894,7 +1912,10 @@ function UsersView({ user }) {
               {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||''}) }}>✏️ Edit</button>}
               {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
             </div>
-          ))
+          ))}
+        </div>
+      ))
+    })()
         }
       </div>
       <div className="section">
