@@ -699,6 +699,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
 
   useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
+  useEffect(()=>{
+    if(isConfigured()&&user.org) {
+      supabase.from('organisations').select('custom_departments').eq('name',user.org).single()
+        .then(({data})=>{ if(data?.custom_departments) setOrgCustomDepts(JSON.parse(data.custom_departments||'[]')) })
+        .catch(()=>{})
+    }
+  },[user.org])
 
   const visible = visibleTasks(tasks, user)
   // Super admin: filter by selected org
@@ -1708,6 +1715,9 @@ function UsersView({ user }) {
   const [inviteName, setInviteName] = useState('')
   const [inviteMethod, setInviteMethod] = useState('email')
   const [inviteOrg, setInviteOrg] = useState('')
+  const [inviteIndustry, setInviteIndustry] = useState('')
+  const [inviteDept, setInviteDept] = useState('')
+  const [inviteCustomDept, setInviteCustomDept] = useState('')
   const [realUsers, setRealUsers] = useState([])
   const [editingUser, setEditingUser] = useState(null)
   const [editForm, setEditForm] = useState({})
@@ -1794,12 +1804,19 @@ function UsersView({ user }) {
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg, secret: import.meta.env.VITE_INVITE_SECRET || '' })
+        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg, industry: inviteIndustry, department: inviteDept==='__custom__'?inviteCustomDept:inviteDept, secret: import.meta.env.VITE_INVITE_SECRET || '' })
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
-      alert('Invite email sent to '+inviteEmail+'!')
-      setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg('')
+      alert('Invite sent to '+inviteEmail+'!')
+      // Save custom department to org if added
+      if(inviteDept==='__custom__'&&inviteCustomDept.trim()&&inviteIndustry&&isConfigured()) {
+        const newDept = {name:inviteCustomDept.trim(),industry:inviteIndustry}
+        const updatedDepts = [...orgCustomDepts,newDept]
+        setOrgCustomDepts(updatedDepts)
+        supabase.from('organisations').update({custom_departments:JSON.stringify(updatedDepts)}).eq('name',targetOrg).then(()=>{})
+      }
+      setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg(''); setInviteIndustry(''); setInviteDept(''); setInviteCustomDept('')
     } catch(e) {
       alert('Failed to send invite: '+e.message)
     }
@@ -1843,7 +1860,8 @@ function UsersView({ user }) {
                 <label className="form-label">Department / Position</label>
                 <select className="form-input" value={editForm.department||''} onChange={e=>setEditForm({...editForm,department:e.target.value})}>
                   <option value="">— Select department —</option>
-                  {(DEPARTMENTS[editForm.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
+                  {[...(DEPARTMENTS[editForm.industry||'General']||DEPARTMENTS.General),...orgCustomDepts.filter(d=>d.industry===(editForm.industry||'General')).map(d=>d.name)].map(d=><option key={d} value={d}>{d}</option>)}
+                  <option value="__custom__">+ Add custom position...</option>
                 </select>
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
@@ -1864,6 +1882,9 @@ function UsersView({ user }) {
               <div className="form-field"><label className="form-label">Email Address</label><input className="form-input" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="emma@yourorg.com"/></div>
               <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
               {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
+              <div className="form-field"><label className="form-label">Industry</label><select className="form-input" value={inviteIndustry} onChange={e=>{setInviteIndustry(e.target.value);setInviteDept('');setInviteCustomDept('')}}><option value="">— Select industry —</option>{Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}</select></div>
+              {inviteIndustry&&<div className="form-field"><label className="form-label">Department / Position</label><select className="form-input" value={inviteDept} onChange={e=>setInviteDept(e.target.value)}><option value="">— Select department —</option>{[...(DEPARTMENTS[inviteIndustry]||[]),...orgCustomDepts.filter(d=>d.industry===inviteIndustry).map(d=>d.name)].map(d=><option key={d} value={d}>{d}</option>)}<option value="__custom__">+ Add custom position...</option></select></div>}
+              {inviteDept==='__custom__'&&<div className="form-field"><label className="form-label">Custom Position <span style={{fontSize:10,color:'var(--t2)'}}>— will be saved to this org</span></label><input className="form-input" value={inviteCustomDept} onChange={e=>setInviteCustomDept(e.target.value)} placeholder="e.g. Night Shift Supervisor"/></div>}
               <div className="form-field">
                 <label className="form-label">Send Via</label>
                 <div style={{display:'flex',gap:8}}>
