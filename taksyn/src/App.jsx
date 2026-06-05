@@ -699,13 +699,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
 
   useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
-  useEffect(()=>{
-    if(isConfigured()&&user.org) {
-      supabase.from('organisations').select('custom_departments').eq('name',user.org).single()
-        .then(({data})=>{ if(data?.custom_departments) setOrgCustomDepts(JSON.parse(data.custom_departments||'[]')) })
-        .catch(()=>{})
-    }
-  },[user.org])
+
 
   const visible = visibleTasks(tasks, user)
   // Super admin: filter by selected org
@@ -1723,6 +1717,15 @@ function UsersView({ user }) {
   const [editForm, setEditForm] = useState({})
   const [userSearch, setUserSearch] = useState('')
   const [collapsedRoles, setCollapsedRoles] = useState({})
+  const [orgCustomDepts, setOrgCustomDepts] = useState([])
+
+  useEffect(()=>{
+    if(isConfigured()&&user.org) {
+      supabase.from('organisations').select('custom_departments').eq('name',user.org).single()
+        .then(({data})=>{ if(data?.custom_departments) setOrgCustomDepts(JSON.parse(data.custom_departments||'[]')) })
+        .catch(()=>{})
+    }
+  },[user.org])
 
   useEffect(()=>{
     if(!isConfigured()) return
