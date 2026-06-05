@@ -678,6 +678,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [filter, setFilter] = useState('all')
   const [selectedOrg, setSelectedOrg] = useState('all')
   const [orgSearch, setOrgSearch] = useState('')
+  const [showArchive, setShowArchive] = useState(false)
+  const [archiveSearch, setArchiveSearch] = useState('')
+  const [archiveDateFrom, setArchiveDateFrom] = useState('')
+  const [archiveDateTo, setArchiveDateTo] = useState('')
+  const [archiveWorker, setArchiveWorker] = useState('')
+  const [archiveCategory, setArchiveCategory] = useState('')
+  const [archiveCollapsed, setArchiveCollapsed] = useState({})
   const [orgsList, setOrgsList] = useState([])
   const [selected, setSelected] = useState(null)
   const [comment, setComment] = useState('')
@@ -1174,7 +1181,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   {user.role==='super_admin' ? (selectedOrg==='all' ? `All organisations · ${orgFiltered.length} tasks` : `${selectedOrg} · ${orgFiltered.length} tasks`) : `${visible.length} tasks · ${visible.filter(t=>t.compliance).length} compliance-critical`}
                 </div>
               </div>
-              {canCreate&&(user.role==='super_admin' ? <div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:6,border:'1px solid rgba(245,158,11,.2)'}}>🔧 View only — use intervention to edit</div> : <button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <button className={'btn btn-sm '+(showArchive?'btn-primary':'btn-secondary')} onClick={()=>setShowArchive(!showArchive)}>📦 {showArchive?'Active Tasks':'Archive'}</button>
+              {canCreate&&(user.role==='super_admin' ? <div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:6,border:'1px solid rgba(245,158,11,.2)'}}>🔧 View only</div> : <button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}
+            </div>
             </div>
             {user.role==='super_admin'&&(
               <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
@@ -1201,7 +1211,63 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               </div>
             )}
           </div>
-          <div className="filter-bar">
+          {showArchive ? (
+            <div className="anim">
+              <div className="section">
+                <div className="section-title" style={{marginBottom:12}}>📦 Archive — Completed & Approved Tasks</div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                  <input className="form-input" placeholder="Search task or worker..." value={archiveSearch} onChange={e=>setArchiveSearch(e.target.value)} style={{flex:2,minWidth:160,fontSize:12}}/>
+                  <select className="form-input" value={archiveCategory} onChange={e=>setArchiveCategory(e.target.value)} style={{fontSize:12,minWidth:130}}>
+                    <option value="">All Categories</option>
+                    {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
+                  </select>
+                  <select className="form-input" value={archiveWorker} onChange={e=>setArchiveWorker(e.target.value)} style={{fontSize:12,minWidth:130}}>
+                    <option value="">All Workers</option>
+                    {[...new Set(orgFiltered.map(t=>t.assigned_user_name).filter(Boolean))].sort().map(n=><option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <input type="date" className="form-input" value={archiveDateFrom} onChange={e=>setArchiveDateFrom(e.target.value)} style={{fontSize:12}} title="From date"/>
+                  <input type="date" className="form-input" value={archiveDateTo} onChange={e=>setArchiveDateTo(e.target.value)} style={{fontSize:12}} title="To date"/>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveDateFrom('');setArchiveDateTo('')}}>↺ Clear</button>
+                </div>
+                {(()=>{
+                  const archived = orgFiltered.filter(t=>{
+                    if(!['completed','approved','rejected'].includes(t.status)) return false
+                    if(archiveSearch && !t.title?.toLowerCase().includes(archiveSearch.toLowerCase()) && !t.assigned_user_name?.toLowerCase().includes(archiveSearch.toLowerCase())) return false
+                    if(archiveCategory && t.category!==archiveCategory) return false
+                    if(archiveWorker && t.assigned_user_name!==archiveWorker) return false
+                    if(archiveDateFrom && new Date(t.completed_at||t.created_at) < new Date(archiveDateFrom)) return false
+                    if(archiveDateTo && new Date(t.completed_at||t.created_at) > new Date(archiveDateTo+'T23:59:59')) return false
+                    return true
+                  }).sort((a,b)=>new Date(b.completed_at||b.created_at)-new Date(a.completed_at||a.created_at))
+                  const groups = {}
+                  archived.forEach(t=>{ const dept=t.department||t.category||'General'; if(!groups[dept]) groups[dept]=[]; groups[dept].push(t) })
+                  if(archived.length===0) return <div className="empty"><div className="empty-icon">📦</div><div style={{fontSize:14,fontWeight:700,marginBottom:6}}>No archived tasks</div><div className="empty-text">Completed and approved tasks will appear here.</div></div>
+                  return Object.keys(groups).sort().map(dept=>(
+                    <div key={dept} style={{marginBottom:14}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setArchiveCollapsed(prev=>({...prev,[dept]:!prev[dept]}))}>
+                        <span style={{fontSize:12,fontWeight:700,color:'var(--t2)',flex:1}}>{dept} <span style={{fontWeight:400}}>({groups[dept].length})</span></span>
+                        <span style={{fontSize:11,color:'var(--t2)'}}>{archiveCollapsed[dept]?'▶':'▼'}</span>
+                      </div>
+                      {!archiveCollapsed[dept]&&groups[dept].map(t=>(
+                        <div key={t.id} onClick={()=>setSelected(t.id)} style={{padding:'10px 14px',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:'pointer',display:'flex',gap:12,alignItems:'flex-start'}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
+                            <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
+                              <span>👤 {t.assigned_user_name||'—'}</span>
+                              {t.completed_at&&<span>✅ {new Date(t.completed_at).toLocaleDateString('en-AU')}</span>}
+                              {t.due_date&&<span>📅 Due {t.due_date}</span>}
+                            </div>
+                          </div>
+                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='approved'?'rgba(16,185,129,.12)':t.status==='rejected'?'rgba(239,68,68,.12)':'var(--s3)',color:t.status==='approved'?'var(--green)':t.status==='rejected'?'var(--red)':'var(--t2)'}}>{t.status.replace('_',' ').toUpperCase()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                })()}
+              </div>
+            </div>
+          ) : (
+            <div className="filter-bar">
             {['all','pending','in_progress','awaiting_review','rejected','completed','overdue','escalated'].map(f=>(
               <button key={f} className={"fb "+(filter===f?'active':'')} onClick={()=>setFilter(f)}>
                 {f==='all'?'All':(STATUS_CFG[f]?.label||f)} <span style={{opacity:.6}}>({f==='all'?orgFiltered.length:f==='escalated'?orgFiltered.filter(t=>t.escalation).length:orgFiltered.filter(t=>t.status===f).length})</span>
@@ -1213,6 +1279,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             : filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
           }
         </>
+          )}
       )}
     </div>
   )
