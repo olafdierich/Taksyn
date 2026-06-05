@@ -124,7 +124,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .sb-user-info{overflow:hidden;transition:opacity .2s,width .2s}
 .sidebar.collapsed .sb-user-info{opacity:0;width:0}
 .sb-logout{width:100%;margin-top:6px;padding:7px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-.content{flex:1;overflow-y:auto;padding:20px}
+.content{flex:1;overflow-y:auto;padding:20px;-webkit-overflow-scrolling:touch}
 @media(max-width:768px){.content{padding:14px}}
 .ph{margin-bottom:20px}
 .ph-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -2533,19 +2533,10 @@ export default function App() {
     loadAuditLog()
   }
 
-  // Prevent pull-to-refresh on iOS Safari
+  // Prevent pull-to-refresh on iOS Safari only at very top
   useEffect(()=>{
-    let lastY = 0
-    const preventPull = (e) => {
-      const y = e.touches[0].clientY
-      const scrollable = e.target.closest('.content,.anim,[class*="scroll"]')
-      const atTop = !scrollable || scrollable.scrollTop === 0
-      if (atTop && y > lastY) e.preventDefault()
-      lastY = y
-    }
-    document.addEventListener('touchstart', e=>{ lastY = e.touches[0]?.clientY||0 }, {passive:true})
-    document.addEventListener('touchmove', preventPull, {passive:false})
-    return ()=>{ document.removeEventListener('touchmove', preventPull) }
+    document.body.style.overscrollBehaviorY = 'none'
+    return ()=>{ document.body.style.overscrollBehaviorY = '' }
   },[])
 
   useEffect(()=>{
