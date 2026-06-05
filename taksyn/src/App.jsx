@@ -1215,30 +1215,41 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             <div className="anim">
               <div className="section">
                 <div className="section-title" style={{marginBottom:12}}>📦 Archive — Completed & Approved Tasks</div>
-                <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:12}}>
-                  <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                    <input className="form-input" placeholder="🔍 Search task name or worker..." value={archiveSearch} onChange={e=>setArchiveSearch(e.target.value)} style={{flex:2,minWidth:200,fontSize:12}}/>
-                    <select className="form-input" value={archiveCategory} onChange={e=>setArchiveCategory(e.target.value)} style={{fontSize:12,minWidth:140}}>
-                      <option value="">All Categories</option>
-                      {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
-                    </select>
-                    <select className="form-input" value={archiveWorker} onChange={e=>setArchiveWorker(e.target.value)} style={{fontSize:12,minWidth:140}}>
-                      <option value="">All Workers</option>
-                      {[...new Set(orgFiltered.map(t=>t.assigned_user_name).filter(Boolean))].sort().map(n=><option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </div>
-                  <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:6,padding:'6px 10px'}}>
-                      <span style={{fontSize:11,color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>📅 From</span>
-                      <input type="date" value={archiveDateFrom} onChange={e=>setArchiveDateFrom(e.target.value)} style={{fontSize:12,border:'none',background:'transparent',outline:'none',color:'var(--text)',fontFamily:'inherit'}}/>
+
+                {/* Search Box */}
+                <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Search & Filter</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    <input className="form-input" placeholder="Search task name or worker..." value={archiveSearch} onChange={e=>setArchiveSearch(e.target.value)} style={{fontSize:12}}/>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                      <select className="form-input" value={archiveCategory} onChange={e=>setArchiveCategory(e.target.value)} style={{fontSize:12,flex:1,minWidth:130}}>
+                        <option value="">All Categories</option>
+                        {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
+                      </select>
+                      <select className="form-input" value={archiveWorker} onChange={e=>setArchiveWorker(e.target.value)} style={{fontSize:12,flex:1,minWidth:130}}>
+                        <option value="">All Workers</option>
+                        {[...new Set(orgFiltered.map(t=>t.assigned_user_name).filter(Boolean))].sort().map(n=><option key={n} value={n}>{n}</option>)}
+                      </select>
                     </div>
-                    <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:6,padding:'6px 10px'}}>
-                      <span style={{fontSize:11,color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>📅 To</span>
-                      <input type="date" value={archiveDateTo} onChange={e=>setArchiveDateTo(e.target.value)} style={{fontSize:12,border:'none',background:'transparent',outline:'none',color:'var(--text)',fontFamily:'inherit'}}/>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:'1px solid var(--border)',borderRadius:6,padding:'6px 10px',flex:1}}>
+                        <span style={{fontSize:11,color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>📅 From</span>
+                        <input type="date" value={archiveDateFrom} onChange={e=>setArchiveDateFrom(e.target.value)} style={{fontSize:12,border:'none',background:'transparent',outline:'none',color:'var(--text)',fontFamily:'inherit',flex:1}}/>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:'1px solid var(--border)',borderRadius:6,padding:'6px 10px',flex:1}}>
+                        <span style={{fontSize:11,color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>📅 To</span>
+                        <input type="date" value={archiveDateTo} onChange={e=>setArchiveDateTo(e.target.value)} style={{fontSize:12,border:'none',background:'transparent',outline:'none',color:'var(--text)',fontFamily:'inherit',flex:1}}/>
+                      </div>
+                      {(archiveSearch||archiveCategory||archiveWorker||archiveDateFrom||archiveDateTo)&&
+                        <button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveDateFrom('');setArchiveDateTo('')}}>✕ Clear All</button>
+                      }
                     </div>
-                    {(archiveSearch||archiveCategory||archiveWorker||archiveDateFrom||archiveDateTo)&&<button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveDateFrom('');setArchiveDateTo('')}}>✕ Clear All</button>}
                   </div>
                 </div>
+
+                {/* Results Box */}
+                <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 Results</div>
                 {(()=>{
                   const archived = orgFiltered.filter(t=>{
                     if(!['completed','approved','rejected'].includes(t.status)) return false
@@ -1274,7 +1285,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     </div>
                   ))
                 })()}
-              </div>
+                </div>{/* end results box */}
+              </div>{/* end section */}
             </div>
           ) : (
             <div>
