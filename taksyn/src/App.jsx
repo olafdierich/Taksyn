@@ -1839,7 +1839,7 @@ function UsersView({ user }) {
             const p = profiles?.find(p=>p.id===m.user_id) || {}
             return {...p, id:m.user_id, role:m.role, org:m.org, tier:m.tier}
           })
-          setRealUsers(merged.map(m=>({...m, email:profiles?.find(p=>p.id===m.user_id)?.email||m.email||''})))ealUsers(merged)
+          setRealUsers(merged)
         })
     }
   },[])
