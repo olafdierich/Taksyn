@@ -1170,65 +1170,66 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     </div>
                     <div style={{width:'100%'}}>
                       <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6}}>📅 DATE RANGE</div>
-                      {(()=>{
-                        const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-                        const allMonths=['January','February','March','April','May','June','July','August','September','October','November','December']
-                        const firstDay=new Date(calYear,calMonth,1).getDay()
-                        const daysInMonth=new Date(calYear,calMonth+1,0).getDate()
-                        const toKey=d=>new Date(calYear,calMonth,d).toISOString().split('T')[0]
-                        const fmt=d=>d?new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'—'
-                        const inRange=d=>{ const k=toKey(d); return archiveDateFrom&&archiveDateTo&&k>archiveDateFrom&&k<archiveDateTo }
-                        const years=Array.from({length:10},(_,i)=>new Date().getFullYear()-i)
-                        return (
-                          <div>
-                            <div style={{display:'flex',gap:6,marginBottom:8}}>
-                              <div onClick={()=>setCalPicking('from')} style={{flex:1,padding:'6px 10px',borderRadius:8,border:'2px solid '+(calPicking==='from'?'var(--brand)':'var(--border)'),background:calPicking==='from'?'var(--brand-lt)':'var(--s3)',cursor:'pointer'}}>
-                                <div style={{fontSize:9,color:'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>From</div>
-                                <div style={{fontSize:12,fontWeight:700,color:archiveDateFrom?'var(--text)':'var(--t3)',marginTop:1}}>{archiveDateFrom?fmt(archiveDateFrom):'Select'}</div>
-                              </div>
-                              <div style={{display:'flex',alignItems:'center',color:'var(--t3)',fontSize:14,padding:'0 2px'}}>→</div>
-                              <div onClick={()=>setCalPicking('to')} style={{flex:1,padding:'6px 10px',borderRadius:8,border:'2px solid '+(calPicking==='to'?'var(--brand)':'var(--border)'),background:calPicking==='to'?'var(--brand-lt)':'var(--s3)',cursor:'pointer'}}>
-                                <div style={{fontSize:9,color:'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>To</div>
-                                <div style={{fontSize:12,fontWeight:700,color:archiveDateTo?'var(--text)':'var(--t3)',marginTop:1}}>{archiveDateTo?fmt(archiveDateTo):'Select'}</div>
-                              </div>
-                              {(archiveDateFrom||archiveDateTo)&&<button className="btn btn-secondary btn-sm" style={{alignSelf:'center',padding:'4px 8px'}} onClick={()=>{setArchiveDateFrom('');setArchiveDateTo('');setCalPicking('from')}}>✕</button>}
-                            </div>
-                            {calPicking&&(
-                              <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:10}}>
-                                <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:8}}>
-                                  <button style={{background:'none',border:'1px solid var(--border)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:14,color:'var(--t2)'}} onClick={()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1)}else setCalMonth(m=>m-1)}}>‹</button>
-                                  <select value={calMonth} onChange={e=>setCalMonth(+e.target.value)} style={{flex:1,fontSize:12,fontWeight:700,border:'1px solid var(--border)',borderRadius:6,padding:'4px 6px',background:'var(--s3)',cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
-                                    {allMonths.map((m,i)=><option key={i} value={i}>{m}</option>)}
-                                  </select>
-                                  <select value={calYear} onChange={e=>setCalYear(+e.target.value)} style={{fontSize:12,fontWeight:700,border:'1px solid var(--border)',borderRadius:6,padding:'4px 6px',background:'var(--s3)',cursor:'pointer',outline:'none',fontFamily:'inherit',width:70}}>
-                                    {years.map(y=><option key={y} value={y}>{y}</option>)}
-                                  </select>
-                                  <button style={{background:'none',border:'1px solid var(--border)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:14,color:'var(--t2)'}} onClick={()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1)}else setCalMonth(m=>m+1)}}>›</button>
-                                </div>
-                                <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,marginBottom:3,textAlign:'center'}}>
-                                  {['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={{fontSize:9,color:'var(--t2)',fontWeight:700,padding:'2px 0'}}>{d}</div>)}
-                                </div>
-                                <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1}}>
-                                  {Array.from({length:firstDay}).map((_,i)=><div key={'e'+i}/>)}
-                                  {Array.from({length:daysInMonth},(_,i)=>i+1).map(d=>{
-                                    const k=toKey(d)
-                                    const isFr=k===archiveDateFrom, isTo=k===archiveDateTo, inR=inRange(d)
-                                    const isDisabled=calPicking==='to'&&archiveDateFrom&&k<archiveDateFrom
-                                    return (
-                                      <div key={d} onClick={()=>{
-                                        if(isDisabled) return
-                                        if(calPicking==='from'){setArchiveDateFrom(k);setArchiveDateTo('');setCalPicking('to')}
-                                        else{setArchiveDateTo(k);setCalPicking(null)}
-                                      }} style={{textAlign:'center',padding:'5px 1px',borderRadius:5,fontSize:11,cursor:isDisabled?'default':'pointer',background:isFr||isTo?'var(--brand)':inR?'rgba(0,168,126,.15)':'transparent',color:isFr||isTo?'#fff':isDisabled?'var(--t3)':'var(--text)',fontWeight:isFr||isTo?700:400,opacity:isDisabled?0.3:1}}>{d}</div>
-                                    )
-                                  })}
-                                </div>
-                                <div style={{marginTop:6,textAlign:'center',fontSize:10,color:'var(--brand)',fontWeight:600}}>{calPicking==='from'?'Tap start date':calPicking==='to'?'Now tap end date':'✓ Done'}</div>
-                              </div>
-                            )}
+                      <div style={{display:'flex',gap:6}}>
+                        <div onClick={()=>setCalPicking('from')} style={{flex:1,padding:'6px 10px',borderRadius:8,border:'2px solid '+(calPicking==='from'?'var(--brand)':'var(--border)'),background:calPicking==='from'?'var(--brand-lt)':'var(--s3)',cursor:'pointer'}}>
+                          <div style={{fontSize:9,color:'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>From</div>
+                          <div style={{fontSize:12,fontWeight:700,color:archiveDateFrom?'var(--text)':'var(--t3)',marginTop:1}}>
+                            {archiveDateFrom?new Date(archiveDateFrom+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'Tap to set'}
                           </div>
-                        )
-                      })()}
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',color:'var(--t3)',fontSize:14}}>→</div>
+                        <div onClick={()=>setCalPicking('to')} style={{flex:1,padding:'6px 10px',borderRadius:8,border:'2px solid '+(calPicking==='to'?'var(--brand)':'var(--border)'),background:calPicking==='to'?'var(--brand-lt)':'var(--s3)',cursor:'pointer'}}>
+                          <div style={{fontSize:9,color:'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>To</div>
+                          <div style={{fontSize:12,fontWeight:700,color:archiveDateTo?'var(--text)':'var(--t3)',marginTop:1}}>
+                            {archiveDateTo?new Date(archiveDateTo+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'Tap to set'}
+                          </div>
+                        </div>
+                        {(archiveDateFrom||archiveDateTo)&&<button className="btn btn-secondary btn-sm" style={{alignSelf:'center'}} onClick={()=>{setArchiveDateFrom('');setArchiveDateTo('');setCalPicking(null)}}>✕</button>}
+                      </div>
+                      {calPicking&&(
+                        <div style={{position:'fixed',inset:0,zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,.4)',backdropFilter:'blur(2px)'}} onClick={()=>setCalPicking(null)}>
+                          <div style={{background:'#fff',borderRadius:16,padding:16,width:300,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}} onClick={e=>e.stopPropagation()}>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                              <div style={{fontSize:13,fontWeight:700,color:calPicking==='from'?'var(--brand)':'#8B5CF6'}}>
+                                {calPicking==='from'?'📅 Select Start Date':'📅 Select End Date'}
+                              </div>
+                              <button style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:'var(--t2)',lineHeight:1}} onClick={()=>setCalPicking(null)}>×</button>
+                            </div>
+                            <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:10}}>
+                              <button style={{background:'none',border:'1px solid var(--border)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:14,color:'var(--t2)'}} onClick={()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1)}else setCalMonth(m=>m-1)}}>‹</button>
+                              <select value={calMonth} onChange={e=>setCalMonth(+e.target.value)} style={{flex:1,fontSize:12,fontWeight:700,border:'1px solid var(--border)',borderRadius:6,padding:'5px 6px',background:'var(--s3)',cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+                                {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m,i)=><option key={i} value={i}>{m}</option>)}
+                              </select>
+                              <select value={calYear} onChange={e=>setCalYear(+e.target.value)} style={{fontSize:12,fontWeight:700,border:'1px solid var(--border)',borderRadius:6,padding:'5px 6px',background:'var(--s3)',cursor:'pointer',outline:'none',fontFamily:'inherit',width:72}}>
+                                {Array.from({length:10},(_,i)=>new Date().getFullYear()-i).map(y=><option key={y} value={y}>{y}</option>)}
+                              </select>
+                              <button style={{background:'none',border:'1px solid var(--border)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:14,color:'var(--t2)'}} onClick={()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1)}else setCalMonth(m=>m+1)}}>›</button>
+                            </div>
+                            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4,textAlign:'center'}}>
+                              {['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={{fontSize:10,color:'var(--t2)',fontWeight:700,padding:'2px 0'}}>{d}</div>)}
+                            </div>
+                            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+                              {Array.from({length:new Date(calYear,calMonth,1).getDay()}).map((_,i)=><div key={'e'+i}/>)}
+                              {Array.from({length:new Date(calYear,calMonth+1,0).getDate()},(_,i)=>i+1).map(d=>{
+                                const k=new Date(calYear,calMonth,d).toISOString().split('T')[0]
+                                const isFr=k===archiveDateFrom, isTo=k===archiveDateTo
+                                const inR=archiveDateFrom&&archiveDateTo&&k>archiveDateFrom&&k<archiveDateTo
+                                const isDisabled=calPicking==='to'&&archiveDateFrom&&k<archiveDateFrom
+                                return (
+                                  <div key={d} onClick={()=>{
+                                    if(isDisabled) return
+                                    if(calPicking==='from'){setArchiveDateFrom(k);setArchiveDateTo('');setCalPicking('to')}
+                                    else{setArchiveDateTo(k);setCalPicking(null)}
+                                  }} style={{textAlign:'center',padding:'7px 2px',borderRadius:6,fontSize:12,cursor:isDisabled?'default':'pointer',background:isFr||isTo?'var(--brand)':inR?'rgba(0,168,126,.15)':'transparent',color:isFr||isTo?'#fff':isDisabled?'var(--t3)':'var(--text)',fontWeight:isFr||isTo?700:400,opacity:isDisabled?0.3:1,transition:'background .1s'}}>{d}</div>
+                                )
+                              })}
+                            </div>
+                            <div style={{marginTop:10,textAlign:'center',fontSize:11,color:calPicking==='from'?'var(--brand)':'#8B5CF6',fontWeight:600}}>
+                              {calPicking==='from'?'Tap a day to set start':'Tap a day to set end'}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {(archiveSearch||archiveCategory||archiveWorker||archiveDateFrom||archiveDateTo)&&(
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:'var(--brand-lt)',borderRadius:6,border:'1px solid rgba(0,168,126,.2)'}}>
