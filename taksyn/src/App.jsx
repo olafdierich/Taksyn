@@ -1719,12 +1719,13 @@ function UsersView({ user }) {
     } else {
       // Load members from org_members joined with profiles
       supabase.from('org_members').select('user_id, role, org, tier').eq('org', user.org)
-        .then(async ({data:members})=>{
+        .then(async ({data:members, error:err1})=>{
+          console.log('org_members result:', members, 'error:', err1, 'org:', user.org)
           if(!members?.length) return
           const ids = members.map(m=>m.user_id)
-          const {data:profiles} = await supabase.from('profiles').select('*').in('id', ids)
+          const {data:profiles, error:err2} = await supabase.from('profiles').select('*').in('id', ids)
+          console.log('profiles result:', profiles, 'error:', err2)
           if(profiles) {
-            // Merge profile with org-specific role from org_members
             const merged = profiles.map(p=>{
               const m = members.find(m=>m.user_id===p.id)
               return {...p, role: m?.role||p.role}
