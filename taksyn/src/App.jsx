@@ -1839,7 +1839,7 @@ function UsersView({ user }) {
             const p = profiles?.find(p=>p.id===m.user_id) || {}
             return {...p, id:m.user_id, role:m.role, org:m.org, tier:m.tier}
           })
-          setRealUsers(merged)
+          setRealUsers(merged.map(m=>({...m, email:profiles?.find(p=>p.id===m.user_id)?.email||m.email||''})))ealUsers(merged)
         })
     }
   },[])
@@ -2227,7 +2227,7 @@ function OrganisationsView({ user }) {
     if (members?.length) {
       const ids = members.map(m=>m.user_id)
       const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids)
-      const merged = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:m.org,tier:m.tier} })
+      const merged = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:m.org,tier:m.tier,email:p.email||''} })
       setOrgMembers(merged)
     } else { setOrgMembers([]) }
     setLoadingMembers(false)
@@ -2716,7 +2716,7 @@ export default function App() {
         // Password was just set — now log them in properly
         try {
           const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
-          if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)); setNeedsPasswordSetup(false) }
+          if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
       }
       else if(event==='SIGNED_IN') {
