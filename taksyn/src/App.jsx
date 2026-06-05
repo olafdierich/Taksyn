@@ -86,7 +86,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .auth-toggle{text-align:center;font-size:13px;color:var(--t2);margin-top:14px}
 .auth-toggle a{color:var(--brand);cursor:pointer;font-weight:600}
 .app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
-.topbar{display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;z-index:200;position:sticky;top:0}
+.topbar{display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;z-index:200;position:sticky;top:0;transition:transform .2s ease}
 .tb-menu-btn{background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:var(--t2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .tb-logo{height:30px;object-fit:contain;cursor:pointer}
 .tb-sep{width:1px;height:18px;background:var(--border);margin:0 2px}
