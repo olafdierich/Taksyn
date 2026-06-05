@@ -1863,7 +1863,8 @@ function UsersView({ user }) {
       department: finalDept,
       industry: editForm.industry||'',
       phone: editForm.phone||'',
-      notes: editForm.notes||''
+      notes: editForm.notes||'',
+      email: editForm.email||''
     }
     // Save custom dept to org
     if (editForm.department==='__custom__' && editCustomDept.trim() && editForm.industry && isConfigured()) {
@@ -1958,6 +1959,11 @@ function UsersView({ user }) {
                   <label className="form-label">Phone</label>
                   <input className="form-input" value={editForm.phone||''} onChange={e=>setEditForm({...editForm,phone:e.target.value})} placeholder="e.g. +61 400 000 000"/>
                 </div>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Email</label>
+                <input className="form-input" type="email" value={editForm.email||''} onChange={e=>setEditForm({...editForm,email:e.target.value})} placeholder="email@example.com"/>
+                <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates the display email — user must change their own login email via Profile</div>
               </div>
               <div className="form-field">
                 <label className="form-label">Role</label>
@@ -2056,7 +2062,7 @@ function UsersView({ user }) {
                 {u.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {u.department}</div>}
               </div>
               <RolePill role={u.role}/>
-              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||''}) }}>✏️ Edit</button>}
+              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||'',phone:u.phone||'',notes:u.notes||'',email:u.email||''}) }}>✏️ Edit</button>}
               {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
             </div>
           ))}
@@ -2229,7 +2235,7 @@ function OrganisationsView({ user }) {
 
   const saveMemberEdit = async () => {
     if (!memberEditForm.name?.trim()) return
-    const updates = { name:memberEditForm.name.trim(), role:memberEditForm.role, department:memberEditForm.department||'', industry:memberEditForm.industry||'', phone:memberEditForm.phone||'', notes:memberEditForm.notes||'' }
+    const updates = { name:memberEditForm.name.trim(), role:memberEditForm.role, department:memberEditForm.department||'', industry:memberEditForm.industry||'', phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'' }
     if (isConfigured()) {
       await supabase.from('profiles').update(updates).eq('id', editingMember.id)
       await supabase.from('org_members').update({ role: memberEditForm.role }).eq('user_id', editingMember.id).eq('org', editingMember.org)
@@ -2425,7 +2431,7 @@ function OrganisationsView({ user }) {
                           {m.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {m.department}</div>}
                         </div>
                         <RolePill role={m.role}/>
-                        <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,department:m.department||'',industry:m.industry||'',phone:m.phone||'',notes:m.notes||''})}}>✏️</button>
+                        <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,department:m.department||'',industry:m.industry||'',phone:m.phone||'',notes:m.notes||'',email:m.email||''})}}>✏️</button>
                       </div>
                     ))}
                   </div>
@@ -2461,7 +2467,7 @@ function OrganisationsView({ user }) {
               {viewingMember.notes&&<div style={{marginTop:10,background:'var(--s3)',borderRadius:8,padding:'8px 12px',fontSize:13,color:'var(--t2)',fontStyle:'italic'}}>{viewingMember.notes}</div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
                 <button className="btn btn-secondary" onClick={()=>setViewingMember(null)}>Close</button>
-                <button className="btn btn-primary" onClick={()=>{setEditingMember(viewingMember);setMemberEditForm({name:viewingMember.name,role:viewingMember.role,department:viewingMember.department||'',industry:viewingMember.industry||'',phone:viewingMember.phone||'',notes:viewingMember.notes||''})}}>✏️ Edit Profile</button>
+                <button className="btn btn-primary" onClick={()=>{setEditingMember(viewingMember);setMemberEditForm({name:viewingMember.name,role:viewingMember.role,department:viewingMember.department||'',industry:viewingMember.industry||'',phone:viewingMember.phone||'',notes:viewingMember.notes||'',email:viewingMember.email||''})}}>✏️ Edit Profile</button>
               </div>
             </div>
           </div>
@@ -2481,6 +2487,10 @@ function OrganisationsView({ user }) {
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={memberEditForm.name||''} onChange={e=>setMemberEditForm({...memberEditForm,name:e.target.value})}/></div>
                 <div className="form-field"><label className="form-label">Phone</label><input className="form-input" value={memberEditForm.phone||''} onChange={e=>setMemberEditForm({...memberEditForm,phone:e.target.value})} placeholder="+61 400 000 000"/></div>
+              </div>
+              <div className="form-field"><label className="form-label">Email</label>
+                <input className="form-input" type="email" value={memberEditForm.email||''} onChange={e=>setMemberEditForm({...memberEditForm,email:e.target.value})} placeholder="email@example.com"/>
+                <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates display email — user changes login email via their own Profile</div>
               </div>
               <div className="form-field"><label className="form-label">Role</label>
                 <select className="form-input" value={memberEditForm.role||'worker'} onChange={e=>setMemberEditForm({...memberEditForm,role:e.target.value})}>
