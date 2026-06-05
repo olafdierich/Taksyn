@@ -1861,7 +1861,9 @@ function UsersView({ user }) {
       name: editForm.name.trim(),
       role: editForm.role,
       department: finalDept,
-      industry: editForm.industry||''
+      industry: editForm.industry||'',
+      phone: editForm.phone||'',
+      notes: editForm.notes||''
     }
     // Save custom dept to org
     if (editForm.department==='__custom__' && editCustomDept.trim() && editForm.industry && isConfigured()) {
@@ -1940,15 +1942,22 @@ function UsersView({ user }) {
             </div>
             <div className="modal-body">
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--s3)',borderRadius:8}}>
-                <Avatar name={editingUser.name} role={editingUser.role} size={40} avatarUrl={editingUser.avatar_url}/>
+                <Avatar name={editingUser.name} role={editingUser.role} size={44} avatarUrl={editingUser.avatar_url}/>
                 <div>
-                  <div style={{fontWeight:700}}>{editingUser.name}</div>
-                  <div style={{fontSize:12,color:'var(--t2)'}}>{editingUser.email||'—'}</div>
+                  <div style={{fontWeight:700,fontSize:14}}>{editingUser.name}</div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{editingUser.email||'—'}</div>
+                  <div style={{marginTop:4}}><RolePill role={editingUser.role}/></div>
                 </div>
               </div>
-              <div className="form-field">
-                <label className="form-label">Full Name</label>
-                <input className="form-input" value={editForm.name||''} onChange={e=>setEditForm({...editForm,name:e.target.value})}/>
+              <div className="two-col">
+                <div className="form-field">
+                  <label className="form-label">Full Name</label>
+                  <input className="form-input" value={editForm.name||''} onChange={e=>setEditForm({...editForm,name:e.target.value})}/>
+                </div>
+                <div className="form-field">
+                  <label className="form-label">Phone</label>
+                  <input className="form-input" value={editForm.phone||''} onChange={e=>setEditForm({...editForm,phone:e.target.value})} placeholder="e.g. +61 400 000 000"/>
+                </div>
               </div>
               <div className="form-field">
                 <label className="form-label">Role</label>
@@ -1956,25 +1965,31 @@ function UsersView({ user }) {
                   {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                 </select>
               </div>
-              <div className="form-field">
-                <label className="form-label">Industry</label>
-                <select className="form-input" value={editForm.industry||''} onChange={e=>setEditForm({...editForm,industry:e.target.value,department:''})}>
-                  <option value="">— Select industry —</option>
-                  {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
-                </select>
-              </div>
-              <div className="form-field">
-                <label className="form-label">Department / Position</label>
-                <select className="form-input" value={editForm.department||''} onChange={e=>setEditForm({...editForm,department:e.target.value})}>
-                  <option value="">— Select department —</option>
-                  {[...(DEPARTMENTS[editForm.industry||'General']||DEPARTMENTS.General),...orgCustomDepts.filter(d=>d.industry===(editForm.industry||'General')).map(d=>d.name)].map(d=><option key={d} value={d}>{d}</option>)}
-                  <option value="__custom__">+ Add custom position...</option>
-                </select>
+              <div className="two-col">
+                <div className="form-field">
+                  <label className="form-label">Industry</label>
+                  <select className="form-input" value={editForm.industry||''} onChange={e=>setEditForm({...editForm,industry:e.target.value,department:''})}>
+                    <option value="">— Select industry —</option>
+                    {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label className="form-label">Department / Position</label>
+                  <select className="form-input" value={editForm.department||''} onChange={e=>setEditForm({...editForm,department:e.target.value})}>
+                    <option value="">— Select department —</option>
+                    {[...(DEPARTMENTS[editForm.industry||'General']||DEPARTMENTS.General),...orgCustomDepts.filter(d=>d.industry===(editForm.industry||'General')).map(d=>d.name)].map(d=><option key={d} value={d}>{d}</option>)}
+                    <option value="__custom__">+ Add custom position...</option>
+                  </select>
+                </div>
               </div>
               {editForm.department==='__custom__'&&<div className="form-field">
-                <label className="form-label">Custom Position <span style={{fontSize:10,color:'var(--t2)'}}>— will be saved to this org</span></label>
+                <label className="form-label">Custom Position</label>
                 <input className="form-input" value={editCustomDept} onChange={e=>setEditCustomDept(e.target.value)} placeholder="e.g. Night Shift Supervisor"/>
               </div>}
+              <div className="form-field">
+                <label className="form-label">Notes</label>
+                <textarea className="comment-box" style={{minHeight:60}} value={editForm.notes||''} onChange={e=>setEditForm({...editForm,notes:e.target.value})} placeholder="Any notes about this team member..."/>
+              </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
                 <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditForm({}) }}>Cancel</button>
                 <button className="btn btn-primary" disabled={!editForm.name?.trim()} onClick={saveEditUser}>Save Changes</button>
@@ -2158,7 +2173,13 @@ function OrganisationsView({ user }) {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [search, setSearch] = useState('')
-  const [dragOver, setDragOver] = useState(null) // org id being dragged over
+  const [dragOver, setDragOver] = useState(null)
+  const [selectedOrgView, setSelectedOrgView] = useState(null) // org being viewed
+  const [orgMembers, setOrgMembers] = useState([])
+  const [loadingMembers, setLoadingMembers] = useState(false)
+  const [viewingMember, setViewingMember] = useState(null)
+  const [editingMember, setEditingMember] = useState(null)
+  const [memberEditForm, setMemberEditForm] = useState({})
 
   const INDUSTRIES = ['Hospitality','Aged Care','Disability Care','Healthcare / Clinic','Wedding & Events','Facilities Management','Other']
 
@@ -2192,6 +2213,30 @@ function OrganisationsView({ user }) {
     setShowCreate(false)
     setNewOrg({ name:'', industry:'', tier:'Growth', notes:'' })
     setLoading(false)
+  }
+
+  const loadOrgMembers = async (orgName) => {
+    setLoadingMembers(true)
+    const { data: members } = await supabase.from('org_members').select('user_id, role, org, tier').eq('org', orgName)
+    if (members?.length) {
+      const ids = members.map(m=>m.user_id)
+      const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids)
+      const merged = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:m.org,tier:m.tier} })
+      setOrgMembers(merged)
+    } else { setOrgMembers([]) }
+    setLoadingMembers(false)
+  }
+
+  const saveMemberEdit = async () => {
+    if (!memberEditForm.name?.trim()) return
+    const updates = { name:memberEditForm.name.trim(), role:memberEditForm.role, department:memberEditForm.department||'', industry:memberEditForm.industry||'', phone:memberEditForm.phone||'', notes:memberEditForm.notes||'' }
+    if (isConfigured()) {
+      await supabase.from('profiles').update(updates).eq('id', editingMember.id)
+      await supabase.from('org_members').update({ role: memberEditForm.role }).eq('user_id', editingMember.id).eq('org', editingMember.org)
+    }
+    setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...updates}:m))
+    setViewingMember(prev=>prev?{...prev,...updates}:null)
+    setEditingMember(null); setMemberEditForm({})
   }
 
   const toggleStatus = async (org) => {
@@ -2268,7 +2313,7 @@ function OrganisationsView({ user }) {
                 <div style={{flex:1}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
                     {org.logo&&<img src={org.logo} alt={org.name} style={{height:32,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)'}}/>}
-                    <div style={{fontWeight:700,fontSize:15}}>{org.name}</div>
+                    <div style={{fontWeight:700,fontSize:15,cursor:'pointer',color:'var(--brand)',textDecoration:'underline'}} onClick={()=>{ setSelectedOrgView(org); loadOrgMembers(org.name) }}>{org.name}</div>
                     <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,
                       background:org.status==='active'?'rgba(16,185,129,.12)':'var(--s3)',
                       color:org.status==='active'?'var(--green)':'var(--t2)'
@@ -2347,6 +2392,121 @@ function OrganisationsView({ user }) {
                 <button className="btn btn-primary" disabled={!newOrg.name.trim()||loading} onClick={createOrg}>
                   {loading?'Creating...':'Create Organisation'}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Org Members Modal */}
+      {selectedOrgView&&(
+        <div className="modal-overlay" onClick={()=>setSelectedOrgView(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:560}}>
+            <div className="modal-hdr">
+              <div>
+                <div className="modal-title">👥 {selectedOrgView.name}</div>
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>{selectedOrgView.industry||'—'} · {selectedOrgView.tier}</div>
+              </div>
+              <button className="modal-close" onClick={()=>setSelectedOrgView(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              {loadingMembers ? <div style={{textAlign:'center',padding:20,color:'var(--t2)'}}>Loading members...</div> :
+              orgMembers.length===0 ? <div className="empty"><div className="empty-icon">👥</div><div className="empty-text">No members yet</div></div> :
+              <div>
+                {Object.entries(orgMembers.reduce((g,m)=>{ const r=m.role||'worker'; if(!g[r]) g[r]=[]; g[r].push(m); return g },{})).sort(([a],[b])=>['client_admin','manager','supervisor','worker'].indexOf(a)-['client_admin','manager','supervisor','worker'].indexOf(b)).map(([role,members])=>(
+                  <div key={role} style={{marginBottom:14}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:8,paddingBottom:4,borderBottom:'1px solid var(--border)'}}>{ROLE_LABELS[role]} ({members.length})</div>
+                    {members.map((m,i)=>(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={()=>setViewingMember(m)}>
+                        <Avatar name={m.name||'?'} role={m.role} size={36} avatarUrl={m.avatar_url}/>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:600,fontSize:13}}>{m.name||'—'}</div>
+                          <div style={{fontSize:11,color:'var(--t2)'}}>{m.email||'—'}</div>
+                          {m.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {m.department}</div>}
+                        </div>
+                        <RolePill role={m.role}/>
+                        <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,department:m.department||'',industry:m.industry||'',phone:m.phone||'',notes:m.notes||''})}}>✏️</button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Member Profile Modal */}
+      {viewingMember&&(
+        <div className="modal-overlay" onClick={()=>setViewingMember(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr"><div className="modal-title">👤 Member Profile</div><button className="modal-close" onClick={()=>setViewingMember(null)}>×</button></div>
+            <div className="modal-body">
+              <div style={{display:'flex',alignItems:'center',gap:14,padding:'12px 0 16px',borderBottom:'1px solid var(--border)',marginBottom:16}}>
+                <Avatar name={viewingMember.name||'?'} role={viewingMember.role} size={56} avatarUrl={viewingMember.avatar_url}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:16,fontWeight:800}}>{viewingMember.name||'—'}</div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{viewingMember.email||'—'}</div>
+                  <div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap'}}><RolePill role={viewingMember.role}/>{viewingMember.tier&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>{viewingMember.tier}</span>}</div>
+                </div>
+              </div>
+              <div className="two-col" style={{gap:8}}>
+                {[['Organisation',viewingMember.org],['Industry',viewingMember.industry],['Department',viewingMember.department],['Phone',viewingMember.phone]].map(([l,v])=>v?(
+                  <div key={l} style={{background:'var(--s3)',borderRadius:8,padding:'8px 12px'}}>
+                    <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:13,fontWeight:600}}>{v}</div>
+                  </div>
+                ):null)}
+              </div>
+              {viewingMember.notes&&<div style={{marginTop:10,background:'var(--s3)',borderRadius:8,padding:'8px 12px',fontSize:13,color:'var(--t2)',fontStyle:'italic'}}>{viewingMember.notes}</div>}
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+                <button className="btn btn-secondary" onClick={()=>setViewingMember(null)}>Close</button>
+                <button className="btn btn-primary" onClick={()=>{setEditingMember(viewingMember);setMemberEditForm({name:viewingMember.name,role:viewingMember.role,department:viewingMember.department||'',industry:viewingMember.industry||'',phone:viewingMember.phone||'',notes:viewingMember.notes||''})}}>✏️ Edit Profile</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Member Modal */}
+      {editingMember&&(
+        <div className="modal-overlay" onClick={()=>setEditingMember(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr"><div className="modal-title">✏️ Edit Member</div><button className="modal-close" onClick={()=>setEditingMember(null)}>×</button></div>
+            <div className="modal-body">
+              <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--s3)',borderRadius:8,marginBottom:14}}>
+                <Avatar name={editingMember.name||'?'} role={editingMember.role} size={36} avatarUrl={editingMember.avatar_url}/>
+                <div><div style={{fontWeight:700}}>{editingMember.name}</div><div style={{fontSize:11,color:'var(--t2)'}}>{editingMember.email||'—'} · {editingMember.org}</div></div>
+              </div>
+              <div className="two-col">
+                <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={memberEditForm.name||''} onChange={e=>setMemberEditForm({...memberEditForm,name:e.target.value})}/></div>
+                <div className="form-field"><label className="form-label">Phone</label><input className="form-input" value={memberEditForm.phone||''} onChange={e=>setMemberEditForm({...memberEditForm,phone:e.target.value})} placeholder="+61 400 000 000"/></div>
+              </div>
+              <div className="form-field"><label className="form-label">Role</label>
+                <select className="form-input" value={memberEditForm.role||'worker'} onChange={e=>setMemberEditForm({...memberEditForm,role:e.target.value})}>
+                  {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                </select>
+              </div>
+              <div className="two-col">
+                <div className="form-field"><label className="form-label">Industry</label>
+                  <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value,department:''})}>
+                    <option value="">— Select —</option>
+                    {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
+                  </select>
+                </div>
+                <div className="form-field"><label className="form-label">Department</label>
+                  <select className="form-input" value={memberEditForm.department||''} onChange={e=>setMemberEditForm({...memberEditForm,department:e.target.value})}>
+                    <option value="">— Select —</option>
+                    {(DEPARTMENTS[memberEditForm.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-field"><label className="form-label">Notes</label>
+                <textarea className="comment-box" style={{minHeight:60}} value={memberEditForm.notes||''} onChange={e=>setMemberEditForm({...memberEditForm,notes:e.target.value})} placeholder="Notes about this member..."/>
+              </div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>setEditingMember(null)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!memberEditForm.name?.trim()} onClick={saveMemberEdit}>Save Changes</button>
               </div>
             </div>
           </div>
@@ -2728,6 +2888,9 @@ export default function App() {
                     if(!newEmail.trim()||newEmail===user.email) return
                     const {error} = await supabase.auth.updateUser({email:newEmail.trim()})
                     if(error) { setProfileMsg('✗ '+error.message); return }
+                    // Also update profiles table so admins see the new email
+                    await supabase.from('profiles').update({email:newEmail.trim()}).eq('id',user.id)
+                    setUser(prev=>({...prev,email:newEmail.trim()}))
                     setProfileMsg('✓ Confirmation sent to '+newEmail+' — check your inbox to confirm the change')
                     setNewEmail('')
                   }}>Update Email</button>
