@@ -1281,7 +1281,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           }
             </>
           )}
-      )}
     </div>
   )
 }
