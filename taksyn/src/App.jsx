@@ -1281,8 +1281,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           }
             </div>
           )}
-      </div>
-    )
+        </>
+      )}
+    </div>
+  )
 }
 
 function EscalationsView({ tasks, setTasks, user }) {
