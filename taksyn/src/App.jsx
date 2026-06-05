@@ -1232,18 +1232,21 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       </select>
                     </div>
                     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:'1px solid var(--border)',borderRadius:6,padding:'6px 10px',flex:1}}>
-                        <span style={{fontSize:11,color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>📅 From</span>
-                        <input type="date" value={archiveDateFrom} onChange={e=>setArchiveDateFrom(e.target.value)} style={{fontSize:12,border:'none',background:'transparent',outline:'none',color:'var(--text)',fontFamily:'inherit',flex:1}}/>
+                      <div style={{flex:1,minWidth:140}}>
+                        <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:3}}>📅 FROM DATE</div>
+                        <input type="date" className="form-input" value={archiveDateFrom} onChange={e=>setArchiveDateFrom(e.target.value)} style={{fontSize:12}}/>
                       </div>
-                      <div style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:'1px solid var(--border)',borderRadius:6,padding:'6px 10px',flex:1}}>
-                        <span style={{fontSize:11,color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>📅 To</span>
-                        <input type="date" value={archiveDateTo} onChange={e=>setArchiveDateTo(e.target.value)} style={{fontSize:12,border:'none',background:'transparent',outline:'none',color:'var(--text)',fontFamily:'inherit',flex:1}}/>
+                      <div style={{flex:1,minWidth:140}}>
+                        <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:3}}>📅 TO DATE</div>
+                        <input type="date" className="form-input" value={archiveDateTo} onChange={e=>setArchiveDateTo(e.target.value)} style={{fontSize:12}}/>
                       </div>
-                      {(archiveSearch||archiveCategory||archiveWorker||archiveDateFrom||archiveDateTo)&&
-                        <button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveDateFrom('');setArchiveDateTo('')}}>✕ Clear All</button>
-                      }
                     </div>
+                    {(archiveSearch||archiveCategory||archiveWorker||archiveDateFrom||archiveDateTo)&&(
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:'var(--brand-lt)',borderRadius:6,border:'1px solid rgba(0,168,126,.2)'}}>
+                        <span style={{fontSize:12,color:'var(--brand)',fontWeight:600}}>✓ Filters active</span>
+                        <button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveDateFrom('');setArchiveDateTo('')}}>✕ Clear All</button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
