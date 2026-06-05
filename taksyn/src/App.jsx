@@ -1715,6 +1715,7 @@ function UsersView({ user }) {
   const [realUsers, setRealUsers] = useState([])
   const [editingUser, setEditingUser] = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [editCustomDept, setEditCustomDept] = useState('')
   const [userSearch, setUserSearch] = useState('')
   const [collapsedRoles, setCollapsedRoles] = useState({})
   const [orgCustomDepts, setOrgCustomDepts] = useState([])
@@ -1761,11 +1762,19 @@ function UsersView({ user }) {
   const saveEditUser = async () => {
     if (!editForm.name?.trim()) return
     const { id } = editingUser
+    const finalDept = editForm.department==='__custom__' ? editCustomDept.trim() : editForm.department||''
     const updates = {
       name: editForm.name.trim(),
       role: editForm.role,
-      department: editForm.department||'',
+      department: finalDept,
       industry: editForm.industry||''
+    }
+    // Save custom dept to org
+    if (editForm.department==='__custom__' && editCustomDept.trim() && editForm.industry && isConfigured()) {
+      const newDept = {name:editCustomDept.trim(),industry:editForm.industry}
+      const updatedDepts = [...orgCustomDepts, newDept]
+      setOrgCustomDepts(updatedDepts)
+      supabase.from('organisations').update({custom_departments:JSON.stringify(updatedDepts)}).eq('name',user.org).then(()=>{})
     }
     if (isConfigured()) {
       await supabase.from('profiles').update(updates).eq('id', id)
@@ -1774,6 +1783,7 @@ function UsersView({ user }) {
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...updates}:u))
     setEditingUser(null)
     setEditForm({})
+    setEditCustomDept('')
   }
 
   const addExistingUserToOrg = async (email, role) => {
@@ -1867,6 +1877,10 @@ function UsersView({ user }) {
                   <option value="__custom__">+ Add custom position...</option>
                 </select>
               </div>
+              {editForm.department==='__custom__'&&<div className="form-field">
+                <label className="form-label">Custom Position <span style={{fontSize:10,color:'var(--t2)'}}>— will be saved to this org</span></label>
+                <input className="form-input" value={editCustomDept} onChange={e=>setEditCustomDept(e.target.value)} placeholder="e.g. Night Shift Supervisor"/>
+              </div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
                 <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditForm({}) }}>Cancel</button>
                 <button className="btn btn-primary" disabled={!editForm.name?.trim()} onClick={saveEditUser}>Save Changes</button>
