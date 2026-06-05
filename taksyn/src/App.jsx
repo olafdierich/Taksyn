@@ -1279,10 +1279,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>
             : filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
           }
-            </>
+          </>
           )}
-    </div>
-  )
+      </div>
+    )
 }
 
 function EscalationsView({ tasks, setTasks, user }) {
