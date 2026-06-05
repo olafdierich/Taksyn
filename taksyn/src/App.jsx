@@ -86,7 +86,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .auth-toggle{text-align:center;font-size:13px;color:var(--t2);margin-top:14px}
 .auth-toggle a{color:var(--brand);cursor:pointer;font-weight:600}
 .app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
-.topbar{display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;z-index:200;position:sticky;top:0;transition:transform .2s ease}
+.topbar{display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;background:#fff;border-bottom:1px solid var(--border);flex-shrink:0;z-index:300;position:fixed;top:0;left:0;right:0}
 .tb-menu-btn{background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:var(--t2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .tb-logo{height:30px;object-fit:contain;cursor:pointer}
 .tb-sep{width:1px;height:18px;background:var(--border);margin:0 2px}
@@ -103,7 +103,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .tb-user-name{font-size:12px;font-weight:600}
 .tb-user-role{font-size:10px;color:var(--t2)}
 @media(max-width:480px){.tb-user-name,.tb-user-role{display:none}}
-.main{display:flex;flex:1;overflow:hidden}
+.main{display:flex;flex:1;overflow:hidden;margin-top:52px}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:150}
 .sidebar-overlay.open{display:block}
 .sidebar{width:var(--sidebar-w);flex-shrink:0;background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;transition:transform .25s,width .25s;z-index:160}
