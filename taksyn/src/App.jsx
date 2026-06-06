@@ -602,16 +602,49 @@ function AuthView({ onAuth }) {
 }
 
 function visibleTasks(tasks, user) {
-  // Super admin sees all orgs via org dropdown filter in TasksView
+  // Super admin sees all via org dropdown — cannot create or receive tasks
   if (user.role==='super_admin') return tasks
-  // All other roles only see their own org's tasks
+
   const orgTasks = tasks.filter(t => t.org===user.org)
-  if (['client_admin','manager','supervisor'].includes(user.role)) return orgTasks
-  return orgTasks.filter(t=>
-    t.assigned_user_id===user.id ||
-    t.assigned_user_name===user.name ||
-    (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role===user.role)
-  )
+
+  if (user.role==='client_admin') {
+    // Sees all tasks in org
+    // "Receives back" = completed/approved tasks assigned to managers show in their view
+    return orgTasks
+  }
+
+  if (user.role==='manager') {
+    // Sees tasks assigned to them (from client_admin) + tasks they created for supervisor/worker
+    // + completed tasks submitted back from supervisors
+    return orgTasks.filter(t =>
+      t.assigned_user_id===user.id ||
+      t.assigned_user_name===user.name ||
+      t.created_by===user.name ||
+      (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='manager')
+    )
+  }
+
+  if (user.role==='supervisor') {
+    // Sees tasks assigned to them (from manager/client_admin) + tasks they created for workers
+    // + completed tasks submitted back from workers
+    return orgTasks.filter(t =>
+      t.assigned_user_id===user.id ||
+      t.assigned_user_name===user.name ||
+      t.created_by===user.name ||
+      (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='supervisor')
+    )
+  }
+
+  if (user.role==='worker') {
+    // Only sees tasks assigned to them — cannot create tasks
+    return orgTasks.filter(t =>
+      t.assigned_user_id===user.id ||
+      t.assigned_user_name===user.name ||
+      (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='worker')
+    )
+  }
+
+  return orgTasks
 }
 
 function computeAwards(tasks) {
@@ -827,8 +860,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     }
   }
 
-  const canCreate = hasAccess(user.role, 2)
+  const canCreate = ['client_admin','manager','supervisor'].includes(user.role)
   const canApprove = hasAccess(user.role, 2)
+  // Each role can only assign to roles below them
+  const assignableRoles = user.role==='client_admin' ? ['manager','supervisor','worker']
+    : user.role==='manager' ? ['supervisor','worker']
+    : user.role==='supervisor' ? ['worker']
+    : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
 
   const AssignField = ({ value, onChange, compact=false }) => (
@@ -837,7 +875,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         {!compact&&<input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>}
         <select className="form-select" value={value} onChange={onChange}>
           <option value="">— Select a staff member —</option>
-          {teamUsers.filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
+          {teamUsers.filter(u=>(assignableRoles.includes(u.role))&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
         </select>
       </div>
     ) : (
@@ -944,12 +982,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     <input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>
                     <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
                       <option value="">— Select a staff member —</option>
-                      {teamUsers.filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
+                      {teamUsers.filter(u=>(assignableRoles.includes(u.role))&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
                     </select>
                     {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
                   </div>
                 ) : (
-                  <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
+                  <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
                 )}
               </div>
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
