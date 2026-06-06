@@ -602,8 +602,8 @@ function AuthView({ onAuth }) {
 }
 
 function visibleTasks(tasks, user) {
-  // Super admin sees all via org dropdown — cannot create or receive tasks
-  if (user.role==='super_admin') return tasks
+  // Super admin sees NO task content — privacy/confidentiality
+  if (user.role==='super_admin') return []
 
   const orgTasks = tasks.filter(t => t.org===user.org)
 
@@ -2151,7 +2151,7 @@ function TiersView({ user }) {
 }
 
 const NAV = {
-  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['support','Support','alert']],
+  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Task Stats','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['support','Support','alert']],
   client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['help','Help & Support','alert']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['help','Help & Support','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['help','Help & Support','alert']],
@@ -2686,6 +2686,90 @@ function AuditLogView({ tasks, user, auditLog }) {
 }
 
 
+function SuperAdminTaskStats({ tasks }) {
+  const [orgSearch, setOrgSearch] = useState('')
+  
+  // Build aggregate stats per org — no task content exposed
+  const orgs = [...new Set(tasks.map(t=>t.org).filter(Boolean))].sort()
+  const filtered = orgSearch ? orgs.filter(o=>o.toLowerCase().includes(orgSearch.toLowerCase())) : orgs
+  
+  const statsForOrg = (org) => {
+    const t = tasks.filter(t=>t.org===org)
+    const done = t.filter(t=>['completed','approved','awaiting_review'].includes(t.status)).length
+    const overdue = t.filter(t=>t.status==='overdue').length
+    const pending = t.filter(t=>t.status==='pending').length
+    const rejected = t.filter(t=>t.status==='rejected').length
+    const compliance = t.filter(t=>t.compliance)
+    const compDone = compliance.filter(t=>['completed','approved'].includes(t.status)).length
+    return { total:t.length, done, overdue, pending, rejected, compRate:pct(done,t.length), complianceRate:pct(compDone,compliance.length) }
+  }
+
+  const globalStats = statsForOrg(null)
+  const allTotal = tasks.length
+  const allDone = tasks.filter(t=>['completed','approved','awaiting_review'].includes(t.status)).length
+  const allOverdue = tasks.filter(t=>t.status==='overdue').length
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Platform Task Overview</div>
+        <div className="ph-sub">Aggregate statistics only — task content is private to each organisation</div>
+      </div>
+
+      <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.2)',borderRadius:10,padding:12,marginBottom:16,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'center'}}>
+        <span style={{fontSize:16}}>🔒</span>
+        <span>Task content, titles and worker details are private to each organisation. Only aggregate statistics are shown here.</span>
+      </div>
+
+      <div className="stat-grid" style={{marginBottom:20}}>
+        <Stat label="Total Tasks" val={allTotal} sub="across all orgs" icon="📋" color="#3B82F6" bg="rgba(59,130,246,.1)"/>
+        <Stat label="Completed" val={allDone} sub={pct(allDone,allTotal)+'% rate'} icon="✅" color="#10B981" bg="rgba(16,185,129,.1)"/>
+        <Stat label="Overdue" val={allOverdue} sub={allOverdue>0?'Need attention':'All on track'} icon="⏰" color={allOverdue>0?'#EF4444':'#10B981'} bg={allOverdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'}/>
+        <Stat label="Organisations" val={orgs.length} sub="active" icon="🏢" color="#8B5CF6" bg="rgba(139,92,246,.1)"/>
+      </div>
+
+      <div className="section">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div className="section-title" style={{margin:0}}>Stats by Organisation</div>
+          <input className="form-input" placeholder="Search org..." value={orgSearch} onChange={e=>setOrgSearch(e.target.value)} style={{fontSize:12,padding:'5px 10px',maxWidth:180}}/>
+        </div>
+        {filtered.length===0
+          ? <div className="empty"><div className="empty-icon">🏢</div><div className="empty-text">No organisations found</div></div>
+          : <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead>
+                  <tr style={{background:'var(--s3)'}}>
+                    {['Organisation','Total','Done','Overdue','Pending','Rejected','Rate','Compliance'].map(h=>(
+                      <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(org=>{
+                    const s = statsForOrg(org)
+                    return (
+                      <tr key={org} style={{borderBottom:'1px solid var(--border)'}}>
+                        <td style={{padding:'8px 10px',fontWeight:700}}>{org}</td>
+                        <td style={{padding:'8px 10px'}}>{s.total}</td>
+                        <td style={{padding:'8px 10px',color:'var(--green)',fontWeight:600}}>{s.done}</td>
+                        <td style={{padding:'8px 10px',color:s.overdue>0?'var(--red)':'var(--t2)',fontWeight:s.overdue>0?700:400}}>{s.overdue}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)'}}>{s.pending}</td>
+                        <td style={{padding:'8px 10px',color:s.rejected>0?'var(--red)':'var(--t2)'}}>{s.rejected}</td>
+                        <td style={{padding:'8px 10px',fontWeight:700,color:s.compRate>=80?'var(--green)':s.compRate>=50?'#F59E0B':'var(--red)'}}>{s.compRate}%</td>
+                        <td style={{padding:'8px 10px',fontWeight:700,color:s.complianceRate>=80?'var(--green)':s.complianceRate>=50?'#F59E0B':'var(--red)'}}>{s.complianceRate}%</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+        }
+      </div>
+    </div>
+  )
+}
+
+
 function HelpView({ user }) {
   const [desc, setDesc] = useState('')
   const [device, setDevice] = useState('')
@@ -2823,8 +2907,11 @@ function SupportView({ user }) {
 
   useEffect(()=>{
     if(isConfigured()) {
-      supabase.from('support_tickets').select('*').order('created_at',{ascending:false})
-        .then(({data})=>{ if(data) setTickets(data) })
+      supabase.from('support_tickets').select('*').order('created_at',{ascending:false}).limit(500)
+        .then(({data,error})=>{ 
+          if(error) console.error('Support tickets error:',error)
+          if(data) setTickets(data) 
+        })
     }
   },[])
 
@@ -3223,7 +3310,7 @@ export default function App() {
             ) : (
               <>
                 {page==='dashboard'   && <DashboardView   {...pageProps}/>}
-                {page==='tasks'       && <TasksView        {...pageProps}/>}
+                {page==='tasks'       && (user.role==='super_admin' ? <SuperAdminTaskStats tasks={tasks} /> : <TasksView {...pageProps}/>)}
                 {page==='evidence'    && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
                 {page==='escalations' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
                 {page==='reports'     && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
