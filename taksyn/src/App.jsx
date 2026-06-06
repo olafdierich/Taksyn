@@ -40,7 +40,7 @@ const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (M
 const DEMO_TASKS = []
 const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
 const avatarColor = role => ROLE_COLORS[role] || '#6B7280'
@@ -322,6 +322,7 @@ const TaskCard = ({ task, onClick }) => {
         {task.assigned_user_name&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {task.assigned_user_name}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
+        {task.project&&<span style={{fontSize:11,color:'#3B82F6',background:'rgba(59,130,246,.08)',padding:'2px 7px',borderRadius:4}}>📁 {task.project}</span>}
         {dur&&<span style={{fontSize:11,color:'var(--t2)'}}>⏱ {dur}</span>}
         {task.gps_start&&<a href={"https://www.google.com/maps?q="+task.gps_start} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'var(--blue)',textDecoration:'none'}} onClick={e=>e.stopPropagation()}>📍 GPS ↗</a>}
       </div>
@@ -739,7 +740,16 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'Hospitality', department:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'' })
+  const [newTask, setNewTask] = useState({ title:'', category:'Hospitality', department:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'' })
+  const [orgProjects, setOrgProjects] = useState([])
+
+  useEffect(()=>{
+    if(isConfigured()&&user.org) {
+      supabase.from('projects').select('*').eq('org',user.org).eq('status','active').order('name')
+        .then(({data})=>{ if(data) setOrgProjects(data) })
+        .catch(()=>{}) // table may not exist yet
+    }
+  },[user.org])
 
   useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
@@ -842,7 +852,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     // Close and reset immediately — no await before this
     setShowCreate(false)
     setUserSearch('')
-    setNewTask({title:'',category:'Hospitality',department:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''})
+    setNewTask({title:'',category:'Hospitality',department:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:''})
     // Do the async work in background
     const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     setTasks(prev=>[...prev,t])
@@ -991,6 +1001,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
                 )}
               </div>
+              {orgProjects.length>0&&(
+                <div className="form-field">
+                  <label className="form-label">Project <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
+                  <select className="form-select" value={newTask.project||''} onChange={e=>setNewTask({...newTask,project:e.target.value})}>
+                    <option value="">— No project —</option>
+                    {orgProjects.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
                 <input type="checkbox" id="comp" checked={newTask.compliance} onChange={e=>setNewTask({...newTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
                 <label htmlFor="comp" style={{fontSize:13,cursor:'pointer'}}>Mark as compliance-critical</label>
@@ -1118,6 +1137,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Compliance:</span> {sel.compliance?'🔒 Yes':'—'}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Assigned:</span> {sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
+              {sel.project&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Project:</span> <span style={{color:'#3B82F6',fontWeight:600}}>📁 {sel.project}</span></div>}
             </div>
           </div>
           {user.role==='worker'&&(
@@ -2153,9 +2173,9 @@ function TiersView({ user }) {
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Task Stats','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['support','Support','alert']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['help','Help & Support','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['help','Help & Support','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['help','Help & Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['projects','Projects 🔜','tasks'],['performance','Performance','chart'],['tiers','Plans','tier'],['help','Help & Support','alert']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['help','Help & Support','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['help','Help & Support','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['help','Help & Support','alert']],
 }
 
@@ -2771,6 +2791,283 @@ function SuperAdminTaskStats({ tasks }) {
 }
 
 
+function ProjectsView({ user }) {
+  const [projects, setProjects] = useState([])
+  const [showCreate, setShowCreate] = useState(false)
+  const [newProject, setNewProject] = useState({name:'',description:'',status:'active'})
+  const [saving, setSaving] = useState(false)
+
+  useEffect(()=>{
+    if(isConfigured()&&user.org) {
+      supabase.from('projects').select('*').eq('org',user.org).order('created_at',{ascending:false})
+        .then(({data})=>{ if(data) setProjects(data) })
+        .catch(()=>{})
+    }
+  },[user.org])
+
+  const createProject = async () => {
+    if(!newProject.name.trim()||saving) return
+    setSaving(true)
+    const entry = { id:'PRJ'+Date.now(), name:newProject.name.trim(), description:newProject.description.trim(), org:user.org, status:'active', created_by:user.name, created_at:new Date().toISOString() }
+    if(isConfigured()) {
+      const {error} = await supabase.from('projects').insert(entry)
+      if(error) { alert('Error: '+error.message); setSaving(false); return }
+    }
+    setProjects(prev=>[entry,...prev])
+    setShowCreate(false)
+    setNewProject({name:'',description:'',status:'active'})
+    setSaving(false)
+  }
+
+  const toggleProject = async (p) => {
+    const newStatus = p.status==='active'?'inactive':'active'
+    if(isConfigured()) await supabase.from('projects').update({status:newStatus}).eq('id',p.id)
+    setProjects(prev=>prev.map(x=>x.id===p.id?{...x,status:newStatus}:x))
+  }
+
+  const deleteProject = async (id) => {
+    if(!confirm('Delete this project?')) return
+    if(isConfigured()) await supabase.from('projects').delete().eq('id',id)
+    setProjects(prev=>prev.filter(p=>p.id!==id))
+  }
+
+  const isCA = user.role==='client_admin'
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-top">
+          <div>
+            <div className="ph-title">Projects <span style={{fontSize:12,background:'rgba(245,158,11,.12)',color:'#F59E0B',padding:'2px 8px',borderRadius:10,fontWeight:600,marginLeft:6}}>🔜 Coming Soon</span></div>
+            <div className="ph-sub">{user.org} · {projects.filter(p=>p.status==='active').length} active projects</div>
+          </div>
+          {isCA&&<button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Project</button>}
+        </div>
+      </div>
+
+      <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.2)',borderRadius:10,padding:12,marginBottom:16,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'flex-start'}}>
+        <span style={{fontSize:16,flexShrink:0}}>🚀</span>
+        <div>
+          <strong>Full Project Management is coming soon.</strong> For now, you can create projects and assign them to tasks. Future updates will add milestones, Gantt charts, project-level reporting and multi-team coordination.
+        </div>
+      </div>
+
+      {showCreate&&(
+        <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr"><div className="modal-title">New Project</div><button className="modal-close" onClick={()=>setShowCreate(false)}>×</button></div>
+            <div className="modal-body">
+              <div className="form-field"><label className="form-label">Project Name <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={newProject.name} onChange={e=>setNewProject({...newProject,name:e.target.value})} placeholder="e.g. Q3 Facility Upgrade"/></div>
+              <div className="form-field"><label className="form-label">Description</label><textarea className="comment-box" value={newProject.description} onChange={e=>setNewProject({...newProject,description:e.target.value})} placeholder="Brief description of this project..."/></div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>setShowCreate(false)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!newProject.name.trim()||saving} onClick={createProject}>{saving?'Creating...':'Create Project'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {projects.length===0 ? (
+        <div className="empty" style={{background:'#fff',borderRadius:16,border:'1px solid var(--border)',padding:40}}>
+          <div className="empty-icon">📁</div>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>{isCA?'No projects yet':'No projects set up'}</div>
+          <div className="empty-text">{isCA?'Create your first project to start organising tasks.':'Your Client Admin will set up projects for this organisation.'}</div>
+        </div>
+      ) : (
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {projects.map(p=>(
+            <div key={p.id} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,borderLeft:'4px solid '+(p.status==='active'?'var(--brand)':'var(--border)')}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}>
+                <div style={{flex:1}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                    <span style={{fontSize:15,fontWeight:700}}>{p.name}</span>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:p.status==='active'?'rgba(0,168,126,.12)':'var(--s3)',color:p.status==='active'?'var(--brand)':'var(--t2)'}}>{p.status?.toUpperCase()}</span>
+                  </div>
+                  {p.description&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:4}}>{p.description}</div>}
+                  <div style={{fontSize:11,color:'var(--t3)'}}>Created by {p.created_by} · {new Date(p.created_at).toLocaleDateString('en-AU')}</div>
+                </div>
+                {isCA&&(
+                  <div style={{display:'flex',gap:6,flexShrink:0}}>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>toggleProject(p)}>{p.status==='active'?'Deactivate':'Activate'}</button>
+                    <button className="btn btn-danger btn-sm" onClick={()=>deleteProject(p.id)}>🗑</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="section" style={{marginTop:16}}>
+        <div className="section-title">Coming in Full Release</div>
+        {['Milestones & deadlines','Task grouping by project','Project progress tracking','Gantt chart view','Project-level reports','Budget tracking','Multi-team coordination'].map((f,i)=>(
+          <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:'var(--t2)',padding:'5px 0',borderBottom:'1px solid var(--border)'}}>
+            <span style={{color:'var(--t3)'}}>◦</span>{f}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PerformanceView({ tasks, user }) {
+  const [period, setPeriod] = useState('monthly')
+  const [selectedRole, setSelectedRole] = useState('all')
+
+  const getRange = () => {
+    const now = new Date()
+    if (period==='weekly') { const s=new Date(now); s.setDate(s.getDate()-6); return [s,now] }
+    if (period==='monthly') { const s=new Date(now); s.setDate(s.getDate()-29); return [s,now] }
+    if (period==='quarterly') { const s=new Date(now); s.setDate(s.getDate()-89); return [s,now] }
+    return [new Date(0), now]
+  }
+  const [rs,re] = getRange()
+  const orgTasks = tasks.filter(t=>t.org===user.org)
+  const pt = orgTasks.filter(t=>{ const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
+
+  // Build per-person stats
+  const peopleMap = {}
+  pt.forEach(t=>{
+    const key = t.assigned_user_id||t.assigned_user_name||'Unassigned'
+    const name = t.assigned_user_name||'Unassigned'
+    const role = t.assigned_role||'worker'
+    if(!peopleMap[key]) peopleMap[key]={id:key,name,role,total:0,done:0,onTime:0,rejected:0,overdue:0,avgMins:[],submitted:0,reviewedInTime:0}
+    peopleMap[key].total++
+    if(['completed','approved'].includes(t.status)){
+      peopleMap[key].done++
+      if(t.due_date&&t.completed_at&&new Date(t.completed_at)<=new Date(t.due_date)) peopleMap[key].onTime++
+      if(t.started_at&&t.completed_at) peopleMap[key].avgMins.push((new Date(t.completed_at)-new Date(t.started_at))/60000)
+    }
+    if(t.status==='rejected') peopleMap[key].rejected++
+    if(t.status==='overdue') peopleMap[key].overdue++
+    if(['awaiting_review','approved','rejected'].includes(t.status)) peopleMap[key].submitted++
+    if(t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) peopleMap[key].reviewedInTime++
+  })
+
+  const people = Object.values(peopleMap)
+    .filter(p=>selectedRole==='all'||p.role===selectedRole)
+    .sort((a,b)=>b.total-a.total)
+
+  const fmtAvg = mins => {
+    if(!mins.length) return '—'
+    const avg = Math.round(mins.reduce((a,b)=>a+b,0)/mins.length)
+    return avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
+  }
+
+  const getGrade = (rate) => {
+    if(rate>=90) return {grade:'A',color:'#10B981'}
+    if(rate>=75) return {grade:'B',color:'#3B82F6'}
+    if(rate>=60) return {grade:'C',color:'#F59E0B'}
+    if(rate>=40) return {grade:'D',color:'#F97316'}
+    return {grade:'F',color:'#EF4444'}
+  }
+
+  const pct = (a,b) => b>0?Math.round(a/b*100):0
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Performance Review</div>
+        <div className="ph-sub">{user.org} · Task-based performance metrics</div>
+      </div>
+
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14,alignItems:'center'}}>
+        <div style={{display:'flex',gap:4}}>
+          {[['weekly','Weekly'],['monthly','Monthly'],['quarterly','Quarterly']].map(([v,l])=>(
+            <button key={v} className={'btn btn-sm '+(period===v?'btn-primary':'btn-secondary')} onClick={()=>setPeriod(v)}>{l}</button>
+          ))}
+        </div>
+        <select className="form-input" value={selectedRole} onChange={e=>setSelectedRole(e.target.value)} style={{fontSize:12,padding:'5px 10px',maxWidth:160}}>
+          <option value="all">All Roles</option>
+          {['manager','supervisor','worker'].map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+        </select>
+      </div>
+
+      {people.length===0 ? (
+        <div className="empty"><div className="empty-icon">📊</div><div className="empty-text">No task data for this period</div></div>
+      ) : (
+        <>
+          {/* Summary cards */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10,marginBottom:16}}>
+            {[
+              {label:'Team Members',val:people.length,color:'#3B82F6'},
+              {label:'Tasks Assigned',val:pt.length,color:'#5BC8C0'},
+              {label:'Completed',val:pt.filter(t=>['completed','approved'].includes(t.status)).length,color:'#10B981'},
+              {label:'Overdue',val:pt.filter(t=>t.status==='overdue').length,color:'#EF4444'},
+            ].map(s=>(
+              <div key={s.label} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
+                <div style={{fontSize:22,fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
+                <div style={{fontSize:10,color:'var(--t2)',marginTop:4,textTransform:'uppercase',fontWeight:600,letterSpacing:'.5px'}}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Per-person cards */}
+          {people.map((p,i)=>{
+            const compRate = pct(p.done,p.total)
+            const onTimeRate = pct(p.onTime,p.done)
+            const {grade,color} = getGrade(compRate)
+            return (
+              <div key={i} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:10}}>
+                <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
+                  <div style={{width:44,height:44,borderRadius:'50%',background:color+'22',color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:800,flexShrink:0}}>{grade}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:14}}>{p.name}</div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}><RolePill role={p.role}/></div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:22,fontWeight:800,color,lineHeight:1}}>{compRate}%</div>
+                    <div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>completion</div>
+                  </div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(100px,1fr))',gap:8}}>
+                  {[
+                    ['Tasks',p.total,'#5BC8C0'],
+                    ['Completed',p.done,'#10B981'],
+                    ['On Time',onTimeRate+'%','#3B82F6'],
+                    ['Rejected',p.rejected,p.rejected>0?'#EF4444':'#6B7280'],
+                    ['Overdue',p.overdue,p.overdue>0?'#EF4444':'#6B7280'],
+                    ['Avg Time',fmtAvg(p.avgMins),'#8B5CF6'],
+                  ].map(([l,v,c])=>(
+                    <div key={l} style={{background:'var(--s3)',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
+                      <div style={{fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+                      <div style={{fontSize:9,color:'var(--t2)',marginTop:3,textTransform:'uppercase',fontWeight:600}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Performance bar */}
+                <div style={{marginTop:10}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--t2)',marginBottom:3}}>
+                    <span>Performance</span><span style={{fontWeight:600,color}}>{compRate}%</span>
+                  </div>
+                  <div style={{height:6,background:'var(--s3)',borderRadius:3,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:compRate+'%',background:color,borderRadius:3,transition:'width .5s'}}/>
+                  </div>
+                </div>
+                {p.rejected>0&&<div style={{marginTop:8,fontSize:11,color:'#F97316',background:'rgba(249,115,22,.08)',borderRadius:6,padding:'4px 8px'}}>⚠️ {p.rejected} task{p.rejected>1?'s':''} rejected — may need coaching</div>}
+                {p.overdue>0&&<div style={{marginTop:4,fontSize:11,color:'var(--red)',background:'rgba(239,68,68,.06)',borderRadius:6,padding:'4px 8px'}}>🔴 {p.overdue} overdue task{p.overdue>1?'s':''}</div>}
+                {compRate>=90&&<div style={{marginTop:4,fontSize:11,color:'var(--green)',background:'rgba(16,185,129,.06)',borderRadius:6,padding:'4px 8px'}}>⭐ Outstanding performance</div>}
+              </div>
+            )
+          })}
+
+          {/* Team summary */}
+          <div className="section" style={{marginTop:8}}>
+            <div className="section-title">Team Summary</div>
+            <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.8}}>
+              <div>📊 Overall team completion rate: <strong style={{color:'var(--text)'}}>{pct(pt.filter(t=>['completed','approved'].includes(t.status)).length,pt.length)}%</strong></div>
+              <div>⭐ Top performer: <strong style={{color:'var(--text)'}}>{people.sort((a,b)=>pct(b.done,b.total)-pct(a.done,a.total))[0]?.name||'—'}</strong></div>
+              <div>⚠️ Needs attention: <strong style={{color:'var(--red)'}}>{people.filter(p=>pct(p.done,p.total)<50).map(p=>p.name).join(', ')||'None'}</strong></div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+
 function HelpView({ user }) {
   const [desc, setDesc] = useState('')
   const [device, setDevice] = useState('')
@@ -3326,6 +3623,8 @@ export default function App() {
                 {page==='tiers'       && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
                 {page==='support'     && user.role==='super_admin' && <SupportView {...pageProps}/>}
                 {page==='help'        && <HelpView {...pageProps}/>}
+                {page==='projects'    && hasAccess(user.role,2) && <ProjectsView {...pageProps}/>}
+                {page==='performance' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
               </>
             )}
           </div>
