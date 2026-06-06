@@ -605,7 +605,7 @@ function visibleTasks(tasks, user) {
   // Super admin sees NO task content — privacy/confidentiality
   if (user.role==='super_admin') return []
 
-  const orgTasks = tasks.filter(t => t.org===user.org)
+  const orgTasks = tasks.filter(t => t.org?.toLowerCase()===user.org?.toLowerCase())
 
   if (user.role==='client_admin') {
     // Sees all tasks in org
@@ -852,7 +852,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         supabase.from('tasks').insert({ ...t, subtasks:'[]', evidence:'[]', comments:'[]', assigned_user_id })
           .then(({error})=>{
             if (error) console.error('Task save error:', error)
-            if (loadTasks) loadTasks()
+            // Real-time subscription will update the list automatically
           })
       }).finally(()=>setCreating(false))
     } else {
