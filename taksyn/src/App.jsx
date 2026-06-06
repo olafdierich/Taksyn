@@ -40,7 +40,7 @@ const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (M
 const DEMO_TASKS = []
 const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
 const avatarColor = role => ROLE_COLORS[role] || '#6B7280'
@@ -2151,11 +2151,11 @@ function TiersView({ user }) {
 }
 
 const NAV = {
-  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit']],
-  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks']],
+  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['support','Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['help','Help & Support','alert']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['help','Help & Support','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['help','Help & Support','alert']],
+  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['help','Help & Support','alert']],
 }
 
 function PasswordSetupView({ onDone }) {
@@ -2686,6 +2686,237 @@ function AuditLogView({ tasks, user, auditLog }) {
 }
 
 
+function HelpView({ user }) {
+  const [desc, setDesc] = useState('')
+  const [device, setDevice] = useState('')
+  const [screenshot, setScreenshot] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [tickets, setTickets] = useState([])
+  const appVersion = '1.0.0'
+
+  useEffect(()=>{
+    // Detect device
+    const ua = navigator.userAgent
+    const d = /iPhone|iPad/.test(ua)?'iOS':(/Android/.test(ua)?'Android':(/Mac/.test(ua)?'Mac':'Desktop'))
+    setDevice(d)
+    // Load user's tickets
+    if(isConfigured()) {
+      supabase.from('support_tickets').select('*').eq('user_id',user.id).order('created_at',{ascending:false})
+        .then(({data})=>{ if(data) setTickets(data) })
+    }
+  },[])
+
+  const submitTicket = async () => {
+    if(!desc.trim()) return
+    setSubmitting(true)
+    const ticket = {
+      id: 'TKT'+Date.now(),
+      user_id: user.id,
+      user_name: user.name,
+      user_email: user.email,
+      org: user.org,
+      role: user.role,
+      description: desc.trim(),
+      device,
+      app_version: appVersion,
+      screenshot: screenshot||null,
+      status: 'open',
+      created_at: new Date().toISOString()
+    }
+    if(isConfigured()) {
+      await supabase.from('support_tickets').insert(ticket)
+    }
+    setTickets(prev=>[ticket,...prev])
+    setSubmitted(true); setSubmitting(false); setDesc(''); setScreenshot(null)
+    setTimeout(()=>setSubmitted(false), 4000)
+  }
+
+  const STATUS_COLORS = { open:'#F59E0B', in_progress:'#3B82F6', resolved:'#10B981', closed:'#6B7280' }
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Help & Support</div>
+        <div className="ph-sub">Report an issue or get help with Taksyn</div>
+      </div>
+
+      {submitted&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:10,padding:14,marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
+        <span style={{fontSize:20}}>✅</span>
+        <div><div style={{fontWeight:700,color:'var(--green)'}}>Ticket submitted!</div><div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>The Taksyn support team will get back to you shortly.</div></div>
+      </div>}
+
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">🛠 Report a Technical Issue</div>
+        <div className="form-field">
+          <label className="form-label">Description <span style={{color:'var(--red)'}}>*</span></label>
+          <textarea className="comment-box" style={{minHeight:100}} placeholder="Describe the issue you're experiencing. Include what you were doing when it happened..." value={desc} onChange={e=>setDesc(e.target.value)}/>
+        </div>
+        <div className="two-col">
+          <div style={{background:'var(--s3)',borderRadius:8,padding:'8px 12px',fontSize:12}}>
+            <div style={{color:'var(--t2)',fontSize:10,fontWeight:600,textTransform:'uppercase',marginBottom:2}}>Device</div>
+            <div style={{fontWeight:600}}>{device||'Detecting...'}</div>
+          </div>
+          <div style={{background:'var(--s3)',borderRadius:8,padding:'8px 12px',fontSize:12}}>
+            <div style={{color:'var(--t2)',fontSize:10,fontWeight:600,textTransform:'uppercase',marginBottom:2}}>App Version</div>
+            <div style={{fontWeight:600}}>v{appVersion}</div>
+          </div>
+        </div>
+        <div className="form-field" style={{marginTop:12}}>
+          <label className="form-label">Screenshot (optional)</label>
+          {screenshot
+            ? <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <img src={screenshot} alt="screenshot" style={{height:60,borderRadius:6,border:'1px solid var(--border)'}}/>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setScreenshot(null)}>✕ Remove</button>
+              </div>
+            : <button className="btn btn-secondary" onClick={()=>document.getElementById('support-img').click()}>📷 Attach Screenshot</button>
+          }
+          <input id="support-img" type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>setScreenshot(ev.target.result); r.readAsDataURL(f); e.target.value='' }}/>
+        </div>
+        <button className="btn btn-primary" disabled={!desc.trim()||submitting} onClick={submitTicket} style={{width:'100%',marginTop:4}}>
+          {submitting?'Submitting...':'🚀 Submit Support Ticket'}
+        </button>
+      </div>
+
+      <div className="section">
+        <div className="section-title">📋 My Tickets</div>
+        {tickets.length===0
+          ? <div style={{fontSize:13,color:'var(--t2)',textAlign:'center',padding:16}}>No tickets yet — we hope everything is working smoothly! 😊</div>
+          : tickets.map((t,i)=>(
+            <div key={i} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:600,marginBottom:3,color:'var(--text)'}}>{t.description?.slice(0,80)}{t.description?.length>80?'...':''}</div>
+                  <div style={{fontSize:10,color:'var(--t2)'}}>{new Date(t.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} · {t.device} · v{t.app_version}</div>
+                </div>
+                <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:(STATUS_COLORS[t.status]||'#6B7280')+'22',color:STATUS_COLORS[t.status]||'#6B7280',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
+              </div>
+              {t.response&&<div style={{marginTop:6,background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.15)',borderRadius:6,padding:'6px 10px',fontSize:12}}><span style={{color:'var(--brand)',fontWeight:600}}>💬 Taksyn Support:</span> {t.response}</div>}
+            </div>
+          ))
+        }
+      </div>
+
+      <div className="section">
+        <div className="section-title">📚 Quick Help</div>
+        {[['How do I complete a task?','Time In → do the task → Time Out → Submit for Review. Your supervisor will then approve or send it back.'],
+          ['Why is my task showing as overdue?','The due date has passed. Complete and submit it as soon as possible.'],
+          ['How do I add evidence/photos?','Open the task → tap Take Photo or Gallery in the Evidence section.'],
+          ['Who do I contact for account issues?','Submit a ticket above and the Taksyn support team will assist you.']
+        ].map(([q,a],i)=>(
+          <div key={i} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:4,color:'var(--text)'}}>❓ {q}</div>
+            <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.5}}>{a}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SupportView({ user }) {
+  const [tickets, setTickets] = useState([])
+  const [filter, setFilter] = useState('open')
+  const [selected, setSelected] = useState(null)
+  const [response, setResponse] = useState('')
+  const [updating, setUpdating] = useState(false)
+
+  useEffect(()=>{
+    if(isConfigured()) {
+      supabase.from('support_tickets').select('*').order('created_at',{ascending:false})
+        .then(({data})=>{ if(data) setTickets(data) })
+    }
+  },[])
+
+  const STATUS_COLORS = { open:'#F59E0B', in_progress:'#3B82F6', resolved:'#10B981', closed:'#6B7280' }
+  const filtered = filter==='all' ? tickets : tickets.filter(t=>t.status===filter)
+
+  const updateTicket = async (id, changes) => {
+    setUpdating(true)
+    if(isConfigured()) await supabase.from('support_tickets').update(changes).eq('id',id)
+    setTickets(prev=>prev.map(t=>t.id===id?{...t,...changes}:t))
+    setSelected(prev=>prev?.id===id?{...prev,...changes}:prev)
+    setUpdating(false)
+  }
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Support Centre</div>
+        <div className="ph-sub">{tickets.filter(t=>t.status==='open').length} open · {tickets.length} total tickets</div>
+      </div>
+
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+        {[['open','Open'],['in_progress','In Progress'],['resolved','Resolved'],['closed','Closed'],['all','All']].map(([v,l])=>(
+          <button key={v} className={'btn btn-sm '+(filter===v?'btn-primary':'btn-secondary')} onClick={()=>setFilter(v)}>
+            {l} <span style={{opacity:.6}}>({v==='all'?tickets.length:tickets.filter(t=>t.status===v).length})</span>
+          </button>
+        ))}
+      </div>
+
+      {selected ? (
+        <div className="anim">
+          <button className="back-btn" onClick={()=>setSelected(null)}><IC n="x" s={14}/> Back to tickets</button>
+          <div className="section">
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12,flexWrap:'wrap',gap:8}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:15}}>{selected.id}</div>
+                <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{selected.user_name} · {selected.org} · {ROLE_LABELS[selected.role]}</div>
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>{selected.user_email} · {selected.device} · v{selected.app_version}</div>
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>{new Date(selected.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+              </div>
+              <select value={selected.status} onChange={e=>updateTicket(selected.id,{status:e.target.value})} style={{fontSize:12,fontWeight:700,border:'2px solid '+(STATUS_COLORS[selected.status]||'var(--border)'),borderRadius:8,padding:'6px 10px',background:(STATUS_COLORS[selected.status]||'#6B7280')+'22',color:STATUS_COLORS[selected.status]||'var(--t2)',cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+            <div style={{background:'var(--s3)',borderRadius:8,padding:12,fontSize:13,lineHeight:1.6,marginBottom:14}}>{selected.description}</div>
+            {selected.screenshot&&<img src={selected.screenshot} alt="screenshot" style={{width:'100%',maxWidth:400,borderRadius:8,border:'1px solid var(--border)',marginBottom:14}}/>}
+            <div className="form-field">
+              <label className="form-label">Reply to User</label>
+              <textarea className="comment-box" style={{minHeight:80}} placeholder="Type your response to the user..." value={response||selected.response||''} onChange={e=>setResponse(e.target.value)}/>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button className="btn btn-primary" disabled={!response.trim()||updating} onClick={()=>{ updateTicket(selected.id,{response:response.trim(),status:'resolved'}); setResponse('') }}>✅ Send & Resolve</button>
+              <button className="btn btn-secondary" disabled={!response.trim()||updating} onClick={()=>{ updateTicket(selected.id,{response:response.trim()}); setResponse('') }}>💬 Send Reply</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div>
+          {filtered.length===0
+            ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No {filter==='all'?'':filter} tickets</div></div>
+            : filtered.map((t,i)=>(
+              <div key={i} onClick={()=>setSelected(t)} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(STATUS_COLORS[t.status]||'var(--border)')}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
+                      <span style={{fontSize:11,fontWeight:700,color:'var(--t2)'}}>{t.id}</span>
+                      <RolePill role={t.role}/>
+                      <span style={{fontSize:11,color:'var(--t2)'}}>{t.org}</span>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>{t.description?.slice(0,100)}{t.description?.length>100?'...':''}</div>
+                    <div style={{fontSize:11,color:'var(--t2)'}}>{t.user_name} · {t.user_email} · {t.device}</div>
+                    <div style={{fontSize:10,color:'var(--t3)',marginTop:2}}>{new Date(t.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'flex-end'}}>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:(STATUS_COLORS[t.status]||'#6B7280')+'22',color:STATUS_COLORS[t.status]||'#6B7280',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
+                    {t.screenshot&&<span style={{fontSize:10,color:'var(--t2)'}}>📷</span>}
+                    {t.response&&<span style={{fontSize:10,color:'var(--green)'}}>💬 Replied</span>}
+                  </div>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 export default function App() {
   const [user, setUser] = useState(null)
   const [page, setPage] = useState('dashboard')
@@ -3000,6 +3231,8 @@ export default function App() {
                 {page==='orgs'        && user.role==='super_admin' && <OrganisationsView {...pageProps}/>}
                 {page==='users'       && hasAccess(user.role,4) && <UsersView      {...pageProps}/>}
                 {page==='tiers'       && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
+                {page==='support'     && user.role==='super_admin' && <SupportView {...pageProps}/>}
+                {page==='help'        && <HelpView {...pageProps}/>}
               </>
             )}
           </div>
