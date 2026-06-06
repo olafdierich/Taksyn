@@ -3099,9 +3099,14 @@ export default function App() {
   useEffect(()=>{
     if(user&&isConfigured()) {
       loadTasks()
+      let reloadTimer = null
       const channel = supabase
         .channel('tasks-realtime')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, ()=>{ loadTasks() })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, ()=>{
+          // Debounce to avoid wiping optimistic updates
+          clearTimeout(reloadTimer)
+          reloadTimer = setTimeout(()=>loadTasks(), 1500)
+        })
         .subscribe()
       return ()=>{ supabase.removeChannel(channel) }
     }
