@@ -766,7 +766,7 @@ function visibleTasks(tasks, user, leaveRecords=[]) {
   if (user.role==='worker') {
     const myTasks = orgTasks.filter(t =>
       t.assigned_user_id===user.id ||
-      t.assigned_user_name===user.name ||
+      t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase() ||
       (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='worker')
     )
     // Add tasks of people being covered
