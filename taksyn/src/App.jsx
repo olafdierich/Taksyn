@@ -3630,6 +3630,7 @@ function SupportView({ user, tickets=[], setTickets }) {
         </div>
       </div>
       )}
+      )}
     </div>
   )
 }
