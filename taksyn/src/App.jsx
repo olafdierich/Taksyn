@@ -1561,7 +1561,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             </div>
           ) : (
             <div>
-              <div className="filter-bar">
+              {/* Filter bar — only show when not on 'all' view */}
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:12,alignItems:'center'}}>
+                <span style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',marginRight:2}}>Filter:</span>
                 {['all','pending','in_progress','awaiting_review','rejected','overdue','escalated'].map(f=>(
                   <button key={f} className={"fb "+(filter===f?'active':'')} onClick={()=>setFilter(f)}>
                     {f==='all'?'All':(STATUS_CFG[f]?.label||f)} <span style={{opacity:.6}}>({f==='all'?activeFiltered.length:f==='escalated'?activeFiltered.filter(t=>t.escalation).length:activeFiltered.filter(t=>t.status===f).length})</span>
@@ -1574,8 +1576,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     <div className="empty-text">No active tasks</div>
                     <div style={{fontSize:12,color:'var(--t2)',marginTop:8}}>Completed tasks are in the <span style={{color:'var(--brand)',cursor:'pointer',fontWeight:600}} onClick={()=>setShowArchive(true)}>📦 Archive</span></div>
                   </div>
-                : (()=>{
-                    // Priority sort: overdue → pending → in_progress → awaiting_review → rest
+                : filter!=='all' ? (
+                    // Flat list when specific filter selected
+                    <div>{filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>
+                  ) : (()=>{
+                    // 3-box layout when showing all
                     const priority = t => t.status==='overdue'?0:t.status==='rejected'?1:t.status==='pending'?2:t.status==='in_progress'?3:t.status==='awaiting_review'?4:5
                     const sorted = [...filtered].sort((a,b)=>priority(a)-priority(b))
 
