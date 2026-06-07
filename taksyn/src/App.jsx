@@ -101,6 +101,58 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
   return alerts
 }
 
+const generateNotifications = (tasks, user, prevTasks=[]) => {
+  const notifs = []
+  const orgTasks = tasks.filter(t=>t.org===user.org)
+  const today = new Date().toISOString().split('T')[0]
+
+  orgTasks.forEach(t=>{
+    const prev = prevTasks.find(p=>p.id===t.id)
+
+    // Task completed/submitted — notify supervisor/manager
+    if(t.status==='awaiting_review' && prev?.status!=='awaiting_review') {
+      if(['supervisor','manager','client_admin'].includes(user.role) &&
+        (t.assigned_role==='worker'||t.assigned_role===user.role)) {
+        notifs.push({ id:t.id+'_submitted', type:'submitted', title:'Task submitted for review', body:`"${t.title}" submitted by ${t.completed_by||t.assigned_user_name||'worker'}`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#F59E0B' })
+      }
+    }
+
+    // Task approved — notify worker
+    if(t.status==='approved' && prev?.status!=='approved') {
+      if(user.id===t.assigned_user_id || user.name===t.assigned_user_name) {
+        notifs.push({ id:t.id+'_approved', type:'approved', title:'Task approved ✅', body:`"${t.title}" has been approved`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#10B981' })
+      }
+    }
+
+    // Task rejected — notify worker
+    if(t.status==='rejected' && prev?.status!=='rejected') {
+      if(user.id===t.assigned_user_id || user.name===t.assigned_user_name) {
+        notifs.push({ id:t.id+'_rejected', type:'rejected', title:'Task sent back ⚠️', body:`"${t.title}" was rejected — check instructions`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444' })
+      }
+    }
+
+    // Task overdue — notify assignee and supervisor
+    if(t.status==='pending' && t.due_date && t.due_date < today) {
+      if(user.id===t.assigned_user_id || user.name===t.assigned_user_name) {
+        notifs.push({ id:t.id+'_overdue_worker', type:'overdue', title:'Task overdue 🔴', body:`"${t.title}" was due ${t.due_date}`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444' })
+      }
+    }
+  })
+  return notifs
+}
+
+const sendEmailNotif = async (toEmail, subject, body) => {
+  if(!isConfigured()||!toEmail) return
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    await fetch(supabaseUrl+'/functions/v1/send-notification', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ to:toEmail, subject, body, secret:import.meta.env.VITE_INVITE_SECRET||'' })
+    })
+  } catch(e) { console.log('Email notif failed:', e.message) }
+}
+
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
 const avatarColor = role => ROLE_COLORS[role] || '#6B7280'
 const isConfigured = () => { const u = import.meta.env.VITE_SUPABASE_URL; return u && !u.includes('placeholder') }
@@ -313,6 +365,12 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .undo-btn{background:var(--brand);color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite}
+.notif-panel{position:fixed;top:52px;right:0;width:320px;max-height:calc(100vh - 52px);background:#fff;border-left:1px solid var(--border);border-bottom:1px solid var(--border);box-shadow:-4px 4px 20px rgba(0,0,0,.1);z-index:250;display:flex;flex-direction:column;overflow:hidden}
+@media(max-width:480px){.notif-panel{width:100vw}}
+.notif-entry{padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.notif-entry:hover{background:var(--s3)}
+.notif-entry.unread{background:rgba(0,168,126,.04);border-left:3px solid var(--brand)}
+.notif-entry.unread:hover{background:rgba(0,168,126,.08)}
 `
 
 const IC = ({ n, s=16 }) => {
@@ -897,6 +955,36 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       setAuditLog(log=>[entry,...log])
       if (isConfigured()) {
         await supabase.from('audit_log').insert(entry).then(()=>{})
+      }
+      // Send email notifications for key status changes
+      if(isConfigured()) {
+        const task = tasks.find(t=>t.id===id)
+        // Task submitted → email supervisor/manager
+        if(changes.status==='awaiting_review' && task) {
+          const supervisors = await supabase.from('profiles').select('email,name,role').eq('org',task.org||user.org)
+          if(supervisors.data) {
+            supervisors.data.filter(p=>['supervisor','manager','client_admin'].includes(p.role)&&p.email).forEach(p=>{
+              sendEmailNotif(p.email, `Task submitted for review: ${task.title}`,
+                `${task.assigned_user_name||'A worker'} has submitted "${task.title}" for your review in ${task.org||user.org}. Please review it in Taksyn.`)
+            })
+          }
+        }
+        // Task approved → email worker
+        if(changes.status==='approved' && task?.assigned_user_id) {
+          const worker = await supabase.from('profiles').select('email,name').eq('id',task.assigned_user_id).single()
+          if(worker.data?.email) {
+            sendEmailNotif(worker.data.email, `Task approved: ${task.title}`,
+              `Great work! Your task "${task.title}" has been approved by ${user.name}.`)
+          }
+        }
+        // Task rejected → email worker
+        if(changes.status==='rejected' && task?.assigned_user_id) {
+          const worker = await supabase.from('profiles').select('email,name').eq('id',task.assigned_user_id).single()
+          if(worker.data?.email) {
+            sendEmailNotif(worker.data.email, `Task sent back: ${task.title}`,
+              `Your task "${task.title}" has been sent back by ${user.name}. Please check the instructions in Taksyn and resubmit.`)
+          }
+        }
       }
     }
     const interventionTag = user?.role==='super_admin' ? { lastIntervention: { by: user.name, reason: _interventionReason, at: new Date().toISOString() } } : {}
@@ -3381,6 +3469,8 @@ function HelpView({ user }) {
   const [submitted, setSubmitted] = useState(false)
   const [tickets, setTickets] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
+  const [notifications, setNotifications] = useState([])
+  const [showNotifPanel, setShowNotifPanel] = useState(false)
   const appVersion = '1.0.0'
 
   useEffect(()=>{
@@ -3656,6 +3746,8 @@ export default function App() {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
   const [tickets, setTickets] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
+  const [notifications, setNotifications] = useState([])
+  const [showNotifPanel, setShowNotifPanel] = useState(false)
   const undoTimer = useRef(null)
 
   const pushUndo = (label, prevTasks) => {
@@ -3687,7 +3779,23 @@ export default function App() {
   const loadTasks = async () => {
     if(!isConfigured()) return
     const { data } = await supabase.from('tasks').select('*').order('created_at',{ascending:false})
-    if(data) setTasks(data.map(t=>({...t, subtasks:parseSafe(t.subtasks), evidence:parseSafe(t.evidence), comments:parseSafe(t.comments,[])})))
+    if(data) {
+      const newTasks = data.map(t=>({...t, subtasks:parseSafe(t.subtasks), evidence:parseSafe(t.evidence), comments:parseSafe(t.comments,[])}))
+      setTasks(prev=>{
+        // Generate notifications from status changes
+        if(prev.length>0 && user) {
+          const newNotifs = generateNotifications(newTasks, user, prev)
+          if(newNotifs.length>0) {
+            setNotifications(n=>{
+              const existingIds = new Set(n.map(x=>x.id))
+              const fresh = newNotifs.filter(x=>!existingIds.has(x.id))
+              return [...fresh,...n].slice(0,50)
+            })
+          }
+        }
+        return newTasks
+      })
+    }
     loadAuditLog()
   }
 
@@ -3797,12 +3905,57 @@ export default function App() {
           <span className="tb-org">{user.org||'My Organisation'}</span>
           <div className="tb-space"/>
           <div className="tb-search"><IC n="search" s={12}/><input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/></div>
-          <button className="tb-icon-btn" onClick={()=>navigate('escalations')}><IC n="bell" s={16}/>{escalationCount>0&&<div className="tb-badge">{escalationCount}</div>}</button>
+          <button className="tb-icon-btn" onClick={()=>setShowNotifPanel(v=>!v)}>
+            <IC n="bell" s={16}/>
+            {notifications.filter(n=>!n.read).length>0&&<div className="tb-badge">{notifications.filter(n=>!n.read).length}</div>}
+          </button>
           <div className="tb-user" onClick={()=>{setShowProfile(true);setProfileName(user.name);setProfileMsg('')}}>
             <Avatar name={user.name} role={user.role} size={26} avatarUrl={user.avatar_url}/>
             <div><div className="tb-user-name">{user.name?.split(' ')[0]}</div><div className="tb-user-role">{ROLE_LABELS[user.role]}</div></div>
           </div>
         </div>
+
+        {/* Notification Panel */}
+        {showNotifPanel&&(
+          <>
+            <div style={{position:'fixed',inset:0,zIndex:249}} onClick={()=>setShowNotifPanel(false)}/>
+            <div className="notif-panel">
+              <div style={{padding:'12px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                <div style={{fontWeight:700,fontSize:14}}>🔔 Notifications</div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  {notifications.filter(n=>!n.read).length>0&&(
+                    <button style={{fontSize:11,color:'var(--brand)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:600}} onClick={()=>setNotifications(prev=>prev.map(n=>({...n,read:true})))}>Mark all read</button>
+                  )}
+                  <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:18,lineHeight:1}} onClick={()=>setShowNotifPanel(false)}>×</button>
+                </div>
+              </div>
+              <div style={{overflowY:'auto',flex:1}}>
+                {notifications.length===0 ? (
+                  <div style={{padding:'40px 20px',textAlign:'center',color:'var(--t2)'}}>
+                    <div style={{fontSize:28,marginBottom:8}}>🔔</div>
+                    <div style={{fontSize:13}}>No notifications yet</div>
+                  </div>
+                ) : notifications.map((n,i)=>(
+                  <div key={i} className={'notif-entry '+(n.read?'':'unread')} onClick={()=>{ setNotifications(prev=>prev.map((x,j)=>j===i?{...x,read:true}:x)); setShowNotifPanel(false); navigate('tasks') }}>
+                    <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                      <div style={{width:8,height:8,borderRadius:'50%',background:n.color||'var(--brand)',marginTop:5,flexShrink:0}}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:n.read?400:600,color:'var(--text)'}}>{n.title}</div>
+                        <div style={{fontSize:12,color:'var(--t2)',marginTop:2,lineHeight:1.4}}>{n.body}</div>
+                        <div style={{fontSize:10,color:'var(--t3)',marginTop:3}}>{new Date(n.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {notifications.length>0&&(
+                <div style={{padding:'8px 14px',borderTop:'1px solid var(--border)',flexShrink:0}}>
+                  <button style={{fontSize:11,color:'var(--red)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}} onClick={()=>setNotifications([])}>Clear all</button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         {showProfile&&(
           <div className="modal-overlay" onClick={()=>setShowProfile(false)}>
