@@ -43,6 +43,8 @@ const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','month
 const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' }
 const DEMO_TASKS = []
 const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
+const isRecurring = t => t.recurrence && t.recurrence !== '' && t.recurrence !== 'once' && t.recurrence !== null
+const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
 const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
@@ -938,7 +940,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     : []
   const activeStatuses = ['pending','in_progress','awaiting_review','overdue','escalated','rejected']
   const searchFiltered = search ? orgFiltered.filter(t=>t.title?.toLowerCase().includes(search.toLowerCase())||t.category?.toLowerCase().includes(search.toLowerCase())||t.assigned_user_name?.toLowerCase().includes(search.toLowerCase())) : orgFiltered
-  const activeFiltered = searchFiltered.filter(t=>activeStatuses.includes(t.status))
+  const activeFiltered = searchFiltered.filter(t=>activeStatuses.includes(t.status) || isRecurring(t))
   const filtered = filter==='all'?activeFiltered:filter==='escalated'?activeFiltered.filter(t=>t.escalation):activeFiltered.filter(t=>t.status===filter)
 
   const update = async (id, changes, _interventionReason=null) => {
@@ -1522,7 +1524,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     const approved = archived.filter(t=>t.status==='approved')
                     const completed = archived.filter(t=>t.status==='completed')
                     const rejected = archived.filter(t=>t.status==='rejected')
-                    const oneOffArchive = archived.filter(t=>!t.recurrence||t.recurrence===''||t.recurrence==='once')
+                    const oneOffArchive = archived.filter(t=>isOneOff(t))
                     const recurringArchive = archived.filter(t=>t.recurrence&&t.recurrence!==''&&t.recurrence!=='once')
 
                     const ArchiveTaskRow = ({t}) => (
@@ -1616,8 +1618,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
                       const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name===user.name)&&t.status!=='awaiting_review').sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
-                      const oneOff = iAssigned.filter(t=>!t.recurrence||t.recurrence==='once'||t.recurrence==='')
-                      const recurring = iAssigned.filter(t=>t.recurrence&&t.recurrence!=='once'&&t.recurrence!=='')
+                      const oneOff = iAssigned.filter(t=>isOneOff(t))
+                      const recurring = iAssigned.filter(t=>isRecurring(t))
                       return (
                         <div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
@@ -1645,8 +1647,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
                       const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name===user.name)&&t.status!=='awaiting_review').sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
-                      const oneOff = iAssigned.filter(t=>!t.recurrence||t.recurrence==='once'||t.recurrence==='')
-                      const recurring = iAssigned.filter(t=>t.recurrence&&t.recurrence!=='once'&&t.recurrence!=='')
+                      const oneOff = iAssigned.filter(t=>isOneOff(t))
+                      const recurring = iAssigned.filter(t=>isRecurring(t))
                       return (
                         <div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
@@ -1676,8 +1678,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     const assignedToMgr = iAssigned.filter(t=>t.assigned_role==='manager'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='manager')
                     const assignedToSup = iAssigned.filter(t=>t.assigned_role==='supervisor'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='supervisor')
                     const assignedToWkr = iAssigned.filter(t=>t.assigned_role==='worker'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='worker')
-                    const oneOffAll = activeFiltered.filter(t=>!t.recurrence||t.recurrence==='once'||t.recurrence==='').filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation).sort(byDate)
-                    const recurringAll = activeFiltered.filter(t=>t.recurrence&&t.recurrence!=='once'&&t.recurrence!=='').filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation).sort(byDate)
+                    const oneOffAll = activeFiltered.filter(t=>isOneOff(t)).filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation).sort(byDate)
+                    const recurringAll = activeFiltered.filter(t=>isRecurring(t)).filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation).sort(byDate)
                     return (
                       <div>
                         <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
