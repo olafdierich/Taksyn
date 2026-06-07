@@ -1614,16 +1614,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       </div>
                     )
                   })()
-              } if(!groups[dept]) groups[dept]=[]; groups[dept].push(t) })
-                    const depts=Object.keys(groups).sort()
-                    if(depts.length<=1) return filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
-                    return depts.map(dept=>(
-                      <div key={dept} style={{marginBottom:16}}>
-                        <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',padding:'4px 0',borderBottom:'1px solid var(--border)',marginBottom:8}}>{dept} <span style={{fontWeight:400,color:'var(--t3)'}}>({groups[dept].length})</span></div>
-                        {groups[dept].map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                      </div>
-                    ))
-                  })()
               }
             </div>
           )}
