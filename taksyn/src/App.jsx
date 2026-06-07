@@ -35,13 +35,72 @@ const DEPARTMENTS = {
   General: ['Staff','Supervisor','Management','Administration']
 }
 const CAT_ICONS = { Hospitality:'🏨', Clinical:'🏥', NDIS:'♿', Aged_Care:'👴', Wedding_Events:'💍', Facilities:'🏢', Safety:'🛡️', Maintenance:'🔧', HR:'👥', General:'📋' }
+const LEAVE_TYPES = ['sick_leave','annual_leave','personal_leave','public_holiday']
+const LEAVE_LABELS = { sick_leave:'Sick Leave', annual_leave:'Annual Leave', personal_leave:'Personal Leave', public_holiday:'Public Holiday' }
+const LEAVE_COLORS = { sick_leave:'#EF4444', annual_leave:'#10B981', personal_leave:'#3B82F6', public_holiday:'#8B5CF6' }
+
 const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','monthly','quarterly','annually']
 const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' }
 const DEMO_TASKS = []
 const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
+const workingDaysBetween = (start, end) => {
+  let count = 0
+  const cur = new Date(start)
+  cur.setHours(0,0,0,0)
+  const endD = new Date(end)
+  endD.setHours(0,0,0,0)
+  while(cur <= endD) {
+    const day = cur.getDay()
+    if(day!==0&&day!==6) count++
+    cur.setDate(cur.getDate()+1)
+  }
+  return count
+}
+
+const computeAlerts = (tasks, user, leaveRecords=[]) => {
+  const now = new Date()
+  const today = now.toISOString().split('T')[0]
+  const alerts = []
+  const orgTasks = tasks.filter(t=>t.org===user.org)
+
+  // Get users on leave today
+  const onLeaveToday = new Set(leaveRecords.filter(l=>l.date_from<=today&&l.date_to>=today).map(l=>l.user_id))
+
+  orgTasks.forEach(t=>{
+    if(!t.due_date) return
+    const isAssigneeOnLeave = onLeaveToday.has(t.assigned_user_id)
+    if(isAssigneeOnLeave) return // skip — worker on leave
+
+    // Alert 1: Worker hasn't done task on due date — alert supervisor
+    if(t.status==='pending'&&t.due_date<today&&t.assigned_role==='worker') {
+      if(['supervisor','manager','client_admin'].includes(user.role)) {
+        alerts.push({ type:'overdue_worker', task:t, msg:`Worker task overdue: "${t.title}" assigned to ${t.assigned_user_name||'worker'}`, level:'red' })
+      }
+    }
+
+    // Alert 2: Supervisor hasn't responded to awaiting_review for >1 working day
+    if(t.status==='awaiting_review'&&t.submitted_at) {
+      const days = workingDaysBetween(new Date(t.submitted_at), now)
+      if(days>=1&&['manager','client_admin'].includes(user.role)) {
+        alerts.push({ type:'review_pending', task:t, msg:`"${t.title}" awaiting review for ${days} working day${days>1?'s':''} — supervisor not responded`, level:'amber' })
+      }
+    }
+
+    // Alert 3: Report not reviewed within 5 working days
+    if(t.status==='awaiting_review'&&t.submitted_at) {
+      const days = workingDaysBetween(new Date(t.submitted_at), now)
+      if(days>=5&&['manager','client_admin'].includes(user.role)) {
+        alerts.push({ type:'review_overdue', task:t, msg:`"${t.title}" not reviewed in ${days} working days — immediate action required`, level:'red' })
+      }
+    }
+  })
+
+  return alerts
+}
+
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
 const avatarColor = role => ROLE_COLORS[role] || '#6B7280'
 const isConfigured = () => { const u = import.meta.env.VITE_SUPABASE_URL; return u && !u.includes('placeholder') }
@@ -658,7 +717,7 @@ function computeAwards(tasks) {
   return { week:sorted[0]||null, month:sorted[0]||null }
 }
 
-function DashboardView({ tasks, user, setPage }) {
+function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[] }) {
   // Filter tasks by org - super admin sees no org's tasks on dashboard (use Organisations page)
   const visibleAll = visibleTasks(tasks, user)
   const visible = user.role==='super_admin' ? [] : visibleAll
@@ -685,6 +744,23 @@ function DashboardView({ tasks, user, setPage }) {
         {isWkr&&<><Stat label="My Tasks" val={visible.filter(t=>!['awaiting_review','approved','completed'].includes(t.status)).length} sub="remaining to do" icon="📋"/><Stat label="Submitted" val={visible.filter(t=>['awaiting_review','approved','completed'].includes(t.status)).length} sub="done or in review" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Overdue" val={overdue} sub={overdue>0?'Complete soon':'All good'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><Stat label="Rejected" val={rejected} sub={rejected>0?'Action needed':'All good'} color={rejected>0?'#EF4444':'#6B7280'} bg={rejected>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)'} icon="✗"/></>}
       </div>
       {overdue>0&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">{overdue} task{overdue>1?'s':''} overdue</div><div className="esc-banner-sub">Immediate action required</div></div><button className="btn btn-danger btn-sm" onClick={()=>setPage('escalations')}>View</button></div>}
+      {/* Smart Alerts */}
+      {(()=>{
+        const smartAlerts = computeAlerts(tasks, user, leaveRecords)
+        if(smartAlerts.length===0) return null
+        return (
+          <div className="section" style={{marginBottom:14,border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.03)'}}>
+            <div className="section-title" style={{color:'var(--red)'}}>⚠️ Action Required ({smartAlerts.length})</div>
+            {smartAlerts.slice(0,5).map((a,i)=>(
+              <div key={i} style={{display:'flex',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)',alignItems:'flex-start',cursor:'pointer'}} onClick={()=>setPage('tasks')}>
+                <span style={{fontSize:14,flexShrink:0}}>{a.level==='red'?'🔴':'🟡'}</span>
+                <div style={{flex:1,fontSize:12,color:'var(--text)',lineHeight:1.5}}>{a.msg}</div>
+              </div>
+            ))}
+            {smartAlerts.length>5&&<div style={{fontSize:11,color:'var(--t2)',marginTop:6,textAlign:'right'}}>{smartAlerts.length-5} more alerts</div>}
+          </div>
+        )
+      })()}
       {(isCA||isMgr)&&awards.week&&<div className="section"><div className="section-title">🏆 Staff Recognition</div><div className="award-card"><div className="award-icon">🥇</div><div><div className="award-title">Worker of the Week</div><div className="award-name">{awards.week.name}</div><div className="award-sub">{awards.week.count} tasks completed</div></div></div></div>}
       <div className="two-col">
         <div className="section">
@@ -700,9 +776,34 @@ function DashboardView({ tasks, user, setPage }) {
         </div>
       </div>
       <div style={{marginTop:4}}>
-        <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Active Tasks</div>
-        {visible.filter(t=>!['completed','approved'].includes(t.status)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')}/>)}
-        {visible.filter(t=>!['completed','approved'].includes(t.status)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
+        {isSA ? (
+          <>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <div style={{fontSize:14,fontWeight:700}}>🎫 Active Support Tickets</div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setPage('support')}>View All</button>
+            </div>
+            {tickets.filter(t=>t.status==='open'||t.status==='in_progress').length===0
+              ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No open tickets</div></div>
+              : tickets.filter(t=>t.status==='open'||t.status==='in_progress').slice(0,5).map((t,i)=>(
+                <div key={i} onClick={()=>setPage('support')} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:12,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(t.status==='open'?'#F59E0B':'#3B82F6')}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:600,marginBottom:2}}>{t.description?.slice(0,80)}{t.description?.length>80?'...':''}</div>
+                      <div style={{fontSize:11,color:'var(--t2)'}}>{t.user_name} · {t.org} · {t.device}</div>
+                    </div>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='open'?'rgba(245,158,11,.15)':'rgba(59,130,246,.15)',color:t.status==='open'?'#F59E0B':'#3B82F6',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
+                  </div>
+                </div>
+              ))
+            }
+          </>
+        ) : (
+          <>
+            <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Active Tasks</div>
+            {visible.filter(t=>!['completed','approved'].includes(t.status)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')}/>)}
+            {visible.filter(t=>!['completed','approved'].includes(t.status)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
+          </>
+        )}
       </div>
     </div>
   )
@@ -1594,7 +1695,7 @@ function ReportsView({ tasks, user }) {
   // --- Worker performance stats ---
   const workerRoles = ['worker','supervisor','manager']
   const workerMap = {}
-  pt.forEach(t => {
+  ptFiltered.forEach(t => {
     const key = t.assigned_user_name || t.assigned_user_id || 'Unassigned'
     const role = t.assigned_role || 'worker'
     if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
@@ -2173,10 +2274,10 @@ function TiersView({ user }) {
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Task Stats','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['support','Support','alert']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['projects','Projects 🔜','tasks'],['performance','Performance','chart'],['tiers','Plans','tier'],['help','Help & Support','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['help','Help & Support','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['help','Help & Support','alert']],
-  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['help','Help & Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['tiers','Plans','tier'],['help','Help & Support','alert']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['leave','Leave','clock'],['help','Help & Support','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['leave','Leave','clock'],['help','Help & Support','alert']],
+  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
 }
 
 function PasswordSetupView({ onDone }) {
@@ -2911,7 +3012,7 @@ function ProjectsView({ user }) {
   )
 }
 
-function PerformanceView({ tasks, user }) {
+function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
 
@@ -2925,6 +3026,23 @@ function PerformanceView({ tasks, user }) {
   const [rs,re] = getRange()
   const orgTasks = tasks.filter(t=>t.org===user.org)
   const pt = orgTasks.filter(t=>{ const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
+
+  // Build leave day lookup per user
+  const leaveDaysByUser = {}
+  leaveRecords.forEach(l=>{
+    if(!leaveDaysByUser[l.user_id]) leaveDaysByUser[l.user_id]=new Set()
+    const cur=new Date(l.date_from)
+    while(cur.toISOString().split('T')[0]<=l.date_to){
+      leaveDaysByUser[l.user_id].add(cur.toISOString().split('T')[0])
+      cur.setDate(cur.getDate()+1)
+    }
+  })
+
+  // Filter out tasks due on leave days (don't penalise for leave)
+  const ptFiltered = pt.filter(t=>{
+    if(!t.assigned_user_id||!t.due_date) return true
+    return !leaveDaysByUser[t.assigned_user_id]?.has(t.due_date)
+  })
 
   // Build per-person stats
   const peopleMap = {}
@@ -3068,6 +3186,193 @@ function PerformanceView({ tasks, user }) {
 }
 
 
+function LeaveView({ user, tasks }) {
+  const [leaves, setLeaves] = useState([])
+  const [showApply, setShowApply] = useState(false)
+  const [form, setForm] = useState({ type:'annual_leave', date_from:'', date_to:'', reason:'' })
+  const [saving, setSaving] = useState(false)
+  const [teamLeaves, setTeamLeaves] = useState([])
+  const isCA = user.role==='client_admin'
+  const today = new Date().toISOString().split('T')[0]
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    // Load own leave
+    supabase.from('leave_records').select('*').eq('user_id',user.id).order('date_from',{ascending:false})
+      .then(({data})=>{ if(data) setLeaves(data) }).catch(()=>{})
+    // Client admin sees all team leave
+    if(isCA) {
+      supabase.from('leave_records').select('*').eq('org',user.org).order('date_from',{ascending:false})
+        .then(({data})=>{ if(data) setTeamLeaves(data) }).catch(()=>{})
+    }
+  },[])
+
+  const applyLeave = async () => {
+    if(!form.date_from||!form.date_to||saving) return
+    if(form.date_to<form.date_from) { alert('End date must be after start date'); return }
+    setSaving(true)
+    const entry = {
+      id: 'LV'+Date.now(),
+      user_id: user.id,
+      user_name: user.name,
+      org: user.org,
+      role: user.role,
+      type: form.type,
+      date_from: form.date_from,
+      date_to: form.date_to,
+      reason: form.reason.trim(),
+      status: 'approved', // auto-approved for now
+      created_at: new Date().toISOString()
+    }
+    if(isConfigured()) {
+      const {error} = await supabase.from('leave_records').insert(entry)
+      if(error) { alert('Error: '+error.message); setSaving(false); return }
+    }
+    setLeaves(prev=>[entry,...prev])
+    if(isCA) setTeamLeaves(prev=>[entry,...prev])
+    setShowApply(false)
+    setForm({ type:'annual_leave', date_from:'', date_to:'', reason:'' })
+    setSaving(false)
+  }
+
+  const deleteLeave = async (id) => {
+    if(!confirm('Cancel this leave request?')) return
+    if(isConfigured()) await supabase.from('leave_records').delete().eq('id',id)
+    setLeaves(prev=>prev.filter(l=>l.id!==id))
+    setTeamLeaves(prev=>prev.filter(l=>l.id!==id))
+  }
+
+  const isOnLeave = leaves.some(l=>l.date_from<=today&&l.date_to>=today)
+
+  // Tasks on leave days — excluded from performance
+  const leaveDays = new Set()
+  leaves.forEach(l=>{
+    const cur = new Date(l.date_from)
+    while(cur.toISOString().split('T')[0]<=l.date_to) {
+      leaveDays.add(cur.toISOString().split('T')[0])
+      cur.setDate(cur.getDate()+1)
+    }
+  })
+  const orgTasks = tasks.filter(t=>t.org===user.org)
+  const myTasks = orgTasks.filter(t=>t.assigned_user_id===user.id||t.assigned_user_name===user.name)
+  const leaveExcluded = myTasks.filter(t=>t.due_date&&leaveDays.has(t.due_date))
+
+  const fmtDate = d => d ? new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : '—'
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-top">
+          <div>
+            <div className="ph-title">{isCA?'Team Leave':'My Leave'}</div>
+            <div className="ph-sub">{isCA?`${teamLeaves.filter(l=>l.date_from<=today&&l.date_to>=today).length} staff on leave today`:(isOnLeave?'🟡 You are currently on leave':'✅ You are currently active')}</div>
+          </div>
+          <button className="btn btn-primary" onClick={()=>setShowApply(true)}><IC n="plus" s={13}/> Apply for Leave</button>
+        </div>
+      </div>
+
+      {isOnLeave&&(
+        <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.2)',borderRadius:10,padding:12,marginBottom:14,fontSize:13,color:'#92400E'}}>
+          🟡 <strong>You are on leave today.</strong> Tasks due on your leave days are excluded from your performance review.
+        </div>
+      )}
+
+      {showApply&&(
+        <div className="modal-overlay" onClick={()=>setShowApply(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr"><div className="modal-title">Apply for Leave</div><button className="modal-close" onClick={()=>setShowApply(false)}>×</button></div>
+            <div className="modal-body">
+              <div className="form-field">
+                <label className="form-label">Leave Type</label>
+                <select className="form-select" value={form.type} onChange={e=>setForm({...form,type:e.target.value})}>
+                  {LEAVE_TYPES.map(t=><option key={t} value={t}>{LEAVE_LABELS[t]}</option>)}
+                </select>
+              </div>
+              <div className="two-col">
+                <div className="form-field"><label className="form-label">From Date</label><input type="date" className="form-input" value={form.date_from} onChange={e=>setForm({...form,date_from:e.target.value})}/></div>
+                <div className="form-field"><label className="form-label">To Date</label><input type="date" className="form-input" value={form.date_to} min={form.date_from||undefined} onChange={e=>setForm({...form,date_to:e.target.value})}/></div>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Reason <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
+                <textarea className="comment-box" value={form.reason} onChange={e=>setForm({...form,reason:e.target.value})} placeholder="Brief reason for leave..."/>
+              </div>
+              <div style={{background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,fontSize:12,color:'var(--brand)',marginBottom:12}}>
+                ℹ️ Tasks due on your leave days will be excluded from your performance review automatically.
+              </div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>setShowApply(false)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!form.date_from||!form.date_to||saving} onClick={applyLeave}>{saving?'Saving...':'Submit Leave'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* My Leave Records */}
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">My Leave Records</div>
+        {leaves.length===0
+          ? <div style={{fontSize:13,color:'var(--t2)',textAlign:'center',padding:16}}>No leave records yet</div>
+          : leaves.map((l,i)=>(
+            <div key={i} style={{display:'flex',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)',alignItems:'center'}}>
+              <div style={{width:10,height:10,borderRadius:'50%',background:LEAVE_COLORS[l.type]||'#6B7280',flexShrink:0}}/>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:13}}>{LEAVE_LABELS[l.type]}</div>
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>{fmtDate(l.date_from)} → {fmtDate(l.date_to)}</div>
+                {l.reason&&<div style={{fontSize:11,color:'var(--t2)',fontStyle:'italic',marginTop:1}}>{l.reason}</div>}
+              </div>
+              <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:(LEAVE_COLORS[l.type]||'#6B7280')+'22',color:LEAVE_COLORS[l.type]||'#6B7280'}}>{l.type.replace('_',' ').toUpperCase()}</span>
+              {l.date_from>=today&&<button className="btn btn-danger btn-sm" onClick={()=>deleteLeave(l.id)}>Cancel</button>}
+            </div>
+          ))
+        }
+      </div>
+
+      {/* Tasks excluded from performance */}
+      {leaveExcluded.length>0&&(
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">📊 Excluded from Performance Review</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>These tasks were due on your leave days and won't affect your performance metrics.</div>
+          {leaveExcluded.map((t,i)=>(
+            <div key={i} style={{display:'flex',gap:8,padding:'6px 0',borderBottom:'1px solid var(--border)',fontSize:12,alignItems:'center'}}>
+              <span style={{color:'var(--t2)'}}>📋</span>
+              <div style={{flex:1}}>{t.title}</div>
+              <span style={{color:'var(--t2)',fontSize:11}}>Due {t.due_date}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Client admin: team leave overview */}
+      {isCA&&teamLeaves.length>0&&(
+        <div className="section">
+          <div className="section-title">Team Leave Overview</div>
+          {[...new Set(teamLeaves.map(l=>l.user_name))].map(name=>{
+            const userLeaves = teamLeaves.filter(l=>l.user_name===name)
+            const onLeave = userLeaves.some(l=>l.date_from<=today&&l.date_to>=today)
+            return (
+              <div key={name} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                  <span style={{width:8,height:8,borderRadius:'50%',background:onLeave?'#F59E0B':'#10B981',display:'inline-block'}}/>
+                  <span style={{fontWeight:600,fontSize:13}}>{name}</span>
+                  {onLeave&&<span style={{fontSize:10,background:'rgba(245,158,11,.15)',color:'#F59E0B',padding:'1px 6px',borderRadius:8,fontWeight:600}}>ON LEAVE</span>}
+                </div>
+                {userLeaves.slice(0,2).map((l,i)=>(
+                  <div key={i} style={{fontSize:11,color:'var(--t2)',marginLeft:16,display:'flex',gap:8}}>
+                    <span style={{color:LEAVE_COLORS[l.type]}}>{LEAVE_LABELS[l.type]}</span>
+                    <span>{fmtDate(l.date_from)} → {fmtDate(l.date_to)}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 function HelpView({ user }) {
   const [desc, setDesc] = useState('')
   const [device, setDevice] = useState('')
@@ -3075,6 +3380,7 @@ function HelpView({ user }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [tickets, setTickets] = useState([])
+  const [leaveRecords, setLeaveRecords] = useState([])
   const appVersion = '1.0.0'
 
   useEffect(()=>{
@@ -3196,30 +3502,23 @@ function HelpView({ user }) {
   )
 }
 
-function SupportView({ user }) {
-  const [tickets, setTickets] = useState([])
+function SupportView({ user, tickets=[], setTickets }) {
   const [filter, setFilter] = useState('open')
+  const [showArchive, setShowArchive] = useState(false)
+  const [archiveSearch, setArchiveSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [response, setResponse] = useState('')
   const [updating, setUpdating] = useState(false)
 
-  useEffect(()=>{
-    if(isConfigured()) {
-      supabase.from('support_tickets').select('*').order('created_at',{ascending:false}).limit(500)
-        .then(({data,error})=>{ 
-          if(error) console.error('Support tickets error:',error)
-          if(data) setTickets(data) 
-        })
-    }
-  },[])
+  // tickets loaded from App-level state
 
   const STATUS_COLORS = { open:'#F59E0B', in_progress:'#3B82F6', resolved:'#10B981', closed:'#6B7280' }
-  const filtered = filter==='all' ? tickets : tickets.filter(t=>t.status===filter)
+  const filtered = filter==='all' ? tickets.filter(t=>!['resolved','closed'].includes(t.status)) : tickets.filter(t=>t.status===filter)
 
   const updateTicket = async (id, changes) => {
     setUpdating(true)
     if(isConfigured()) await supabase.from('support_tickets').update(changes).eq('id',id)
-    setTickets(prev=>prev.map(t=>t.id===id?{...t,...changes}:t))
+    if(setTickets) setTickets(prev=>prev.map(t=>t.id===id?{...t,...changes}:t))
     setSelected(prev=>prev?.id===id?{...prev,...changes}:prev)
     setUpdating(false)
   }
@@ -3227,14 +3526,46 @@ function SupportView({ user }) {
   return (
     <div className="anim">
       <div className="ph">
-        <div className="ph-title">Support Centre</div>
-        <div className="ph-sub">{tickets.filter(t=>t.status==='open').length} open · {tickets.length} total tickets</div>
+        <div className="ph-top">
+          <div>
+            <div className="ph-title">Support Centre</div>
+            <div className="ph-sub">{tickets.filter(t=>t.status==='open').length} open · {tickets.filter(t=>t.status==='in_progress').length} in progress · {tickets.length} total</div>
+          </div>
+          <button className={'btn btn-sm '+(showArchive?'btn-primary':'btn-secondary')} onClick={()=>setShowArchive(!showArchive)}>📦 {showArchive?'Active Tickets':'Archive'}</button>
+        </div>
       </div>
 
+      {showArchive ? (
+        <div className="anim">
+          <div className="section">
+            <div className="section-title" style={{marginBottom:12}}>📦 Archived Tickets — Resolved & Closed</div>
+            <input className="form-input" placeholder="Search by user, org or description..." value={archiveSearch} onChange={e=>setArchiveSearch(e.target.value)} style={{fontSize:12,marginBottom:12}}/>
+            {(()=>{
+              const archived = tickets
+                .filter(t=>['resolved','closed'].includes(t.status))
+                .filter(t=>!archiveSearch||t.description?.toLowerCase().includes(archiveSearch.toLowerCase())||t.user_name?.toLowerCase().includes(archiveSearch.toLowerCase())||t.org?.toLowerCase().includes(archiveSearch.toLowerCase()))
+                .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
+              if(archived.length===0) return <div className="empty"><div className="empty-icon">📦</div><div className="empty-text">No archived tickets</div></div>
+              return archived.map((t,i)=>(
+                <div key={i} onClick={()=>{setSelected(t);setShowArchive(false)}} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:12,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(t.status==='resolved'?'#10B981':'#6B7280')}}>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:600,marginBottom:2}}>{t.description?.slice(0,80)}{t.description?.length>80?'...':''}</div>
+                      <div style={{fontSize:11,color:'var(--t2)'}}>{t.user_name} · {t.org} · {new Date(t.created_at).toLocaleDateString('en-AU')}</div>
+                    </div>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='resolved'?'rgba(16,185,129,.12)':'var(--s4)',color:t.status==='resolved'?'var(--green)':'var(--t2)',whiteSpace:'nowrap',alignSelf:'flex-start'}}>{t.status.toUpperCase()}</span>
+                  </div>
+                  {t.response&&<div style={{fontSize:11,color:'var(--green)',marginTop:4}}>💬 Replied</div>}
+                </div>
+              ))
+            })()}
+          </div>
+        </div>
+      ) : (
       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
-        {[['open','Open'],['in_progress','In Progress'],['resolved','Resolved'],['closed','Closed'],['all','All']].map(([v,l])=>(
+        {[['open','Open'],['in_progress','In Progress'],['all','All Active']].map(([v,l])=>(
           <button key={v} className={'btn btn-sm '+(filter===v?'btn-primary':'btn-secondary')} onClick={()=>setFilter(v)}>
-            {l} <span style={{opacity:.6}}>({v==='all'?tickets.length:tickets.filter(t=>t.status===v).length})</span>
+            {l} <span style={{opacity:.6}}>({v==='all'?tickets.filter(t=>!['resolved','closed'].includes(t.status)).length:tickets.filter(t=>t.status===v).length})</span>
           </button>
         ))}
       </div>
@@ -3272,7 +3603,7 @@ function SupportView({ user }) {
       ) : (
         <div>
           {filtered.length===0
-            ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No {filter==='all'?'':filter} tickets</div></div>
+            ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No {filter==='all'?'active':filter} tickets</div></div>
             : filtered.map((t,i)=>(
               <div key={i} onClick={()=>setSelected(t)} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(STATUS_COLORS[t.status]||'var(--border)')}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
@@ -3297,6 +3628,7 @@ function SupportView({ user }) {
           }
         </div>
       )}
+      )}
     </div>
   )
 }
@@ -3320,6 +3652,8 @@ export default function App() {
   const [showUndo, setShowUndo] = useState(false)
   const [auditLog, setAuditLog] = useState([])
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
+  const [tickets, setTickets] = useState([])
+  const [leaveRecords, setLeaveRecords] = useState([])
   const undoTimer = useRef(null)
 
   const pushUndo = (label, prevTasks) => {
@@ -3340,6 +3674,12 @@ export default function App() {
     if (!isConfigured()) return
     const { data } = await supabase.from('audit_log').select('*').order('at', { ascending: false }).limit(500)
     if (data) setAuditLog(user.role==='super_admin'?data:data.filter(e=>e.org===user.org))
+  }
+
+  const loadTickets = async () => {
+    if(!isConfigured()) return
+    const {data} = await supabase.from('support_tickets').select('*').order('created_at',{ascending:false}).limit(500)
+    if(data) setTickets(data)
   }
 
   const loadTasks = async () => {
@@ -3397,6 +3737,12 @@ export default function App() {
   useEffect(()=>{
     if(user&&isConfigured()) {
       loadTasks()
+      if(user.role==='super_admin') loadTickets()
+      // Load leave records for org
+      if(isConfigured()&&user.org) {
+        supabase.from('leave_records').select('*').eq('org',user.org)
+          .then(({data})=>{ if(data) setLeaveRecords(data) }).catch(()=>{})
+      }
       let reloadTimer = null
       const channel = supabase
         .channel('tasks-realtime')
@@ -3427,7 +3773,7 @@ export default function App() {
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
@@ -3612,7 +3958,7 @@ export default function App() {
               <div className="empty" style={{marginTop:60}}><div className="empty-icon">🔒</div><div style={{fontSize:16,fontWeight:700,marginBottom:8}}>Access Restricted</div><div className="empty-text">Your role ({ROLE_LABELS[user.role]}) does not have access to this section.</div></div>
             ) : (
               <>
-                {page==='dashboard'   && <DashboardView   {...pageProps}/>}
+                {page==='dashboard'   && <DashboardView   {...pageProps} tickets={tickets} leaveRecords={leaveRecords}/>}
                 {page==='tasks'       && (user.role==='super_admin' ? <SuperAdminTaskStats tasks={tasks} /> : <TasksView {...pageProps}/>)}
                 {page==='evidence'    && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
                 {page==='escalations' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
@@ -3625,6 +3971,7 @@ export default function App() {
                 {page==='help'        && <HelpView {...pageProps}/>}
                 {page==='projects'    && hasAccess(user.role,2) && <ProjectsView {...pageProps}/>}
                 {page==='performance' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
+                {page==='leave'       && <LeaveView {...pageProps}/>}
               </>
             )}
           </div>
