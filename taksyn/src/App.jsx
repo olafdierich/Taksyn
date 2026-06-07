@@ -3562,6 +3562,7 @@ function SupportView({ user, tickets=[], setTickets }) {
           </div>
         </div>
       ) : (
+      <div>
       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
         {[['open','Open'],['in_progress','In Progress'],['all','All Active']].map(([v,l])=>(
           <button key={v} className={'btn btn-sm '+(filter===v?'btn-primary':'btn-secondary')} onClick={()=>setFilter(v)}>
@@ -3627,7 +3628,7 @@ function SupportView({ user, tickets=[], setTickets }) {
             ))
           }
         </div>
-      )}
+      </div>
       )}
     </div>
   )
