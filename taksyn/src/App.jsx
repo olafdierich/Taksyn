@@ -873,7 +873,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[] }) {
           <>
             <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Active Tasks</div>
             {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')}/>)}
-            {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}d'].includes(t.status)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
+            {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
           </>
         )}
       </div>
