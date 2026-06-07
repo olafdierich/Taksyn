@@ -1574,88 +1574,131 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     // Flat list when specific filter selected
                     <div>{filtered.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>:filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>
                   ) : (()=>{
-                    // 3-box layout always shown
-                    const priority = t => t.status==='overdue'?0:t.status==='rejected'?1:t.status==='pending'?2:t.status==='in_progress'?3:t.status==='awaiting_review'?4:5
-                    const sorted = [...activeFiltered].sort((a,b)=>priority(a)-priority(b))
+                    const byDate = (a,b) => new Date(a.due_date||'9999')-new Date(b.due_date||'9999')
 
-                    // Split into one-off and recurring
-                    const oneOff = sorted.filter(t=>!t.recurrence||t.recurrence===''||t.recurrence==='once')
-                    const recurring = sorted.filter(t=>t.recurrence&&t.recurrence!==''&&t.recurrence!=='once')
-
-                    // Rejected box (worker only)
-                    const rejected = sorted.filter(t=>t.status==='rejected')
-
-                    // Awaiting review box (supervisor/manager/client_admin)
-                    const awaitingReview = sorted.filter(t=>t.status==='awaiting_review')
-
-                    const TaskBox = ({title, icon, tasks, emptyText, borderColor='var(--border)', bg='#fff'}) => (
-                      tasks.length===0 ? null : (
-                        <div style={{background:bg,border:`1px solid ${borderColor}`,borderRadius:12,padding:16,marginBottom:14}}>
-                          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
-                            <span>{icon}</span>{title} <span style={{fontWeight:400,color:'var(--t3)'}}>({tasks.length})</span>
+                    // ── WORKER VIEW ──────────────────────────────────
+                    if(user.role==='worker') {
+                      const actionNeeded = activeFiltered.filter(t=>t.status==='rejected').sort(byDate)
+                      const toDo = activeFiltered.filter(t=>['pending','in_progress','overdue'].includes(t.status)).sort(byDate)
+                      const submitted = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                      return (
+                        <div>
+                          <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔴 Action Needed — Sent Back ({actionNeeded.length})</div>
+                            {actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
-                          {tasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 To Do ({toDo.length})</div>
+                            {toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                          <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>⏳ Submitted — Awaiting Review ({submitted.length})</div>
+                            {submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
                         </div>
                       )
-                    )
+                    }
 
+                    // ── SUPERVISOR VIEW ───────────────────────────────
+                    if(user.role==='supervisor') {
+                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name===user.name)&&t.status!=='awaiting_review').sort(byDate)
+                      const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
+                      const oneOff = iAssigned.filter(t=>!t.recurrence||t.recurrence==='once'||t.recurrence==='')
+                      const recurring = iAssigned.filter(t=>t.recurrence&&t.recurrence!=='once'&&t.recurrence!=='')
+                      return (
+                        <div>
+                          <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
+                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 My Own Tasks ({myTasks.length})</div>
+                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 One-off Tasks I Assigned ({oneOff.length})</div>
+                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                          <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks I Assigned ({recurring.length})</div>
+                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // ── MANAGER VIEW ──────────────────────────────────
+                    if(user.role==='manager') {
+                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name===user.name)&&t.status!=='awaiting_review').sort(byDate)
+                      const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
+                      const oneOff = iAssigned.filter(t=>!t.recurrence||t.recurrence==='once'||t.recurrence==='')
+                      const recurring = iAssigned.filter(t=>t.recurrence&&t.recurrence!=='once'&&t.recurrence!=='')
+                      return (
+                        <div>
+                          <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
+                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 My Own Tasks ({myTasks.length})</div>
+                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 One-off Tasks I Assigned ({oneOff.length})</div>
+                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                          <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks I Assigned ({recurring.length})</div>
+                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // ── CLIENT ADMIN VIEW ─────────────────────────────
+                    const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                    const attention = activeFiltered.filter(t=>['overdue','escalated'].includes(t.status)||t.escalation).sort(byDate)
+                    const iAssigned = activeFiltered.filter(t=>t.created_by===user.name).sort(byDate)
+                    const assignedToMgr = iAssigned.filter(t=>t.assigned_role==='manager'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='manager')
+                    const assignedToSup = iAssigned.filter(t=>t.assigned_role==='supervisor'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='supervisor')
+                    const assignedToWkr = iAssigned.filter(t=>t.assigned_role==='worker'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='worker')
+                    const oneOffAll = activeFiltered.filter(t=>!t.recurrence||t.recurrence==='once'||t.recurrence==='').filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation).sort(byDate)
+                    const recurringAll = activeFiltered.filter(t=>t.recurrence&&t.recurrence!=='once'&&t.recurrence!=='').filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation).sort(byDate)
                     return (
                       <div>
-                        {/* Rejected box — worker only */}
-                        {user.role==='worker'&&(
-                          <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:14}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
-                              ⚠️ Action Required — Sent Back <span style={{fontWeight:400,color:'var(--red)',opacity:.7}}>({rejected.length})</span>
-                            </div>
-                            {rejected.length===0
-                              ? <div style={{fontSize:12,color:'var(--t2)',textAlign:'center',padding:'10px 0'}}>✅ No rejected tasks</div>
-                              : rejected.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
-                            }
-                          </div>
-                        )}
-
-                        {/* Awaiting review box — supervisor/manager/client_admin */}
-                        {['supervisor','manager','client_admin'].includes(user.role)&&(
-                          <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:14}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
-                              🔍 Awaiting Your Review <span style={{fontWeight:400,color:'#F59E0B',opacity:.7}}>({awaitingReview.length})</span>
-                            </div>
-                            {awaitingReview.length===0
-                              ? <div style={{fontSize:12,color:'var(--t2)',textAlign:'center',padding:'10px 0'}}>✅ Nothing to review</div>
-                              : awaitingReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
-                            }
-                          </div>
-                        )}
-
-                        {/* One-off tasks box */}
-                        <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:14}}>
-                          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
-                            📋 One-off Tasks <span style={{fontWeight:400,color:'var(--t3)'}}>({oneOff.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review')).length})</span>
-                          </div>
-                          {(()=>{
-                            const show = oneOff.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review'))
-                            return show.length===0
-                              ? <div style={{fontSize:12,color:'var(--t2)',textAlign:'center',padding:'10px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>
-                              : show.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
-                          })()}
+                        <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
+                          <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
+                          {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                         </div>
-
-                        {/* Recurring tasks box */}
-                        <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:14}}>
-                          <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
-                            🔁 Recurring Tasks <span style={{fontWeight:400,color:'var(--brand)',opacity:.7}}>({recurring.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review')).length})</span>
+                        {attention.length>0&&(
+                          <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>⚠️ Needs Attention — Overdue & Escalated ({attention.length})</div>
+                            {attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
-                          {(()=>{
-                            const show = recurring.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review'))
-                            return show.length===0
-                              ? <div style={{fontSize:12,color:'var(--t2)',textAlign:'center',padding:'10px 0'}}>✅ No recurring tasks</div>
-                              : show.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
-                          })()}
+                        )}
+                        <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
+                          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 Tasks I Assigned ({iAssigned.length})</div>
+                          {iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
+                            <div>
+                              {assignedToMgr.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3B82F6',display:'inline-block'}}/> To Managers ({assignedToMgr.length})</div>{assignedToMgr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
+                              {assignedToSup.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#10B981',display:'inline-block'}}/> To Supervisors ({assignedToSup.length})</div>{assignedToSup.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
+                              {assignedToWkr.length>0&&<div><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#6B7280',display:'inline-block'}}/> To Workers ({assignedToWkr.length})</div>{assignedToWkr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
+                          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 One-off Tasks ({oneOffAll.length})</div>
+                          {oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                        </div>
+                        <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
+                          <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks ({recurringAll.length})</div>
+                          {recurringAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks</div>:recurringAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                         </div>
                       </div>
                     )
-                  })()
-              }
+                  })()}
             </div>
           )}
         </div>
