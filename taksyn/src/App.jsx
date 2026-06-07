@@ -3562,78 +3562,78 @@ function SupportView({ user, tickets=[], setTickets }) {
           </div>
         </div>
       ) : (
-      <div>
-      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
-        {[['open','Open'],['in_progress','In Progress'],['all','All Active']].map(([v,l])=>(
-          <button key={v} className={'btn btn-sm '+(filter===v?'btn-primary':'btn-secondary')} onClick={()=>setFilter(v)}>
-            {l} <span style={{opacity:.6}}>({v==='all'?tickets.filter(t=>!['resolved','closed'].includes(t.status)).length:tickets.filter(t=>t.status===v).length})</span>
-          </button>
-        ))}
-      </div>
-
-      {selected ? (
-        <div className="anim">
-          <button className="back-btn" onClick={()=>setSelected(null)}><IC n="x" s={14}/> Back to tickets</button>
-          <div className="section">
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12,flexWrap:'wrap',gap:8}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:15}}>{selected.id}</div>
-                <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{selected.user_name} · {selected.org} · {ROLE_LABELS[selected.role]}</div>
-                <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>{selected.user_email} · {selected.device} · v{selected.app_version}</div>
-                <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>{new Date(selected.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
-              </div>
-              <select value={selected.status} onChange={e=>updateTicket(selected.id,{status:e.target.value})} style={{fontSize:12,fontWeight:700,border:'2px solid '+(STATUS_COLORS[selected.status]||'var(--border)'),borderRadius:8,padding:'6px 10px',background:(STATUS_COLORS[selected.status]||'#6B7280')+'22',color:STATUS_COLORS[selected.status]||'var(--t2)',cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
-                <option value="open">Open</option>
-                <option value="in_progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-                <option value="closed">Closed</option>
-              </select>
-            </div>
-            <div style={{background:'var(--s3)',borderRadius:8,padding:12,fontSize:13,lineHeight:1.6,marginBottom:14}}>{selected.description}</div>
-            {selected.screenshot&&<img src={selected.screenshot} alt="screenshot" style={{width:'100%',maxWidth:400,borderRadius:8,border:'1px solid var(--border)',marginBottom:14}}/>}
-            <div className="form-field">
-              <label className="form-label">Reply to User</label>
-              <textarea className="comment-box" style={{minHeight:80}} placeholder="Type your response to the user..." value={response||selected.response||''} onChange={e=>setResponse(e.target.value)}/>
-            </div>
-            <div style={{display:'flex',gap:8}}>
-              <button className="btn btn-primary" disabled={!response.trim()||updating} onClick={()=>{ updateTicket(selected.id,{response:response.trim(),status:'resolved'}); setResponse('') }}>✅ Send & Resolve</button>
-              <button className="btn btn-secondary" disabled={!response.trim()||updating} onClick={()=>{ updateTicket(selected.id,{response:response.trim()}); setResponse('') }}>💬 Send Reply</button>
-            </div>
-          </div>
-        </div>
-      ) : (
         <div>
-          {filtered.length===0
-            ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No {filter==='all'?'active':filter} tickets</div></div>
-            : filtered.map((t,i)=>(
-              <div key={i} onClick={()=>setSelected(t)} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(STATUS_COLORS[t.status]||'var(--border)')}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-                  <div style={{flex:1}}>
-                    <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
-                      <span style={{fontSize:11,fontWeight:700,color:'var(--t2)'}}>{t.id}</span>
-                      <RolePill role={t.role}/>
-                      <span style={{fontSize:11,color:'var(--t2)'}}>{t.org}</span>
-                    </div>
-                    <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>{t.description?.slice(0,100)}{t.description?.length>100?'...':''}</div>
-                    <div style={{fontSize:11,color:'var(--t2)'}}>{t.user_name} · {t.user_email} · {t.device}</div>
-                    <div style={{fontSize:10,color:'var(--t3)',marginTop:2}}>{new Date(t.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+            {[['open','Open'],['in_progress','In Progress'],['all','All Active']].map(([v,l])=>(
+              <button key={v} className={'btn btn-sm '+(filter===v?'btn-primary':'btn-secondary')} onClick={()=>setFilter(v)}>
+                {l} <span style={{opacity:.6}}>({v==='all'?tickets.filter(t=>!['resolved','closed'].includes(t.status)).length:tickets.filter(t=>t.status===v).length})</span>
+              </button>
+            ))}
+          </div>
+          {selected ? (
+            <div className="anim">
+              <button className="back-btn" onClick={()=>setSelected(null)}><IC n="x" s={14}/> Back to tickets</button>
+              <div className="section">
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12,flexWrap:'wrap',gap:8}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:15}}>{selected.id}</div>
+                    <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{selected.user_name} · {selected.org} · {ROLE_LABELS[selected.role]}</div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>{selected.user_email} · {selected.device} · v{selected.app_version}</div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>{new Date(selected.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
                   </div>
-                  <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'flex-end'}}>
-                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:(STATUS_COLORS[t.status]||'#6B7280')+'22',color:STATUS_COLORS[t.status]||'#6B7280',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
-                    {t.screenshot&&<span style={{fontSize:10,color:'var(--t2)'}}>📷</span>}
-                    {t.response&&<span style={{fontSize:10,color:'var(--green)'}}>💬 Replied</span>}
-                  </div>
+                  <select value={selected.status} onChange={e=>updateTicket(selected.id,{status:e.target.value})} style={{fontSize:12,fontWeight:700,border:'2px solid '+(STATUS_COLORS[selected.status]||'var(--border)'),borderRadius:8,padding:'6px 10px',background:(STATUS_COLORS[selected.status]||'#6B7280')+'22',color:STATUS_COLORS[selected.status]||'var(--t2)',cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+                    <option value="open">Open</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+                <div style={{background:'var(--s3)',borderRadius:8,padding:12,fontSize:13,lineHeight:1.6,marginBottom:14}}>{selected.description}</div>
+                {selected.screenshot&&<img src={selected.screenshot} alt="screenshot" style={{width:'100%',maxWidth:400,borderRadius:8,border:'1px solid var(--border)',marginBottom:14}}/>}
+                <div className="form-field">
+                  <label className="form-label">Reply to User</label>
+                  <textarea className="comment-box" style={{minHeight:80}} placeholder="Type your response..." value={response||selected.response||''} onChange={e=>setResponse(e.target.value)}/>
+                </div>
+                <div style={{display:'flex',gap:8}}>
+                  <button className="btn btn-primary" disabled={!response.trim()||updating} onClick={()=>{ updateTicket(selected.id,{response:response.trim(),status:'resolved'}); setResponse('') }}>✅ Send & Resolve</button>
+                  <button className="btn btn-secondary" disabled={!response.trim()||updating} onClick={()=>{ updateTicket(selected.id,{response:response.trim()}); setResponse('') }}>💬 Send Reply</button>
                 </div>
               </div>
-            ))
-          }
+            </div>
+          ) : (
+            <div>
+              {filtered.length===0
+                ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No {filter==='all'?'active':filter} tickets</div></div>
+                : filtered.map((t,i)=>(
+                  <div key={i} onClick={()=>setSelected(t)} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(STATUS_COLORS[t.status]||'var(--border)')}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
+                          <span style={{fontSize:11,fontWeight:700,color:'var(--t2)'}}>{t.id}</span>
+                          <RolePill role={t.role}/>
+                          <span style={{fontSize:11,color:'var(--t2)'}}>{t.org}</span>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>{t.description?.slice(0,100)}{t.description?.length>100?'...':''}</div>
+                        <div style={{fontSize:11,color:'var(--t2)'}}>{t.user_name} · {t.user_email} · {t.device}</div>
+                        <div style={{fontSize:10,color:'var(--t3)',marginTop:2}}>{new Date(t.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'flex-end'}}>
+                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:(STATUS_COLORS[t.status]||'#6B7280')+'22',color:STATUS_COLORS[t.status]||'#6B7280',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
+                        {t.screenshot&&<span style={{fontSize:10,color:'var(--t2)'}}>📷</span>}
+                        {t.response&&<span style={{fontSize:10,color:'var(--green)'}}>💬 Replied</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          )}
         </div>
-      </div>
-      )}
       )}
     </div>
   )
 }
+
 
 
 export default function App() {
