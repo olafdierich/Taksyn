@@ -1621,10 +1621,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     // ── SUPERVISOR VIEW ───────────────────────────────
                     if(user.role==='supervisor') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name===user.name)&&t.status!=='awaiting_review').sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
-                      const recurring = iAssigned.filter(t=>isRecurring(t))
+                      const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
                       return (
                         <div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
@@ -1650,10 +1650,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     // ── MANAGER VIEW ──────────────────────────────────
                     if(user.role==='manager') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name===user.name)&&t.status!=='awaiting_review').sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
-                      const recurring = iAssigned.filter(t=>isRecurring(t))
+                      const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
                       return (
                         <div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
