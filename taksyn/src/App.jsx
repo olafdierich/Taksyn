@@ -1216,7 +1216,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
 
       {sel ? (
         <div className="anim">
-          <button className="back-btn" onClick={()=>{setSelected(null);setShowDeleteConfirm(false);setDeleteScope('')}}><IC n="x" s={14}/> Close</button>
+          <button className="back-btn" onClick={()=>{setSelected(null);setShowDeleteConfirm(false);setDeleteScope('')}}><IC n="x" s={14}/> {showArchive?'Back to Archive':'Back to Tasks'}</button>
           <div className="detail-header">
             <div style={{flex:1}}>
               <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
@@ -1384,7 +1384,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 <div className="ph-sub">{user.role==='super_admin'?(selectedOrg==='all'?`All orgs · ${orgFiltered.length} tasks`:`${selectedOrg} · ${orgFiltered.length} tasks`):`${visible.length} tasks · ${visible.filter(t=>t.compliance).length} compliance`}</div>
               </div>
               <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <button className={'btn btn-sm '+(showArchive?'btn-primary':'btn-secondary')} onClick={()=>setShowArchive(!showArchive)}>📦 {showArchive?'Active':'Archive'}</button>
+                <button className={'btn btn-sm '+(showArchive?'btn-primary':'btn-secondary')} onClick={()=>{setShowArchive(v=>!v);setSelected(null)}}>📦 {showArchive?'Active':'Archive'}</button>
                 {canCreate&&(user.role==='super_admin'?<div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:6}}>🔧 View only</div>:<button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}
               </div>
             </div>
@@ -1403,6 +1403,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           {showArchive ? (
             <div className="anim">
               <div className="section">
+                <button className="back-btn" style={{marginBottom:10}} onClick={()=>setShowArchive(false)}><IC n="x" s={14}/> Back to Tasks</button>
                 <div className="section-title" style={{marginBottom:12}}>📦 Archive — Completed & Approved Tasks</div>
                 <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Search & Filter</div>
@@ -1504,27 +1505,56 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     const groups={}
                     archived.forEach(t=>{ const dept=t.department||t.category||'General'; if(!groups[dept]) groups[dept]=[]; groups[dept].push(t) })
                     if(archived.length===0) return <div className="empty"><div className="empty-icon">📦</div><div className="empty-text">No archived tasks match your filters</div></div>
-                    return Object.keys(groups).sort().map(dept=>(
-                      <div key={dept} style={{marginBottom:14}}>
-                        <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setArchiveCollapsed(prev=>({...prev,[dept]:!prev[dept]}))}>
-                          <span style={{fontSize:12,fontWeight:700,color:'var(--t2)',flex:1}}>{dept} ({groups[dept].length})</span>
-                          <span style={{fontSize:11,color:'var(--t2)'}}>{archiveCollapsed[dept]?'▶':'▼'}</span>
-                        </div>
-                        {!archiveCollapsed[dept]&&groups[dept].map(t=>(
-                          <div key={t.id} onClick={()=>setSelected(t.id)} style={{padding:'10px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:'pointer',display:'flex',gap:12,alignItems:'flex-start'}}>
-                            <div style={{flex:1}}>
-                              <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
-                              <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
-                                <span>👤 {t.assigned_user_name||'—'}</span>
-                                {t.completed_at&&<span>✅ {new Date(t.completed_at).toLocaleDateString('en-AU')}</span>}
-                                {t.due_date&&<span>📅 {t.due_date}</span>}
-                              </div>
-                            </div>
-                            <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='approved'?'rgba(16,185,129,.12)':t.status==='rejected'?'rgba(239,68,68,.12)':'var(--s3)',color:t.status==='approved'?'var(--green)':t.status==='rejected'?'var(--red)':'var(--t2)'}}>{t.status.replace('_',' ').toUpperCase()}</span>
+
+                    // Same box structure as active tasks
+                    const approved = archived.filter(t=>t.status==='approved')
+                    const completed = archived.filter(t=>t.status==='completed')
+                    const rejected = archived.filter(t=>t.status==='rejected')
+                    const oneOffArchive = archived.filter(t=>!t.recurrence||t.recurrence===''||t.recurrence==='once')
+                    const recurringArchive = archived.filter(t=>t.recurrence&&t.recurrence!==''&&t.recurrence!=='once')
+
+                    const ArchiveTaskRow = ({t}) => (
+                      <div onClick={()=>setSelected(t.id)} style={{padding:'10px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:'pointer',display:'flex',gap:12,alignItems:'flex-start'}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
+                          <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
+                            <span>👤 {t.assigned_user_name||'—'}</span>
+                            {t.completed_at&&<span>✅ {new Date(t.completed_at).toLocaleDateString('en-AU')}</span>}
+                            {t.due_date&&<span>📅 {t.due_date}</span>}
+                            {t.recurrence&&t.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[t.recurrence]}</span>}
                           </div>
-                        ))}
+                        </div>
+                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='approved'?'rgba(16,185,129,.12)':t.status==='rejected'?'rgba(239,68,68,.12)':'var(--s3)',color:t.status==='approved'?'var(--green)':t.status==='rejected'?'var(--red)':'var(--t2)'}}>{t.status.replace('_',' ').toUpperCase()}</span>
                       </div>
-                    ))
+                    )
+
+                    return (
+                      <div>
+                        {/* Rejected box */}
+                        {rejected.length>0&&(
+                          <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:14}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>⚠️ Rejected ({rejected.length})</div>
+                            {rejected.map(t=><ArchiveTaskRow key={t.id} t={t}/>)}
+                          </div>
+                        )}
+
+                        {/* One-off tasks */}
+                        {oneOffArchive.filter(t=>t.status!=='rejected').length>0&&(
+                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:14}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>📋 One-off Tasks ({oneOffArchive.filter(t=>t.status!=='rejected').length})</div>
+                            {oneOffArchive.filter(t=>t.status!=='rejected').map(t=><ArchiveTaskRow key={t.id} t={t}/>)}
+                          </div>
+                        )}
+
+                        {/* Recurring tasks */}
+                        {recurringArchive.filter(t=>t.status!=='rejected').length>0&&(
+                          <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:14}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>🔁 Recurring Tasks ({recurringArchive.filter(t=>t.status!=='rejected').length})</div>
+                            {recurringArchive.filter(t=>t.status!=='rejected').map(t=><ArchiveTaskRow key={t.id} t={t}/>)}
+                          </div>
+                        )}
+                      </div>
+                    )
                   })()}
                 </div>
               </div>
@@ -1539,15 +1569,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 ))}
               </div>
               {filtered.length===0
-                ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>
+                ? <div className="empty">
+                    <div className="empty-icon">✅</div>
+                    <div className="empty-text">No active tasks</div>
+                    <div style={{fontSize:12,color:'var(--t2)',marginTop:8}}>Completed tasks are in the <span style={{color:'var(--brand)',cursor:'pointer',fontWeight:600}} onClick={()=>setShowArchive(true)}>📦 Archive</span></div>
+                  </div>
                 : (()=>{
                     // Priority sort: overdue → pending → in_progress → awaiting_review → rest
                     const priority = t => t.status==='overdue'?0:t.status==='rejected'?1:t.status==='pending'?2:t.status==='in_progress'?3:t.status==='awaiting_review'?4:5
                     const sorted = [...filtered].sort((a,b)=>priority(a)-priority(b))
 
                     // Split into one-off and recurring
-                    const oneOff = sorted.filter(t=>!t.recurrence||t.recurrence==='once')
-                    const recurring = sorted.filter(t=>t.recurrence&&t.recurrence!=='once')
+                    const oneOff = sorted.filter(t=>!t.recurrence||t.recurrence===''||t.recurrence==='once')
+                    const recurring = sorted.filter(t=>t.recurrence&&t.recurrence!==''&&t.recurrence!=='once')
 
                     // Rejected box (worker only)
                     const rejected = sorted.filter(t=>t.status==='rejected')
@@ -1588,25 +1622,39 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                           </div>
                         )}
 
-                        {/* One-off tasks box */}
-                        {oneOff.filter(t=>t.status!=='rejected'&&t.status!=='awaiting_review'||(user.role!=='worker'&&t.status!=='awaiting_review')).length>0&&(
-                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:14}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
-                              📋 One-off Tasks <span style={{fontWeight:400,color:'var(--t3)'}}>({oneOff.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review')).length})</span>
+                        {/* One-off tasks box — exclude rejected (worker) and awaiting_review (supervisor+) since shown above */}
+                        {(()=>{
+                          const showOneOff = oneOff.filter(t=>{
+                            if(user.role==='worker'&&t.status==='rejected') return false
+                            if(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review') return false
+                            return true
+                          })
+                          return showOneOff.length>0&&(
+                            <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:14}}>
+                              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+                                📋 One-off Tasks <span style={{fontWeight:400,color:'var(--t3)'}}>({showOneOff.length})</span>
+                              </div>
+                              {showOneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                             </div>
-                            {oneOff.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review')).map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                        )}
+                          )
+                        })()}
 
                         {/* Recurring tasks box */}
-                        {recurring.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review')).length>0&&(
-                          <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:14}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
-                              🔁 Recurring Tasks <span style={{fontWeight:400,color:'var(--brand)',opacity:.7}}>({recurring.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review')).length})</span>
+                        {(()=>{
+                          const showRecurring = recurring.filter(t=>{
+                            if(user.role==='worker'&&t.status==='rejected') return false
+                            if(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review') return false
+                            return true
+                          })
+                          return showRecurring.length>0&&(
+                            <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:14}}>
+                              <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+                                🔁 Recurring Tasks <span style={{fontWeight:400,color:'var(--brand)',opacity:.7}}>({showRecurring.length})</span>
+                              </div>
+                              {showRecurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                             </div>
-                            {recurring.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review')).map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                        )}
+                          )
+                        })()}
 
                         {oneOff.length===0&&recurring.length===0&&rejected.length===0&&awaitingReview.length===0&&(
                           <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>
