@@ -44,7 +44,7 @@ const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (M
 const DEMO_TASKS = []
 const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const workingDaysBetween = (start, end) => {
   let count = 0
@@ -719,11 +719,19 @@ function AuthView({ onAuth }) {
   )
 }
 
-function visibleTasks(tasks, user) {
+function visibleTasks(tasks, user, leaveRecords=[]) {
   // Super admin sees NO task content — privacy/confidentiality
   if (user.role==='super_admin') return []
 
   const orgTasks = tasks.filter(t => t.org?.toLowerCase()===user.org?.toLowerCase())
+
+  // Check if user is a replacement for someone on leave
+  const today = new Date().toISOString().split('T')[0]
+  const coveringFor = leaveRecords.filter(l=>
+    l.replacement_id===user.id &&
+    l.date_from<=today &&
+    l.date_to>=today
+  )
 
   if (user.role==='client_admin') {
     // Sees all tasks in org
@@ -754,12 +762,16 @@ function visibleTasks(tasks, user) {
   }
 
   if (user.role==='worker') {
-    // Only sees tasks assigned to them — cannot create tasks
-    return orgTasks.filter(t =>
+    const myTasks = orgTasks.filter(t =>
       t.assigned_user_id===user.id ||
       t.assigned_user_name===user.name ||
       (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='worker')
     )
+    // Add tasks of people being covered
+    const coverTasks = coveringFor.length>0 ? orgTasks.filter(t=>
+      coveringFor.some(l=>t.assigned_user_id===l.user_id||t.assigned_user_name===l.user_name)
+    ) : []
+    return [...new Map([...myTasks,...coverTasks].map(t=>[t.id,t])).values()]
   }
 
   return orgTasks
@@ -867,7 +879,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog }) {
+function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog, leaveRecords=[] }) {
   const [filter, setFilter] = useState('all')
   const [selectedOrg, setSelectedOrg] = useState('all')
   const [orgSearch, setOrgSearch] = useState('')
@@ -914,7 +926,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
 
 
-  const visible = visibleTasks(tasks, user)
+  const visible = visibleTasks(tasks, user, leaveRecords)
   // Super admin: filter by selected org
   const orgFiltered = user.role==='super_admin' && selectedOrg!=='all'
     ? visible.filter(t=>t.org===selectedOrg)
@@ -2510,9 +2522,9 @@ function TiersView({ user }) {
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Task Stats','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['support','Support','alert']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['tiers','Plans','tier'],['help','Help & Support','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['leave','Leave','clock'],['help','Help & Support','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['leave','Leave','clock'],['help','Help & Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['tiers','Plans','tier'],['help','Help & Support','alert']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
 }
 
@@ -3425,11 +3437,23 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 function LeaveView({ user, tasks }) {
   const [leaves, setLeaves] = useState([])
   const [showApply, setShowApply] = useState(false)
-  const [form, setForm] = useState({ type:'annual_leave', date_from:'', date_to:'', reason:'' })
+  const [form, setForm] = useState({ type:'annual_leave', date_from:'', date_to:'', reason:'', replacement_id:'', replacement_name:'' })
   const [saving, setSaving] = useState(false)
   const [teamLeaves, setTeamLeaves] = useState([])
   const isCA = user.role==='client_admin'
   const today = new Date().toISOString().split('T')[0]
+  const [orgUsers, setOrgUsers] = useState([])
+
+  useEffect(()=>{
+    if(isConfigured()&&user.org) {
+      supabase.from('org_members').select('user_id,role').eq('org',user.org)
+        .then(async({data:members})=>{
+          if(!members?.length) return
+          const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
+          if(profiles) setOrgUsers(profiles.map(p=>({...p,role:members.find(m=>m.user_id===p.id)?.role||p.role})))
+        }).catch(()=>{})
+    }
+  },[user.org])
 
   useEffect(()=>{
     if(!isConfigured()) return
@@ -3457,7 +3481,9 @@ function LeaveView({ user, tasks }) {
       date_from: form.date_from,
       date_to: form.date_to,
       reason: form.reason.trim(),
-      status: 'approved', // auto-approved for now
+      replacement_id: form.replacement_id||null,
+      replacement_name: form.replacement_name||null,
+      status: 'approved',
       created_at: new Date().toISOString()
     }
     if(isConfigured()) {
@@ -3532,6 +3558,14 @@ function LeaveView({ user, tasks }) {
                 <label className="form-label">Reason <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
                 <textarea className="comment-box" value={form.reason} onChange={e=>setForm({...form,reason:e.target.value})} placeholder="Brief reason for leave..."/>
               </div>
+              <div className="form-field">
+                <label className="form-label">Replacement / Cover Person <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
+                <select className="form-select" value={form.replacement_id||''} onChange={e=>{ const u=orgUsers?.find(x=>x.id===e.target.value); setForm({...form,replacement_id:e.target.value,replacement_name:u?.name||''}) }}>
+                  <option value="">— No replacement needed —</option>
+                  {(orgUsers||[]).filter(u=>u.id!==user.id&&(ROLE_LEVEL[u.role]||0)>=(ROLE_LEVEL[user.role]||0)).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
+                </select>
+                <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Can be same level or above. They will see your tasks during your leave.</div>
+              </div>
               <div style={{background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,fontSize:12,color:'var(--brand)',marginBottom:12}}>
                 ℹ️ Tasks due on your leave days will be excluded from your performance review automatically.
               </div>
@@ -3556,6 +3590,7 @@ function LeaveView({ user, tasks }) {
                 <div style={{fontWeight:600,fontSize:13}}>{LEAVE_LABELS[l.type]}</div>
                 <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>{fmtDate(l.date_from)} → {fmtDate(l.date_to)}</div>
                 {l.reason&&<div style={{fontSize:11,color:'var(--t2)',fontStyle:'italic',marginTop:1}}>{l.reason}</div>}
+                {l.replacement_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:1}}>👤 Cover: {l.replacement_name}</div>}
               </div>
               <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:(LEAVE_COLORS[l.type]||'#6B7280')+'22',color:LEAVE_COLORS[l.type]||'#6B7280'}}>{l.type.replace('_',' ').toUpperCase()}</span>
               {l.date_from>=today&&<button className="btn btn-danger btn-sm" onClick={()=>deleteLeave(l.id)}>Cancel</button>}
@@ -3602,6 +3637,305 @@ function LeaveView({ user, tasks }) {
               </div>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+function TeamsView({ user }) {
+  const [teams, setTeams] = useState([])
+  const [teamTypes, setTeamTypes] = useState([]) // org-defined team types
+  const [showCreateTeam, setShowCreateTeam] = useState(false)
+  const [showManageTypes, setShowManageTypes] = useState(false)
+  const [selectedTeam, setSelectedTeam] = useState(null)
+  const [orgUsers, setOrgUsers] = useState([])
+  const [newTeam, setNewTeam] = useState({name:'', type:'', description:''})
+  const [newType, setNewType] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [addMemberUser, setAddMemberUser] = useState('')
+  const [addMemberRole, setAddMemberRole] = useState('')
+  const isCA = user.role==='client_admin'
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    // Load teams for this org
+    supabase.from('teams').select('*').eq('org',user.org).order('name')
+      .then(({data})=>{ if(data) setTeams(data) }).catch(()=>{})
+    // Load team types (stored in organisations table as JSON)
+    supabase.from('organisations').select('team_types').eq('name',user.org).single()
+      .then(({data})=>{ if(data?.team_types) setTeamTypes(JSON.parse(data.team_types||'[]')) }).catch(()=>{})
+    // Load org users
+    supabase.from('org_members').select('user_id,role').eq('org',user.org)
+      .then(async({data:members})=>{
+        if(!members?.length) return
+        const {data:profiles} = await supabase.from('profiles').select('*').in('id',members.map(m=>m.user_id))
+        if(profiles) setOrgUsers(profiles.map(p=>({...p,role:members.find(m=>m.user_id===p.id)?.role||p.role})))
+      }).catch(()=>{})
+  },[user.org])
+
+  const loadTeamMembers = async (teamId) => {
+    const {data} = await supabase.from('team_members').select('*').eq('team_id',teamId)
+    if(data) {
+      const ids = data.map(m=>m.user_id)
+      const {data:profiles} = await supabase.from('profiles').select('*').in('id',ids)
+      return data.map(m=>({...m, profile:profiles?.find(p=>p.id===m.user_id)||{}}))
+    }
+    return []
+  }
+
+  const openTeam = async (team) => {
+    const members = await loadTeamMembers(team.id)
+    setSelectedTeam({...team, members})
+  }
+
+  const createTeam = async () => {
+    if(!newTeam.name.trim()||saving) return
+    setSaving(true)
+    const entry = {id:'TM'+Date.now(), name:newTeam.name.trim(), type:newTeam.type, description:newTeam.description.trim(), org:user.org, created_by:user.name, created_at:new Date().toISOString()}
+    if(isConfigured()) {
+      const {error} = await supabase.from('teams').insert(entry)
+      if(error){alert('Error: '+error.message);setSaving(false);return}
+    }
+    setTeams(prev=>[...prev,entry])
+    setShowCreateTeam(false)
+    setNewTeam({name:'',type:'',description:''})
+    setSaving(false)
+  }
+
+  const saveTeamType = async () => {
+    if(!newType.trim()) return
+    const updated = [...teamTypes, newType.trim()]
+    setTeamTypes(updated)
+    setNewType('')
+    if(isConfigured()) supabase.from('organisations').update({team_types:JSON.stringify(updated)}).eq('name',user.org).then(()=>{})
+  }
+
+  const removeTeamType = async (t) => {
+    const updated = teamTypes.filter(x=>x!==t)
+    setTeamTypes(updated)
+    if(isConfigured()) supabase.from('organisations').update({team_types:JSON.stringify(updated)}).eq('name',user.org).then(()=>{})
+  }
+
+  const addMember = async () => {
+    if(!addMemberUser||!selectedTeam) return
+    const u = orgUsers.find(x=>x.id===addMemberUser)
+    if(!u) return
+    const entry = {id:'TM'+Date.now(), team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:addMemberRole||u.role, org:user.org, added_by:user.name, added_at:new Date().toISOString()}
+    if(isConfigured()) await supabase.from('team_members').insert(entry)
+    const updated = {...selectedTeam, members:[...(selectedTeam.members||[]),{...entry,profile:u}]}
+    setSelectedTeam(updated)
+    setTeams(prev=>prev.map(t=>t.id===selectedTeam.id?{...t,member_count:(t.member_count||0)+1}:t))
+    setShowAddMember(false)
+    setAddMemberUser('')
+    setAddMemberRole('')
+  }
+
+  const removeMember = async (memberId) => {
+    if(!confirm('Remove this member from the team?')) return
+    if(isConfigured()) await supabase.from('team_members').delete().eq('id',memberId)
+    setSelectedTeam(prev=>({...prev, members:prev.members.filter(m=>m.id!==memberId)}))
+  }
+
+  const deleteTeam = async (id) => {
+    if(!confirm('Delete this team? Members will be removed.')) return
+    if(isConfigured()) {
+      await supabase.from('team_members').delete().eq('team_id',id)
+      await supabase.from('teams').delete().eq('id',id)
+    }
+    setTeams(prev=>prev.filter(t=>t.id!==id))
+    if(selectedTeam?.id===id) setSelectedTeam(null)
+  }
+
+  const TYPE_COLORS = ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#F97316','#06B6D4','#84CC16']
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-top">
+          <div>
+            <div className="ph-title">Teams</div>
+            <div className="ph-sub">{user.org} · {teams.length} team{teams.length!==1?'s':''}</div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            {isCA&&<button className="btn btn-secondary" onClick={()=>setShowManageTypes(true)}>⚙️ Team Types</button>}
+            {isCA&&<button className="btn btn-primary" onClick={()=>setShowCreateTeam(true)}><IC n="plus" s={13}/> New Team</button>}
+          </div>
+        </div>
+      </div>
+
+      {/* Manage Team Types Modal */}
+      {showManageTypes&&(
+        <div className="modal-overlay" onClick={()=>setShowManageTypes(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr"><div className="modal-title">⚙️ Team Types</div><button className="modal-close" onClick={()=>setShowManageTypes(false)}>×</button></div>
+            <div className="modal-body">
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:14}}>Define team types for your organisation. These appear as categories when creating teams (e.g. SIL House, Kitchen, Admin, Outreach).</div>
+              <div style={{display:'flex',gap:8,marginBottom:14}}>
+                <input className="form-input" value={newType} onChange={e=>setNewType(e.target.value)} placeholder="e.g. SIL House, Kitchen Team..." onKeyDown={e=>e.key==='Enter'&&saveTeamType()}/>
+                <button className="btn btn-primary" onClick={saveTeamType} disabled={!newType.trim()}>Add</button>
+              </div>
+              {teamTypes.length===0
+                ? <div style={{fontSize:13,color:'var(--t2)',textAlign:'center',padding:16}}>No team types yet — add some above</div>
+                : <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                    {teamTypes.map((t,i)=>(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:20,background:TYPE_COLORS[i%TYPE_COLORS.length]+'22',border:'1px solid '+TYPE_COLORS[i%TYPE_COLORS.length]+'44',color:TYPE_COLORS[i%TYPE_COLORS.length],fontSize:12,fontWeight:600}}>
+                        {t}
+                        {isCA&&<span style={{cursor:'pointer',fontSize:14,lineHeight:1,opacity:.7}} onClick={()=>removeTeamType(t)}>×</span>}
+                      </div>
+                    ))}
+                  </div>
+              }
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Team Modal */}
+      {showCreateTeam&&(
+        <div className="modal-overlay" onClick={()=>setShowCreateTeam(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr"><div className="modal-title">New Team</div><button className="modal-close" onClick={()=>setShowCreateTeam(false)}>×</button></div>
+            <div className="modal-body">
+              <div className="form-field"><label className="form-label">Team Name <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={newTeam.name} onChange={e=>setNewTeam({...newTeam,name:e.target.value})} placeholder="e.g. SIL House Alpha, Morning Shift..."/></div>
+              <div className="form-field">
+                <label className="form-label">Team Type</label>
+                <select className="form-select" value={newTeam.type} onChange={e=>setNewTeam({...newTeam,type:e.target.value})}>
+                  <option value="">— Select type —</option>
+                  {teamTypes.map((t,i)=><option key={i} value={t}>{t}</option>)}
+                  {teamTypes.length===0&&<option disabled>No types defined — add via ⚙️ Team Types</option>}
+                </select>
+              </div>
+              <div className="form-field"><label className="form-label">Description</label><textarea className="comment-box" value={newTeam.description} onChange={e=>setNewTeam({...newTeam,description:e.target.value})} placeholder="Brief description..."/></div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>setShowCreateTeam(false)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!newTeam.name.trim()||saving} onClick={createTeam}>{saving?'Creating...':'Create Team'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Team Detail View */}
+      {selectedTeam ? (
+        <div className="anim">
+          <button className="back-btn" onClick={()=>setSelectedTeam(null)}><IC n="x" s={14}/> Back to Teams</button>
+          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:20,marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,marginBottom:12}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:800}}>{selectedTeam.name}</div>
+                {selectedTeam.type&&<div style={{fontSize:12,color:'var(--t2)',marginTop:3}}>📂 {selectedTeam.type}</div>}
+                {selectedTeam.description&&<div style={{fontSize:12,color:'var(--t2)',marginTop:4,fontStyle:'italic'}}>{selectedTeam.description}</div>}
+                <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>Created by {selectedTeam.created_by} · {new Date(selectedTeam.created_at).toLocaleDateString('en-AU')}</div>
+              </div>
+              {isCA&&<button className="btn btn-danger btn-sm" onClick={()=>deleteTeam(selectedTeam.id)}>🗑 Delete Team</button>}
+            </div>
+
+            <div style={{borderTop:'1px solid var(--border)',paddingTop:14}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>Members ({(selectedTeam.members||[]).length})</div>
+                {(isCA||user.role==='manager'||user.role==='supervisor')&&<button className="btn btn-primary btn-sm" onClick={()=>setShowAddMember(true)}><IC n="plus" s={12}/> Add Member</button>}
+              </div>
+
+              {showAddMember&&(
+                <div style={{background:'var(--s3)',borderRadius:10,padding:14,marginBottom:14}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',marginBottom:10}}>Add Member</div>
+                  <div className="two-col">
+                    <div className="form-field">
+                      <label className="form-label">Staff Member</label>
+                      <select className="form-select" value={addMemberUser} onChange={e=>setAddMemberUser(e.target.value)}>
+                        <option value="">— Select —</option>
+                        {orgUsers.filter(u=>!(selectedTeam.members||[]).find(m=>m.user_id===u.id)).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
+                      </select>
+                    </div>
+                    <div className="form-field">
+                      <label className="form-label">Role in Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
+                      <input className="form-input" value={addMemberRole} onChange={e=>setAddMemberRole(e.target.value)} placeholder="e.g. Team Lead, On-call..."/>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setShowAddMember(false)}>Cancel</button>
+                    <button className="btn btn-primary btn-sm" disabled={!addMemberUser} onClick={addMember}>Add to Team</button>
+                  </div>
+                </div>
+              )}
+
+              {(selectedTeam.members||[]).length===0
+                ? <div style={{fontSize:13,color:'var(--t2)',textAlign:'center',padding:20}}>No members yet — add staff to this team</div>
+                : (()=>{
+                    const roleOrder = ['client_admin','manager','supervisor','worker']
+                    const grouped = {}
+                    ;(selectedTeam.members||[]).forEach(m=>{ const r=m.profile?.role||m.role||'worker'; if(!grouped[r]) grouped[r]=[]; grouped[r].push(m) })
+                    return roleOrder.filter(r=>grouped[r]?.length).map(role=>(
+                      <div key={role} style={{marginBottom:14}}>
+                        <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+                          <span style={{width:8,height:8,borderRadius:'50%',background:avatarColor(role),display:'inline-block'}}/>
+                          {ROLE_LABELS[role]} ({grouped[role].length})
+                        </div>
+                        {grouped[role].map((m,i)=>(
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                            <Avatar name={m.profile?.name||m.user_name||'?'} role={m.profile?.role||role} size={32} avatarUrl={m.profile?.avatar_url}/>
+                            <div style={{flex:1}}>
+                              <div style={{fontWeight:600,fontSize:13}}>{m.profile?.name||m.user_name||'—'}</div>
+                              <div style={{fontSize:11,color:'var(--t2)'}}>{m.role_in_team||m.role||ROLE_LABELS[role]}{m.profile?.department?' · '+m.profile.department:''}</div>
+                            </div>
+                            <RolePill role={m.profile?.role||role}/>
+                            {(isCA||user.role==='manager')&&<button className="btn btn-danger btn-sm" onClick={()=>removeMember(m.id)}>Remove</button>}
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  })()
+              }
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div>
+          {teams.length===0 ? (
+            <div className="empty" style={{background:'#fff',borderRadius:16,border:'1px solid var(--border)',padding:40}}>
+              <div className="empty-icon">👥</div>
+              <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>{isCA?'No teams yet':'No teams set up'}</div>
+              <div className="empty-text">{isCA?'Create your first team to organise your staff.':'Your Client Admin will set up teams for this organisation.'}</div>
+            </div>
+          ) : (
+            <div>
+              {/* Group by team type */}
+              {(()=>{
+                const byType = {}
+                teams.forEach(t=>{ const type=t.type||'Other'; if(!byType[type]) byType[type]=[]; byType[type].push(t) })
+                return Object.keys(byType).sort().map((type,ti)=>(
+                  <div key={type} style={{marginBottom:20}}>
+                    <div style={{fontSize:11,fontWeight:700,color:TYPE_COLORS[ti%TYPE_COLORS.length],textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{width:10,height:10,borderRadius:'50%',background:TYPE_COLORS[ti%TYPE_COLORS.length],display:'inline-block'}}/>
+                      {type} ({byType[type].length})
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:10}}>
+                      {byType[type].map(team=>(
+                        <div key={team.id} onClick={()=>openTeam(team)} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,cursor:'pointer',transition:'all .15s',borderLeft:'4px solid '+TYPE_COLORS[ti%TYPE_COLORS.length]}}
+                          onMouseOver={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'}
+                          onMouseOut={e=>e.currentTarget.style.boxShadow='none'}>
+                          <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{team.name}</div>
+                          {team.description&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>{team.description}</div>}
+                          <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:12}}>
+                            <span>👥 {team.member_count||0} members</span>
+                            <span>📅 {new Date(team.created_at).toLocaleDateString('en-AU')}</span>
+                          </div>
+                          {isCA&&(
+                            <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)',display:'flex',justifyContent:'flex-end'}}>
+                              <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteTeam(team.id)}}>🗑</button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              })()}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -4275,6 +4609,7 @@ export default function App() {
                 {page==='projects'    && hasAccess(user.role,2) && <ProjectsView {...pageProps}/>}
                 {page==='performance' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
                 {page==='leave'       && <LeaveView {...pageProps}/>}
+                {page==='teams'       && hasAccess(user.role,2) && <TeamsView {...pageProps}/>}
               </>
             )}
           </div>
