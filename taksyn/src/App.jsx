@@ -1593,8 +1593,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     // ── WORKER VIEW ──────────────────────────────────
                     if(user.role==='worker') {
                       const actionNeeded = activeFiltered.filter(t=>t.status==='rejected').sort(byDate)
-                      const toDo = activeFiltered.filter(t=>['pending','in_progress','overdue'].includes(t.status)).sort(byDate)
+                      const toDo = activeFiltered.filter(t=>['pending','in_progress','overdue'].includes(t.status)&&isOneOff(t)).sort(byDate)
                       const submitted = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                      const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
                       return (
                         <div>
                           <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
@@ -1604,6 +1605,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 To Do ({toDo.length})</div>
                             {toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          </div>
+                          <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks ({recurring.length})</div>
+                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>⏳ Submitted — Awaiting Review ({submitted.length})</div>
