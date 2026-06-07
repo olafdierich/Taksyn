@@ -1570,19 +1570,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   </button>
                 ))}
               </div>
-              {filtered.length===0
-                ? <div className="empty">
-                    <div className="empty-icon">✅</div>
-                    <div className="empty-text">No active tasks</div>
-                    <div style={{fontSize:12,color:'var(--t2)',marginTop:8}}>Completed tasks are in the <span style={{color:'var(--brand)',cursor:'pointer',fontWeight:600}} onClick={()=>setShowArchive(true)}>📦 Archive</span></div>
-                  </div>
-                : filter!=='all' ? (
+              {filter!=='all' ? (
                     // Flat list when specific filter selected
-                    <div>{filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>
+                    <div>{filtered.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>:filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>
                   ) : (()=>{
-                    // 3-box layout when showing all
+                    // 3-box layout always shown
                     const priority = t => t.status==='overdue'?0:t.status==='rejected'?1:t.status==='pending'?2:t.status==='in_progress'?3:t.status==='awaiting_review'?4:5
-                    const sorted = [...filtered].sort((a,b)=>priority(a)-priority(b))
+                    const sorted = [...activeFiltered].sort((a,b)=>priority(a)-priority(b))
 
                     // Split into one-off and recurring
                     const oneOff = sorted.filter(t=>!t.recurrence||t.recurrence===''||t.recurrence==='once')
@@ -1608,62 +1602,56 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     return (
                       <div>
                         {/* Rejected box — worker only */}
-                        {user.role==='worker'&&rejected.length>0&&(
+                        {user.role==='worker'&&(
                           <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:14}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
                               ⚠️ Action Required — Sent Back <span style={{fontWeight:400,color:'var(--red)',opacity:.7}}>({rejected.length})</span>
                             </div>
-                            {rejected.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {rejected.length===0
+                              ? <div style={{fontSize:12,color:'var(--t2)',textAlign:'center',padding:'10px 0'}}>✅ No rejected tasks</div>
+                              : rejected.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
+                            }
                           </div>
                         )}
 
                         {/* Awaiting review box — supervisor/manager/client_admin */}
-                        {['supervisor','manager','client_admin'].includes(user.role)&&awaitingReview.length>0&&(
+                        {['supervisor','manager','client_admin'].includes(user.role)&&(
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:14}}>
                             <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
                               🔍 Awaiting Your Review <span style={{fontWeight:400,color:'#F59E0B',opacity:.7}}>({awaitingReview.length})</span>
                             </div>
-                            {awaitingReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {awaitingReview.length===0
+                              ? <div style={{fontSize:12,color:'var(--t2)',textAlign:'center',padding:'10px 0'}}>✅ Nothing to review</div>
+                              : awaitingReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
+                            }
                           </div>
                         )}
 
-                        {/* One-off tasks box — exclude rejected (worker) and awaiting_review (supervisor+) since shown above */}
-                        {(()=>{
-                          const showOneOff = oneOff.filter(t=>{
-                            if(user.role==='worker'&&t.status==='rejected') return false
-                            if(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review') return false
-                            return true
-                          })
-                          return showOneOff.length>0&&(
-                            <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:14}}>
-                              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
-                                📋 One-off Tasks <span style={{fontWeight:400,color:'var(--t3)'}}>({showOneOff.length})</span>
-                              </div>
-                              {showOneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                            </div>
-                          )
-                        })()}
+                        {/* One-off tasks box */}
+                        <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:14}}>
+                          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+                            📋 One-off Tasks <span style={{fontWeight:400,color:'var(--t3)'}}>({oneOff.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review')).length})</span>
+                          </div>
+                          {(()=>{
+                            const show = oneOff.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review'))
+                            return show.length===0
+                              ? <div style={{fontSize:12,color:'var(--t2)',textAlign:'center',padding:'10px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>
+                              : show.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
+                          })()}
+                        </div>
 
                         {/* Recurring tasks box */}
-                        {(()=>{
-                          const showRecurring = recurring.filter(t=>{
-                            if(user.role==='worker'&&t.status==='rejected') return false
-                            if(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review') return false
-                            return true
-                          })
-                          return showRecurring.length>0&&(
-                            <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:14}}>
-                              <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
-                                🔁 Recurring Tasks <span style={{fontWeight:400,color:'var(--brand)',opacity:.7}}>({showRecurring.length})</span>
-                              </div>
-                              {showRecurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                            </div>
-                          )
-                        })()}
-
-                        {oneOff.length===0&&recurring.length===0&&rejected.length===0&&awaitingReview.length===0&&(
-                          <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>
-                        )}
+                        <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:14}}>
+                          <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+                            🔁 Recurring Tasks <span style={{fontWeight:400,color:'var(--brand)',opacity:.7}}>({recurring.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review')).length})</span>
+                          </div>
+                          {(()=>{
+                            const show = recurring.filter(t=>!(user.role==='worker'&&t.status==='rejected')&&!(['supervisor','manager','client_admin'].includes(user.role)&&t.status==='awaiting_review'))
+                            return show.length===0
+                              ? <div style={{fontSize:12,color:'var(--t2)',textAlign:'center',padding:'10px 0'}}>✅ No recurring tasks</div>
+                              : show.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)
+                          })()}
+                        </div>
                       </div>
                     )
                   })()
