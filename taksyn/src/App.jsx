@@ -451,7 +451,7 @@ function Celebration({ onClose }) {
   )
 }
 
-const TaskCard = ({ task, onClick }) => {
+const TaskCard = ({ task, onClick, orgSLA=DEFAULT_SLA }) => {
   const dur = fmtDuration(task.started_at, task.completed_at)
   return (
     <div className={"task-card "+task.priority} onClick={onClick}>
