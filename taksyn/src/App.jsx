@@ -2604,10 +2604,6 @@ function PasswordSetupView({ onDone }) {
 
 
 function OrganisationsView({ user }) {
-  const [inviteTab, setInviteTab] = useState('invite')
-const [existingUserSearch, setExistingUserSearch] = useState('')
-const [existingUserRole, setExistingUserRole] = useState('client_admin')
-const [existingUserMsg, setExistingUserMsg] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [showInvite, setShowInvite] = useState(null) // org object
   const [loading, setLoading] = useState(false)
@@ -2616,6 +2612,10 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [search, setSearch] = useState('')
   const [dragOver, setDragOver] = useState(null)
+  const [inviteTab, setInviteTab] = useState('invite')
+const [existingUserSearch, setExistingUserSearch] = useState('')
+const [existingUserRole, setExistingUserRole] = useState('client_admin')
+const [existingUserMsg, setExistingUserMsg] = useState('')
   const [selectedOrgView, setSelectedOrgView] = useState(null) // org being viewed
   const [orgMembers, setOrgMembers] = useState([])
   const [loadingMembers, setLoadingMembers] = useState(false)
@@ -2700,7 +2700,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     r.readAsDataURL(file)
   }
 
-  const sendInviteToOrg = async () => {
+  const  sendInviteToOrg= async () => {
     if (!inviteEmail.trim()||!inviteName.trim()) { alert('Please enter name and email'); return }
     if (!showInvite) return
     setLoading(true)
@@ -2721,6 +2721,25 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       setShowInvite(null); setInviteEmail(''); setInviteName('')
     } catch(e) {
       alert('Failed: '+e.message)
+    }
+    setLoading(false)
+  }
+
+  const addExistingUserToOrg = async () => {
+    if (!existingUserSearch.trim()) { setExistingUserMsg('Please enter an email address'); return }
+    if (!showInvite) return
+    setLoading(true)
+    setExistingUserMsg('')
+    try {
+      const { data: profile, error } = await supabase.from('profiles').select('*').eq('email', existingUserSearch.trim().toLowerCase()).single()
+      if (error || !profile) { setExistingUserMsg('No user found with that email address'); setLoading(false); return }
+      const { error: memberError } = await supabase.from('org_members').upsert({ user_id: profile.id, org: showInvite.name, role: existingUserRole }, { onConflict: 'user_id,org' })
+      if (memberError) throw new Error(memberError.message)
+      await supabase.from('profiles').update({ org: showInvite.name, role: existingUserRole }).eq('id', profile.id)
+      setExistingUserMsg('✅ ' + (profile.name || existingUserSearch) + ' added to ' + showInvite.name)
+      setExistingUserSearch('')
+    } catch(e) {
+      setExistingUserMsg('Error: ' + e.message)
     }
     setLoading(false)
   }
@@ -2974,8 +2993,53 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
         </div>
         <div className="tabs" style={{marginBottom:14}}>
           <button className={'tab '+(inviteTab==='invite'?'active':'')} onClick={()=>setInviteTab('invite')}>✉️ Invite New User</button>
-          <button className={'tab '+(inviteTab==='existing'?'active':'')} onClick={()=>setInviteTab('existing'
+          <button className={'tab '+(inviteTab==='existing'?'active':'')} onClick={()=>setInviteTab('existing')}>👤 Add Existing User</button>
+        </div>
 
+        {inviteTab==='invite' && (
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <input className="form-input" placeholder="Full Name *" value={inviteName} onChange={e=>setInviteName(e.target.value)} style={{fontSize:13}}/>
+            <input className="form-input" type="email" placeholder="Email Address *" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} style={{fontSize:13}}/>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
+              <button className="btn btn-ghost" onClick={()=>setShowInvite(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={sendInviteToOrg} disabled={loading}>{loading?'Sending...':'Send Invite'}</button>
+            </div>
+          </div>
+        )}
+
+        {inviteTab==='existing' && (
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <input
+              className="form-input"
+              type="email"
+              placeholder="Search by email address..."
+              value={existingUserSearch}
+              onChange={e=>{setExistingUserSearch(e.target.value);setExistingUserMsg('')}}
+              style={{fontSize:13}}
+            />
+            <select className="form-input" value={existingUserRole} onChange={e=>setExistingUserRole(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
+              <option value="client_admin">Client Admin</option>
+              <option value="client_user">Client User</option>
+              <option value="staff">Staff</option>
+            </select>
+            {existingUserMsg && (
+              <div style={{fontSize:13,padding:'8px 12px',borderRadius:6,background:existingUserMsg.startsWith('✅')?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)',color:existingUserMsg.startsWith('✅')?'var(--green)':'#EF4444',border:'1px solid '+(existingUserMsg.startsWith('✅')?'var(--green)':'#EF4444')+'44'}}>
+                {existingUserMsg}
+              </div>
+            )}
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
+              <button className="btn btn-ghost" onClick={()=>setShowInvite(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={addExistingUserToOrg} disabled={loading}>{loading?'Adding...':'Add to Org'}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+    </div>
+  )
+}
 
 function AuditLogView({ tasks, user, auditLog }) {
   const [filter, setFilter] = useState('')
