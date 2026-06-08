@@ -742,25 +742,13 @@ function visibleTasks(tasks, user, leaveRecords=[]) {
   }
 
   if (user.role==='manager') {
-    // Sees tasks assigned to them (from client_admin) + tasks they created for supervisor/worker
-    // + completed tasks submitted back from supervisors
-    return orgTasks.filter(t =>
-      t.assigned_user_id===user.id ||
-      t.assigned_user_name===user.name ||
-      t.created_by===user.name ||
-      (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='manager')
-    )
+    // Managers see all tasks in their org for full oversight
+    return orgTasks
   }
 
   if (user.role==='supervisor') {
-    // Sees tasks assigned to them (from manager/client_admin) + tasks they created for workers
-    // + completed tasks submitted back from workers
-    return orgTasks.filter(t =>
-      t.assigned_user_id===user.id ||
-      t.assigned_user_name===user.name ||
-      t.created_by===user.name ||
-      (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='supervisor')
-    )
+    // Supervisors see all tasks in their org for full oversight
+    return orgTasks
   }
 
   if (user.role==='worker') {
