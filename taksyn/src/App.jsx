@@ -2604,6 +2604,7 @@ function PasswordSetupView({ onDone }) {
 
 
 function OrganisationsView({ user }) {
+  const [orgs, setOrgs] = useState([])
   const [showCreate, setShowCreate] = useState(false)
   const [showInvite, setShowInvite] = useState(null) // org object
   const [loading, setLoading] = useState(false)
