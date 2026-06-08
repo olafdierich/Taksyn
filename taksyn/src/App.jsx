@@ -2624,6 +2624,15 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
   const [editingMember, setEditingMember] = useState(null)
   const [memberEditForm, setMemberEditForm] = useState({})
   const [orgChangeSearch, setOrgChangeSearch] = useState('')
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [allProfiles, setAllProfiles] = useState([])
+  const [addMemberSearch, setAddMemberSearch] = useState('')
+  const [addMemberSelectedId, setAddMemberSelectedId] = useState(null)
+  const [addMemberRole, setAddMemberRole] = useState('worker')
+  const [addMemberMsg, setAddMemberMsg] = useState('')
+  const [loadingProfiles, setLoadingProfiles] = useState(false)
+  const [showMemberOrgChange, setShowMemberOrgChange] = useState(false)
+  const [memberOrgSearch, setMemberOrgSearch] = useState('')
 
   const INDUSTRIES = ['Hospitality','Aged Care','Disability Care','Healthcare / Clinic','Wedding & Events','Facilities Management','Other']
 
@@ -2692,6 +2701,45 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     }
     setViewingMember(null)
     setEditingMember(null); setMemberEditForm({}); setOrgChangeSearch('')
+  }
+
+  const loadAllProfiles = async () => {
+    setLoadingProfiles(true)
+    const { data } = await supabase.from('profiles').select('id,name,email,role,org').order('name')
+    if (data) setAllProfiles(data)
+    setLoadingProfiles(false)
+  }
+
+  const addMemberToOrg = async () => {
+    if (!addMemberSelectedId) { setAddMemberMsg('Please select a user'); return }
+    if (!selectedOrgView) return
+    setLoading(true); setAddMemberMsg('')
+    try {
+      const { error } = await supabase.from('org_members').upsert(
+        { user_id: addMemberSelectedId, org: selectedOrgView.name, role: addMemberRole },
+        { onConflict: 'user_id,org' }
+      )
+      if (error) throw new Error(error.message)
+      await supabase.from('profiles').update({ org: selectedOrgView.name, role: addMemberRole }).eq('id', addMemberSelectedId)
+      const added = allProfiles.find(p => p.id === addMemberSelectedId)
+      setOrgMembers(prev => [...prev, { ...(added||{}), id: addMemberSelectedId, role: addMemberRole, org: selectedOrgView.name }])
+      setAddMemberMsg('✅ ' + (added?.name || 'User') + ' added to ' + selectedOrgView.name)
+      setAddMemberSelectedId(null); setAddMemberSearch('')
+    } catch(e) { setAddMemberMsg('Error: ' + e.message) }
+    setLoading(false)
+  }
+
+  const changeViewingMemberOrg = async (newOrgName) => {
+    if (!viewingMember || newOrgName === viewingMember.org) return
+    setLoading(true)
+    try {
+      await supabase.from('org_members').delete().eq('user_id', viewingMember.id).eq('org', viewingMember.org)
+      await supabase.from('org_members').insert({ user_id: viewingMember.id, org: newOrgName, role: viewingMember.role })
+      await supabase.from('profiles').update({ org: newOrgName }).eq('id', viewingMember.id)
+      setOrgMembers(prev => prev.filter(m => m.id !== viewingMember.id))
+      setViewingMember(null); setShowMemberOrgChange(false); setMemberOrgSearch('')
+    } catch(e) { alert('Error: ' + e.message) }
+    setLoading(false)
   }
 
   const toggleStatus = async (org) => {
@@ -2874,16 +2922,69 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
       {/* Org Members Modal */}
       {selectedOrgView&&(
-        <div className="modal-overlay" onClick={()=>setSelectedOrgView(null)}>
+        <div className="modal-overlay" onClick={()=>{setSelectedOrgView(null);setShowAddMember(false);setAddMemberSearch('');setAddMemberSelectedId(null);setAddMemberMsg('')}}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:560}}>
             <div className="modal-hdr">
               <div>
                 <div className="modal-title">👥 {selectedOrgView.name}</div>
                 <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>{selectedOrgView.industry||'—'} · {selectedOrgView.tier}</div>
               </div>
-              <button className="modal-close" onClick={()=>setSelectedOrgView(null)}>×</button>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <button className="btn btn-primary btn-sm" onClick={()=>{setShowAddMember(v=>!v);setAddMemberMsg('');setAddMemberSelectedId(null);setAddMemberSearch('');if(!allProfiles.length)loadAllProfiles()}}>
+                  {showAddMember?'✕ Cancel':'+ Add Member'}
+                </button>
+                <button className="modal-close" onClick={()=>{setSelectedOrgView(null);setShowAddMember(false);setAddMemberSearch('');setAddMemberSelectedId(null);setAddMemberMsg('')}}>×</button>
+              </div>
             </div>
             <div className="modal-body">
+              {showAddMember && (
+                <div style={{marginBottom:16,paddingBottom:16,borderBottom:'1px solid var(--border)'}}>
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>Add member to {selectedOrgView.name}</div>
+                  <input
+                    className="form-input"
+                    placeholder="Search by name or email..."
+                    value={addMemberSearch}
+                    onChange={e=>setAddMemberSearch(e.target.value)}
+                    style={{fontSize:13,marginBottom:6}}
+                  />
+                  {loadingProfiles ? (
+                    <div style={{textAlign:'center',padding:12,color:'var(--t2)',fontSize:13}}>Loading users...</div>
+                  ) : (
+                    <div style={{maxHeight:200,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6}}>
+                      {allProfiles
+                        .filter(p=>!orgMembers.some(m=>m.id===p.id))
+                        .filter(p=>!addMemberSearch||p.name?.toLowerCase().includes(addMemberSearch.toLowerCase())||p.email?.toLowerCase().includes(addMemberSearch.toLowerCase()))
+                        .map(p=>(
+                          <div key={p.id} onClick={()=>setAddMemberSelectedId(p.id===addMemberSelectedId?null:p.id)}
+                            style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',cursor:'pointer',background:p.id===addMemberSelectedId?'var(--brand-lt)':'transparent',borderBottom:'1px solid var(--border)'}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontWeight:600,fontSize:13,color:p.id===addMemberSelectedId?'var(--brand)':'inherit'}}>{p.name||'—'}</div>
+                              <div style={{fontSize:11,color:'var(--t2)'}}>{p.email||'—'}{p.org&&<span> · {p.org}</span>}</div>
+                            </div>
+                            {p.id===addMemberSelectedId&&<span style={{fontSize:11,color:'var(--brand)',fontWeight:700}}>✓</span>}
+                          </div>
+                        ))
+                      }
+                      {allProfiles.filter(p=>!orgMembers.some(m=>m.id===p.id)).length===0&&(
+                        <div style={{padding:16,textAlign:'center',color:'var(--t2)',fontSize:13}}>All users are already members of this org</div>
+                      )}
+                    </div>
+                  )}
+                  {addMemberSelectedId && (
+                    <div style={{display:'flex',gap:8,alignItems:'center',marginTop:8,flexWrap:'wrap'}}>
+                      <select className="form-input" value={addMemberRole} onChange={e=>setAddMemberRole(e.target.value)} style={{flex:1,fontSize:13,padding:'6px 10px'}}>
+                        {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                      </select>
+                      <button className="btn btn-primary" onClick={addMemberToOrg} disabled={loading}>{loading?'Adding...':'Add to Org'}</button>
+                    </div>
+                  )}
+                  {addMemberMsg&&(
+                    <div style={{marginTop:8,fontSize:13,padding:'6px 10px',borderRadius:6,background:addMemberMsg.startsWith('✅')?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)',color:addMemberMsg.startsWith('✅')?'var(--green)':'#EF4444'}}>
+                      {addMemberMsg}
+                    </div>
+                  )}
+                </div>
+              )}
               {loadingMembers ? <div style={{textAlign:'center',padding:20,color:'var(--t2)'}}>Loading members...</div> :
               orgMembers.length===0 ? <div className="empty"><div className="empty-icon">👥</div><div className="empty-text">No members yet</div></div> :
               <div>
@@ -2912,9 +3013,9 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
       {/* View Member Profile Modal */}
       {viewingMember&&(
-        <div className="modal-overlay" onClick={()=>setViewingMember(null)}>
+        <div className="modal-overlay" onClick={()=>{setViewingMember(null);setShowMemberOrgChange(false);setMemberOrgSearch('')}}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-hdr"><div className="modal-title">👤 Member Profile</div><button className="modal-close" onClick={()=>setViewingMember(null)}>×</button></div>
+            <div className="modal-hdr"><div className="modal-title">👤 Member Profile</div><button className="modal-close" onClick={()=>{setViewingMember(null);setShowMemberOrgChange(false);setMemberOrgSearch('')}}>×</button></div>
             <div className="modal-body">
               <div style={{display:'flex',alignItems:'center',gap:14,padding:'12px 0 16px',borderBottom:'1px solid var(--border)',marginBottom:16}}>
                 <Avatar name={viewingMember.name||'?'} role={viewingMember.role} size={56} avatarUrl={viewingMember.avatar_url}/>
@@ -2933,8 +3034,38 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                 ):null)}
               </div>
               {viewingMember.notes&&<div style={{marginTop:10,background:'var(--s3)',borderRadius:8,padding:'8px 12px',fontSize:13,color:'var(--t2)',fontStyle:'italic'}}>{viewingMember.notes}</div>}
+              <div style={{marginTop:14,borderTop:'1px solid var(--border)',paddingTop:12}}>
+                <button className="btn btn-secondary btn-sm" onClick={()=>{setShowMemberOrgChange(v=>!v);setMemberOrgSearch('')}}>
+                  {showMemberOrgChange?'✕ Cancel':'🔄 Change Organisation'}
+                </button>
+                {showMemberOrgChange&&(
+                  <div style={{marginTop:10}}>
+                    <input
+                      className="form-input"
+                      placeholder="Filter organisations..."
+                      value={memberOrgSearch}
+                      onChange={e=>setMemberOrgSearch(e.target.value)}
+                      style={{fontSize:13,marginBottom:6}}
+                    />
+                    <div style={{maxHeight:180,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6}}>
+                      {[...orgs]
+                        .sort((a,b)=>a.name.localeCompare(b.name))
+                        .filter(o=>!memberOrgSearch||o.name.toLowerCase().includes(memberOrgSearch.toLowerCase()))
+                        .map(o=>(
+                          <div key={o.id} onClick={()=>changeViewingMemberOrg(o.name)}
+                            style={{padding:'8px 12px',cursor:'pointer',fontSize:13,fontWeight:o.name===viewingMember.org?700:400,color:o.name===viewingMember.org?'var(--t2)':'inherit',background:o.name===viewingMember.org?'var(--s3)':'transparent',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            {o.name}
+                            {o.name===viewingMember.org&&<span style={{fontSize:11,color:'var(--t2)'}}>current</span>}
+                          </div>
+                        ))
+                      }
+                    </div>
+                    {loading&&<div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>Moving...</div>}
+                  </div>
+                )}
+              </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
-                <button className="btn btn-secondary" onClick={()=>setViewingMember(null)}>Close</button>
+                <button className="btn btn-secondary" onClick={()=>{setViewingMember(null);setShowMemberOrgChange(false);setMemberOrgSearch('')}}>Close</button>
                 <button className="btn btn-primary" onClick={()=>{setEditingMember(viewingMember);setMemberEditForm({name:viewingMember.name,role:viewingMember.role,department:viewingMember.department||'',industry:viewingMember.industry||'',phone:viewingMember.phone||'',notes:viewingMember.notes||'',email:viewingMember.email||'',org:viewingMember.org||''})}}>✏️ Edit Profile</button>
               </div>
             </div>
