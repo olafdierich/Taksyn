@@ -2604,7 +2604,10 @@ function PasswordSetupView({ onDone }) {
 
 
 function OrganisationsView({ user }) {
-  const [orgs, setOrgs] = useState([])
+  const [inviteTab, setInviteTab] = useState('invite')
+const [existingUserSearch, setExistingUserSearch] = useState('')
+const [existingUserRole, setExistingUserRole] = useState('client_admin')
+const [existingUserMsg, setExistingUserMsg] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [showInvite, setShowInvite] = useState(null) // org object
   const [loading, setLoading] = useState(false)
