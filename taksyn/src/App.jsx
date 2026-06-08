@@ -808,7 +808,7 @@ function computeAwards(tasks) {
   return { week:sorted[0]||null, month:sorted[0]||null }
 }
 
-function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[] }) {
+function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgSLA=DEFAULT_SLA }) {
   // Filter tasks by org - super admin sees no org's tasks on dashboard (use Organisations page)
   const visibleAll = visibleTasks(tasks, user)
   const visible = user.role==='super_admin' ? [] : visibleAll
@@ -4407,9 +4407,6 @@ export default function App() {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
   const [tickets, setTickets] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
-  const [notifications, setNotifications] = useState([])
-  const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
-  const orgSLARef = useRef(DEFAULT_SLA)
   const updateOrgSLA = (val) => { setOrgSLA(val); orgSLARef.current = val }
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const undoTimer = useRef(null)
