@@ -2246,6 +2246,8 @@ function UsersView({ user }) {
   const [userSearch, setUserSearch] = useState('')
   const [collapsedRoles, setCollapsedRoles] = useState({})
   const [orgCustomDepts, setOrgCustomDepts] = useState([])
+  const [orgsList, setOrgsList] = useState([])
+  const [editOrgSearch, setEditOrgSearch] = useState('')
 
   useEffect(()=>{
     if(isConfigured()&&user.org) {
@@ -2254,6 +2256,12 @@ function UsersView({ user }) {
         .catch(()=>{})
     }
   },[user.org])
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('organisations').select('id,name').order('name')
+      .then(({data})=>{ if(data) setOrgsList(data) })
+  },[])
 
   useEffect(()=>{
     if(!isConfigured()) return
@@ -2308,12 +2316,14 @@ function UsersView({ user }) {
     }
     if (isConfigured()) {
       await supabase.from('profiles').update(updates).eq('id', id)
-      await supabase.from('org_members').update({ role: editForm.role }).eq('user_id', id).eq('org', user.org)
+      const targetOrg = editForm.org || user.org
+      await supabase.from('org_members').upsert({ user_id: id, org: targetOrg, role: editForm.role }, { onConflict: 'user_id,org' })
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...updates}:u))
     setEditingUser(null)
     setEditForm({})
     setEditCustomDept('')
+    setEditOrgSearch('')
   }
 
   const addExistingUserToOrg = async (email, role) => {
@@ -2368,11 +2378,11 @@ function UsersView({ user }) {
   return (
     <div className="anim">
       {editingUser&&(
-        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditForm({}) }}>
+        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch('') }}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">Edit Team Member</div>
-              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditForm({}) }}>×</button>
+              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch('') }}>×</button>
             </div>
             <div className="modal-body">
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--s3)',borderRadius:8}}>
@@ -2429,8 +2439,16 @@ function UsersView({ user }) {
                 <label className="form-label">Notes</label>
                 <textarea className="comment-box" style={{minHeight:60}} value={editForm.notes||''} onChange={e=>setEditForm({...editForm,notes:e.target.value})} placeholder="Any notes about this team member..."/>
               </div>
+              {orgsList.length>0&&<div className="form-field">
+                <label className="form-label">Organisation</label>
+                <input className="form-input" value={editOrgSearch} onChange={e=>setEditOrgSearch(e.target.value)} placeholder="Search organisations..." style={{marginBottom:4}}/>
+                <select className="form-input" value={editForm.org||''} onChange={e=>setEditForm({...editForm,org:e.target.value})}>
+                  <option value="">— No organisation —</option>
+                  {orgsList.filter(o=>o.name.toLowerCase().includes(editOrgSearch.toLowerCase())).map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
+                </select>
+              </div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
-                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditForm({}) }}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch('') }}>Cancel</button>
                 <button className="btn btn-primary" disabled={!editForm.name?.trim()} onClick={saveEditUser}>Save Changes</button>
               </div>
             </div>
@@ -2495,7 +2513,7 @@ function UsersView({ user }) {
                 {u.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {u.department}</div>}
               </div>
               <RolePill role={u.role}/>
-              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||'',phone:u.phone||'',notes:u.notes||'',email:u.email||''}) }}>✏️ Edit</button>}
+              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||'',phone:u.phone||'',notes:u.notes||'',email:u.email||'',org:u.org||''}) }}>✏️ Edit</button>}
               {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
             </div>
           ))}
