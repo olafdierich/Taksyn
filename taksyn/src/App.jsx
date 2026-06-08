@@ -43,10 +43,30 @@ const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','month
 const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' }
 const DEMO_TASKS = []
 const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
+// Default SLA response times in minutes
+const DEFAULT_SLA = { low:1440, medium:1440, high:1440, critical:60 } // minutes
+const SLA_LABELS = { low:'1 day', medium:'1 day', high:'1 day', critical:'1 hour' }
+
+const getSLAMinutes = (priority, orgSLA) => {
+  const sla = orgSLA || DEFAULT_SLA
+  return sla[priority] || DEFAULT_SLA[priority] || 1440
+}
+
+const getSLAStatus = (task, orgSLA) => {
+  if(task.status !== 'awaiting_review' || !task.submitted_at) return null
+  const slaMinutes = getSLAMinutes(task.priority, orgSLA)
+  const elapsed = (new Date() - new Date(task.submitted_at)) / 60000
+  const remaining = slaMinutes - elapsed
+  const pct = Math.min(100, (elapsed / slaMinutes) * 100)
+  if(remaining <= 0) return { status:'breached', remaining:0, pct:100, label:'SLA Breached', color:'#EF4444' }
+  if(remaining <= slaMinutes * 0.25) return { status:'warning', remaining, pct, label:remaining<60?Math.round(remaining)+'m left':Math.round(remaining/60)+'h left', color:'#F97316' }
+  return { status:'ok', remaining, pct, label:remaining<60?Math.round(remaining)+'m left':Math.round(remaining/60)+'h left', color:'#10B981' }
+}
+
 const isRecurring = t => t.recurrence && t.recurrence !== '' && t.recurrence !== 'once' && t.recurrence !== null
 const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const workingDaysBetween = (start, end) => {
   let count = 0
@@ -96,6 +116,16 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
       const days = workingDaysBetween(new Date(t.submitted_at), now)
       if(days>=5&&['manager','client_admin'].includes(user.role)) {
         alerts.push({ type:'review_overdue', task:t, msg:`"${t.title}" not reviewed in ${days} working days — immediate action required`, level:'red' })
+      }
+    }
+
+    // Alert 4: SLA warning — review deadline approaching or breached
+    if(t.status==='awaiting_review'&&t.submitted_at&&['supervisor','manager','client_admin'].includes(user.role)) {
+      const sla = getSLAStatus(t, leaveRecords?.orgSLA)
+      if(sla?.status==='breached') {
+        alerts.push({ type:'sla_breach', task:t, msg:`SLA breached: "${t.title}" — review overdue (${t.priority} priority)`, level:'red' })
+      } else if(sla?.status==='warning') {
+        alerts.push({ type:'sla_warning', task:t, msg:`SLA warning: "${t.title}" — only ${sla.label} to review (${t.priority} priority)`, level:'amber' })
       }
     }
   })
@@ -442,6 +472,7 @@ const TaskCard = ({ task, onClick }) => {
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
         {task.project&&<span style={{fontSize:11,color:'#3B82F6',background:'rgba(59,130,246,.08)',padding:'2px 7px',borderRadius:4}}>📁 {task.project}</span>}
+        {(()=>{ const sla=getSLAStatus(task,orgSLA); return sla?<span style={{fontSize:10,padding:'2px 7px',borderRadius:4,fontWeight:700,background:sla.color+'22',color:sla.color}}>⏱ {sla.label}</span>:null })()} 
         {dur&&<span style={{fontSize:11,color:'var(--t2)'}}>⏱ {dur}</span>}
         {task.gps_start&&<a href={"https://www.google.com/maps?q="+task.gps_start} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'var(--blue)',textDecoration:'none'}} onClick={e=>e.stopPropagation()}>📍 GPS ↗</a>}
       </div>
@@ -860,7 +891,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[] }) {
         ) : (
           <>
             <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Active Tasks</div>
-            {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')}/>)}
+            {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')} orgSLA={orgSLA}/>)}
             {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
           </>
         )}
@@ -869,7 +900,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog, leaveRecords=[] }) {
+function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA }) {
   const [filter, setFilter] = useState('all')
   const [selectedOrg, setSelectedOrg] = useState('all')
   const [orgSearch, setOrgSearch] = useState('')
@@ -1574,7 +1605,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               </div>
               {filter!=='all' ? (
                     // Flat list when specific filter selected
-                    <div>{filtered.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>:filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>
+                    <div>{filtered.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>:filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}</div>
                   ) : (()=>{
                     const byDate = (a,b) => new Date(a.due_date||'9999')-new Date(b.due_date||'9999')
 
@@ -1588,19 +1619,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         <div>
                           <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔴 Action Needed — Sent Back ({actionNeeded.length})</div>
-                            {actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 To Do ({toDo.length})</div>
-                            {toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                           <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks ({recurring.length})</div>
-                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>⏳ Submitted — Awaiting Review ({submitted.length})</div>
-                            {submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                         </div>
                       )
@@ -1617,19 +1648,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         <div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
-                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 My Own Tasks ({myTasks.length})</div>
-                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 One-off Tasks I Assigned ({oneOff.length})</div>
-                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                           <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks I Assigned ({recurring.length})</div>
-                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                         </div>
                       )
@@ -1646,19 +1677,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         <div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
-                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 My Own Tasks ({myTasks.length})</div>
-                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 One-off Tasks I Assigned ({oneOff.length})</div>
-                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                           <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks I Assigned ({recurring.length})</div>
-                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                         </div>
                       )
@@ -1677,31 +1708,31 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       <div>
                         <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
                           <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
-                          {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                         </div>
                         {attention.length>0&&(
                           <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>⚠️ Needs Attention — Overdue & Escalated ({attention.length})</div>
-                            {attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                            {attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                           </div>
                         )}
                         <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                           <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 Tasks I Assigned ({iAssigned.length})</div>
                           {iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
                             <div>
-                              {assignedToMgr.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3B82F6',display:'inline-block'}}/> To Managers ({assignedToMgr.length})</div>{assignedToMgr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
-                              {assignedToSup.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#10B981',display:'inline-block'}}/> To Supervisors ({assignedToSup.length})</div>{assignedToSup.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
-                              {assignedToWkr.length>0&&<div><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#6B7280',display:'inline-block'}}/> To Workers ({assignedToWkr.length})</div>{assignedToWkr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
+                              {assignedToMgr.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3B82F6',display:'inline-block'}}/> To Managers ({assignedToMgr.length})</div>{assignedToMgr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}</div>}
+                              {assignedToSup.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#10B981',display:'inline-block'}}/> To Supervisors ({assignedToSup.length})</div>{assignedToSup.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}</div>}
+                              {assignedToWkr.length>0&&<div><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#6B7280',display:'inline-block'}}/> To Workers ({assignedToWkr.length})</div>{assignedToWkr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}</div>}
                             </div>
                           )}
                         </div>
                         <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                           <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 One-off Tasks ({oneOffAll.length})</div>
-                          {oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          {oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                         </div>
                         <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
                           <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks ({recurringAll.length})</div>
-                          {recurringAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks</div>:recurringAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
+                          {recurringAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks</div>:recurringAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
                         </div>
                       </div>
                     )
@@ -2517,7 +2548,7 @@ function TiersView({ user }) {
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Task Stats','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['support','Support','alert']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['tiers','Plans','tier'],['help','Help & Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','SLA Settings','clock'],['tiers','Plans','tier'],['help','Help & Support','alert']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
@@ -3303,6 +3334,15 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
     if(t.status==='rejected') peopleMap[key].rejected++
     if(t.status==='overdue') peopleMap[key].overdue++
     if(['awaiting_review','approved','rejected'].includes(t.status)) peopleMap[key].submitted++
+    // SLA tracking — was it reviewed within the SLA?
+    if(t.reviewed_at && t.submitted_at) {
+      const slaMinutes = getSLAMinutes(t.priority, leaveRecords?.orgSLA)
+      const reviewMinutes = (new Date(t.reviewed_at)-new Date(t.submitted_at))/60000
+      if(!peopleMap[key].slaTotal) peopleMap[key].slaTotal=0
+      if(!peopleMap[key].slaOnTime) peopleMap[key].slaOnTime=0
+      peopleMap[key].slaTotal++
+      if(reviewMinutes<=slaMinutes) peopleMap[key].slaOnTime++
+    }
     if(t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) peopleMap[key].reviewedInTime++
   })
 
@@ -3390,6 +3430,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
                     ['Rejected',p.rejected,p.rejected>0?'#EF4444':'#6B7280'],
                     ['Overdue',p.overdue,p.overdue>0?'#EF4444':'#6B7280'],
                     ['Avg Time',fmtAvg(p.avgMins),'#8B5CF6'],
+                    ['SLA Met',p.slaTotal>0?pct(p.slaOnTime,p.slaTotal)+'%':'—',p.slaTotal>0&&pct(p.slaOnTime,p.slaTotal)>=80?'#10B981':'#EF4444'],
                   ].map(([l,v,c])=>(
                     <div key={l} style={{background:'var(--s3)',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
                       <div style={{fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
@@ -3938,6 +3979,146 @@ function TeamsView({ user }) {
 }
 
 
+function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }) {
+  const [sla, setSla] = useState(orgSLA || DEFAULT_SLA)
+  const [reviewSLA, setReviewSLA] = useState(10080) // 1 week in minutes
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [generating, setGenerating] = useState(false)
+
+  const fmtMinutes = m => m<60?m+'m':m<1440?(m/60)+'h':Math.round(m/1440)+'d'
+  const PRIORITIES = ['low','medium','high','critical']
+  const PRIORITY_COLORS = {low:'#10B981',medium:'#F59E0B',high:'#F97316',critical:'#EF4444'}
+
+  const saveSLA = async () => {
+    setSaving(true)
+    const settings = {...sla, monthly_review: reviewSLA}
+    if(isConfigured()) {
+      await supabase.from('organisations').update({sla_settings:JSON.stringify(settings)}).eq('name',user.org)
+    }
+    setOrgSLA(settings)
+    setSaving(false); setSaved(true)
+    setTimeout(()=>setSaved(false), 2000)
+  }
+
+  const generateMonthlyReview = async () => {
+    if(!confirm('Generate monthly review tasks for all managers and supervisors?')) return
+    setGenerating(true)
+    const now = new Date()
+    const monthName = now.toLocaleString('en-AU',{month:'long',year:'numeric'})
+    // Get all managers and supervisors in org
+    const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',user.org).in('role',['manager','supervisor'])
+    if(members?.length) {
+      const ids = members.map(m=>m.user_id)
+      const {data:profiles} = await supabase.from('profiles').select('id,name').in('id',ids)
+      const tasks = members.map(m=>{
+        const p = profiles?.find(x=>x.id===m.user_id)
+        return {
+          id: 'MR'+Date.now()+Math.random().toString(36).slice(2),
+          title: `Monthly Review — ${monthName}`,
+          category: 'Administration',
+          priority: 'high',
+          status: 'pending',
+          org: user.org,
+          assigned_user_id: m.user_id,
+          assigned_user_name: p?.name||'',
+          assigned_role: m.role,
+          recurrence: 'once',
+          compliance: true,
+          due_date: new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0],
+          created_by: user.name,
+          created_at: new Date().toISOString(),
+          subtasks: [], evidence: [], comments: [], escalation: false,
+          sla_override: reviewSLA
+        }
+      })
+      if(isConfigured()) await supabase.from('tasks').insert(tasks)
+      if(loadTasks) loadTasks()
+    }
+    setGenerating(false)
+    alert(`Monthly review tasks generated for ${members?.length||0} staff members.`)
+  }
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">⚙️ SLA & Response Time Settings</div>
+        <div className="ph-sub">{user.org} · Configure review response time limits</div>
+      </div>
+
+      {saved&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:10,padding:12,marginBottom:14,fontSize:13,color:'var(--green)',fontWeight:600}}>✅ Settings saved successfully</div>}
+
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">⏱ Review Response Times</div>
+        <div style={{fontSize:12,color:'var(--t2)',marginBottom:16,lineHeight:1.6}}>
+          How long a supervisor or manager has to review a submitted task before it auto-escalates to you. The clock starts when the worker submits the task.
+        </div>
+        {PRIORITIES.map(p=>(
+          <div key={p} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
+            <div style={{width:10,height:10,borderRadius:'50%',background:PRIORITY_COLORS[p],flexShrink:0}}/>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:600,fontSize:13,textTransform:'capitalize'}}>{p} Priority</div>
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>Current: {fmtMinutes(sla[p]||DEFAULT_SLA[p])}</div>
+            </div>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              {[[30,'30m'],[60,'1h'],[240,'4h'],[480,'8h'],[1440,'1d'],[2880,'2d'],[4320,'3d']].map(([mins,label])=>(
+                <button key={mins} onClick={()=>setSla({...sla,[p]:mins})}
+                  style={{fontSize:11,padding:'4px 10px',borderRadius:6,border:'1px solid var(--border)',cursor:'pointer',fontFamily:'inherit',fontWeight:600,
+                    background:sla[p]===mins?PRIORITY_COLORS[p]:sla[p]===mins?PRIORITY_COLORS[p]:'var(--s3)',
+                    color:sla[p]===mins?'#fff':'var(--t2)'}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">📊 Monthly Review Response Time</div>
+        <div style={{fontSize:12,color:'var(--t2)',marginBottom:12,lineHeight:1.6}}>
+          How long managers and supervisors have to complete their monthly performance review task.
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          {[[1440,'1 day'],[2880,'2 days'],[4320,'3 days'],[7200,'5 days'],[10080,'1 week'],[20160,'2 weeks']].map(([mins,label])=>(
+            <button key={mins} onClick={()=>setReviewSLA(mins)}
+              style={{fontSize:12,padding:'6px 14px',borderRadius:8,border:'1px solid var(--border)',cursor:'pointer',fontFamily:'inherit',fontWeight:600,
+                background:reviewSLA===mins?'var(--brand)':'var(--s3)',
+                color:reviewSLA===mins?'#fff':'var(--t2)'}}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{display:'flex',gap:10,marginBottom:20}}>
+        <button className="btn btn-primary" disabled={saving} onClick={saveSLA} style={{flex:1}}>{saving?'Saving...':'💾 Save SLA Settings'}</button>
+      </div>
+
+      <div className="section">
+        <div className="section-title">📋 Monthly Review Tasks</div>
+        <div style={{fontSize:12,color:'var(--t2)',marginBottom:14,lineHeight:1.6}}>
+          Generate monthly review tasks for all managers and supervisors. Each person gets a task to complete their monthly report. Response time: <strong>{fmtMinutes(reviewSLA)}</strong>.
+        </div>
+        <div style={{background:'var(--s3)',borderRadius:10,padding:14,marginBottom:14,fontSize:12}}>
+          <div style={{fontWeight:600,marginBottom:4}}>📅 What gets created:</div>
+          <div style={{color:'var(--t2)',lineHeight:1.8}}>
+            • Task title: "Monthly Review — {new Date().toLocaleString('en-AU',{month:'long',year:'numeric'})}"<br/>
+            • Assigned to: all managers and supervisors in {user.org}<br/>
+            • Due: last day of current month<br/>
+            • Priority: High · Compliance: Yes<br/>
+            • Response time: {fmtMinutes(reviewSLA)}
+          </div>
+        </div>
+        <button className="btn btn-primary" disabled={generating} onClick={generateMonthlyReview} style={{width:'100%'}}>
+          {generating?'Generating...':'🚀 Generate Monthly Review Tasks'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+
 function HelpView({ user }) {
   const [desc, setDesc] = useState('')
   const [device, setDevice] = useState('')
@@ -3947,6 +4128,7 @@ function HelpView({ user }) {
   const [tickets, setTickets] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
+  const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const appVersion = '1.0.0'
 
@@ -4224,6 +4406,7 @@ export default function App() {
   const [tickets, setTickets] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
+  const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const undoTimer = useRef(null)
 
@@ -4269,6 +4452,21 @@ export default function App() {
               return [...fresh,...n].slice(0,50)
             })
           }
+        }
+        // SLA breach auto-escalation
+        if(user && isConfigured()) {
+          newTasks.filter(t=>
+            t.status==='awaiting_review' &&
+            t.submitted_at &&
+            !t.escalation &&
+            t.org?.toLowerCase()===user.org?.toLowerCase()
+          ).forEach(t=>{
+            const sla = getSLAStatus(t, orgSLA)
+            if(sla?.status==='breached') {
+              supabase.from('tasks').update({escalation:true, status:'escalated', lastIntervention:'SLA breach — auto-escalated'}).eq('id',t.id).then(()=>{})
+              setNotifications(n=>[{id:t.id+'_sla_breach', type:'sla', title:'SLA Breached 🚨', body:`"${t.title}" review deadline exceeded — auto-escalated`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444'},...n].slice(0,50))
+            }
+          })
         }
         return newTasks
       })
@@ -4325,6 +4523,12 @@ export default function App() {
     if(user&&isConfigured()) {
       loadTasks()
       if(user.role==='super_admin') loadTickets()
+      // Load org SLA settings
+      if(isConfigured()&&user.org) {
+        supabase.from('organisations').select('sla_settings').eq('name',user.org).single()
+          .then(({data})=>{ if(data?.sla_settings) setOrgSLA({...DEFAULT_SLA,...JSON.parse(data.sla_settings)}) })
+          .catch(()=>{})
+      }
       // Load leave records for org
       if(isConfigured()&&user.org) {
         supabase.from('leave_records').select('*').eq('org',user.org)
@@ -4360,7 +4564,7 @@ export default function App() {
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
@@ -4605,6 +4809,7 @@ export default function App() {
                 {page==='performance' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
                 {page==='leave'       && <LeaveView {...pageProps}/>}
                 {page==='teams'       && hasAccess(user.role,2) && <TeamsView {...pageProps}/>}
+                {page==='sla'         && user.role==='client_admin' && <SLASettingsView {...pageProps}/>}
               </>
             )}
           </div>
