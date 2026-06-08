@@ -2958,39 +2958,20 @@ function OrganisationsView({ user }) {
 
       {/* Invite Admin Modal */}
       {showInvite&&(
-        <div className="modal-overlay" onClick={()=>setShowInvite(null)}>
-          <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-hdr">
-              <div className="modal-title">Invite Client Admin</div>
-              <button className="modal-close" onClick={()=>setShowInvite(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:13}}>
-                <span style={{color:'var(--t2)'}}>Organisation: </span>
-                <strong>{showInvite.name}</strong>
-              </div>
-              <div className="form-field">
-                <label className="form-label">Full Name <span style={{color:'var(--red)'}}>*</span></label>
-                <input className="form-input" placeholder="Admin full name" value={inviteName} onChange={e=>setInviteName(e.target.value)}/>
-              </div>
-              <div className="form-field">
-                <label className="form-label">Email <span style={{color:'var(--red)'}}>*</span></label>
-                <input className="form-input" type="email" placeholder="admin@organisation.com" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)}/>
-              </div>
-              <div style={{fontSize:11,color:'var(--t2)',marginBottom:14}}>They will receive an email invite and be set up as Client Admin for {showInvite.name}.</div>
-              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                <button className="btn btn-secondary" onClick={()=>setShowInvite(null)}>Cancel</button>
-                <button className="btn btn-primary" disabled={!inviteEmail.trim()||!inviteName.trim()||loading} onClick={sendInviteToOrg}>
-                  {loading?'Sending...':'✉️ Send Invite'}
-                </button>
-              </div>
-            </div>
-          </div>
+  <div className="modal-overlay" onClick={()=>setShowInvite(null)}>
+    <div className="modal" onClick={e=>e.stopPropagation()}>
+      <div className="modal-hdr">
+        <div className="modal-title">Add to Organisation</div>
+        <button className="modal-close" onClick={()=>setShowInvite(null)}>×</button>
+      </div>
+      <div className="modal-body">
+        <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:13}}>
+          <span style={{color:'var(--t2)'}}>Organisation: </span>
+          <strong>{showInvite.name}</strong>
         </div>
-      )}
-    </div>
-  )
-}
+        <div className="tabs" style={{marginBottom:14}}>
+          <button className={'tab '+(inviteTab==='invite'?'active':'')} onClick={()=>setInviteTab('invite')}>✉️ Invite New User</button>
+          <button className={'tab '+(inviteTab==='existing'?'active':'')} onClick={()=>setInviteTab('existing'
 
 
 function AuditLogView({ tasks, user, auditLog }) {
