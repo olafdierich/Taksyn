@@ -4468,6 +4468,25 @@ export default function App() {
             }
           })
         }
+        // Auto-reset completed recurring tasks back to pending
+if(isConfigured()) {
+  newTasks.filter(t=>
+    isRecurring(t) &&
+    ['approved','completed'].includes(t.status)
+  ).forEach(t=>{
+    supabase.from('tasks').update({
+      status:'pending',
+      started_at:null,
+      completed_at:null,
+      submitted_at:null,
+      completed_by:null,
+      gps_start:null,
+      gps_end:null,
+      evidence:'[]',
+      comments:'[]'
+    }).eq('id',t.id).then(()=>{})
+  })
+}
         return newTasks
       })
     }
