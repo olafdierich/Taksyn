@@ -437,7 +437,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .notif-icon-btn:hover{color:var(--text)}
 .notif-icon-btn.del:hover{color:var(--red)}
 .notif-icon-btn.chk:hover{color:var(--green)}
-.notif-summary{padding:8px 14px;background:rgba(59,130,246,.04);border-bottom:1px solid var(--border);font-size:11px;color:'var(--t2)'}
+.notif-summary{padding:8px 14px;background:rgba(59,130,246,.04);border-bottom:1px solid var(--border);font-size:11px;color:var(--t2)}
 .notif-settings-panel{padding:10px 14px;border-bottom:1px solid var(--border);background:var(--s3)}
 .bottom-nav{display:none}
 @media(max-width:768px){
@@ -5649,6 +5649,10 @@ export default function App() {
   const [showNotifSettings, setShowNotifSettings] = useState(false)
   const notifPrefsRef = useRef(notifPrefs)
   useEffect(()=>{ notifPrefsRef.current = notifPrefs },[notifPrefs])
+  const notifIdsRef = useRef(new Set())
+  useEffect(()=>{ notifIdsRef.current = new Set(notifications.map(n=>n.id)) },[notifications])
+  const tasksRef = useRef([])
+  useEffect(()=>{ tasksRef.current = tasks },[tasks])
   const undoTimer = useRef(null)
   const idleTimer = useRef(null)
   const countdownTimer = useRef(null)
@@ -5658,19 +5662,16 @@ export default function App() {
     const prefs = notifPrefsRef.current
     const allowed = newNotifs.filter(n=>prefs[n.type]!==false)
     if(!allowed.length) return
-    setNotifications(prev=>{
-      const existingIds = new Set(prev.map(n=>n.id))
-      const fresh = allowed.filter(n=>!existingIds.has(n.id))
-      if(!fresh.length) return prev
-      const merged = [...fresh,...prev].slice(0,50)
-      if(isConfigured()) {
-        fresh.forEach(n=>supabase.from('user_notifications').insert({...n,user_id:user?.id}).catch(()=>{}))
-      }
-      if(prefs.sound && fresh.length) {
-        try { const ctx=new AudioContext(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=880; g.gain.setValueAtTime(0.1,ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3); o.start(); o.stop(ctx.currentTime+0.3) } catch{}
-      }
-      return merged
-    })
+    const fresh = allowed.filter(n=>!notifIdsRef.current.has(n.id))
+    if(!fresh.length) return
+    fresh.forEach(n=>notifIdsRef.current.add(n.id))
+    setNotifications(prev=>[...fresh,...prev].slice(0,50))
+    if(isConfigured()) {
+      fresh.forEach(n=>supabase.from('user_notifications').insert({...n,user_id:user?.id}).catch(()=>{}))
+    }
+    if(prefs.sound) {
+      try { const ctx=new AudioContext(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=880; g.gain.setValueAtTime(0.1,ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3); o.start(); o.stop(ctx.currentTime+0.3) } catch{}
+    }
   }
 
   const markNotifRead = (id) => {
@@ -5776,50 +5777,36 @@ export default function App() {
     const { data } = await supabase.from('tasks').select('*').order('created_at',{ascending:false})
     if(data) {
       const newTasks = data.map(t=>({...t, subtasks:parseSafe(t.subtasks), evidence:parseSafe(t.evidence), comments:parseSafe(t.comments,[])}))
-      setTasks(prev=>{
-        // Generate notifications from status changes
-        if(prev.length>0 && user) {
-          const newNotifs = generateNotifications(newTasks, user, prev)
-          if(newNotifs.length>0) addNotifications(newNotifs)
-        }
-        // SLA breach auto-escalation
-        if(user && isConfigured()) {
-          newTasks.filter(t=>
-            t.status==='awaiting_review' &&
-            t.submitted_at &&
-            !t.escalation &&
-            t.org?.toLowerCase()===user.org?.toLowerCase()
-          ).forEach(t=>{
-            const sla = getSLAStatus(t, orgSLARef.current)
-            if(sla?.status==='breached') {
-              supabase.from('tasks').update({escalation:true, status:'escalated', lastIntervention:'Response time exceeded — auto-escalated'}).eq('id',t.id).then(()=>{})
-              addNotifications([{id:t.id+'_sla_breach', type:'sla', title:'Response Time Exceeded 🚨', body:`"${t.title}" review deadline exceeded — auto-escalated`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444'}])
-            }
-          })
-        }
-        // Auto-reset completed recurring tasks back to pending
-if(isConfigured()) {
-  newTasks.filter(t=>
-    isRecurring(t) &&
-    ['approved','completed'].includes(t.status)
-  ).forEach(t=>{
-    supabase.from('tasks').update({
-      status:'pending',
-      started_at:null,
-      completed_at:null,
-      submitted_at:null,
-      completed_by:null,
-      gps_start:null,
-      gps_end:null,
-      evidence:'[]',
-      comments:'[]'
-    }).eq('id',t.id).then(()=>{})
-  })
-}
-        return newTasks
-      })
+      const prevTasks = tasksRef.current
+      // Generate notifications from status changes
+      if(prevTasks.length>0 && user) {
+        const newNotifs = generateNotifications(newTasks, user, prevTasks)
+        if(newNotifs.length>0) addNotifications(newNotifs)
+      }
+      // SLA breach auto-escalation
+      if(user && isConfigured()) {
+        newTasks.filter(t=>
+          t.status==='awaiting_review' &&
+          t.submitted_at &&
+          !t.escalation &&
+          t.org?.toLowerCase()===user.org?.toLowerCase()
+        ).forEach(t=>{
+          const sla = getSLAStatus(t, orgSLARef.current)
+          if(sla?.status==='breached') {
+            supabase.from('tasks').update({escalation:true, status:'escalated', lastIntervention:'Response time exceeded — auto-escalated'}).eq('id',t.id).then(()=>{})
+            addNotifications([{id:t.id+'_sla_breach', type:'sla', title:'Response Time Exceeded 🚨', body:`"${t.title}" review deadline exceeded — auto-escalated`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444'}])
+          }
+        })
+      }
+      // Auto-reset completed recurring tasks back to pending
+      if(isConfigured()) {
+        newTasks.filter(t=>isRecurring(t)&&['approved','completed'].includes(t.status)).forEach(t=>{
+          supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
+        })
+      }
+      setTasks(newTasks)
+      loadAuditLog()
     }
-    loadAuditLog()
   }
 
   // keep topbar fixed on mobile
