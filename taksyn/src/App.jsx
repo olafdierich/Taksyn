@@ -499,6 +499,7 @@ const TaskCard = ({ task, onClick }) => {
         <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}</span>
         {task.assigned_user_name&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {task.assigned_user_name}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
+        {task.compliance&&!task.evidence?.length&&!['awaiting_review','approved','completed'].includes(task.status)&&<span style={{fontSize:11,color:'#8B5CF6',background:'rgba(139,92,246,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>📷 required</span>}
         {task.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
         {task.project&&<span style={{fontSize:11,color:'#3B82F6',background:'rgba(59,130,246,.08)',padding:'2px 7px',borderRadius:4}}>📁 {task.project}</span>}
 
@@ -974,6 +975,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [clNoteOpen, setClNoteOpen] = useState(null) // {taskId, idx}
   const [clNoteText, setClNoteText] = useState('')
   const [mandatoryWarn, setMandatoryWarn] = useState(null)
+  const [photoWarn, setPhotoWarn] = useState(false)
 
   useEffect(()=>{
     if(isConfigured()&&user.org) {
@@ -1132,6 +1134,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     const missing = checkMandatory(tid)
     if (missing.length > 0) { setMandatoryWarn(missing); return }
     const task = tasks.find(t=>t.id===tid)
+    if (task.compliance && parseSafe(task.evidence).length === 0) { setPhotoWarn(true); return }
     const updatedComments = comment.trim() ? [...(task.comments||[]), user.name+': '+comment.trim()] : task.comments||[]
     const doSubmit = (extra={}) => {
       update(tid, { status:'awaiting_review', completed_by:user.name, submitted_at:new Date().toISOString(), comments:updatedComments, ...extra })
@@ -1467,7 +1470,26 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             )
           })()}
           <div className="section">
-            <div className="section-title">Evidence {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}</div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,gap:8,flexWrap:'wrap'}}>
+              <div className="section-title" style={{marginBottom:0}}>
+                Evidence {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}
+              </div>
+              {sel.compliance
+                ? <span style={{fontSize:11,fontWeight:700,color:'#8B5CF6',background:'rgba(139,92,246,.1)',border:'1px solid rgba(139,92,246,.25)',borderRadius:4,padding:'2px 8px'}}>🔒 Required for compliance</span>
+                : <span style={{fontSize:11,color:'var(--t2)'}}>Optional</span>
+              }
+            </div>
+            {sel.compliance&&parseSafe(sel.evidence).length===0&&user.role==='worker'&&(
+              <div style={{background:'rgba(139,92,246,.06)',border:'1px solid rgba(139,92,246,.2)',borderRadius:8,padding:'10px 12px',marginBottom:10,fontSize:12,color:'#7C3AED'}}>
+                📷 This is a compliance task — at least 1 photo is required before you can submit for review.
+              </div>
+            )}
+            {photoWarn&&parseSafe(sel.evidence).length===0&&(
+              <div className="cl-warn" style={{marginBottom:10}}>
+                ⚠️ <strong>Cannot submit — photo evidence is required for compliance tasks.</strong> Add at least one photo below.
+                <button className="cl-action-btn" style={{marginLeft:8}} onClick={()=>setPhotoWarn(false)}>Dismiss</button>
+              </div>
+            )}
             {parseSafe(sel.evidence).length>0&&<div className="ev-thumbs" style={{marginBottom:10}}>
               {parseSafe(sel.evidence).map((e,i)=>{
                 const url=typeof e==='object'?e.url:e
@@ -1488,12 +1510,21 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('cam-inp').click()}>📷 Take Photo</button>
                   <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('gal-inp').click()}>🖼 Gallery</button>
                 </div>
-                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name}]}) }; r.readAsDataURL(f); e.target.value='' }}/>
-                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name}]}) }; r.readAsDataURL(f); e.target.value='' }}/>
-                {parseSafe(sel.evidence).length===0&&<div className="evidence-zone" onClick={()=>document.getElementById('cam-inp').click()}><div style={{fontSize:24,marginBottom:5}}>📷</div><div style={{fontSize:13,color:'var(--t2)'}}>Tap to add photo (max 5)</div></div>}
+                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name}]}); setPhotoWarn(false) }; r.readAsDataURL(f); e.target.value='' }}/>
+                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name}]}); setPhotoWarn(false) }; r.readAsDataURL(f); e.target.value='' }}/>
+                {parseSafe(sel.evidence).length===0&&(
+                  <div className="evidence-zone" onClick={()=>document.getElementById('cam-inp').click()}>
+                    <div style={{fontSize:24,marginBottom:5}}>📷</div>
+                    <div style={{fontSize:13,color:'var(--t2)'}}>{sel.compliance?'Tap to add required photo evidence':'Tap to add photo (optional)'}</div>
+                  </div>
+                )}
               </div>
             )}
-            {user.role!=='worker'&&!parseSafe(sel.evidence).length&&<div style={{fontSize:13,color:'var(--t2)'}}>No evidence uploaded yet</div>}
+            {user.role!=='worker'&&!parseSafe(sel.evidence).length&&(
+              sel.compliance
+                ? <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--red)'}}>⚠️ No photos attached — this is a compliance task and evidence should be required.</div>
+                : <div style={{fontSize:13,color:'var(--t2)'}}>No evidence uploaded yet</div>
+            )}
           </div>
           <div className="section">
             <div className="section-title">Comments & Notes</div>
@@ -1558,7 +1589,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 {sel.started_at&&!sel.completed_at?<button className="btn btn-amber" style={{flex:1}} onClick={()=>{ if(gpsEnabled===false||!navigator.geolocation){update(sel.id,{completed_at:new Date().toISOString()});return} navigator.geolocation.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>:sel.completed_at?<div style={{flex:1,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>✓ Out: {fmtTime(sel.completed_at)}</div>:null}
               </div>
               {sel.started_at&&sel.completed_at&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:10,textAlign:'center'}}>⏱ Duration: <strong>{fmtDuration(sel.started_at,sel.completed_at)}</strong></div>}
-              {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&<button className="btn btn-primary" style={{width:'100%'}} onClick={()=>submitTask(sel.id)}>✅ Submit for Review</button>}
+              {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
+                <button
+                  className="btn btn-primary"
+                  style={{width:'100%',opacity:(sel.compliance&&parseSafe(sel.evidence).length===0)?0.55:1}}
+                  onClick={()=>submitTask(sel.id)}
+                >
+                  {sel.compliance&&parseSafe(sel.evidence).length===0?'📷 Add Photo to Submit':'✅ Submit for Review'}
+                </button>
+              )}
               {sel.status==='awaiting_review'&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>📋 Awaiting review</div>}
               {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✅ Approved</div>}
             </div>
