@@ -121,7 +121,7 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
 
     // Alert 4: SLA warning — review deadline approaching or breached
     if(t.status==='awaiting_review'&&t.submitted_at&&['supervisor','manager','client_admin'].includes(user.role)) {
-      const sla = getSLAStatus(t, leaveRecords?.orgSLA)
+      const sla = getSLAStatus(t, null)
       if(sla?.status==='breached') {
         alerts.push({ type:'sla_breach', task:t, msg:`SLA breached: "${t.title}" — review overdue (${t.priority} priority)`, level:'red' })
       } else if(sla?.status==='warning') {
@@ -472,7 +472,7 @@ const TaskCard = ({ task, onClick }) => {
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
         {task.project&&<span style={{fontSize:11,color:'#3B82F6',background:'rgba(59,130,246,.08)',padding:'2px 7px',borderRadius:4}}>📁 {task.project}</span>}
-        {(()=>{ const sla=getSLAStatus(task,orgSLA); return sla?<span style={{fontSize:10,padding:'2px 7px',borderRadius:4,fontWeight:700,background:sla.color+'22',color:sla.color}}>⏱ {sla.label}</span>:null })()} 
+        {(()=>{ const sla=getSLAStatus(task,orgSLA||DEFAULT_SLA); return sla?<span style={{fontSize:10,padding:'2px 7px',borderRadius:4,fontWeight:700,background:sla.color+'22',color:sla.color}}>⏱ {sla.label}</span>:null })()} 
         {dur&&<span style={{fontSize:11,color:'var(--t2)'}}>⏱ {dur}</span>}
         {task.gps_start&&<a href={"https://www.google.com/maps?q="+task.gps_start} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'var(--blue)',textDecoration:'none'}} onClick={e=>e.stopPropagation()}>📍 GPS ↗</a>}
       </div>
@@ -3336,7 +3336,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
     if(['awaiting_review','approved','rejected'].includes(t.status)) peopleMap[key].submitted++
     // SLA tracking — was it reviewed within the SLA?
     if(t.reviewed_at && t.submitted_at) {
-      const slaMinutes = getSLAMinutes(t.priority, leaveRecords?.orgSLA)
+      const slaMinutes = getSLAMinutes(t.priority, null)
       const reviewMinutes = (new Date(t.reviewed_at)-new Date(t.submitted_at))/60000
       if(!peopleMap[key].slaTotal) peopleMap[key].slaTotal=0
       if(!peopleMap[key].slaOnTime) peopleMap[key].slaOnTime=0
@@ -4129,6 +4129,8 @@ function HelpView({ user }) {
   const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
   const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
+  const orgSLARef = React.useRef(DEFAULT_SLA)
+  const updateOrgSLA = (val) => { setOrgSLA(val); orgSLARef.current = val }
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const appVersion = '1.0.0'
 
@@ -4407,6 +4409,8 @@ export default function App() {
   const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
   const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
+  const orgSLARef = React.useRef(DEFAULT_SLA)
+  const updateOrgSLA = (val) => { setOrgSLA(val); orgSLARef.current = val }
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const undoTimer = useRef(null)
 
@@ -4461,7 +4465,7 @@ export default function App() {
             !t.escalation &&
             t.org?.toLowerCase()===user.org?.toLowerCase()
           ).forEach(t=>{
-            const sla = getSLAStatus(t, orgSLA)
+            const sla = getSLAStatus(t, orgSLARef.current)
             if(sla?.status==='breached') {
               supabase.from('tasks').update({escalation:true, status:'escalated', lastIntervention:'SLA breach — auto-escalated'}).eq('id',t.id).then(()=>{})
               setNotifications(n=>[{id:t.id+'_sla_breach', type:'sla', title:'SLA Breached 🚨', body:`"${t.title}" review deadline exceeded — auto-escalated`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444'},...n].slice(0,50))
@@ -4526,7 +4530,7 @@ export default function App() {
       // Load org SLA settings
       if(isConfigured()&&user.org) {
         supabase.from('organisations').select('sla_settings').eq('name',user.org).single()
-          .then(({data})=>{ if(data?.sla_settings) setOrgSLA({...DEFAULT_SLA,...JSON.parse(data.sla_settings)}) })
+          .then(({data})=>{ if(data?.sla_settings) updateOrgSLA({...DEFAULT_SLA,...JSON.parse(data.sla_settings)}) })
           .catch(()=>{})
       }
       // Load leave records for org
@@ -4564,7 +4568,7 @@ export default function App() {
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA:updateOrgSLA }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
