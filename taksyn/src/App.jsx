@@ -1082,8 +1082,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     setTasks(prev=>[...prev,t])
     if (isConfigured()) {
       supabase.auth.getUser().then(({data:{user:authUser}})=>{
-        const assigned_user_id = authUser?.id ?? null
-        supabase.from('tasks').insert({ ...t, subtasks:'[]', evidence:'[]', comments:'[]', assigned_user_id })
+  supabase.from('tasks').insert({ ...t, subtasks:'[]', evidence:'[]', comments:'[]' })
           .then(({error})=>{
             if (error) console.error('Task save error:', error)
             // Real-time subscription will update the list automatically
