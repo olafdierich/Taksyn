@@ -2623,6 +2623,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
   const [viewingMember, setViewingMember] = useState(null)
   const [editingMember, setEditingMember] = useState(null)
   const [memberEditForm, setMemberEditForm] = useState({})
+  const [orgChangeSearch, setOrgChangeSearch] = useState('')
 
   const INDUSTRIES = ['Hospitality','Aged Care','Disability Care','Healthcare / Clinic','Wedding & Events','Facilities Management','Other']
 
@@ -2672,14 +2673,25 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   const saveMemberEdit = async () => {
     if (!memberEditForm.name?.trim()) return
-    const updates = { name:memberEditForm.name.trim(), role:memberEditForm.role, department:memberEditForm.department||'', industry:memberEditForm.industry||'', phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'' }
+    const newOrg = memberEditForm.org || editingMember.org
+    const orgChanged = newOrg !== editingMember.org
+    const updates = { name:memberEditForm.name.trim(), role:memberEditForm.role, department:memberEditForm.department||'', industry:memberEditForm.industry||'', phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'', org:newOrg }
     if (isConfigured()) {
       await supabase.from('profiles').update(updates).eq('id', editingMember.id)
-      await supabase.from('org_members').update({ role: memberEditForm.role }).eq('user_id', editingMember.id).eq('org', editingMember.org)
+      if (orgChanged) {
+        await supabase.from('org_members').delete().eq('user_id', editingMember.id).eq('org', editingMember.org)
+        await supabase.from('org_members').insert({ user_id: editingMember.id, org: newOrg, role: memberEditForm.role })
+      } else {
+        await supabase.from('org_members').update({ role: memberEditForm.role }).eq('user_id', editingMember.id).eq('org', editingMember.org)
+      }
     }
-    setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...updates}:m))
-    setViewingMember(prev=>prev?{...prev,...updates}:null)
-    setEditingMember(null); setMemberEditForm({})
+    if (orgChanged) {
+      setOrgMembers(prev=>prev.filter(m=>m.id!==editingMember.id))
+    } else {
+      setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...updates}:m))
+    }
+    setViewingMember(null)
+    setEditingMember(null); setMemberEditForm({}); setOrgChangeSearch('')
   }
 
   const toggleStatus = async (org) => {
@@ -2887,7 +2899,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                           {m.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {m.department}</div>}
                         </div>
                         <RolePill role={m.role}/>
-                        <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,department:m.department||'',industry:m.industry||'',phone:m.phone||'',notes:m.notes||'',email:m.email||''})}}>✏️</button>
+                        <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,department:m.department||'',industry:m.industry||'',phone:m.phone||'',notes:m.notes||'',email:m.email||'',org:m.org||''})}}>✏️</button>
                       </div>
                     ))}
                   </div>
@@ -2923,7 +2935,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
               {viewingMember.notes&&<div style={{marginTop:10,background:'var(--s3)',borderRadius:8,padding:'8px 12px',fontSize:13,color:'var(--t2)',fontStyle:'italic'}}>{viewingMember.notes}</div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
                 <button className="btn btn-secondary" onClick={()=>setViewingMember(null)}>Close</button>
-                <button className="btn btn-primary" onClick={()=>{setEditingMember(viewingMember);setMemberEditForm({name:viewingMember.name,role:viewingMember.role,department:viewingMember.department||'',industry:viewingMember.industry||'',phone:viewingMember.phone||'',notes:viewingMember.notes||'',email:viewingMember.email||''})}}>✏️ Edit Profile</button>
+                <button className="btn btn-primary" onClick={()=>{setEditingMember(viewingMember);setMemberEditForm({name:viewingMember.name,role:viewingMember.role,department:viewingMember.department||'',industry:viewingMember.industry||'',phone:viewingMember.phone||'',notes:viewingMember.notes||'',email:viewingMember.email||'',org:viewingMember.org||''})}}>✏️ Edit Profile</button>
               </div>
             </div>
           </div>
@@ -2953,6 +2965,31 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                   {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                 </select>
               </div>
+              <div className="form-field"><label className="form-label">Organisation</label>
+                <input
+                  className="form-input"
+                  placeholder="Filter organisations..."
+                  value={orgChangeSearch}
+                  onChange={e=>setOrgChangeSearch(e.target.value)}
+                  style={{fontSize:13,marginBottom:4}}
+                />
+                <select
+                  className="form-input"
+                  value={memberEditForm.org||editingMember?.org||''}
+                  onChange={e=>setMemberEditForm({...memberEditForm,org:e.target.value})}
+                  size={4}
+                  style={{fontSize:13,height:'auto'}}
+                >
+                  {[...orgs]
+                    .sort((a,b)=>a.name.localeCompare(b.name))
+                    .filter(o=>!orgChangeSearch||o.name.toLowerCase().includes(orgChangeSearch.toLowerCase()))
+                    .map(o=><option key={o.id} value={o.name}>{o.name}</option>)
+                  }
+                </select>
+                {memberEditForm.org && memberEditForm.org!==editingMember?.org && (
+                  <div style={{fontSize:11,color:'#F59E0B',marginTop:3}}>⚠️ Moving from <strong>{editingMember?.org}</strong> to <strong>{memberEditForm.org}</strong></div>
+                )}
+              </div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Industry</label>
                   <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value,department:''})}>
@@ -2971,7 +3008,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                 <textarea className="comment-box" style={{minHeight:60}} value={memberEditForm.notes||''} onChange={e=>setMemberEditForm({...memberEditForm,notes:e.target.value})} placeholder="Notes about this member..."/>
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                <button className="btn btn-secondary" onClick={()=>setEditingMember(null)}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{setEditingMember(null);setOrgChangeSearch('')}}>Cancel</button>
                 <button className="btn btn-primary" disabled={!memberEditForm.name?.trim()} onClick={saveMemberEdit}>Save Changes</button>
               </div>
             </div>
