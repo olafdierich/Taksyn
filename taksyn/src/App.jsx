@@ -2153,6 +2153,15 @@ function ReportsView({ tasks, user }) {
   const [statOrder, setStatOrder] = useState(DEFAULT_STAT_ORDER)
   const [dragStatId, setDragStatId] = useState(null)
   const [chartTab, setChartTab] = useState('overview')
+  const [showFilters, setShowFilters] = useState(false)
+  const [filterTitle, setFilterTitle] = useState('')
+  const [filterWorker, setFilterWorker] = useState('')
+  const [filterDept, setFilterDept] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
+  const [filterStatuses, setFilterStatuses] = useState([])
+  const [filterPriorities, setFilterPriorities] = useState([])
+  const [filterCompliance, setFilterCompliance] = useState(false)
+  const [filterProject, setFilterProject] = useState('')
 
   const isClientAdmin = ['client_admin','super_admin'].includes(user.role)
   const isSupervisorUp = ['supervisor','manager','client_admin','super_admin'].includes(user.role)
@@ -2186,34 +2195,55 @@ function ReportsView({ tasks, user }) {
   const [rs,re] = getRange()
   const pt = tasks.filter(t => { const d = new Date(t.created_at||t.due_date||0); return d>=rs && d<=re })
 
+  // --- Filter helpers & filtered dataset ---
+  const workerOptions = [...new Set(pt.map(t=>t.assigned_user_name).filter(Boolean))].sort()
+  const deptOptions = [...new Set(pt.map(t=>t.department).filter(Boolean))].sort()
+  const categoryOptions = [...new Set(pt.map(t=>t.category).filter(Boolean))].sort()
+  const projectOptions = [...new Set(pt.map(t=>t.project).filter(Boolean))].sort()
+  const activeFilterCount = [filterTitle, filterWorker, filterDept, filterCategory, filterStatuses.length>0, filterPriorities.length>0, filterCompliance, filterProject].filter(Boolean).length
+  const filteredPt = pt.filter(t=>{
+    if(filterTitle && !t.title?.toLowerCase().includes(filterTitle.toLowerCase())) return false
+    if(filterWorker && (t.assigned_user_name||t.assigned_user_id||'')!==filterWorker) return false
+    if(filterDept && t.department!==filterDept) return false
+    if(filterCategory && t.category!==filterCategory) return false
+    if(filterStatuses.length>0 && !filterStatuses.includes(t.status)) return false
+    if(filterPriorities.length>0 && !filterPriorities.includes(t.priority)) return false
+    if(filterCompliance && !t.compliance) return false
+    if(filterProject && t.project!==filterProject) return false
+    return true
+  })
+  const clearFilters = ()=>{ setFilterTitle(''); setFilterWorker(''); setFilterDept(''); setFilterCategory(''); setFilterStatuses([]); setFilterPriorities([]); setFilterCompliance(false); setFilterProject('') }
+  const toggleFStatus = s => setFilterStatuses(prev=>prev.includes(s)?prev.filter(x=>x!==s):[...prev,s])
+  const toggleFPriority = p => setFilterPriorities(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])
+
   // --- Shared stats helpers ---
   const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0
   const fmtDur = (s,e) => { if(!s||!e) return '—'; const m=Math.round((new Date(e)-new Date(s))/60000); return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m' }
   const pl = {weekly:'Last 7 Days',monthly:'Last Month',quarterly:'Last 3 Months',annual:'Last Year',custom:customStart+' to '+customEnd}[period]
 
   // --- Compliance report stats ---
-  const total=pt.length, done=pt.filter(t=>['completed','approved'].includes(t.status)).length
-  const approved=pt.filter(t=>t.status==='approved').length, rejected=pt.filter(t=>t.status==='rejected').length
-  const overdue=pt.filter(t=>t.status==='overdue').length
-  const notOnTime=pt.filter(t=>t.due_date&&t.completed_at&&new Date(t.completed_at)>new Date(t.due_date)).length
-  const compT=pt.filter(t=>t.compliance), compDone=compT.filter(t=>['completed','approved'].includes(t.status)).length
-  const pendingReview=pt.filter(t=>t.status==='awaiting_review').length
-  const reviewed=pt.filter(t=>['approved','rejected'].includes(t.status)).length
-  const totalToReview=pt.filter(t=>['awaiting_review','approved','rejected'].includes(t.status)).length
-  const reviewedInTime=pt.filter(t=>t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000).length
+  const total=filteredPt.length, done=filteredPt.filter(t=>['completed','approved'].includes(t.status)).length
+  const approved=filteredPt.filter(t=>t.status==='approved').length, rejected=filteredPt.filter(t=>t.status==='rejected').length
+  const overdue=filteredPt.filter(t=>t.status==='overdue').length
+  const notOnTime=filteredPt.filter(t=>t.due_date&&t.completed_at&&new Date(t.completed_at)>new Date(t.due_date)).length
+  const compT=filteredPt.filter(t=>t.compliance), compDone=compT.filter(t=>['completed','approved'].includes(t.status)).length
+  const pendingReview=filteredPt.filter(t=>t.status==='awaiting_review').length
+  const reviewed=filteredPt.filter(t=>['approved','rejected'].includes(t.status)).length
+  const totalToReview=filteredPt.filter(t=>['awaiting_review','approved','rejected'].includes(t.status)).length
+  const reviewedInTime=filteredPt.filter(t=>t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000).length
   const reviewedInTimePct=pct(reviewedInTime,totalToReview)
-  const doneOnDay=pt.filter(t=>t.due_date&&t.completed_at&&new Date(t.completed_at).toDateString()===new Date(t.due_date).toDateString()).length
-  const tasksDueToday=pt.filter(t=>t.due_date).length
+  const doneOnDay=filteredPt.filter(t=>t.due_date&&t.completed_at&&new Date(t.completed_at).toDateString()===new Date(t.due_date).toDateString()).length
+  const tasksDueToday=filteredPt.filter(t=>t.due_date).length
   const doneOnDayPct=pct(doneOnDay,tasksDueToday)
-  const reviewWithin1Day=pt.filter(t=>t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000).length
+  const reviewWithin1Day=filteredPt.filter(t=>t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000).length
   const reviewWithin1DayPct=pct(reviewWithin1Day,totalToReview)
-  const reportWithinWeek=pt.filter(t=>t.reviewed_at&&t.created_at&&(new Date(t.reviewed_at)-new Date(t.created_at))<=604800000).length
-  const reportWithinWeekPct=pct(reportWithinWeek,pt.length)
+  const reportWithinWeek=filteredPt.filter(t=>t.reviewed_at&&t.created_at&&(new Date(t.reviewed_at)-new Date(t.created_at))<=604800000).length
+  const reportWithinWeekPct=pct(reportWithinWeek,filteredPt.length)
 
   // --- Worker performance stats ---
   const workerRoles = ['worker','supervisor','manager']
   const workerMap = {}
- pt.forEach(t => {
+  filteredPt.forEach(t => {
     const key = t.assigned_user_name || t.assigned_user_id || 'Unassigned'
     const role = t.assigned_role || 'worker'
     if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
@@ -2229,10 +2259,10 @@ function ReportsView({ tasks, user }) {
   const workerRows = Object.values(workerMap).sort((a,b) => b.total-a.total)
 
   // --- Org overview stats ---
-  const uniqueWorkers = new Set(pt.map(t=>t.assigned_user_id||t.assigned_user_name).filter(Boolean))
+  const uniqueWorkers = new Set(filteredPt.map(t=>t.assigned_user_id||t.assigned_user_name).filter(Boolean))
   const byRole = {}
   workerRoles.forEach(r => {
-    const roleTasks = pt.filter(t=>t.assigned_role===r)
+    const roleTasks = filteredPt.filter(t=>t.assigned_role===r)
     const compRoleTasks = roleTasks.filter(t=>t.compliance)
     byRole[r] = {
       tasks: roleTasks.length,
@@ -2261,7 +2291,7 @@ function ReportsView({ tasks, user }) {
   }
 
   const exportCompliancePDF = () => {
-    const rows = pt.map(t=>'<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td>'+t.category+'</td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.completed_at?new Date(t.completed_at).toLocaleDateString():'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>').join('')
+    const rows = filteredPt.map(t=>'<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td>'+t.category+'</td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.completed_at?new Date(t.completed_at).toLocaleDateString():'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>').join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>${baseStyle}.sg{grid-template-columns:repeat(5,1fr)}</style></head><body>${reportHeader('Compliance Report')}<div class="sg">${statOrder.map(s=>{
         if(s.c==='x') return '<div class="st" style="background:transparent;border:1px dashed #e8ebf0"></div>'
         const colorMap={g:'#10B981',r:'#EF4444',a:'#F59E0B',p:'#8B5CF6',b:'#3B82F6'}
@@ -2279,13 +2309,13 @@ function ReportsView({ tasks, user }) {
       const avgStr = avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
       return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+onTimePct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
     }).join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Worker Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Worker Performance Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Workers</div></div><div class="st"><div class="sv">${pt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>On Time %</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Worker Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Worker Performance Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>On Time %</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
     openReport(html)
   }
 
   const exportOrgPDF = () => {
     const roleRows = workerRoles.map(r => '<tr><td><strong>'+ROLE_LABELS[r]+'</strong></td><td>'+byRole[r].tasks+'</td><td>'+byRole[r].done+'</td><td style="color:'+(pct(byRole[r].done,byRole[r].tasks)>=80?'#10B981':pct(byRole[r].done,byRole[r].tasks)>=50?'#F59E0B':'#EF4444')+'">'+pct(byRole[r].done,byRole[r].tasks)+'%</td><td style="color:'+(byRole[r].compRate>=80?'#10B981':byRole[r].compRate>=50?'#F59E0B':'#EF4444')+'">'+byRole[r].compRate+'%</td></tr>').join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${pt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${pt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(t.assigned_user_name||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${filteredPt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(t.assigned_user_name||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
     openReport(html)
   }
 
@@ -2314,7 +2344,7 @@ function ReportsView({ tasks, user }) {
             {reportOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <button className="btn btn-primary btn-sm" onClick={handleExport}>📄 Generate PDF</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Completed,Duration,Assigned To\n'+pt.map(t=>[t.id,t.title,t.category,t.status,t.priority,t.compliance,parseSafe(t.evidence).length,t.due_date,t.completed_at||'',fmtDur(t.started_at,t.completed_at)||'',t.assigned_user_name||''].join(',')).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Completed,Duration,Assigned To\n'+filteredPt.map(t=>[t.id,t.title,t.category,t.status,t.priority,t.compliance,parseSafe(t.evidence).length,t.due_date,t.completed_at||'',fmtDur(t.started_at,t.completed_at)||'',t.assigned_user_name||''].join(',')).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
         </div>
       </div>
 
@@ -2328,11 +2358,112 @@ function ReportsView({ tasks, user }) {
         {period==='custom'&&<div style={{display:'flex',gap:8,marginTop:8}}><input type="date" className="form-input" style={{fontSize:12}} value={customStart} onChange={e=>setCustomStart(e.target.value)}/><input type="date" className="form-input" style={{fontSize:12}} value={customEnd} onChange={e=>setCustomEnd(e.target.value)}/></div>}
       </div>
 
+      {/* Filter Panel */}
+      <div className="section" style={{marginBottom:14}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <button
+            className={'btn btn-sm '+(showFilters||activeFilterCount>0?'btn-primary':'btn-secondary')}
+            onClick={()=>setShowFilters(s=>!s)}
+            style={{display:'flex',alignItems:'center',gap:6}}
+          >
+            🔍 Filters
+            {activeFilterCount>0&&<span style={{background:'rgba(255,255,255,0.3)',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:800}}>{activeFilterCount}</span>}
+            <span style={{fontSize:11,opacity:.7}}>{showFilters?'▲':'▼'}</span>
+          </button>
+          {activeFilterCount>0&&(
+            <div style={{fontSize:12,color:'var(--t2)',display:'flex',alignItems:'center',gap:10}}>
+              <span>Showing <strong style={{color:'var(--text)'}}>{filteredPt.length}</strong> of <strong style={{color:'var(--text)'}}>{pt.length}</strong> tasks · filters active</span>
+              <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:11,fontFamily:'inherit',fontWeight:600,padding:0}} onClick={clearFilters}>✕ Clear All</button>
+            </div>
+          )}
+        </div>
+
+        {showFilters&&(
+          <div style={{marginTop:14,display:'flex',flexDirection:'column',gap:14}}>
+            {/* Row 1: Title + Worker + Department */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:10}}>
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.5px'}}>Task Title</div>
+                <input className="form-input" style={{fontSize:12,width:'100%'}} placeholder="Search by title…" value={filterTitle} onChange={e=>setFilterTitle(e.target.value)}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.5px'}}>Assigned Person</div>
+                <select className="form-input" style={{fontSize:12,width:'100%'}} value={filterWorker} onChange={e=>setFilterWorker(e.target.value)}>
+                  <option value="">All workers</option>
+                  {workerOptions.map(w=><option key={w} value={w}>{w}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.5px'}}>Department</div>
+                <select className="form-input" style={{fontSize:12,width:'100%'}} value={filterDept} onChange={e=>setFilterDept(e.target.value)}>
+                  <option value="">All departments</option>
+                  {deptOptions.map(d=><option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.5px'}}>Category</div>
+                <select className="form-input" style={{fontSize:12,width:'100%'}} value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}>
+                  <option value="">All categories</option>
+                  {categoryOptions.map(c=><option key={c} value={c}>{CAT_ICONS[c]||'📋'} {c}</option>)}
+                </select>
+              </div>
+              {projectOptions.length>0&&(
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.5px'}}>Project</div>
+                  <select className="form-input" style={{fontSize:12,width:'100%'}} value={filterProject} onChange={e=>setFilterProject(e.target.value)}>
+                    <option value="">All projects</option>
+                    {projectOptions.map(p=><option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Status multi-select */}
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.5px'}}>Status</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {[['pending','Pending','#6B7280'],['in_progress','In Progress','#3B82F6'],['awaiting_review','Awaiting Review','#F59E0B'],['approved','Approved','#10B981'],['rejected','Rejected','#EF4444'],['overdue','Overdue','#DC2626']].map(([v,l,col])=>(
+                  <button key={v} onClick={()=>toggleFStatus(v)} style={{padding:'4px 11px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',border:'none',background:filterStatuses.includes(v)?col:'var(--s3)',color:filterStatuses.includes(v)?'#fff':'var(--t2)',transition:'all .15s'}}>{l}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Priority multi-select */}
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.5px'}}>Priority</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {[['critical','Critical','#EF4444'],['high','High','#F59E0B'],['medium','Medium','#3B82F6'],['low','Low','#10B981']].map(([v,l,col])=>(
+                  <button key={v} onClick={()=>toggleFPriority(v)} style={{padding:'4px 11px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',border:'none',background:filterPriorities.includes(v)?col:'var(--s3)',color:filterPriorities.includes(v)?'#fff':'var(--t2)',transition:'all .15s'}}>{l}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Compliance toggle + Clear */}
+            <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+              <button className={'btn btn-sm '+(filterCompliance?'btn-primary':'btn-secondary')} onClick={()=>setFilterCompliance(c=>!c)}>
+                🔒 Compliance tasks only
+              </button>
+              {activeFilterCount>0&&(
+                <button className="btn btn-secondary btn-sm" onClick={clearFilters}>✕ Clear All Filters ({activeFilterCount})</button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Active filter summary banner */}
+      {activeFilterCount>0&&!showFilters&&(
+        <div style={{background:'rgba(59,130,246,.06)',border:'1px solid rgba(59,130,246,.2)',borderRadius:8,padding:'8px 14px',marginBottom:14,fontSize:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span>🔍 Showing <strong>{filteredPt.length}</strong> of <strong>{pt.length}</strong> tasks ({activeFilterCount} filter{activeFilterCount>1?'s':''} active)</span>
+          <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:11,fontFamily:'inherit',fontWeight:600}} onClick={clearFilters}>Clear filters</button>
+        </div>
+      )}
+
       {/* Compliance Report Preview */}
       {reportType==='compliance' && (
         <>
           <div className="section">
-            <div className="section-title">Compliance Overview — {pt.length} tasks</div>
+            <div className="section-title">Compliance Overview — {filteredPt.length} tasks</div>
             <div style={{fontSize:10,color:'var(--t2)',marginBottom:6,marginTop:10}}>✋ Drag blocks to rearrange — order is reflected in the PDF report</div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(110px,1fr))',gap:10}}>
               {statOrder.map((s,i)=>{
@@ -2392,7 +2523,7 @@ function ReportsView({ tasks, user }) {
       {/* Worker Performance Preview */}
       {reportType==='worker' && isClientAdmin && (
         <div className="section">
-          <div className="section-title">Worker Performance — {pl}</div>
+          <div className="section-title">Worker Performance — {filteredPt.length} tasks · {pl}</div>
           <div style={{overflowX:'auto',marginTop:10}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
               <thead>
@@ -2430,9 +2561,9 @@ function ReportsView({ tasks, user }) {
       {reportType==='org' && isClientAdmin && (
         <>
           <div className="section">
-            <div className="section-title">Organisation Summary — {pl}</div>
+            <div className="section-title">Organisation Summary — {filteredPt.length} tasks · {pl}</div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10,marginTop:10}}>
-              {[['Active Workers',uniqueWorkers.size,''],['Total Tasks',pt.length,''],['Completed',done,'g'],['Compliance Rate',pct(compDone,compT.length)+'%','p']].map(([l,v,c])=>(
+              {[['Active Workers',uniqueWorkers.size,''],['Total Tasks',filteredPt.length,''],['Completed',done,'g'],['Compliance Rate',pct(compDone,compT.length)+'%','p']].map(([l,v,c])=>(
                 <div key={l} className="st" style={{background:'var(--s3)',borderRadius:8,padding:14,textAlign:'center'}}>
                   <div style={{fontSize:22,fontWeight:800,color:c==='g'?'var(--green)':c==='p'?'#8B5CF6':'#5BC8C0',lineHeight:1}}>{v}</div>
                   <div style={{fontSize:10,color:'var(--t2)',marginTop:5,textTransform:'uppercase'}}>{l}</div>
