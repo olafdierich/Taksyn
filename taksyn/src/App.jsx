@@ -9,7 +9,7 @@ const TIERS = {
   Starter:      { color:'#3B82F6', base:'$19',  perUser:'$9', users:'1-10',     storage:'5GB',   images:'2/task',retention:'6 months', features:['Task assignment','Photo evidence','Basic reporting'], locked:['Escalation'] },
   Growth:       { color:'#10B981', base:'$39',  perUser:'$8', users:'11-30',    storage:'15GB',  images:'3/task',retention:'12 months',features:['Escalation cascade','GPS tracking','Performance tracking'], locked:[] },
   Professional: { color:'#8B5CF6', base:'$149', perUser:'$7', users:'31-100',   storage:'50GB',  images:'5/task',retention:'24 months',features:['Multi-site support','Advanced escalation','Audit-ready reporting'], locked:[] },
-  Enterprise:   { color:'#F59E0B', base:'$399', perUser:'$6', users:'Unlimited',storage:'100GB+',images:'5/task',retention:'Custom',   features:['Full compliance suite','API integrations','White-labelling','SLA'], locked:[] },
+  Enterprise:   { color:'#F59E0B', base:'$399', perUser:'$6', users:'Unlimited',storage:'100GB+',images:'5/task',retention:'Custom',   features:['Full compliance suite','API integrations','White-labelling','Response Time SLAs'], locked:[] },
 }
 const STATUS_CFG = {
   pending:         { label:'Pending',         color:'#6B7280', bg:'rgba(107,114,128,.15)' },
@@ -58,7 +58,7 @@ const getSLAStatus = (task, orgSLA) => {
   const elapsed = (new Date() - new Date(task.submitted_at)) / 60000
   const remaining = slaMinutes - elapsed
   const pct = Math.min(100, (elapsed / slaMinutes) * 100)
-  if(remaining <= 0) return { status:'breached', remaining:0, pct:100, label:'SLA Breached', color:'#EF4444' }
+  if(remaining <= 0) return { status:'breached', remaining:0, pct:100, label:'Response Time Exceeded', color:'#EF4444' }
   if(remaining <= slaMinutes * 0.25) return { status:'warning', remaining, pct, label:remaining<60?Math.round(remaining)+'m left':Math.round(remaining/60)+'h left', color:'#F97316' }
   return { status:'ok', remaining, pct, label:remaining<60?Math.round(remaining)+'m left':Math.round(remaining/60)+'h left', color:'#10B981' }
 }
@@ -123,14 +123,23 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
     if(t.status==='awaiting_review'&&t.submitted_at&&['supervisor','manager','client_admin'].includes(user.role)) {
       const sla = getSLAStatus(t, null)
       if(sla?.status==='breached') {
-        alerts.push({ type:'sla_breach', task:t, msg:`SLA breached: "${t.title}" — review overdue (${t.priority} priority)`, level:'red' })
+        alerts.push({ type:'sla_breach', task:t, msg:`Response time exceeded: "${t.title}" — review overdue (${t.priority} priority)`, level:'red' })
       } else if(sla?.status==='warning') {
-        alerts.push({ type:'sla_warning', task:t, msg:`SLA warning: "${t.title}" — only ${sla.label} to review (${t.priority} priority)`, level:'amber' })
+        alerts.push({ type:'sla_warning', task:t, msg:`Response time warning: "${t.title}" — only ${sla.label} to review (${t.priority} priority)`, level:'amber' })
       }
     }
   })
 
   return alerts
+}
+
+const NOTIF_TYPE_ICONS = {
+  overdue:'🔴', submitted:'🟡', approved:'✅', rejected:'⚠️',
+  escalated:'🚨', assigned:'📋', comment:'💬', sla:'🔒',
+}
+const DEFAULT_NOTIF_PREFS = {
+  overdue:true, submitted:true, approved:true, rejected:true,
+  escalated:true, assigned:true, comment:true, sla:true, sound:false
 }
 
 const generateNotifications = (tasks, user, prevTasks=[]) => {
@@ -418,8 +427,18 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 @media(max-width:480px){.notif-panel{width:100vw}}
 .notif-entry{padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
 .notif-entry:hover{background:var(--s3)}
-.notif-entry.unread{background:rgba(0,168,126,.04);border-left:3px solid var(--brand)}
-.notif-entry.unread:hover{background:rgba(0,168,126,.08)}
+.notif-entry.unread{background:rgba(59,130,246,.04);border-left:3px solid #3B82F6}
+.notif-entry.unread:hover{background:rgba(59,130,246,.08)}
+.notif-entry.read{border-left:3px solid var(--green)}
+.notif-entry.read:hover{background:var(--s3)}
+.notif-group-lbl{padding:5px 14px 3px;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;background:var(--s3);border-bottom:1px solid var(--border)}
+.notif-actions{display:flex;gap:2px;align-items:center;flex-shrink:0;margin-left:4px}
+.notif-icon-btn{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:4px;font-size:12px;line-height:1;color:var(--t3);font-family:inherit;transition:color .15s}
+.notif-icon-btn:hover{color:var(--text)}
+.notif-icon-btn.del:hover{color:var(--red)}
+.notif-icon-btn.chk:hover{color:var(--green)}
+.notif-summary{padding:8px 14px;background:rgba(59,130,246,.04);border-bottom:1px solid var(--border);font-size:11px;color:'var(--t2)'}
+.notif-settings-panel{padding:10px 14px;border-bottom:1px solid var(--border);background:var(--s3)}
 .bottom-nav{display:none}
 @media(max-width:768px){
   .bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;height:56px;background:#fff;border-top:1px solid var(--border);z-index:270;padding-bottom:env(safe-area-inset-bottom,0)}
@@ -2823,7 +2842,7 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Task Stats','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['support','Support','alert']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','SLA Settings','clock'],['tiers','Plans','tier'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
@@ -4509,7 +4528,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
                     ['Rejected',p.rejected,p.rejected>0?'#EF4444':'#6B7280'],
                     ['Overdue',p.overdue,p.overdue>0?'#EF4444':'#6B7280'],
                     ['Avg Time',fmtAvg(p.avgMins),'#8B5CF6'],
-                    ['SLA Met',p.slaTotal>0?pct(p.slaOnTime,p.slaTotal)+'%':'—',p.slaTotal>0&&pct(p.slaOnTime,p.slaTotal)>=80?'#10B981':'#EF4444'],
+                    ['Response Time Met',p.slaTotal>0?pct(p.slaOnTime,p.slaTotal)+'%':'—',p.slaTotal>0&&pct(p.slaOnTime,p.slaTotal)>=80?'#10B981':'#EF4444'],
                   ].map(([l,v,c])=>(
                     <div key={l} style={{background:'var(--s3)',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
                       <div style={{fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
@@ -5122,7 +5141,7 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
   return (
     <div className="anim">
       <div className="ph">
-        <div className="ph-title">⚙️ SLA & Response Time Settings</div>
+        <div className="ph-title">⚙️ Response Time Settings</div>
         <div className="ph-sub">{user.org} · Configure review response time limits</div>
       </div>
 
@@ -5172,7 +5191,7 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
       </div>
 
       <div style={{display:'flex',gap:10,marginBottom:20}}>
-        <button className="btn btn-primary" disabled={saving} onClick={saveSLA} style={{flex:1}}>{saving?'Saving...':'💾 Save SLA Settings'}</button>
+        <button className="btn btn-primary" disabled={saving} onClick={saveSLA} style={{flex:1}}>{saving?'Saving...':'💾 Save Response Time Settings'}</button>
       </div>
 
       <div className="section">
@@ -5493,9 +5512,55 @@ export default function App() {
   const orgSLARef = useRef(DEFAULT_SLA)
   const updateOrgSLA = (val) => { setOrgSLA(val); orgSLARef.current = val }
   const [showNotifPanel, setShowNotifPanel] = useState(false)
+  const [notifPrefs, setNotifPrefs] = useState(() => {
+    try { const v=localStorage.getItem('taksyn_notif_prefs'); return v?{...DEFAULT_NOTIF_PREFS,...JSON.parse(v)}:DEFAULT_NOTIF_PREFS } catch { return DEFAULT_NOTIF_PREFS }
+  })
+  const [showNotifSettings, setShowNotifSettings] = useState(false)
+  const notifPrefsRef = useRef(notifPrefs)
+  useEffect(()=>{ notifPrefsRef.current = notifPrefs },[notifPrefs])
   const undoTimer = useRef(null)
   const idleTimer = useRef(null)
   const countdownTimer = useRef(null)
+
+  const addNotifications = (newNotifs) => {
+    if(!newNotifs.length) return
+    const prefs = notifPrefsRef.current
+    const allowed = newNotifs.filter(n=>prefs[n.type]!==false)
+    if(!allowed.length) return
+    setNotifications(prev=>{
+      const existingIds = new Set(prev.map(n=>n.id))
+      const fresh = allowed.filter(n=>!existingIds.has(n.id))
+      if(!fresh.length) return prev
+      const merged = [...fresh,...prev].slice(0,50)
+      if(isConfigured()) {
+        fresh.forEach(n=>supabase.from('user_notifications').insert({...n,user_id:user?.id}).catch(()=>{}))
+      }
+      if(prefs.sound && fresh.length) {
+        try { const ctx=new AudioContext(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=880; g.gain.setValueAtTime(0.1,ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3); o.start(); o.stop(ctx.currentTime+0.3) } catch{}
+      }
+      return merged
+    })
+  }
+
+  const markNotifRead = (id) => {
+    setNotifications(prev=>prev.map(n=>n.id===id?{...n,read:true}:n))
+    if(isConfigured()) supabase.from('user_notifications').update({read:true}).eq('id',id).catch(()=>{})
+  }
+
+  const deleteNotif = (id) => {
+    setNotifications(prev=>prev.filter(n=>n.id!==id))
+    if(isConfigured()) supabase.from('user_notifications').delete().eq('id',id).catch(()=>{})
+  }
+
+  const clearAllNotifs = () => {
+    setNotifications([])
+    if(isConfigured()) supabase.from('user_notifications').delete().eq('user_id',user?.id).catch(()=>{})
+  }
+
+  const saveNotifPrefs = (prefs) => {
+    setNotifPrefs(prefs)
+    try { localStorage.setItem('taksyn_notif_prefs', JSON.stringify(prefs)) } catch{}
+  }
 
   const pushUndo = (label, prevTasks) => {
     setUndoStack(prev=>[...prev.slice(-9),{tasks:prevTasks,label}])
@@ -5584,13 +5649,7 @@ export default function App() {
         // Generate notifications from status changes
         if(prev.length>0 && user) {
           const newNotifs = generateNotifications(newTasks, user, prev)
-          if(newNotifs.length>0) {
-            setNotifications(n=>{
-              const existingIds = new Set(n.map(x=>x.id))
-              const fresh = newNotifs.filter(x=>!existingIds.has(x.id))
-              return [...fresh,...n].slice(0,50)
-            })
-          }
+          if(newNotifs.length>0) addNotifications(newNotifs)
         }
         // SLA breach auto-escalation
         if(user && isConfigured()) {
@@ -5602,8 +5661,8 @@ export default function App() {
           ).forEach(t=>{
             const sla = getSLAStatus(t, orgSLARef.current)
             if(sla?.status==='breached') {
-              supabase.from('tasks').update({escalation:true, status:'escalated', lastIntervention:'SLA breach — auto-escalated'}).eq('id',t.id).then(()=>{})
-              setNotifications(n=>[{id:t.id+'_sla_breach', type:'sla', title:'SLA Breached 🚨', body:`"${t.title}" review deadline exceeded — auto-escalated`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444'},...n].slice(0,50))
+              supabase.from('tasks').update({escalation:true, status:'escalated', lastIntervention:'Response time exceeded — auto-escalated'}).eq('id',t.id).then(()=>{})
+              addNotifications([{id:t.id+'_sla_breach', type:'sla', title:'Response Time Exceeded 🚨', body:`"${t.title}" review deadline exceeded — auto-escalated`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444'}])
             }
           })
         }
@@ -5681,6 +5740,9 @@ if(isConfigured()) {
     if(user&&isConfigured()) {
       loadTasks()
       if(user.role==='super_admin') loadTickets()
+      // Load persisted notifications from Supabase
+      supabase.from('user_notifications').select('*').eq('user_id',user.id).order('at',{ascending:false}).limit(50)
+        .then(({data})=>{ if(data?.length) setNotifications(data.map(({user_id,...n})=>n)) }).catch(()=>{})
       // Load org SLA settings
       if(isConfigured()&&user.org) {
         supabase.from('organisations').select('sla_settings').eq('name',user.org).single()
@@ -5777,46 +5839,99 @@ if(isConfigured()) {
         </div>
 
         {/* Notification Panel */}
-        {showNotifPanel&&(
-          <>
-            <div style={{position:'fixed',inset:0,zIndex:249}} onClick={()=>setShowNotifPanel(false)}/>
-            <div className="notif-panel">
-              <div style={{padding:'12px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-                <div style={{fontWeight:700,fontSize:14}}>🔔 Notifications</div>
-                <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  {notifications.filter(n=>!n.read).length>0&&(
-                    <button style={{fontSize:11,color:'var(--brand)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:600}} onClick={()=>setNotifications(prev=>prev.map(n=>({...n,read:true})))}>Mark all read</button>
-                  )}
-                  <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:18,lineHeight:1}} onClick={()=>setShowNotifPanel(false)}>×</button>
-                </div>
-              </div>
-              <div style={{overflowY:'auto',flex:1}}>
-                {notifications.length===0 ? (
-                  <div style={{padding:'40px 20px',textAlign:'center',color:'var(--t2)'}}>
-                    <div style={{fontSize:28,marginBottom:8}}>🔔</div>
-                    <div style={{fontSize:13}}>No notifications yet</div>
+        {showNotifPanel&&(()=>{
+          const now = new Date()
+          const today = new Date(now.getFullYear(),now.getMonth(),now.getDate())
+          const yesterday = new Date(today); yesterday.setDate(today.getDate()-1)
+          const weekAgo = new Date(today); weekAgo.setDate(today.getDate()-7)
+          const getGroup = (at) => {
+            const d = new Date(at)
+            if(d>=today) return 'Today'
+            if(d>=yesterday) return 'Yesterday'
+            if(d>=weekAgo) return 'This Week'
+            return 'Older'
+          }
+          const grouped = notifications.reduce((acc,n)=>{ const g=getGroup(n.at); if(!acc[g]) acc[g]=[]; acc[g].push(n); return acc },{})
+          const groupOrder = ['Today','Yesterday','This Week','Older']
+          const unreadCount = notifications.filter(n=>!n.read).length
+          const awaitingCount = notifications.filter(n=>n.type==='submitted'&&!n.read).length
+          const overdueCount = notifications.filter(n=>n.type==='overdue'&&!n.read).length
+          const summaryParts = []
+          if(overdueCount>0) summaryParts.push(`${overdueCount} overdue`)
+          if(awaitingCount>0) summaryParts.push(`${awaitingCount} awaiting review`)
+          const NOTIF_LABELS = { overdue:'Overdue', submitted:'Awaiting review', approved:'Approved', rejected:'Rejected', escalated:'Escalated', assigned:'Assigned', comment:'Comment', sla:'Response Time alert' }
+          return (
+            <>
+              <div style={{position:'fixed',inset:0,zIndex:249}} onClick={()=>{ setShowNotifPanel(false); setShowNotifSettings(false) }}/>
+              <div className="notif-panel">
+                <div style={{padding:'12px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                  <div style={{fontWeight:700,fontSize:14}}>🔔 Notifications{unreadCount>0&&<span style={{marginLeft:6,background:'var(--brand)',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{unreadCount}</span>}</div>
+                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                    {unreadCount>0&&<button style={{fontSize:11,color:'var(--brand)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:600}} onClick={()=>setNotifications(prev=>prev.map(n=>({...n,read:true})))}>Mark all read</button>}
+                    <button className="notif-icon-btn" title="Notification settings" onClick={e=>{e.stopPropagation();setShowNotifSettings(s=>!s)}}>⚙️</button>
+                    <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:18,lineHeight:1}} onClick={()=>{ setShowNotifPanel(false); setShowNotifSettings(false) }}>×</button>
                   </div>
-                ) : notifications.map((n,i)=>(
-                  <div key={i} className={'notif-entry '+(n.read?'':'unread')} onClick={()=>{ setNotifications(prev=>prev.map((x,j)=>j===i?{...x,read:true}:x)); setShowNotifPanel(false); navigate('tasks') }}>
-                    <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
-                      <div style={{width:8,height:8,borderRadius:'50%',background:n.color||'var(--brand)',marginTop:5,flexShrink:0}}/>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight:n.read?400:600,color:'var(--text)'}}>{n.title}</div>
-                        <div style={{fontSize:12,color:'var(--t2)',marginTop:2,lineHeight:1.4}}>{n.body}</div>
-                        <div style={{fontSize:10,color:'var(--t3)',marginTop:3}}>{new Date(n.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
-                      </div>
+                </div>
+                {summaryParts.length>0&&(
+                  <div className="notif-summary">{summaryParts.join(' · ')}</div>
+                )}
+                {showNotifSettings&&(
+                  <div className="notif-settings-panel">
+                    <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>Notification Settings</div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                      {Object.entries(NOTIF_LABELS).map(([k,label])=>(
+                        <label key={k} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer'}}>
+                          <input type="checkbox" checked={notifPrefs[k]!==false} onChange={e=>saveNotifPrefs({...notifPrefs,[k]:e.target.checked})}/>
+                          <span>{NOTIF_TYPE_ICONS[k]} {label}</span>
+                        </label>
+                      ))}
                     </div>
+                    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer',marginTop:8,borderTop:'1px solid var(--border)',paddingTop:8}}>
+                      <input type="checkbox" checked={!!notifPrefs.sound} onChange={e=>saveNotifPrefs({...notifPrefs,sound:e.target.checked})}/>
+                      <span>🔊 Sound alerts</span>
+                    </label>
                   </div>
-                ))}
-              </div>
-              {notifications.length>0&&(
-                <div style={{padding:'8px 14px',borderTop:'1px solid var(--border)',flexShrink:0}}>
-                  <button style={{fontSize:11,color:'var(--red)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}} onClick={()=>setNotifications([])}>Clear all</button>
+                )}
+                <div style={{overflowY:'auto',flex:1}}>
+                  {notifications.length===0 ? (
+                    <div style={{padding:'40px 20px',textAlign:'center',color:'var(--t2)'}}>
+                      <div style={{fontSize:28,marginBottom:8}}>🔔</div>
+                      <div style={{fontSize:13}}>No notifications yet</div>
+                    </div>
+                  ) : groupOrder.filter(g=>grouped[g]?.length).map(group=>(
+                    <div key={group}>
+                      <div className="notif-group-lbl">{group}</div>
+                      {grouped[group].map((n)=>(
+                        <div key={n.id} className={'notif-entry '+(n.read?'read':'unread')} onClick={()=>{ markNotifRead(n.id); setShowNotifPanel(false); navigate('tasks') }}>
+                          <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+                            <div style={{fontSize:18,lineHeight:1,marginTop:2,flexShrink:0}}>{NOTIF_TYPE_ICONS[n.type]||'🔔'}</div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:n.read?400:600,color:'var(--text)',display:'flex',alignItems:'center',gap:6}}>
+                                {n.title}
+                                {n.read&&<span style={{color:'var(--green)',fontSize:11}}>✓</span>}
+                              </div>
+                              <div style={{fontSize:12,color:'var(--t2)',marginTop:2,lineHeight:1.4}}>{n.body}</div>
+                              <div style={{fontSize:10,color:'var(--t3)',marginTop:3}}>{new Date(n.at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+                            </div>
+                            <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                              {!n.read&&<button className="notif-icon-btn chk" title="Mark read" onClick={()=>markNotifRead(n.id)}>✓</button>}
+                              <button className="notif-icon-btn del" title="Delete" onClick={()=>deleteNotif(n.id)}>×</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-          </>
-        )}
+                {notifications.length>0&&(
+                  <div style={{padding:'8px 14px',borderTop:'1px solid var(--border)',flexShrink:0}}>
+                    <button style={{fontSize:11,color:'var(--red)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}} onClick={clearAllNotifs}>Clear all</button>
+                  </div>
+                )}
+              </div>
+            </>
+          )
+        })()}
 
         {showProfile&&(
           <div className="modal-overlay" onClick={()=>setShowProfile(false)}>
