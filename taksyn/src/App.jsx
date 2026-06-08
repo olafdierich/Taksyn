@@ -1969,7 +1969,7 @@ function ReportsView({ tasks, user }) {
   // --- Worker performance stats ---
   const workerRoles = ['worker','supervisor','manager']
   const workerMap = {}
-  ptFiltered.forEach(t => {
+ pt.forEach(t => {
     const key = t.assigned_user_name || t.assigned_user_id || 'Unassigned'
     const role = t.assigned_role || 'worker'
     if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
