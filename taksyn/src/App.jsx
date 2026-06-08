@@ -4128,9 +4128,6 @@ function HelpView({ user }) {
   const [tickets, setTickets] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
-  const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
-  const orgSLARef = useRef(DEFAULT_SLA)
-  const updateOrgSLA = (val) => { setOrgSLA(val); orgSLARef.current = val }
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const appVersion = '1.0.0'
 
@@ -4407,6 +4404,8 @@ export default function App() {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
   const [tickets, setTickets] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
+  const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
+  const orgSLARef = useRef(DEFAULT_SLA)
   const updateOrgSLA = (val) => { setOrgSLA(val); orgSLARef.current = val }
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const undoTimer = useRef(null)
