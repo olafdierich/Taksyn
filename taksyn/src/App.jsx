@@ -451,7 +451,7 @@ function Celebration({ onClose }) {
   )
 }
 
-const TaskCard = ({ task, onClick, orgSLA=DEFAULT_SLA }) => {
+const TaskCard = ({ task, onClick }) => {
   const dur = fmtDuration(task.started_at, task.completed_at)
   return (
     <div className={"task-card "+task.priority} onClick={onClick}>
@@ -472,7 +472,7 @@ const TaskCard = ({ task, onClick, orgSLA=DEFAULT_SLA }) => {
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
         {task.project&&<span style={{fontSize:11,color:'#3B82F6',background:'rgba(59,130,246,.08)',padding:'2px 7px',borderRadius:4}}>📁 {task.project}</span>}
-        {(()=>{ const sla=getSLAStatus(task,orgSLA||DEFAULT_SLA); return sla?<span style={{fontSize:10,padding:'2px 7px',borderRadius:4,fontWeight:700,background:sla.color+'22',color:sla.color}}>⏱ {sla.label}</span>:null })()} 
+
         {dur&&<span style={{fontSize:11,color:'var(--t2)'}}>⏱ {dur}</span>}
         {task.gps_start&&<a href={"https://www.google.com/maps?q="+task.gps_start} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'var(--blue)',textDecoration:'none'}} onClick={e=>e.stopPropagation()}>📍 GPS ↗</a>}
       </div>
@@ -891,7 +891,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         ) : (
           <>
             <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Active Tasks</div>
-            {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')} orgSLA={orgSLA}/>)}
+            {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')}/>)}
             {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
           </>
         )}
@@ -1605,7 +1605,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               </div>
               {filter!=='all' ? (
                     // Flat list when specific filter selected
-                    <div>{filtered.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>:filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}</div>
+                    <div>{filtered.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>:filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>
                   ) : (()=>{
                     const byDate = (a,b) => new Date(a.due_date||'9999')-new Date(b.due_date||'9999')
 
@@ -1619,19 +1619,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         <div>
                           <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔴 Action Needed — Sent Back ({actionNeeded.length})</div>
-                            {actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 To Do ({toDo.length})</div>
-                            {toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks ({recurring.length})</div>
-                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>⏳ Submitted — Awaiting Review ({submitted.length})</div>
-                            {submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                         </div>
                       )
@@ -1648,19 +1648,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         <div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
-                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 My Own Tasks ({myTasks.length})</div>
-                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 One-off Tasks I Assigned ({oneOff.length})</div>
-                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks I Assigned ({recurring.length})</div>
-                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                         </div>
                       )
@@ -1677,19 +1677,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         <div>
                           <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
-                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 My Own Tasks ({myTasks.length})</div>
-                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 One-off Tasks I Assigned ({oneOff.length})</div>
-                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks I Assigned ({recurring.length})</div>
-                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                         </div>
                       )
@@ -1708,31 +1708,31 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       <div>
                         <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
                           <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
-                          {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                          {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                         </div>
                         {attention.length>0&&(
                           <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>⚠️ Needs Attention — Overdue & Escalated ({attention.length})</div>
-                            {attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                            {attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                         )}
                         <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                           <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 Tasks I Assigned ({iAssigned.length})</div>
                           {iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
                             <div>
-                              {assignedToMgr.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3B82F6',display:'inline-block'}}/> To Managers ({assignedToMgr.length})</div>{assignedToMgr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}</div>}
-                              {assignedToSup.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#10B981',display:'inline-block'}}/> To Supervisors ({assignedToSup.length})</div>{assignedToSup.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}</div>}
-                              {assignedToWkr.length>0&&<div><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#6B7280',display:'inline-block'}}/> To Workers ({assignedToWkr.length})</div>{assignedToWkr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}</div>}
+                              {assignedToMgr.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3B82F6',display:'inline-block'}}/> To Managers ({assignedToMgr.length})</div>{assignedToMgr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
+                              {assignedToSup.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#10B981',display:'inline-block'}}/> To Supervisors ({assignedToSup.length})</div>{assignedToSup.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
+                              {assignedToWkr.length>0&&<div><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#6B7280',display:'inline-block'}}/> To Workers ({assignedToWkr.length})</div>{assignedToWkr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
                             </div>
                           )}
                         </div>
                         <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
                           <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 One-off Tasks ({oneOffAll.length})</div>
-                          {oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                          {oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                         </div>
                         <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
                           <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks ({recurringAll.length})</div>
-                          {recurringAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks</div>:recurringAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)} orgSLA={orgSLA}/>)}
+                          {recurringAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks</div>:recurringAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                         </div>
                       </div>
                     )
