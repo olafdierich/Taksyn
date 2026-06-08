@@ -4289,6 +4289,21 @@ function ProjectsView({ user }) {
 function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
+  const [orgMembers, setOrgMembers] = useState([]) // [{id, name, role}]
+
+  useEffect(()=>{
+    if(!isConfigured()||!user.org) return
+    supabase.from('org_members').select('user_id,role').eq('org',user.org)
+      .then(async({data:members})=>{
+        if(!members?.length) return
+        const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
+        if(profiles) setOrgMembers(profiles.map(p=>({
+          id: p.id,
+          name: p.name||'',
+          role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker'
+        })))
+      }).catch(()=>{})
+  },[user.org])
 
   const getRange = () => {
     const now = new Date()
@@ -4312,39 +4327,62 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
     }
   })
 
-  // Filter out tasks due on leave days (don't penalise for leave)
-  const ptFiltered = pt.filter(t=>{
-    if(!t.assigned_user_id||!t.due_date) return true
-    return !leaveDaysByUser[t.assigned_user_id]?.has(t.due_date)
+  // Build a Set of confirmed org member IDs for fast lookup
+  const memberIdSet = new Set(orgMembers.map(m=>m.id))
+  // Also build name→id map to resolve tasks that only have a name
+  const memberNameMap = {}
+  orgMembers.forEach(m=>{ if(m.name) memberNameMap[m.name.toLowerCase().trim()]=m.id })
+
+  // Build per-person stats — only for confirmed org members
+  const peopleMap = {}
+
+  // Initialise an entry for every confirmed org member so members with zero tasks
+  // still appear (empty stats) rather than being silently absent
+  orgMembers.forEach(m=>{
+    peopleMap[m.id] = {
+      id:m.id, name:m.name, role:m.role,
+      total:0, done:0, onTime:0, rejected:0, overdue:0,
+      avgMins:[], submitted:0, reviewedInTime:0,
+      clDone:0, clTotal:0, slaTotal:0, slaOnTime:0
+    }
   })
 
-  // Build per-person stats
-  const peopleMap = {}
   pt.forEach(t=>{
-    const key = t.assigned_user_id||t.assigned_user_name||'Unassigned'
-    const name = t.assigned_user_name||'Unassigned'
-    const role = t.assigned_role||'worker'
-    if(!peopleMap[key]) peopleMap[key]={id:key,name,role,total:0,done:0,onTime:0,rejected:0,overdue:0,avgMins:[],submitted:0,reviewedInTime:0,clDone:0,clTotal:0}
-    peopleMap[key].total++
-    parseSafe(t.subtasks).forEach(s=>{ peopleMap[key].clTotal++; if(s.done) peopleMap[key].clDone++ })
+    // Skip unassigned / ghost tasks
+    if (!t.assigned_user_id && !t.assigned_user_name) return
+    if (!t.assigned_user_name || t.assigned_user_name.trim().toLowerCase()==='unassigned') return
+
+    // Resolve canonical member ID: prefer assigned_user_id, fall back to name lookup
+    const resolvedId = (t.assigned_user_id && memberIdSet.has(t.assigned_user_id))
+      ? t.assigned_user_id
+      : memberNameMap[t.assigned_user_name?.toLowerCase().trim()]
+
+    // Drop tasks not belonging to a confirmed org member
+    if (!resolvedId) return
+
+    const p = peopleMap[resolvedId]
+    if (!p) return
+
+    // Skip tasks that fell on the worker's leave days
+    if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
+
+    p.total++
+    parseSafe(t.subtasks).forEach(s=>{ p.clTotal++; if(s.done) p.clDone++ })
     if(['completed','approved'].includes(t.status)){
-      peopleMap[key].done++
-      if(t.due_date&&t.completed_at&&new Date(t.completed_at)<=new Date(t.due_date)) peopleMap[key].onTime++
-      if(t.started_at&&t.completed_at) peopleMap[key].avgMins.push((new Date(t.completed_at)-new Date(t.started_at))/60000)
+      p.done++
+      if(t.due_date&&t.completed_at&&new Date(t.completed_at)<=new Date(t.due_date)) p.onTime++
+      if(t.started_at&&t.completed_at) p.avgMins.push((new Date(t.completed_at)-new Date(t.started_at))/60000)
     }
-    if(t.status==='rejected') peopleMap[key].rejected++
-    if(t.status==='overdue') peopleMap[key].overdue++
-    if(['awaiting_review','approved','rejected'].includes(t.status)) peopleMap[key].submitted++
-    // SLA tracking — was it reviewed within the SLA?
+    if(t.status==='rejected') p.rejected++
+    if(t.status==='overdue') p.overdue++
+    if(['awaiting_review','approved','rejected'].includes(t.status)) p.submitted++
     if(t.reviewed_at && t.submitted_at) {
       const slaMinutes = getSLAMinutes(t.priority, null)
       const reviewMinutes = (new Date(t.reviewed_at)-new Date(t.submitted_at))/60000
-      if(!peopleMap[key].slaTotal) peopleMap[key].slaTotal=0
-      if(!peopleMap[key].slaOnTime) peopleMap[key].slaOnTime=0
-      peopleMap[key].slaTotal++
-      if(reviewMinutes<=slaMinutes) peopleMap[key].slaOnTime++
+      p.slaTotal++
+      if(reviewMinutes<=slaMinutes) p.slaOnTime++
     }
-    if(t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) peopleMap[key].reviewedInTime++
+    if(t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) p.reviewedInTime++
   })
 
   const people = Object.values(peopleMap)
