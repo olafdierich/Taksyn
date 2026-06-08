@@ -66,7 +66,7 @@ const getSLAStatus = (task, orgSLA) => {
 const isRecurring = t => t.recurrence && t.recurrence !== '' && t.recurrence !== 'once' && t.recurrence !== null
 const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const workingDaysBetween = (start, end) => {
   let count = 0
@@ -246,7 +246,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .tb-user-name{font-size:12px;font-weight:600}
 .tb-user-role{font-size:10px;color:var(--t2)}
 @media(max-width:480px){.tb-user-name,.tb-user-role{display:none}}
-.main{display:flex;flex:1;overflow:hidden}
+.main{display:flex;flex:1;overflow:hidden;min-height:0}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:150}
 .sidebar-overlay.open{display:block}
 .sidebar{width:var(--sidebar-w);flex-shrink:0;background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;transition:transform .25s,width .25s;z-index:160}
@@ -268,7 +268,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .sidebar.collapsed .sb-user-info{opacity:0;width:0}
 .sb-logout{width:100%;margin-top:6px;padding:7px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .content{flex:1;overflow-y:auto;padding:20px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-@media(max-width:768px){.content{padding:14px}}
+@media(max-width:768px){.content{padding:14px;padding-bottom:74px}}
 .ph{margin-bottom:20px}
 .ph-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .ph-title{font-size:20px;font-weight:800;letter-spacing:-.5px}
@@ -403,6 +403,17 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .notif-entry:hover{background:var(--s3)}
 .notif-entry.unread{background:rgba(0,168,126,.04);border-left:3px solid var(--brand)}
 .notif-entry.unread:hover{background:rgba(0,168,126,.08)}
+.bottom-nav{display:none}
+@media(max-width:768px){
+  .bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;height:56px;background:#fff;border-top:1px solid var(--border);z-index:200;padding-bottom:env(safe-area-inset-bottom,0)}
+  .bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;cursor:pointer;padding:6px 4px;color:var(--t2);font-family:inherit;transition:color .15s;position:relative;-webkit-tap-highlight-color:transparent}
+  .bn-item.active{color:var(--brand)}
+  .bn-item svg{width:20px;height:20px;flex-shrink:0}
+  .bn-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+  .bn-badge{position:absolute;top:5px;left:50%;margin-left:4px;width:14px;height:14px;border-radius:50%;background:var(--red);font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;color:#fff}
+  .undo-toast{bottom:72px}
+  .notif-panel{max-height:calc(100vh - 52px - 56px)}
+}
 `
 
 const IC = ({ n, s=16 }) => {
@@ -421,6 +432,7 @@ const IC = ({ n, s=16 }) => {
     gps:'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z',
     audit:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
     org:'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+    settings:'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
   }
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={paths[n]||paths.check} /></svg>
 }
@@ -1040,10 +1052,17 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   }
 
   const startTask = (tid) => {
-    if (!navigator.geolocation) { alert("GPS is required to start a task but your device does not support location services."); return }
+    const doStart = (extra={}) => update(tid, { status:"in_progress", started_at:new Date().toISOString(), ...extra })
+    if (gpsEnabled === false || !navigator.geolocation) { doStart(); return }
     navigator.geolocation.getCurrentPosition(
-      pos => update(tid, { status:"in_progress", started_at:new Date().toISOString(), gps_start:pos.coords.latitude.toFixed(4)+","+pos.coords.longitude.toFixed(4) }),
-      () => alert("GPS location is required to start a task. Please enable location permissions and try again.")
+      pos => {
+        if (gpsEnabled === null) { localStorage.setItem('taksyn_gps_enabled','true'); setGpsEnabled(true) }
+        doStart({ gps_start: pos.coords.latitude.toFixed(4)+","+pos.coords.longitude.toFixed(4) })
+      },
+      () => {
+        if (gpsEnabled === null) { localStorage.setItem('taksyn_gps_enabled','false'); setGpsEnabled(false) }
+        doStart()
+      }
     )
   }
 
@@ -1054,10 +1073,16 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       update(tid, { status:'awaiting_review', completed_by:user.name, submitted_at:new Date().toISOString(), comments:updatedComments, ...extra })
       setCelebration(true); setComment(''); setSelected(null)
     }
-    if (!navigator.geolocation) { alert("GPS is required to complete a task but your device does not support location services."); return }
+    if (gpsEnabled === false || !navigator.geolocation) { doSubmit(); return }
     navigator.geolocation.getCurrentPosition(
-      pos => doSubmit({ gps_end:pos.coords.latitude.toFixed(4)+","+pos.coords.longitude.toFixed(4) }),
-      () => alert("GPS location is required to complete a task. Please enable location permissions and try again.")
+      pos => {
+        if (gpsEnabled === null) { localStorage.setItem('taksyn_gps_enabled','true'); setGpsEnabled(true) }
+        doSubmit({ gps_end: pos.coords.latitude.toFixed(4)+","+pos.coords.longitude.toFixed(4) })
+      },
+      () => {
+        if (gpsEnabled === null) { localStorage.setItem('taksyn_gps_enabled','false'); setGpsEnabled(false) }
+        doSubmit()
+      }
     )
   }
 
@@ -1368,7 +1393,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
                 {!sel.started_at?<button className="btn btn-green" style={{flex:1}} onClick={()=>startTask(sel.id)}>▶ Time In</button>:<div style={{flex:1,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✓ In: {fmtTime(sel.started_at)}</div>}
-                {sel.started_at&&!sel.completed_at?<button className="btn btn-amber" style={{flex:1}} onClick={()=>{ navigator.geolocation?.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>:sel.completed_at?<div style={{flex:1,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>✓ Out: {fmtTime(sel.completed_at)}</div>:null}
+                {sel.started_at&&!sel.completed_at?<button className="btn btn-amber" style={{flex:1}} onClick={()=>{ if(gpsEnabled===false||!navigator.geolocation){update(sel.id,{completed_at:new Date().toISOString()});return} navigator.geolocation.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>:sel.completed_at?<div style={{flex:1,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>✓ Out: {fmtTime(sel.completed_at)}</div>:null}
               </div>
               {sel.started_at&&sel.completed_at&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:10,textAlign:'center'}}>⏱ Duration: <strong>{fmtDuration(sel.started_at,sel.completed_at)}</strong></div>}
               {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&<button className="btn btn-primary" style={{width:'100%'}} onClick={()=>submitTask(sel.id)}>✅ Submit for Review</button>}
@@ -2563,9 +2588,41 @@ function TiersView({ user }) {
   )
 }
 
+const TIMEZONES = [
+  'Australia/Sydney','Australia/Melbourne','Australia/Brisbane','Australia/Perth',
+  'Australia/Adelaide','Australia/Darwin','Australia/Hobart',
+  'Pacific/Auckland','Pacific/Fiji','Pacific/Honolulu',
+  'Asia/Singapore','Asia/Kuala_Lumpur','Asia/Tokyo','Asia/Seoul','Asia/Hong_Kong',
+  'Asia/Dubai','Asia/Kolkata','Asia/Bangkok',
+  'Europe/London','Europe/Paris','Europe/Berlin','Europe/Amsterdam',
+  'America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+  'America/Toronto','America/Vancouver','America/Sao_Paulo',
+  'Africa/Johannesburg','UTC',
+]
+
+const COMPANY_COMPLETENESS_FIELDS = [
+  { key:'name', label:'Company Name' },
+  { key:'industry', label:'Industry' },
+  { key:'abn', label:'ABN / Business Number' },
+  { key:'website', label:'Website' },
+  { key:'timezone', label:'Timezone' },
+  { key:'address_street', label:'Street Address' },
+  { key:'address_city', label:'City' },
+  { key:'address_state', label:'State' },
+  { key:'address_postcode', label:'Postcode' },
+  { key:'address_country', label:'Country' },
+  { key:'contact_name', label:'Primary Contact Name' },
+  { key:'contact_email', label:'Primary Contact Email' },
+  { key:'contact_phone', label:'Primary Contact Phone' },
+  { key:'contact2_name', label:'Secondary Contact Name' },
+  { key:'contact2_email', label:'Secondary Contact Email' },
+  { key:'contact2_phone', label:'Secondary Contact Phone' },
+  { key:'logo', label:'Company Logo' },
+]
+
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['tasks','Task Stats','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['tiers','Plans','tier'],['support','Support','alert']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','SLA Settings','clock'],['tiers','Plans','tier'],['help','Help & Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Team','users'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','SLA Settings','clock'],['tiers','Plans','tier'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
@@ -2955,6 +3012,29 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
               </div>
             </div>
             <div className="modal-body">
+              {(()=>{
+                const filled = COMPANY_COMPLETENESS_FIELDS.filter(f=>selectedOrgView[f.key]&&String(selectedOrgView[f.key]).trim())
+                const missing = COMPANY_COMPLETENESS_FIELDS.filter(f=>!selectedOrgView[f.key]||!String(selectedOrgView[f.key]).trim())
+                const pct = Math.round((filled.length/COMPANY_COMPLETENESS_FIELDS.length)*100)
+                const color = pct===100?'var(--green)':pct>=60?'var(--amber)':'var(--red)'
+                return (
+                  <div style={{marginBottom:16,paddingBottom:16,borderBottom:'1px solid var(--border)'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                      <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px'}}>Profile Completeness</div>
+                      <div style={{fontSize:18,fontWeight:800,color}}>{pct}%</div>
+                    </div>
+                    <div style={{height:6,background:'var(--s3)',borderRadius:4,overflow:'hidden',marginBottom:8}}>
+                      <div style={{height:'100%',width:pct+'%',background:color,borderRadius:4,transition:'width .3s'}}/>
+                    </div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginBottom:missing.length?6:0}}>{filled.length} of {COMPANY_COMPLETENESS_FIELDS.length} fields completed</div>
+                    {missing.length>0&&(
+                      <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                        {missing.map(f=><span key={f.key} style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'rgba(239,68,68,.08)',color:'var(--red)',border:'1px solid rgba(239,68,68,.15)',fontWeight:500}}>{f.label}</span>)}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
               {showAddMember && (
                 <div style={{marginBottom:16,paddingBottom:16,borderBottom:'1px solid var(--border)'}}>
                   <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>Add member to {selectedOrgView.name}</div>
@@ -3224,6 +3304,430 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     </div>
   </div>
 )}
+    </div>
+  )
+}
+
+function CompanySettingsView({ user }) {
+  const NOTIF_EVENTS = [
+    { key:'task_submitted', label:'Task Submitted', sub:'When a worker submits a task for review' },
+    { key:'task_approved',  label:'Task Approved',  sub:'When a task is approved by a reviewer' },
+    { key:'task_rejected',  label:'Task Rejected',  sub:'When a task is sent back to the worker' },
+    { key:'task_overdue',   label:'Task Overdue',   sub:'When a task passes its due date' },
+    { key:'task_escalated', label:'Task Escalated', sub:'When a task is flagged for escalation' },
+  ]
+  const defaultSettings = {
+    notifications:{
+      email_enabled:true,
+      events:{
+        task_submitted:{enabled:true,recipients:''},
+        task_approved:{enabled:false,recipients:''},
+        task_rejected:{enabled:true,recipients:''},
+        task_overdue:{enabled:true,recipients:''},
+        task_escalated:{enabled:true,recipients:''},
+      },
+      daily_digest:false, digest_time:'08:00', digest_recipients:'',
+    },
+    tasks:{
+      default_priority:'medium', default_recurrence:'once',
+      require_gps:false, require_evidence:false, min_evidence_photos:1,
+      require_comments:false, auto_escalate_days:3,
+    },
+    compliance:{ score_target:90, critical_categories:[], reminder_days:[2] },
+    branding:{ primary_color:'#00A87E', report_header:'', report_footer:'' },
+    data:{ retention_months:24 },
+  }
+  const emptyForm = {
+    name:'', industry:'', abn:'', website:'', timezone:'',
+    address_street:'', address_city:'', address_state:'', address_postcode:'', address_country:'Australia',
+    contact_name:'', contact_email:'', contact_phone:'',
+    contact2_name:'', contact2_email:'', contact2_phone:'',
+    logo:'', notes:''
+  }
+
+  const [activeTab, setActiveTab] = useState('company')
+  const [form, setForm] = useState(emptyForm)
+  const [settings, setSettings] = useState(defaultSettings)
+  const [orgId, setOrgId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [deleteMonths, setDeleteMonths] = useState(6)
+  const [exporting, setExporting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    if (!isConfigured()) { setLoading(false); return }
+    supabase.from('organisations').select('*').eq('name', user.org).single().then(({ data }) => {
+      if (data) {
+        setOrgId(data.id)
+        setForm({
+          name:data.name||'', industry:data.industry||'', abn:data.abn||'',
+          website:data.website||'', timezone:data.timezone||'',
+          address_street:data.address_street||'', address_city:data.address_city||'',
+          address_state:data.address_state||'', address_postcode:data.address_postcode||'',
+          address_country:data.address_country||'Australia',
+          contact_name:data.contact_name||'', contact_email:data.contact_email||data.admin_email||'',
+          contact_phone:data.contact_phone||'',
+          contact2_name:data.contact2_name||'', contact2_email:data.contact2_email||'',
+          contact2_phone:data.contact2_phone||'',
+          logo:data.logo||'', notes:data.notes||''
+        })
+        if (data.org_settings) {
+          try {
+            const p = JSON.parse(data.org_settings)
+            setSettings({
+              notifications:{ ...defaultSettings.notifications, ...p.notifications, events:{ ...defaultSettings.notifications.events, ...(p.notifications?.events||{}) } },
+              tasks:{ ...defaultSettings.tasks, ...p.tasks },
+              compliance:{ ...defaultSettings.compliance, ...p.compliance },
+              branding:{ ...defaultSettings.branding, ...p.branding },
+              data:{ ...defaultSettings.data, ...p.data },
+            })
+          } catch(e) {}
+        }
+      }
+      setLoading(false)
+    })
+  }, [user.org])
+
+  const save = async () => {
+    if (activeTab==='company' && !form.name.trim()) { setMsg('✗ Company name is required'); return }
+    setSaving(true); setMsg('')
+    const updates = activeTab==='company' ? {
+      name:form.name.trim(), industry:form.industry, abn:form.abn.trim(),
+      website:form.website.trim(), timezone:form.timezone,
+      address_street:form.address_street.trim(), address_city:form.address_city.trim(),
+      address_state:form.address_state.trim(), address_postcode:form.address_postcode.trim(),
+      address_country:form.address_country.trim(),
+      contact_name:form.contact_name.trim(), contact_email:form.contact_email.trim(),
+      contact_phone:form.contact_phone.trim(),
+      contact2_name:form.contact2_name.trim(), contact2_email:form.contact2_email.trim(),
+      contact2_phone:form.contact2_phone.trim(), logo:form.logo, notes:form.notes.trim()
+    } : activeTab==='branding' ? {
+      logo:form.logo, org_settings:JSON.stringify(settings)
+    } : {
+      org_settings:JSON.stringify(settings)
+    }
+    if (isConfigured() && orgId) {
+      const { error } = await supabase.from('organisations').update(updates).eq('id', orgId)
+      if (error) { setMsg('✗ '+error.message); setSaving(false); return }
+    }
+    setMsg('✓ Settings saved')
+    setSaving(false)
+  }
+
+  const exportCSV = async () => {
+    setExporting(true)
+    try {
+      const { data } = await supabase.from('tasks').select('*').eq('org', user.org)
+      if (!data?.length) { alert('No tasks to export'); setExporting(false); return }
+      const cols = ['id','title','status','priority','category','department','assigned_user_name','assigned_role','due_date','created_at','submitted_at','completed_at','gps_start','gps_end','compliance']
+      const esc = v => { const s=String(v??''); return (s.includes(',')||s.includes('"')||s.includes('\n'))?`"${s.replace(/"/g,'""')}"`  :s }
+      const csv = [cols.join(','), ...data.map(t=>cols.map(c=>esc(t[c])).join(','))].join('\n')
+      const url = URL.createObjectURL(new Blob([csv],{type:'text/csv'}))
+      Object.assign(document.createElement('a'),{href:url,download:`${user.org.replace(/\s+/g,'-')}-tasks-${new Date().toISOString().slice(0,10)}.csv`}).click()
+      URL.revokeObjectURL(url)
+    } catch(e) { alert('Export failed: '+e.message) }
+    setExporting(false)
+  }
+
+  const deleteOldTasks = async () => {
+    if (!confirm(`Permanently delete all approved/completed tasks older than ${deleteMonths} month${deleteMonths!==1?'s':''}?\nThis cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth()-deleteMonths)
+      const { error, count } = await supabase.from('tasks').delete({count:'exact'})
+        .eq('org',user.org).in('status',['approved','completed']).lt('completed_at',cutoff.toISOString())
+      if (error) throw new Error(error.message)
+      setMsg(`✓ Deleted ${count||0} task${count!==1?'s':''}`)
+    } catch(e) { setMsg('✗ '+e.message) }
+    setDeleting(false)
+  }
+
+  const fld = k => ({ value:form[k], onChange:e=>setForm(p=>({...p,[k]:e.target.value})) })
+  const setN  = (k,v) => setSettings(p=>({...p,notifications:{...p.notifications,[k]:v}}))
+  const setNE = (ev,k,v) => setSettings(p=>({...p,notifications:{...p.notifications,events:{...p.notifications.events,[ev]:{...p.notifications.events[ev],[k]:v}}}}))
+  const setT  = (k,v) => setSettings(p=>({...p,tasks:{...p.tasks,[k]:v}}))
+  const setC  = (k,v) => setSettings(p=>({...p,compliance:{...p.compliance,[k]:v}}))
+  const setB  = (k,v) => setSettings(p=>({...p,branding:{...p.branding,[k]:v}}))
+  const setD  = (k,v) => setSettings(p=>({...p,data:{...p.data,[k]:v}}))
+
+  const Tog = ({on,toggle}) => (
+    <button style={{width:38,height:21,borderRadius:11,border:'none',cursor:'pointer',background:on?'var(--green)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggle}>
+      <div style={{width:15,height:15,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:on?20:3,boxShadow:'0 1px 3px rgba(0,0,0,.25)'}}/>
+    </button>
+  )
+  const Row = ({label,sub,children}) => (
+    <div style={{display:'flex',alignItems:sub?'flex-start':'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+      <div style={{flex:1,paddingRight:12}}><div style={{fontSize:13,fontWeight:500}}>{label}</div>{sub&&<div style={{fontSize:11,color:'var(--t2)',marginTop:1}}>{sub}</div>}</div>
+      {children}
+    </div>
+  )
+  const MsgBanner = () => msg ? <div style={{background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),borderRadius:6,padding:'10px 14px',fontSize:13,color:msg.startsWith('✓')?'var(--green)':'var(--red)',marginBottom:16}}>{msg}</div> : null
+  const PillBtn = ({active,onClick,children}) => <button onClick={onClick} style={{padding:'5px 12px',borderRadius:6,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand-lt)':'transparent',color:active?'var(--brand)':'var(--t2)',fontWeight:active?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>{children}</button>
+  const SaveFooter = () => <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button></div>
+
+  if (loading) return <div className="loading"><div className="spinner"/><span>Loading...</span></div>
+
+  const filled = COMPANY_COMPLETENESS_FIELDS.filter(f=>form[f.key]&&String(form[f.key]).trim())
+  const pct = Math.round((filled.length/COMPANY_COMPLETENESS_FIELDS.length)*100)
+  const pctColor = pct===100?'var(--green)':pct>=60?'var(--amber)':'var(--red)'
+  const TABS = [['company','Company'],['notifications','Notifications'],['tasks','Tasks'],['compliance','Compliance'],['branding','Branding'],['data','Data & Privacy']]
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div><div className="ph-title">Company Settings</div><div className="ph-sub">Configure your organisation, workflows and compliance</div></div>
+        {activeTab!=='data'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
+      </div>
+
+      <MsgBanner/>
+
+      <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,flexWrap:'wrap'}}>
+        {TABS.map(([k,l])=><button key={k} onClick={()=>{setActiveTab(k);setMsg('')}} style={{flex:'1 1 auto',padding:'6px 8px',borderRadius:6,border:'none',background:activeTab===k?'#fff':'transparent',color:activeTab===k?'var(--text)':'var(--t2)',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:activeTab===k?'0 1px 4px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>{l}</button>)}
+      </div>
+
+      {/* ── COMPANY ─────────────────────────────── */}
+      {activeTab==='company'&&<>
+        <div className="section" style={{marginBottom:14}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+            <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px'}}>Profile Completeness</div>
+            <div style={{fontSize:16,fontWeight:800,color:pctColor}}>{pct}%</div>
+          </div>
+          <div style={{height:6,background:'var(--s3)',borderRadius:4,overflow:'hidden'}}><div style={{height:'100%',width:pct+'%',background:pctColor,borderRadius:4,transition:'width .3s'}}/></div>
+          <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{filled.length} of {COMPANY_COMPLETENESS_FIELDS.length} fields completed</div>
+        </div>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Company Identity</div>
+          <div style={{display:'flex',gap:16,alignItems:'flex-start',flexWrap:'wrap'}}>
+            <div style={{flexShrink:0}}>
+              <div style={{width:84,height:84,borderRadius:10,border:'2px dashed var(--border)',background:'var(--s3)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',marginBottom:6}}>
+                {form.logo?<img src={form.logo} alt="logo" style={{width:'100%',height:'100%',objectFit:'contain'}}/>:<span style={{fontSize:30}}>🏢</span>}
+              </div>
+              <label className="btn btn-secondary btn-sm" style={{cursor:'pointer',display:'block',textAlign:'center',marginBottom:4}}>{form.logo?'Change Logo':'Upload Logo'}<input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const fl=e.target.files[0]; if(!fl) return; const r=new FileReader(); r.onload=ev=>setForm(p=>({...p,logo:ev.target.result})); r.readAsDataURL(fl); e.target.value='' }}/></label>
+              {form.logo&&<button className="btn btn-danger btn-sm" style={{width:'100%'}} onClick={()=>setForm(p=>({...p,logo:''}))}>Remove</button>}
+            </div>
+            <div style={{flex:1,minWidth:220}}>
+              <div className="two-col">
+                <div className="form-field"><label className="form-label">Company Name <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" {...fld('name')}/></div>
+                <div className="form-field"><label className="form-label">ABN / Business Number</label><input className="form-input" placeholder="12 345 678 901" {...fld('abn')}/></div>
+              </div>
+              <div className="two-col">
+                <div className="form-field"><label className="form-label">Industry</label><select className="form-input" {...fld('industry')}><option value="">— Select industry —</option>{Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace(/_/g,' ')}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Website</label><input className="form-input" placeholder="https://example.com" {...fld('website')}/></div>
+              </div>
+              <div className="form-field"><label className="form-label">Timezone</label><select className="form-input" {...fld('timezone')}><option value="">— Select timezone —</option>{TIMEZONES.map(tz=><option key={tz} value={tz}>{tz.replace(/_/g,' ')}</option>)}</select></div>
+            </div>
+          </div>
+        </div>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Address</div>
+          <div className="form-field"><label className="form-label">Street Address</label><input className="form-input" placeholder="123 Main Street" {...fld('address_street')}/></div>
+          <div className="two-col">
+            <div className="form-field"><label className="form-label">City / Suburb</label><input className="form-input" {...fld('address_city')}/></div>
+            <div className="form-field"><label className="form-label">State / Province</label><input className="form-input" placeholder="NSW" {...fld('address_state')}/></div>
+          </div>
+          <div className="two-col">
+            <div className="form-field"><label className="form-label">Postcode</label><input className="form-input" placeholder="2000" {...fld('address_postcode')}/></div>
+            <div className="form-field"><label className="form-label">Country</label><input className="form-input" {...fld('address_country')}/></div>
+          </div>
+        </div>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Primary Contact</div>
+          <div className="two-col">
+            <div className="form-field"><label className="form-label">Name</label><input className="form-input" {...fld('contact_name')}/></div>
+            <div className="form-field"><label className="form-label">Phone</label><input className="form-input" placeholder="+61 400 000 000" {...fld('contact_phone')}/></div>
+          </div>
+          <div className="form-field"><label className="form-label">Email</label><input className="form-input" type="email" {...fld('contact_email')}/></div>
+        </div>
+        <div className="section" style={{marginBottom:20}}>
+          <div className="section-title">Secondary Contact</div>
+          <div className="two-col">
+            <div className="form-field"><label className="form-label">Name</label><input className="form-input" {...fld('contact2_name')}/></div>
+            <div className="form-field"><label className="form-label">Phone</label><input className="form-input" placeholder="+61 400 000 000" {...fld('contact2_phone')}/></div>
+          </div>
+          <div className="form-field"><label className="form-label">Email</label><input className="form-input" type="email" {...fld('contact2_email')}/></div>
+        </div>
+        <SaveFooter/>
+      </>}
+
+      {/* ── NOTIFICATIONS ───────────────────────── */}
+      {activeTab==='notifications'&&<>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Email Notifications</div>
+          <Row label="Enable Email Notifications" sub="Send email alerts to specified recipients">
+            <Tog on={settings.notifications.email_enabled} toggle={()=>setN('email_enabled',!settings.notifications.email_enabled)}/>
+          </Row>
+          {settings.notifications.email_enabled&&<div style={{marginTop:4}}>
+            {NOTIF_EVENTS.map(ev=>(
+              <div key={ev.key} style={{paddingBottom:12,marginBottom:12,borderBottom:'1px solid var(--border)'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                  <div><div style={{fontSize:13,fontWeight:600}}>{ev.label}</div><div style={{fontSize:11,color:'var(--t2)'}}>{ev.sub}</div></div>
+                  <Tog on={settings.notifications.events[ev.key]?.enabled} toggle={()=>setNE(ev.key,'enabled',!settings.notifications.events[ev.key]?.enabled)}/>
+                </div>
+                {settings.notifications.events[ev.key]?.enabled&&(
+                  <div>
+                    <label className="form-label" style={{marginBottom:3}}>Recipients (comma-separated)</label>
+                    <input className="form-input" style={{fontSize:12}} placeholder="admin@company.com, manager@company.com" value={settings.notifications.events[ev.key]?.recipients||''} onChange={e=>setNE(ev.key,'recipients',e.target.value)}/>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>}
+        </div>
+        <div className="section" style={{marginBottom:20}}>
+          <div className="section-title">Daily Digest</div>
+          <Row label="Send Daily Summary Email" sub="A rolled-up summary of all activity, sent once per day">
+            <Tog on={settings.notifications.daily_digest} toggle={()=>setN('daily_digest',!settings.notifications.daily_digest)}/>
+          </Row>
+          {settings.notifications.daily_digest&&<div className="two-col" style={{marginTop:10}}>
+            <div className="form-field"><label className="form-label">Send Time</label><input className="form-input" type="time" value={settings.notifications.digest_time} onChange={e=>setN('digest_time',e.target.value)}/></div>
+            <div className="form-field"><label className="form-label">Recipients</label><input className="form-input" placeholder="email@company.com" value={settings.notifications.digest_recipients} onChange={e=>setN('digest_recipients',e.target.value)}/></div>
+          </div>}
+        </div>
+        <SaveFooter/>
+      </>}
+
+      {/* ── TASKS ───────────────────────────────── */}
+      {activeTab==='tasks'&&<>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Defaults</div>
+          <div className="two-col">
+            <div className="form-field"><label className="form-label">Default Priority</label><select className="form-input" value={settings.tasks.default_priority} onChange={e=>setT('default_priority',e.target.value)}>{Object.keys(PRIORITY_CFG).map(p=><option key={p} value={p}>{PRIORITY_CFG[p].label}</option>)}</select></div>
+            <div className="form-field"><label className="form-label">Default Recurrence</label><select className="form-input" value={settings.tasks.default_recurrence} onChange={e=>setT('default_recurrence',e.target.value)}>{Object.entries(RECURRENCE_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
+          </div>
+        </div>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Submission Requirements</div>
+          <Row label="Require GPS for Task Completion" sub="Workers must grant location access to start and complete tasks">
+            <Tog on={settings.tasks.require_gps} toggle={()=>setT('require_gps',!settings.tasks.require_gps)}/>
+          </Row>
+          <Row label="Require Photo Evidence" sub="Workers must upload at least one photo before submitting">
+            <Tog on={settings.tasks.require_evidence} toggle={()=>setT('require_evidence',!settings.tasks.require_evidence)}/>
+          </Row>
+          {settings.tasks.require_evidence&&(
+            <div style={{padding:'8px 0'}}>
+              <label className="form-label">Minimum photos required</label>
+              <div style={{display:'flex',gap:6,marginTop:4}}>
+                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setT('min_evidence_photos',n)} style={{width:36,height:36,borderRadius:6,border:'1px solid '+(settings.tasks.min_evidence_photos===n?'var(--brand)':'var(--border)'),background:settings.tasks.min_evidence_photos===n?'var(--brand-lt)':'transparent',color:settings.tasks.min_evidence_photos===n?'var(--brand)':'var(--t2)',fontWeight:700,cursor:'pointer',fontSize:13}}>{n}</button>)}
+              </div>
+            </div>
+          )}
+          <Row label="Require Comment Before Submission" sub="Workers must add a comment before submitting for review">
+            <Tog on={settings.tasks.require_comments} toggle={()=>setT('require_comments',!settings.tasks.require_comments)}/>
+          </Row>
+        </div>
+        <div className="section" style={{marginBottom:20}}>
+          <div className="section-title">Auto-Escalation</div>
+          <div className="form-field">
+            <label className="form-label">Auto-escalate tasks after how many days overdue?</label>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
+              {[1,2,3,5,7,14,0].map(n=><PillBtn key={n} active={settings.tasks.auto_escalate_days===n} onClick={()=>setT('auto_escalate_days',n)}>{n===0?'Never':`${n} day${n!==1?'s':''}`}</PillBtn>)}
+            </div>
+          </div>
+        </div>
+        <SaveFooter/>
+      </>}
+
+      {/* ── COMPLIANCE ──────────────────────────── */}
+      {activeTab==='compliance'&&<>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Score Target</div>
+          <div className="form-field">
+            <label className="form-label">Target compliance score</label>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginTop:4}}>
+              <input type="range" min={50} max={100} step={5} value={settings.compliance.score_target} onChange={e=>setC('score_target',Number(e.target.value))} style={{flex:1,accentColor:'var(--brand)'}}/>
+              <div style={{fontSize:20,fontWeight:800,color:'var(--brand)',minWidth:48,textAlign:'right'}}>{settings.compliance.score_target}%</div>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--t2)',marginTop:2}}><span>50%</span><span>75%</span><span>100%</span></div>
+          </div>
+        </div>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Compliance-Critical Categories</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Tasks in these categories will always be flagged as compliance-critical.</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+            {Object.keys(CAT_ICONS).map(cat=>{
+              const active=settings.compliance.critical_categories.includes(cat)
+              return <button key={cat} onClick={()=>setC('critical_categories',active?settings.compliance.critical_categories.filter(c=>c!==cat):[...settings.compliance.critical_categories,cat])} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:6,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand-lt)':'transparent',color:active?'var(--brand)':'var(--t2)',cursor:'pointer',fontSize:12,fontWeight:active?700:400,fontFamily:'inherit'}}>{CAT_ICONS[cat]} {cat.replace(/_/g,' ')}</button>
+            })}
+          </div>
+        </div>
+        <div className="section" style={{marginBottom:20}}>
+          <div className="section-title">Review Deadline Reminders</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Send reminder notifications this many days before a task is due.</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+            {[1,2,3,5,7].map(n=>{
+              const active=settings.compliance.reminder_days.includes(n)
+              return <PillBtn key={n} active={active} onClick={()=>setC('reminder_days',active?settings.compliance.reminder_days.filter(d=>d!==n):[...settings.compliance.reminder_days,n].sort((a,b)=>a-b))}>{n} day{n!==1?'s':''} before</PillBtn>
+            })}
+          </div>
+        </div>
+        <SaveFooter/>
+      </>}
+
+      {/* ── BRANDING ────────────────────────────── */}
+      {activeTab==='branding'&&<>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Logo</div>
+          <div style={{display:'flex',alignItems:'center',gap:14}}>
+            <div style={{width:80,height:80,borderRadius:10,border:'2px dashed var(--border)',background:'var(--s3)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0}}>
+              {form.logo?<img src={form.logo} alt="logo" style={{width:'100%',height:'100%',objectFit:'contain'}}/>:<span style={{fontSize:28}}>🏢</span>}
+            </div>
+            <div>
+              <div style={{display:'flex',gap:6,marginBottom:4}}>
+                <label className="btn btn-secondary btn-sm" style={{cursor:'pointer'}}>{form.logo?'Change':'Upload Logo'}<input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const fl=e.target.files[0]; if(!fl) return; const r=new FileReader(); r.onload=ev=>setForm(p=>({...p,logo:ev.target.result})); r.readAsDataURL(fl); e.target.value='' }}/></label>
+                {form.logo&&<button className="btn btn-danger btn-sm" onClick={()=>setForm(p=>({...p,logo:''}))}>Remove</button>}
+              </div>
+              <div style={{fontSize:11,color:'var(--t2)'}}>Appears in reports and emails. Recommended: 400×200px.</div>
+            </div>
+          </div>
+        </div>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Brand Colour</div>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <input type="color" value={settings.branding.primary_color} onChange={e=>setB('primary_color',e.target.value)} style={{width:48,height:38,borderRadius:6,border:'1px solid var(--border)',cursor:'pointer',padding:2,background:'transparent'}}/>
+            <div><div style={{fontSize:13,fontWeight:600}}>{settings.branding.primary_color}</div><div style={{fontSize:11,color:'var(--t2)'}}>Used in report headers and accent colours</div></div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setB('primary_color','#00A87E')}>Reset</button>
+          </div>
+        </div>
+        <div className="section" style={{marginBottom:20}}>
+          <div className="section-title">Report Text</div>
+          <div className="form-field"><label className="form-label">Report Header Text</label><input className="form-input" placeholder="e.g. Confidential — For internal use only" value={settings.branding.report_header} onChange={e=>setB('report_header',e.target.value)}/></div>
+          <div className="form-field"><label className="form-label">Report Footer Text</label><input className="form-input" placeholder="e.g. © 2025 Company Name · All rights reserved" value={settings.branding.report_footer} onChange={e=>setB('report_footer',e.target.value)}/></div>
+        </div>
+        <SaveFooter/>
+      </>}
+
+      {/* ── DATA & PRIVACY ──────────────────────── */}
+      {activeTab==='data'&&<>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Data Retention</div>
+          <div className="form-field">
+            <label className="form-label">Retain completed task data for</label>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
+              {[3,6,12,24,36,60].map(m=><PillBtn key={m} active={settings.data.retention_months===m} onClick={()=>setD('retention_months',m)}>{m>=12?`${m/12} yr${m/12!==1?'s':''}`:`${m} mo`}</PillBtn>)}
+            </div>
+          </div>
+          <button className="btn btn-primary btn-sm" style={{marginTop:10}} onClick={async()=>{ if(!orgId) return; const {error}=await supabase.from('organisations').update({org_settings:JSON.stringify(settings)}).eq('id',orgId); setMsg(error?'✗ '+error.message:'✓ Retention policy saved') }}>Save Retention Policy</button>
+        </div>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Export Data</div>
+          <div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>Download all task records for your organisation as a CSV file.</div>
+          <button className="btn btn-secondary" onClick={exportCSV} disabled={exporting}>{exporting?'Exporting…':'⬇ Export All Tasks as CSV'}</button>
+        </div>
+        <div className="section" style={{marginBottom:20,border:'1px solid rgba(239,68,68,.25)'}}>
+          <div className="section-title" style={{color:'var(--red)'}}>Danger Zone</div>
+          <div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>Permanently delete approved and completed tasks older than a set age. This action cannot be undone.</div>
+          <MsgBanner/>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+            <span style={{fontSize:13,color:'var(--text)'}}>Delete tasks older than</span>
+            <select className="form-input" style={{width:'auto',fontSize:13,padding:'5px 10px'}} value={deleteMonths} onChange={e=>setDeleteMonths(Number(e.target.value))}>
+              {[1,2,3,6,12,24].map(m=><option key={m} value={m}>{m>=12?`${m/12} year${m/12!==1?'s':''}`:`${m} month${m!==1?'s':''}`}</option>)}
+            </select>
+            <button className="btn btn-danger" onClick={deleteOldTasks} disabled={deleting}>{deleting?'Deleting…':'🗑 Delete Old Tasks'}</button>
+          </div>
+        </div>
+      </>}
     </div>
   )
 }
@@ -4632,6 +5136,10 @@ export default function App() {
   const [newEmail, setNewEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [gpsEnabled, setGpsEnabled] = useState(() => { const v = localStorage.getItem('taksyn_gps_enabled'); return v === null ? null : v === 'true' })
+  const [sessionWarning, setSessionWarning] = useState(false)
+  const [warnCountdown, setWarnCountdown] = useState(120)
+  const [sessionTimeout, setSessionTimeout] = useState(() => { const v = localStorage.getItem('taksyn_session_timeout'); return v === null ? null : Number(v) })
   const [undoStack, setUndoStack] = useState([])
   const [showUndo, setShowUndo] = useState(false)
   const [auditLog, setAuditLog] = useState([])
@@ -4644,6 +5152,8 @@ export default function App() {
   const updateOrgSLA = (val) => { setOrgSLA(val); orgSLARef.current = val }
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const undoTimer = useRef(null)
+  const idleTimer = useRef(null)
+  const countdownTimer = useRef(null)
 
   const pushUndo = (label, prevTasks) => {
     setUndoStack(prev=>[...prev.slice(-9),{tasks:prevTasks,label}])
@@ -4658,6 +5168,58 @@ export default function App() {
       return prev.slice(0,-1)
     })
   }
+
+  const SESSION_ROLE_TIMEOUTS = { worker:15, supervisor:20, manager:20, client_admin:30, super_admin:10 }
+  const WARN_BEFORE_MINS = 2
+
+  useEffect(() => {
+    if (!user) return
+    const minutes = sessionTimeout !== null ? sessionTimeout : (SESSION_ROLE_TIMEOUTS[user.role] || 15)
+    if (minutes === 0) return // Never timeout
+
+    const warnMs = (minutes - WARN_BEFORE_MINS) * 60 * 1000
+    const warnSecs = WARN_BEFORE_MINS * 60
+
+    const startTimer = () => {
+      clearTimeout(idleTimer.current)
+      clearInterval(countdownTimer.current)
+      setSessionWarning(false)
+      idleTimer.current = setTimeout(() => {
+        setSessionWarning(true)
+        setWarnCountdown(warnSecs)
+        let rem = warnSecs
+        countdownTimer.current = setInterval(() => {
+          rem -= 1
+          setWarnCountdown(rem)
+          if (rem <= 0) {
+            clearInterval(countdownTimer.current)
+            setSessionWarning(false)
+            clearAuthCache()
+            setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
+            if (isConfigured()) supabase.auth.signOut().catch(() => {})
+          }
+        }, 1000)
+      }, warnMs)
+    }
+
+    let lastFire = 0
+    const onActivity = () => {
+      const now = Date.now()
+      if (now - lastFire < 1000) return
+      lastFire = now
+      startTimer()
+    }
+
+    const events = ['click', 'keydown', 'scroll', 'touchstart']
+    events.forEach(e => window.addEventListener(e, onActivity, { passive: true }))
+    startTimer()
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, onActivity))
+      clearTimeout(idleTimer.current)
+      clearInterval(countdownTimer.current)
+    }
+  }, [user, sessionTimeout])
 
   const loadAuditLog = async () => {
     if (!isConfigured()) return
@@ -4830,6 +5392,28 @@ if(isConfigured()) {
             <span>↩ {undoStack[undoStack.length-1]?.label}</span>
             <button className="undo-btn" onClick={doUndo}>Undo</button>
             <span style={{cursor:'pointer',opacity:.6,fontSize:16}} onClick={()=>setShowUndo(false)}>×</span>
+          </div>
+        )}
+
+        {sessionWarning&&(
+          <div style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{background:'var(--card)',borderRadius:12,padding:28,maxWidth:360,width:'90%',boxShadow:'0 8px 32px rgba(0,0,0,.25)',textAlign:'center'}}>
+              <div style={{fontSize:36,marginBottom:8}}>⏱</div>
+              <div style={{fontSize:17,fontWeight:700,marginBottom:6}}>Session Expiring Soon</div>
+              <div style={{fontSize:13,color:'var(--t2)',marginBottom:16}}>You will be signed out due to inactivity in</div>
+              <div style={{fontSize:40,fontWeight:800,color:warnCountdown<=30?'var(--red)':'var(--amber)',letterSpacing:1,marginBottom:20,fontVariantNumeric:'tabular-nums'}}>
+                {String(Math.floor(warnCountdown/60)).padStart(2,'0')}:{String(warnCountdown%60).padStart(2,'0')}
+              </div>
+              <button className="btn btn-primary" style={{width:'100%',fontSize:14,padding:'10px 0'}} onClick={()=>{
+                clearTimeout(idleTimer.current); clearInterval(countdownTimer.current); setSessionWarning(false)
+                const minutes = sessionTimeout !== null ? sessionTimeout : (SESSION_ROLE_TIMEOUTS[user?.role]||15)
+                if(minutes>0) idleTimer.current=setTimeout(()=>{
+                  setSessionWarning(true); setWarnCountdown(WARN_BEFORE_MINS*60)
+                  let rem=WARN_BEFORE_MINS*60; countdownTimer.current=setInterval(()=>{ rem-=1; setWarnCountdown(rem); if(rem<=0){ clearInterval(countdownTimer.current); setSessionWarning(false); clearAuthCache(); setUser(null); setTasks(DEMO_TASKS); setPage('dashboard'); if(isConfigured()) supabase.auth.signOut().catch(()=>{}) } },1000)
+                },(minutes-WARN_BEFORE_MINS)*60*1000)
+              }}>Stay Logged In</button>
+              <button className="btn btn-danger" style={{width:'100%',marginTop:8,fontSize:14,padding:'10px 0'}} onClick={()=>{setSessionWarning(false);logout()}}>Sign Out Now</button>
+            </div>
           </div>
         )}
 
@@ -5007,6 +5591,48 @@ if(isConfigured()) {
                   <div className="form-field"><label className="form-label">Confirm Password</label><input className="form-input" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repeat new password"/></div>
                   <button className="btn btn-secondary btn-sm" style={{marginBottom:20}} disabled={!newPassword||newPassword!==confirmPassword||newPassword.length<6} onClick={async()=>{ if(isConfigured()){ const {error}=await supabase.auth.updateUser({password:newPassword}); if(error) setProfileMsg('❌ '+error.message); else { setProfileMsg('✓ Password updated'); setNewPassword(''); setConfirmPassword('') } } }}>{newPassword&&confirmPassword&&newPassword!==confirmPassword?'⚠️ Passwords do not match':'Update Password'}</button>
                 </div>
+                <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>GPS Tracking</div>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--s3)',borderRadius:8,padding:'10px 14px'}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600}}>Location tracking</div>
+                      <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>Records GPS when starting and completing tasks</div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:11,fontWeight:600,color:gpsEnabled===false?'var(--red)':'var(--green)'}}>{gpsEnabled===false?'Disabled':'Enabled'}</span>
+                      <button style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:gpsEnabled===false?'var(--border)':'var(--green)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>{
+                        if(gpsEnabled===false){
+                          if(!navigator.geolocation){setProfileMsg('✗ Your device does not support location services.');return}
+                          navigator.geolocation.getCurrentPosition(
+                            ()=>{localStorage.setItem('taksyn_gps_enabled','true');setGpsEnabled(true);setProfileMsg('✓ GPS tracking enabled')},
+                            ()=>{setProfileMsg('✗ Location permission denied — enable in browser settings')}
+                          )
+                        } else {
+                          localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false);setProfileMsg('GPS tracking disabled')
+                        }
+                      }}>
+                        <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:gpsEnabled===false?3:21,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>Session Timeout</div>
+                  <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px'}}>
+                    <div style={{fontSize:11,color:'var(--t2)',marginBottom:8}}>Default for your role: <strong>{SESSION_ROLE_TIMEOUTS[user.role]||15} min</strong></div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {[{label:'5 min',v:5},{label:'10 min',v:10},{label:'15 min',v:15},{label:'20 min',v:20},{label:'30 min',v:30},{label:'Never',v:0}].map(({label,v})=>{
+                        const active = sessionTimeout===v||(sessionTimeout===null&&v===(SESSION_ROLE_TIMEOUTS[user.role]||15))
+                        return <button key={v} style={{fontSize:11,padding:'4px 10px',borderRadius:5,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand)':'transparent',color:active?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:active?700:400}} onClick={()=>{
+                          const pref = v===(SESSION_ROLE_TIMEOUTS[user.role]||15)?null:v
+                          if(pref===null) localStorage.removeItem('taksyn_session_timeout'); else localStorage.setItem('taksyn_session_timeout',String(v))
+                          setSessionTimeout(pref===null?null:v)
+                          setProfileMsg(v===0?'Session will never expire':'Session timeout set to '+v+' min')
+                        }}>{label}</button>
+                      })}
+                    </div>
+                  </div>
+                </div>
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16,display:'flex',flexDirection:'column',gap:8}}>
                   <button className="btn btn-secondary" style={{width:'100%'}} onClick={()=>{setShowProfile(false);clearAuthCache();location.reload()}}>🔄 Clear Cache & Reload</button>
                   <button className="btn btn-danger" style={{width:'100%'}} onClick={()=>{setShowProfile(false);logout()}}>Sign Out</button>
@@ -5064,10 +5690,30 @@ if(isConfigured()) {
                 {page==='leave'       && <LeaveView {...pageProps}/>}
                 {page==='teams'       && hasAccess(user.role,2) && <TeamsView {...pageProps}/>}
                 {page==='sla'         && user.role==='client_admin' && <SLASettingsView {...pageProps}/>}
+                {page==='company_settings' && user.role==='client_admin' && <CompanySettingsView user={user}/>}
               </>
             )}
           </div>
         </div>
+
+        {(()=>{
+          const BOTTOM_NAV_KEYS = ['dashboard','tasks','leave','help']
+          const bottomItems = navItems.filter(([key])=>BOTTOM_NAV_KEYS.includes(key))
+          return (
+            <nav className="bottom-nav">
+              {bottomItems.map(([key,label,icon])=>{
+                const badge = (key==='tasks'&&rejectedCount>0&&user.role==='worker')?rejectedCount:0
+                return (
+                  <button key={key} className={'bn-item'+(page===key?' active':'')} onClick={()=>navigate(key)}>
+                    <IC n={icon} s={20}/>
+                    {badge>0&&<span className="bn-badge">{badge}</span>}
+                    <span className="bn-label">{label.replace(' & Support','').replace('My ','')}</span>
+                  </button>
+                )
+              })}
+            </nav>
+          )
+        })()}
       </div>
     </>
   )
