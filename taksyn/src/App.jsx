@@ -959,7 +959,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     : []
   const activeStatuses = ['pending','in_progress','awaiting_review','overdue','escalated','rejected']
   const searchFiltered = search ? orgFiltered.filter(t=>t.title?.toLowerCase().includes(search.toLowerCase())||t.category?.toLowerCase().includes(search.toLowerCase())||t.assigned_user_name?.toLowerCase().includes(search.toLowerCase())) : orgFiltered
-  const activeFiltered = searchFiltered.filter(t=>activeStatuses.includes(t.status) || isRecurring(t))
+  const activeFiltered = searchFiltered.filter(t=>activeStatuses.includes(t.status) || isRecurring(t) || ['completed','approved'].includes(t.status)&&isRecurring(t)) 
   const filtered = filter==='all'?activeFiltered:filter==='escalated'?activeFiltered.filter(t=>t.escalation):activeFiltered.filter(t=>t.status===filter)
 
   const update = async (id, changes, _interventionReason=null) => {
