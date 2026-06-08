@@ -306,6 +306,23 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .detail-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .checkbox{width:18px;height:18px;border-radius:4px;border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
 .checkbox.checked{background:var(--brand);border-color:var(--brand)}
+.cl-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.cl-item:last-child{border-bottom:none}
+.cl-body{flex:1;min-width:0}
+.cl-text{font-size:13px;font-weight:500;line-height:1.4}
+.cl-text.done{text-decoration:line-through;color:var(--t2)}
+.cl-mandatory{color:var(--red);font-weight:800;margin-left:4px}
+.cl-note{font-size:11px;color:var(--t2);margin-top:3px;font-style:italic}
+.cl-photo-thumb{width:40px;height:40px;border-radius:6px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;cursor:pointer}
+.cl-actions{display:flex;gap:4px;align-items:center;margin-top:6px;flex-wrap:wrap}
+.cl-action-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;color:var(--t2);font-family:inherit;white-space:nowrap;transition:all .15s}
+.cl-action-btn:hover{background:var(--s3)}
+.cl-prog{display:flex;align-items:center;gap:10px;padding:8px 0 12px}
+.cl-prog-bar{flex:1;height:6px;background:var(--s3);border-radius:3px;overflow:hidden}
+.cl-prog-fill{height:100%;border-radius:3px;background:var(--brand);transition:width .3s}
+.cl-warn{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:var(--red)}
+.cl-build-item{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.cl-flag-btn{padding:5px 8px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
 .evidence-zone{border:2px dashed var(--border);border-radius:var(--r);padding:22px;text-align:center;cursor:pointer}
 .ev-thumbs{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
 .ev-thumb{width:60px;height:60px;border-radius:var(--rs);background:var(--s3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;position:relative}
@@ -489,6 +506,13 @@ const TaskCard = ({ task, onClick }) => {
         {task.gps_start&&<a href={"https://www.google.com/maps?q="+task.gps_start} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'var(--blue)',textDecoration:'none'}} onClick={e=>e.stopPropagation()}>📍 GPS ↗</a>}
       </div>
 
+      {(()=>{
+        const subs = Array.isArray(task.subtasks)?task.subtasks:parseSafe(task.subtasks)
+        if(!subs.length) return null
+        const done = subs.filter(s=>s.done).length
+        const pct = Math.round(done/subs.length*100)
+        return <div className="mini-prog" style={{marginTop:6}}><div className="mini-prog-bar"><div className="mini-prog-fill" style={{width:pct+'%',background:pct===100?'var(--green)':'var(--brand)'}}/></div><span style={{fontSize:10,color:'var(--t2)'}}>{done}/{subs.length} items</span></div>
+      })()}
       {task.escalation&&<div className="esc-flag">⚠️ Escalated</div>}
     </div>
   )
@@ -944,8 +968,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'Hospitality', department:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'' })
+  const [newTask, setNewTask] = useState({ title:'', category:'Hospitality', department:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[] })
   const [orgProjects, setOrgProjects] = useState([])
+  const [templates, setTemplates] = useState([])
+  const [clNoteOpen, setClNoteOpen] = useState(null) // {taskId, idx}
+  const [clNoteText, setClNoteText] = useState('')
+  const [mandatoryWarn, setMandatoryWarn] = useState(null)
+
+  useEffect(()=>{
+    if(isConfigured()&&user.org) {
+      supabase.from('checklist_templates').select('*').eq('org',user.org).order('name')
+        .then(({data})=>{ if(data) setTemplates(data.map(t=>({...t,items:parseSafe(t.items)}))) })
+        .catch(()=>{})
+    }
+  },[user.org])
 
   useEffect(()=>{
     if(isConfigured()&&user.org) {
@@ -1048,7 +1084,33 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const toggleSub = (tid, idx) => {
     const task = tasks.find(t=>t.id===tid)
     const subs = parseSafe(task.subtasks)
-    update(tid, { subtasks: subs.map((s,i)=>i===idx?{...s,done:!s.done}:s) })
+    const s = subs[idx]; if(!s) return
+    const newDone = !s.done
+    const histEntry = { action:newDone?'checked':'unchecked', by:user.name, byId:user.id, at:new Date().toISOString() }
+    const newSubs = subs.map((x,i)=>i===idx?{...x,done:newDone,history:[...(x.history||[]),histEntry]}:x)
+    update(tid, { subtasks: newSubs })
+    const auditEntry = { id:Date.now()+'', taskId:tid, taskTitle:task.title, fromStatus:null, toStatus:null, checklistAction:newDone?'checked':'unchecked', checklistItem:s.text, by:user.name, byRole:user.role, org:task.org||user.org, at:new Date().toISOString(), isChecklist:true }
+    setAuditLog(log=>[auditEntry,...log])
+    if(isConfigured()) supabase.from('audit_log').insert(auditEntry).catch(()=>{})
+  }
+
+  const addSubNote = (tid, idx, note) => {
+    const task = tasks.find(t=>t.id===tid)
+    const subs = parseSafe(task.subtasks)
+    const histEntry = { action:'noted', by:user.name, byId:user.id, at:new Date().toISOString(), note }
+    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,note,history:[...(x.history||[]),histEntry]}:x) })
+  }
+
+  const addSubPhoto = (tid, idx, photoUrl) => {
+    const task = tasks.find(t=>t.id===tid)
+    const subs = parseSafe(task.subtasks)
+    const histEntry = { action:'photo_added', by:user.name, byId:user.id, at:new Date().toISOString() }
+    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,photo:photoUrl,history:[...(x.history||[]),histEntry]}:x) })
+  }
+
+  const checkMandatory = (tid) => {
+    const task = tasks.find(t=>t.id===tid)
+    return parseSafe(task.subtasks).filter(s=>s.mandatory&&!s.done).map(s=>s.text)
   }
 
   const startTask = (tid) => {
@@ -1067,6 +1129,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   }
 
   const submitTask = (tid) => {
+    const missing = checkMandatory(tid)
+    if (missing.length > 0) { setMandatoryWarn(missing); return }
     const task = tasks.find(t=>t.id===tid)
     const updatedComments = comment.trim() ? [...(task.comments||[]), user.name+': '+comment.trim()] : task.comments||[]
     const doSubmit = (extra={}) => {
@@ -1101,13 +1165,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     // Close and reset immediately — no await before this
     setShowCreate(false)
     setUserSearch('')
-    setNewTask({title:'',category:'Hospitality',department:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:''})
+    setNewTask({title:'',category:'Hospitality',department:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[]})
     // Do the async work in background
-    const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
+    const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     setTasks(prev=>[...prev,t])
     if (isConfigured()) {
       supabase.auth.getUser().then(({data:{user:authUser}})=>{
-  supabase.from('tasks').insert({ ...t, subtasks:'[]', evidence:'[]', comments:'[]' })
+  supabase.from('tasks').insert({ ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' })
           .then(({error})=>{
             if (error) console.error('Task save error:', error)
             // Real-time subscription will update the list automatically
@@ -1169,6 +1233,21 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
                 <input type="checkbox" id="edit-comp" checked={editTask.compliance||false} onChange={e=>setEditTask({...editTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
                 <label htmlFor="edit-comp" style={{fontSize:13,cursor:'pointer'}}>Compliance-critical task</label>
+              </div>
+              <div className="form-field">
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                  <label className="form-label" style={{margin:0}}>Checklist</label>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setEditTask({...editTask,subtasks:[...(editTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
+                </div>
+                {(editTask.subtasks||[]).map((s,i)=>(
+                  <div key={s.id||i} className="cl-build-item">
+                    <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
+                    <button type="button" className="cl-flag-btn" title="Mandatory" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.08)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}><strong>*</strong></button>
+                    <button type="button" className="cl-flag-btn" title="Require photo" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
+                    <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).filter((_,j)=>j!==i)})}>×</button>
+                  </div>
+                ))}
+                {!(editTask.subtasks||[]).length&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items</div>}
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowEdit(false)}>Cancel</button>
@@ -1262,6 +1341,30 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 <input type="checkbox" id="comp" checked={newTask.compliance} onChange={e=>setNewTask({...newTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
                 <label htmlFor="comp" style={{fontSize:13,cursor:'pointer'}}>Mark as compliance-critical</label>
               </div>
+              {templates.length>0&&(
+                <div className="form-field">
+                  <label className="form-label">From Template <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— pre-fill checklist</span></label>
+                  <select className="form-select" value="" onChange={e=>{ const tmpl=templates.find(t=>t.id===e.target.value); if(tmpl) setNewTask({...newTask,subtasks:tmpl.items.map(it=>({id:Date.now()+Math.random()+'',text:it.text,done:false,mandatory:!!it.mandatory,requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))})}}>
+                    <option value="">— Select template —</option>
+                    {templates.map(t=><option key={t.id} value={t.id}>{t.name} ({t.items?.length||0} items)</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="form-field">
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                  <label className="form-label" style={{margin:0}}>Checklist</label>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setNewTask({...newTask,subtasks:[...(newTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
+                </div>
+                {(newTask.subtasks||[]).map((s,i)=>(
+                  <div key={s.id||i} className="cl-build-item">
+                    <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
+                    <button type="button" className="cl-flag-btn" title="Mandatory — blocks submit" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.08)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}><strong>*</strong></button>
+                    <button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
+                    <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).filter((_,j)=>j!==i)})}>×</button>
+                  </div>
+                ))}
+                {!(newTask.subtasks||[]).length&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
+              </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowCreate(false)}>Cancel</button>
                 <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id)} onClick={createTask}>{creating?'Creating…':'Create Task'}</button>
@@ -1304,6 +1407,65 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           )}
           {sel.escalation&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Escalated</div></div></div>}
           {sel.lastIntervention&&<div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12}}><span style={{color:'#F59E0B',fontWeight:700}}>🔧 Platform Intervention</span> by {sel.lastIntervention.by} — {sel.lastIntervention.reason}</div>}
+          {(()=>{
+            const subs = parseSafe(sel.subtasks)
+            if(!subs.length) return null
+            const doneCount = subs.filter(s=>s.done).length
+            const pctVal = Math.round(doneCount/subs.length*100)
+            const pctColor = pctVal===100?'var(--green)':pctVal>=50?'var(--amber)':'var(--brand)'
+            const isWorker = user.role==='worker'
+            return (
+              <div className="section">
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                  <div className="section-title" style={{marginBottom:0}}>Checklist</div>
+                  <div style={{fontSize:12,fontWeight:700,color:pctColor}}>{doneCount}/{subs.length} · {pctVal}%</div>
+                </div>
+                <div className="cl-prog">
+                  <div className="cl-prog-bar"><div className="cl-prog-fill" style={{width:pctVal+'%',background:pctColor}}/></div>
+                </div>
+                {mandatoryWarn&&<div className="cl-warn">⚠️ <strong>Cannot submit — complete mandatory items first:</strong><ul style={{margin:'6px 0 0 16px',padding:0}}>{mandatoryWarn.map((m,i)=><li key={i}>{m}</li>)}</ul><button className="cl-action-btn" style={{marginTop:8}} onClick={()=>setMandatoryWarn(null)}>Dismiss</button></div>}
+                {subs.map((s,idx)=>{
+                  const isOpen = clNoteOpen&&clNoteOpen.taskId===sel.id&&clNoteOpen.idx===idx
+                  return (
+                    <div key={s.id||idx} className="cl-item">
+                      <div className={'checkbox'+(s.done?' checked':'')} style={{cursor:'pointer',marginTop:1}} onClick={()=>isWorker||['supervisor','manager','client_admin'].includes(user.role)?toggleSub(sel.id,idx):null}>
+                        {s.done&&<svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l3 3 5-6" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <div className="cl-body">
+                        <div style={{display:'flex',alignItems:'center',gap:4}}>
+                          <span className={'cl-text'+(s.done?' done':'')}>{s.text||'(untitled)'}</span>
+                          {s.mandatory&&<span className="cl-mandatory" title="Mandatory">*</span>}
+                          {s.requirePhoto&&<span style={{fontSize:10,color:'#3B82F6',fontWeight:600}} title="Photo required">📷</span>}
+                        </div>
+                        {s.note&&<div className="cl-note">💬 {s.note}</div>}
+                        {s.photo&&<img src={s.photo} alt="evidence" className="cl-photo-thumb" style={{marginTop:4}} onClick={()=>window.open(s.photo,'_blank')}/>}
+                        {(s.history||[]).length>1&&<div style={{fontSize:9,color:'var(--t3)',marginTop:3}}>🕐 {s.history.length} changes · last by {s.history[s.history.length-1].by}</div>}
+                        {isOpen?(
+                          <div style={{marginTop:6}}>
+                            <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Add a note for this item…" value={clNoteText} onChange={e=>setClNoteText(e.target.value)}/>
+                            <div style={{display:'flex',gap:6,marginTop:4}}>
+                              <button className="btn btn-primary btn-sm" onClick={()=>{ addSubNote(sel.id,idx,clNoteText); setClNoteOpen(null); setClNoteText('') }}>Save Note</button>
+                              <button className="btn btn-secondary btn-sm" onClick={()=>{setClNoteOpen(null);setClNoteText('')}}>Cancel</button>
+                            </div>
+                          </div>
+                        ):(
+                          <div className="cl-actions">
+                            <button className="cl-action-btn" onClick={()=>{setClNoteOpen({taskId:sel.id,idx});setClNoteText(s.note||'')}}>{s.note?'✏️ Edit Note':'+ Note'}</button>
+                            {s.requirePhoto&&!s.photo&&(
+                              <>
+                                <button className="cl-action-btn" style={{color:'#3B82F6',borderColor:'rgba(59,130,246,.3)'}} onClick={()=>document.getElementById('cl-cam-'+sel.id+'-'+idx).click()}>📷 Add Photo</button>
+                                <input id={'cl-cam-'+sel.id+'-'+idx} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>addSubPhoto(sel.id,idx,ev.target.result); r.readAsDataURL(f); e.target.value='' }}/>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
           <div className="section">
             <div className="section-title">Evidence {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}</div>
             {parseSafe(sel.evidence).length>0&&<div className="ev-thumbs" style={{marginBottom:10}}>
@@ -3355,6 +3517,10 @@ function CompanySettingsView({ user }) {
   const [deleteMonths, setDeleteMonths] = useState(6)
   const [exporting, setExporting] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [tplList, setTplList] = useState([])
+  const [tplName, setTplName] = useState('')
+  const [tplItems, setTplItems] = useState([{text:'',mandatory:false,requirePhoto:false}])
+  const [tplSaving, setTplSaving] = useState(false)
 
   useEffect(() => {
     if (!isConfigured()) { setLoading(false); return }
@@ -3388,7 +3554,33 @@ function CompanySettingsView({ user }) {
       }
       setLoading(false)
     })
+    if (isConfigured()) {
+      supabase.from('checklist_templates').select('*').eq('org',user.org).order('name')
+        .then(({data})=>{ if(data) setTplList(data.map(t=>({...t,items:parseSafe(t.items)}))) })
+        .catch(()=>{})
+    }
   }, [user.org])
+
+  const saveTemplate = async () => {
+    const validItems = tplItems.filter(i=>i.text.trim())
+    if (!tplName.trim() || !validItems.length) { setMsg('✗ Template needs a name and at least one item'); return }
+    setTplSaving(true); setMsg('')
+    const entry = { id: Date.now()+'', org: user.org, name: tplName.trim(), items: JSON.stringify(validItems), created_by: user.name, created_at: new Date().toISOString() }
+    if (isConfigured()) {
+      const { error } = await supabase.from('checklist_templates').insert(entry)
+      if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
+    }
+    setTplList(prev=>[...prev,{...entry,items:validItems}])
+    setTplName(''); setTplItems([{text:'',mandatory:false,requirePhoto:false}])
+    setMsg('✓ Template saved')
+    setTplSaving(false)
+  }
+
+  const deleteTemplate = async (id) => {
+    if (!confirm('Delete this template?')) return
+    if (isConfigured()) await supabase.from('checklist_templates').delete().eq('id',id).catch(()=>{})
+    setTplList(prev=>prev.filter(t=>t.id!==id))
+  }
 
   const save = async () => {
     if (activeTab==='company' && !form.name.trim()) { setMsg('✗ Company name is required'); return }
@@ -3472,13 +3664,13 @@ function CompanySettingsView({ user }) {
   const filled = COMPANY_COMPLETENESS_FIELDS.filter(f=>form[f.key]&&String(form[f.key]).trim())
   const pct = Math.round((filled.length/COMPANY_COMPLETENESS_FIELDS.length)*100)
   const pctColor = pct===100?'var(--green)':pct>=60?'var(--amber)':'var(--red)'
-  const TABS = [['company','Company'],['notifications','Notifications'],['tasks','Tasks'],['compliance','Compliance'],['branding','Branding'],['data','Data & Privacy']]
+  const TABS = [['company','Company'],['notifications','Notifications'],['tasks','Tasks'],['compliance','Compliance'],['branding','Branding'],['templates','Templates'],['data','Data & Privacy']]
 
   return (
     <div className="anim">
       <div className="ph">
         <div><div className="ph-title">Company Settings</div><div className="ph-sub">Configure your organisation, workflows and compliance</div></div>
-        {activeTab!=='data'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
+        {activeTab!=='data'&&activeTab!=='templates'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
       </div>
 
       <MsgBanner/>
@@ -3698,6 +3890,59 @@ function CompanySettingsView({ user }) {
         <SaveFooter/>
       </>}
 
+      {/* ── TEMPLATES ───────────────────────────── */}
+      {activeTab==='templates'&&<>
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Existing Templates</div>
+          {tplList.length===0?<div style={{fontSize:13,color:'var(--t2)'}}>No templates yet — create one below.</div>:(
+            tplList.map(t=>(
+              <div key={t.id} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:12,marginBottom:8}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                  <div style={{fontWeight:700,fontSize:13}}>{t.name}</div>
+                  <button className="btn btn-danger btn-sm" onClick={()=>deleteTemplate(t.id)}>🗑</button>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                  {(t.items||[]).map((item,i)=>(
+                    <div key={i} style={{fontSize:12,color:'var(--t2)',display:'flex',alignItems:'center',gap:6}}>
+                      <span>◽</span>
+                      <span>{item.text}</span>
+                      {item.mandatory&&<span style={{color:'var(--red)',fontWeight:700,fontSize:10}}>mandatory</span>}
+                      {item.requirePhoto&&<span style={{fontSize:10}}>📷</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="section" style={{marginBottom:20}}>
+          <div className="section-title">Create New Template</div>
+          <div className="form-field">
+            <label className="form-label">Template Name</label>
+            <input className="form-input" placeholder="e.g. Daily Kitchen Clean" value={tplName} onChange={e=>setTplName(e.target.value)}/>
+          </div>
+          <div className="form-field">
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+              <label className="form-label" style={{margin:0}}>Checklist Items</label>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setTplItems(p=>[...p,{text:'',mandatory:false,requirePhoto:false}])}>+ Add Item</button>
+            </div>
+            {tplItems.map((s,i)=>(
+              <div key={i} className="cl-build-item">
+                <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,text:e.target.value}:x))}/>
+                <button type="button" className="cl-flag-btn" title="Mandatory" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.08)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x))}><strong>*</strong></button>
+                <button type="button" className="cl-flag-btn" title="Require photo" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x))}>📷</button>
+                {tplItems.length>1&&<button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setTplItems(p=>p.filter((_,j)=>j!==i))}>×</button>}
+              </div>
+            ))}
+            <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>
+              <strong style={{color:'var(--red)'}}>*</strong> = mandatory (blocks submit) · 📷 = requires photo evidence
+            </div>
+          </div>
+          <button className="btn btn-primary" onClick={saveTemplate} disabled={tplSaving}>{tplSaving?'Saving…':'Save Template'}</button>
+        </div>
+        <MsgBanner/>
+      </>}
+
       {/* ── DATA & PRIVACY ──────────────────────── */}
       {activeTab==='data'&&<>
         <div className="section" style={{marginBottom:14}}>
@@ -3735,6 +3980,7 @@ function CompanySettingsView({ user }) {
 function AuditLogView({ tasks, user, auditLog }) {
   const [filter, setFilter] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
 
   const STATUS_COLORS = {
     pending:'#6B7280', in_progress:'#3B82F6', awaiting_review:'#F59E0B',
@@ -3745,16 +3991,17 @@ function AuditLogView({ tasks, user, auditLog }) {
   const fmtTs = (d) => new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
 
   const filtered = auditLog.filter(e => {
-    const matchText = !filter || e.taskTitle?.toLowerCase().includes(filter.toLowerCase()) || e.by?.toLowerCase().includes(filter.toLowerCase())
+    const matchText = !filter || e.taskTitle?.toLowerCase().includes(filter.toLowerCase()) || e.by?.toLowerCase().includes(filter.toLowerCase()) || e.checklistItem?.toLowerCase().includes(filter.toLowerCase())
     const matchRole = roleFilter==='all' || e.byRole===roleFilter
-    return matchText && matchRole
+    const matchType = typeFilter==='all' || (typeFilter==='checklist'&&e.isChecklist) || (typeFilter==='status'&&!e.isChecklist)
+    return matchText && matchRole && matchType
   })
 
   return (
     <div className="anim">
       <div className="ph">
         <div className="ph-title">Audit Log</div>
-        <div className="ph-sub">{auditLog.length} status changes recorded — read only</div>
+        <div className="ph-sub">{auditLog.length} events recorded — read only</div>
       </div>
 
       <div className="section" style={{marginBottom:14}}>
@@ -3770,30 +4017,35 @@ function AuditLogView({ tasks, user, auditLog }) {
             <option value="all">All Roles</option>
             {ROLES.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </select>
+          <select className="form-input" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{fontSize:13,padding:'6px 10px'}}>
+            <option value="all">All Events</option>
+            <option value="status">Status Changes</option>
+            <option value="checklist">Checklist Actions</option>
+          </select>
         </div>
       </div>
 
       {filtered.length===0 ? (
-        <div className="empty"><div className="empty-icon">📋</div><div style={{fontSize:15,fontWeight:700,marginBottom:6}}>No audit entries yet</div><div className="empty-text">Status changes will appear here as tasks are updated.</div></div>
+        <div className="empty"><div className="empty-icon">📋</div><div style={{fontSize:15,fontWeight:700,marginBottom:6}}>No audit entries yet</div><div className="empty-text">Status changes and checklist actions will appear here.</div></div>
       ) : (
         <div className="section">
           <div style={{overflowX:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
               <thead>
                 <tr style={{background:'var(--s3)'}}>
-                  {['Date & Time','Task','Changed By','Role','From','To'].map(h=>(
+                  {['Date & Time','Task','By','Role','Event','Detail'].map(h=>(
                     <th key={h} style={{padding:'8px 12px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:700,whiteSpace:'nowrap',borderBottom:'2px solid var(--border)'}}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((e,i)=>(
-                  <tr key={e.id||i} style={{borderBottom:'1px solid var(--border)',background:e.isIntervention?'rgba(245,158,11,.06)':i%2===0?'transparent':'var(--s3)',borderLeft:e.isIntervention?'3px solid #F59E0B':'3px solid transparent'}}>
+                  <tr key={e.id||i} style={{borderBottom:'1px solid var(--border)',background:e.isIntervention?'rgba(245,158,11,.06)':e.isChecklist?'rgba(59,130,246,.03)':i%2===0?'transparent':'var(--s3)',borderLeft:e.isIntervention?'3px solid #F59E0B':e.isChecklist?'3px solid #3B82F6':'3px solid transparent'}}>
                     <td style={{padding:'9px 12px',color:'var(--t2)',whiteSpace:'nowrap'}}>
                       {fmtTs(e.at)}
                       {e.isIntervention&&<div style={{fontSize:9,color:'#F59E0B',fontWeight:700,marginTop:2}}>🔧 PLATFORM INTERVENTION</div>}
                     </td>
-                    <td style={{padding:'9px 12px',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    <td style={{padding:'9px 12px',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       <div style={{fontWeight:600}}>{e.taskTitle||e.taskId}</div>
                       {e.interventionReason&&<div style={{fontSize:10,color:'var(--t2)',marginTop:2}}>Reason: {e.interventionReason}</div>}
                     </td>
@@ -3802,10 +4054,20 @@ function AuditLogView({ tasks, user, auditLog }) {
                       <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:ROLE_COLORS[e.byRole]||'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>{ROLE_LABELS[e.byRole]||e.byRole}</span>
                     </td>
                     <td style={{padding:'9px 12px'}}>
-                      <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:STATUS_COLORS[e.fromStatus]||'var(--t2)',fontWeight:600}}>{e.fromStatus?.replace(/_/g,' ')}</span>
+                      {e.isChecklist
+                        ? <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:'rgba(59,130,246,.1)',color:'#3B82F6',fontWeight:700}}>☑ {e.checklistAction}</span>
+                        : <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>status</span>
+                      }
                     </td>
-                    <td style={{padding:'9px 12px'}}>
-                      <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:STATUS_COLORS[e.toStatus]+'18'||'var(--s3)',color:STATUS_COLORS[e.toStatus]||'var(--t2)',fontWeight:700,border:'1px solid '+(STATUS_COLORS[e.toStatus]||'var(--border)')+'44'}}>{e.toStatus?.replace(/_/g,' ')}</span>
+                    <td style={{padding:'9px 12px',maxWidth:200}}>
+                      {e.isChecklist
+                        ? <span style={{fontSize:11}}>{e.checklistItem||'—'}</span>
+                        : <div style={{display:'flex',gap:6}}>
+                            <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:STATUS_COLORS[e.fromStatus]||'var(--t2)',fontWeight:600}}>{e.fromStatus?.replace(/_/g,' ')||'—'}</span>
+                            <span style={{color:'var(--t2)'}}>→</span>
+                            <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:STATUS_COLORS[e.toStatus]+'18'||'var(--s3)',color:STATUS_COLORS[e.toStatus]||'var(--t2)',fontWeight:700,border:'1px solid '+(STATUS_COLORS[e.toStatus]||'var(--border)')+'44'}}>{e.toStatus?.replace(/_/g,' ')||'—'}</span>
+                          </div>
+                      }
                     </td>
                   </tr>
                 ))}
@@ -4062,8 +4324,9 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
     const key = t.assigned_user_id||t.assigned_user_name||'Unassigned'
     const name = t.assigned_user_name||'Unassigned'
     const role = t.assigned_role||'worker'
-    if(!peopleMap[key]) peopleMap[key]={id:key,name,role,total:0,done:0,onTime:0,rejected:0,overdue:0,avgMins:[],submitted:0,reviewedInTime:0}
+    if(!peopleMap[key]) peopleMap[key]={id:key,name,role,total:0,done:0,onTime:0,rejected:0,overdue:0,avgMins:[],submitted:0,reviewedInTime:0,clDone:0,clTotal:0}
     peopleMap[key].total++
+    parseSafe(t.subtasks).forEach(s=>{ peopleMap[key].clTotal++; if(s.done) peopleMap[key].clDone++ })
     if(['completed','approved'].includes(t.status)){
       peopleMap[key].done++
       if(t.due_date&&t.completed_at&&new Date(t.completed_at)<=new Date(t.due_date)) peopleMap[key].onTime++
@@ -4165,6 +4428,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
                     ['Tasks',p.total,'#5BC8C0'],
                     ['Completed',p.done,'#10B981'],
                     ['On Time',onTimeRate+'%','#3B82F6'],
+                    ['Checklist',p.clTotal>0?pct(p.clDone,p.clTotal)+'%':'—',p.clTotal>0&&pct(p.clDone,p.clTotal)>=80?'#10B981':p.clTotal>0?'#F59E0B':'#6B7280'],
                     ['Rejected',p.rejected,p.rejected>0?'#EF4444':'#6B7280'],
                     ['Overdue',p.overdue,p.overdue>0?'#EF4444':'#6B7280'],
                     ['Avg Time',fmtAvg(p.avgMins),'#8B5CF6'],
@@ -4197,6 +4461,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
             <div className="section-title">Team Summary</div>
             <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.8}}>
               <div>📊 Overall team completion rate: <strong style={{color:'var(--text)'}}>{pct(pt.filter(t=>['completed','approved'].includes(t.status)).length,pt.length)}%</strong></div>
+              {(()=>{ const clTot=people.reduce((a,p)=>a+p.clTotal,0); const clDn=people.reduce((a,p)=>a+p.clDone,0); return clTot>0?<div>☑ Checklist completion: <strong style={{color:'var(--text)'}}>{pct(clDn,clTot)}%</strong> ({clDn}/{clTot} items)</div>:null })()}
               <div>⭐ Top performer: <strong style={{color:'var(--text)'}}>{people.sort((a,b)=>pct(b.done,b.total)-pct(a.done,a.total))[0]?.name||'—'}</strong></div>
               <div>⚠️ Needs attention: <strong style={{color:'var(--red)'}}>{people.filter(p=>pct(p.done,p.total)<50).map(p=>p.name).join(', ')||'None'}</strong></div>
             </div>
