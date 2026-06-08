@@ -4129,7 +4129,7 @@ function HelpView({ user }) {
   const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
   const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
-  const orgSLARef = React.useRef(DEFAULT_SLA)
+  const orgSLARef = useRef(DEFAULT_SLA)
   const updateOrgSLA = (val) => { setOrgSLA(val); orgSLARef.current = val }
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const appVersion = '1.0.0'
@@ -4409,7 +4409,7 @@ export default function App() {
   const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
   const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
-  const orgSLARef = React.useRef(DEFAULT_SLA)
+  const orgSLARef = useRef(DEFAULT_SLA)
   const updateOrgSLA = (val) => { setOrgSLA(val); orgSLARef.current = val }
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const undoTimer = useRef(null)
