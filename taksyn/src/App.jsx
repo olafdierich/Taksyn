@@ -2388,6 +2388,11 @@ function ReportsView({ tasks, user, setAuditLog }) {
     if (reportType==='compliance') exportCompliancePDF()
     else if (reportType==='worker') exportWorkerPDF()
     else if (reportType==='org') exportOrgPDF()
+    if (setAuditLog) {
+      const rEntry = mkAuditEntry('report_exported', user, user.org, { reportType:reportType, period:period })
+      setAuditLog(prev=>[rEntry,...prev])
+      if (isConfigured()) supabase.from('audit_log').insert(rEntry).catch(()=>{})
+    }
   }
 
   // Summary stats for screen preview
