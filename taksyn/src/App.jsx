@@ -4386,9 +4386,11 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
 
   const byTask = (() => {
     const groups = {}
-    filtered.filter(e=>e.taskId).forEach(e=>{
-      if (!groups[e.taskId]) groups[e.taskId] = { taskId:e.taskId, taskTitle:e.taskTitle||e.taskId, events:[] }
-      groups[e.taskId].events.push(e)
+    filtered.filter(e=>ef(e,'task_id','taskId')).forEach(e=>{
+      const tid = ef(e,'task_id','taskId')
+      const ttl = ef(e,'task_title','taskTitle')||tid
+      if (!groups[tid]) groups[tid] = { taskId:tid, taskTitle:ttl, events:[] }
+      groups[tid].events.push(e)
     })
     return Object.values(groups).sort((a,b)=>(b.events[0]?.at||'')>(a.events[0]?.at||'')?1:-1)
   })()
@@ -4397,7 +4399,7 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
     const groups = {}
     filtered.forEach(e=>{
       const key = e.by||'Unknown'
-      if (!groups[key]) groups[key] = { name:key, role:e.byRole, events:[] }
+      if (!groups[key]) groups[key] = { name:key, role:ef(e,'by_role','byRole'), events:[] }
       groups[key].events.push(e)
     })
     return Object.values(groups).sort((a,b)=>(b.events[0]?.at||'')>(a.events[0]?.at||'')?1:-1)
