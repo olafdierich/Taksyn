@@ -4407,19 +4407,23 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
 
   const EntryRow = ({ e }) => {
     const cfg = getCfg(e)
+    const isIntervention = ef(e,'is_intervention','isIntervention')
+    const taskTitle = ef(e,'task_title','taskTitle')
+    const interventionReason = ef(e,'intervention_reason','interventionReason')
+    const byRole = ef(e,'by_role','byRole')||''
     return (
-      <div style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',alignItems:'flex-start',borderLeft:'3px solid '+cfg.color+'55',background:e.isIntervention?'rgba(245,158,11,.04)':'transparent'}}>
+      <div style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',alignItems:'flex-start',borderLeft:'3px solid '+cfg.color+'55',background:isIntervention?'rgba(245,158,11,.04)':'transparent'}}>
         <div style={{width:28,height:28,borderRadius:'50%',background:cfg.color+'18',color:cfg.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0,marginTop:1}}>{cfg.icon}</div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:1}}>
             <span style={{fontSize:12,fontWeight:700,color:cfg.color}}>{cfg.label}</span>
-            {e.isIntervention&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:8,background:'rgba(245,158,11,.18)',color:'#F59E0B',fontWeight:700,letterSpacing:.3}}>PLATFORM ACTION</span>}
-            {e.taskTitle&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}}>{e.taskTitle}</span>}
+            {isIntervention&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:8,background:'rgba(245,158,11,.18)',color:'#F59E0B',fontWeight:700,letterSpacing:.3}}>PLATFORM ACTION</span>}
+            {taskTitle&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}}>{taskTitle}</span>}
           </div>
           <div style={{fontSize:12,color:'var(--t2)',marginBottom:2}}>{detailText(e)}</div>
-          {e.interventionReason&&<div style={{fontSize:11,color:'#F59E0B',marginBottom:2}}>Reason: {e.interventionReason}</div>}
+          {interventionReason&&<div style={{fontSize:11,color:'#F59E0B',marginBottom:2}}>Reason: {interventionReason}</div>}
           <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-            {view!=='byperson'&&<span style={{fontSize:11,color:'var(--t2)'}}>{e.by||'—'} · <span style={{color:ROLE_COLORS[e.byRole]||'var(--t2)',fontWeight:600}}>{ROLE_LABELS[e.byRole]||e.byRole||'?'}</span></span>}
+            {view!=='byperson'&&<span style={{fontSize:11,color:'var(--t2)'}}>{e.by||'—'} · <span style={{color:ROLE_COLORS[byRole]||'var(--t2)',fontWeight:600}}>{ROLE_LABELS[byRole]||byRole||'?'}</span></span>}
             {user.role==='super_admin'&&e.org&&<span style={{fontSize:11,color:'var(--t2)'}}>· {e.org}</span>}
             <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>{fmtTs(e.at)}</span>
           </div>
