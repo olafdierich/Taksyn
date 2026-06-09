@@ -4371,8 +4371,11 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
 
   const exportCSV = () => {
     const rows = [
-      ['Date','Task','Event','By','Role','Org','Detail'],
-      ...filtered.map(e=>[e.at||'', e.taskTitle||'', getCfg(e).label, e.by||'', ROLE_LABELS[e.byRole]||e.byRole||'', e.org||'', detailText(e)])
+      ['Date','Task','Event','By','Role','Org','Old Value','New Value','Detail'],
+      ...filtered.map(e=>{
+        const byRole = ef(e,'by_role','byRole')||''
+        return [e.at||'', ef(e,'task_title','taskTitle')||'', getCfg(e).label, e.by||'', ROLE_LABELS[byRole]||byRole||'', e.org||'', ef(e,'old_value','fromStatus')||'', ef(e,'new_value','toStatus')||'', detailText(e)]
+      })
     ]
     const csv = rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(',')).join('\n')
     const a = document.createElement('a')
