@@ -72,6 +72,64 @@ CREATE POLICY "tasks_read_all"    ON public.tasks FOR SELECT TO authenticated US
 CREATE POLICY "tasks_insert_auth" ON public.tasks FOR INSERT TO authenticated WITH CHECK (TRUE);
 CREATE POLICY "tasks_update_auth" ON public.tasks FOR UPDATE TO authenticated USING (TRUE);
 
+-- 3b. AUDIT LOG
+-- Tracks all meaningful events: task lifecycle, evidence, comments, checklist,
+-- member management, leave, report exports, and session events.
+CREATE TABLE IF NOT EXISTS public.audit_log (
+  id                  TEXT PRIMARY KEY,
+  event_type          TEXT NOT NULL DEFAULT 'status_change',
+  task_id             TEXT,
+  task_title          TEXT,
+  by                  TEXT,                        -- display name of the actor
+  by_id               UUID,                        -- auth user id of the actor
+  by_role             TEXT,                        -- role at time of action
+  org                 TEXT,                        -- organisation slug
+  at                  TIMESTAMPTZ DEFAULT NOW(),   -- when the event occurred
+  detail              JSONB DEFAULT '{}',          -- structured extra context (priority, dates, etc.)
+  old_value           TEXT,                        -- primary "before" value (status, name, count …)
+  new_value           TEXT,                        -- primary "after" value
+  is_intervention     BOOLEAN DEFAULT FALSE,       -- true when super_admin acts on another org
+  intervention_reason TEXT,
+  is_checklist        BOOLEAN DEFAULT FALSE,
+  checklist_action    TEXT,                        -- 'checked' or 'unchecked'
+  checklist_item      TEXT
+);
+
+ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "audit_log_read_auth"   ON public.audit_log FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY "audit_log_insert_auth" ON public.audit_log FOR INSERT TO authenticated WITH CHECK (TRUE);
+
+-- Index for fast org-filtered queries
+CREATE INDEX IF NOT EXISTS audit_log_org_at ON public.audit_log (org, at DESC);
+
+-- ── EXISTING INSTALLATION MIGRATION ──────────────────────────────────────────
+-- If you already created audit_log manually, run these ALTER TABLE statements
+-- in Supabase SQL Editor to add the new columns without losing existing rows:
+--
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS event_type TEXT NOT NULL DEFAULT 'status_change';
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS by_id UUID;
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS detail JSONB DEFAULT '{}';
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS old_value TEXT;
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS new_value TEXT;
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS is_intervention BOOLEAN DEFAULT FALSE;
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS intervention_reason TEXT;
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS is_checklist BOOLEAN DEFAULT FALSE;
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS checklist_action TEXT;
+--   ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS checklist_item TEXT;
+--
+-- Column name mapping from old camelCase to new snake_case:
+--   taskId         → task_id
+--   taskTitle      → task_title
+--   byRole         → by_role
+--   isIntervention → is_intervention
+--   interventionReason → intervention_reason
+--   isChecklist    → is_checklist
+--   checklistAction → checklist_action
+--   checklistItem  → checklist_item
+--   fromStatus     → old_value
+--   toStatus       → new_value
+-- ─────────────────────────────────────────────────────────────────────────────
+
 -- 4. SEED DEMO DATA (optional – run after creating your admin account)
 -- Replace 'YOUR-ADMIN-UUID' with your actual user ID from auth.users
 
