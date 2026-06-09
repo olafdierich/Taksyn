@@ -1068,22 +1068,25 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     if (changes.status) {
       const prev = tasks.find(t=>t.id===id)
       const task = tasks.find(t=>t.id===id)
-      const entry = {
-        id: Date.now()+'',
-        taskId: id,
-        taskTitle: prev?.title||id,
-        fromStatus: prev?.status||'—',
-        toStatus: changes.status,
-        by: user?.name||'System',
-        byRole: user?.role||'',
-        org: task?.org||user?.org||'',
-        isIntervention: user?.role==='super_admin',
-        interventionReason: _interventionReason||null,
-        at: new Date().toISOString()
-      }
-      setAuditLog(log=>[entry,...log])
-      if (isConfigured()) {
-        await supabase.from('audit_log').insert(entry).then(()=>{})
+      if (prev?.status !== changes.status) {
+        const statusTypeMap = { approved:'task_approved', rejected:'task_rejected', completed:'task_completed', escalated:'task_escalated' }
+        const evType = statusTypeMap[changes.status] || 'status_change'
+        const entry = mkAuditEntry(evType, user, task?.org||user?.org, {
+          fromStatus: prev?.status||'—',
+          toStatus: changes.status,
+          interventionReason: _interventionReason||null,
+        }, id, prev?.title||id)
+        setAuditLog(log=>[entry,...log])
+        if (isConfigured()) await supabase.from('audit_log').insert(entry).then(()=>{})
+      } else {
+        const editableFields = ['title','priority','due_date','category','department','description']
+        const changesMap = {}
+        editableFields.filter(f=>f in changes && changes[f]!==prev?.[f]).forEach(f=>{changesMap[f]=changes[f]})
+        if (Object.keys(changesMap).length>0) {
+          const edEntry = mkAuditEntry('task_edited', user, task?.org||user?.org, { changes:changesMap }, id, prev?.title||id)
+          setAuditLog(log=>[edEntry,...log])
+          if (isConfigured()) supabase.from('audit_log').insert(edEntry).catch(()=>{})
+        }
       }
       // Send email notifications for key status changes
       if(isConfigured()) {
