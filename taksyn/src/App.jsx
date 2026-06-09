@@ -1119,6 +1119,25 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         }
       }
     }
+    if ('evidence' in changes) {
+      const prev = tasks.find(t=>t.id===id)
+      const oldLen = parseSafe(prev?.evidence)?.length||0
+      const newLen = Array.isArray(changes.evidence)?changes.evidence.length:(parseSafe(changes.evidence)?.length||0)
+      if (newLen!==oldLen) {
+        const evEntry = mkAuditEntry(newLen>oldLen?'evidence_added':'evidence_removed', user, prev?.org||user?.org, {}, id, prev?.title||id)
+        setAuditLog(log=>[evEntry,...log])
+        if (isConfigured()) supabase.from('audit_log').insert(evEntry).catch(()=>{})
+      }
+    }
+    if ('assigned_user_id' in changes) {
+      const prev = tasks.find(t=>t.id===id)
+      if (prev && String(changes.assigned_user_id||'')!==String(prev.assigned_user_id||'')) {
+        const toName = changes.assigned_user_name||teamUsers.find(u=>u.id===changes.assigned_user_id)?.name||'—'
+        const rEntry = mkAuditEntry('task_reassigned', user, prev?.org||user?.org, { fromName:prev.assigned_user_name||'—', toName }, id, prev?.title||id)
+        setAuditLog(log=>[rEntry,...log])
+        if (isConfigured()) supabase.from('audit_log').insert(rEntry).catch(()=>{})
+      }
+    }
     const interventionTag = user?.role==='super_admin' ? { lastIntervention: { by: user.name, reason: _interventionReason, at: new Date().toISOString() } } : {}
     setTasks(prev=>prev.map(t=>t.id===id?{...t,...changes,...interventionTag}:t))
     if (isConfigured()) {
