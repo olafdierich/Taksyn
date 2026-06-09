@@ -2755,9 +2755,9 @@ function UsersView({ user, setAuditLog }) {
     }
     setRealUsers(prev=>prev.filter(u=>u.id!==id))
     if (setAuditLog) {
-      const rmEntry = mkAuditEntry('member_removed', user, user.org, { memberName:target?.name||id, memberRole:target?.role||'' })
+      const rmEntry = mkAuditEntry('member_removed', user, user.org, { memberRole:target?.role||'' }, null, null, target?.name||id, null)
       setAuditLog(prev=>[rmEntry,...prev])
-      if (isConfigured()) supabase.from('audit_log').insert(rmEntry).catch(()=>{})
+      if (isConfigured()) supabase.from('audit_log').insert(rmEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     }
   }
 
