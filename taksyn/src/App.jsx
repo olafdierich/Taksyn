@@ -4908,6 +4908,11 @@ function LeaveView({ user, tasks, setAuditLog }) {
     }
     setLeaves(prev=>[entry,...prev])
     if(isCA) setTeamLeaves(prev=>[entry,...prev])
+    if (setAuditLog) {
+      const lvEntry = mkAuditEntry('leave_submitted', user, user.org, { leaveType:form.type, dateFrom:form.date_from, dateTo:form.date_to })
+      setAuditLog(prev=>[lvEntry,...prev])
+      if (isConfigured()) supabase.from('audit_log').insert(lvEntry).catch(()=>{})
+    }
     setShowApply(false)
     setForm({ type:'annual_leave', date_from:'', date_to:'', reason:'' })
     setSaving(false)
@@ -4915,9 +4920,15 @@ function LeaveView({ user, tasks, setAuditLog }) {
 
   const deleteLeave = async (id) => {
     if(!confirm('Cancel this leave request?')) return
+    const lv = leaves.find(l=>l.id===id)
     if(isConfigured()) await supabase.from('leave_records').delete().eq('id',id)
     setLeaves(prev=>prev.filter(l=>l.id!==id))
     setTeamLeaves(prev=>prev.filter(l=>l.id!==id))
+    if (setAuditLog) {
+      const lcEntry = mkAuditEntry('leave_cancelled', user, user.org, { leaveType:lv?.type||'', dateFrom:lv?.date_from||'', dateTo:lv?.date_to||'' })
+      setAuditLog(prev=>[lcEntry,...prev])
+      if (isConfigured()) supabase.from('audit_log').insert(lcEntry).catch(()=>{})
+    }
   }
 
   const isOnLeave = leaves.some(l=>l.date_from<=today&&l.date_to>=today)
