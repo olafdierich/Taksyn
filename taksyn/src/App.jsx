@@ -1157,7 +1157,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     const histEntry = { action:newDone?'checked':'unchecked', by:user.name, byId:user.id, at:new Date().toISOString() }
     const newSubs = subs.map((x,i)=>i===idx?{...x,done:newDone,history:[...(x.history||[]),histEntry]}:x)
     update(tid, { subtasks: newSubs })
-    const auditEntry = { id:Date.now()+'', taskId:tid, taskTitle:task.title, fromStatus:null, toStatus:null, checklistAction:newDone?'checked':'unchecked', checklistItem:s.text, by:user.name, byRole:user.role, org:task.org||user.org, at:new Date().toISOString(), isChecklist:true }
+    const auditEntry = mkAuditEntry('checklist_toggled', user, task.org||user.org, { action:newDone?'checked':'unchecked', item:s.text }, tid, task.title)
     setAuditLog(log=>[auditEntry,...log])
     if(isConfigured()) supabase.from('audit_log').insert(auditEntry).catch(()=>{})
   }
