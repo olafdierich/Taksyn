@@ -1071,21 +1071,26 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       if (prev?.status !== changes.status) {
         const statusTypeMap = { approved:'task_approved', rejected:'task_rejected', completed:'task_completed', escalated:'task_escalated' }
         const evType = statusTypeMap[changes.status] || 'status_change'
-        const entry = mkAuditEntry(evType, user, task?.org||user?.org, {
-          fromStatus: prev?.status||'—',
-          toStatus: changes.status,
-          interventionReason: _interventionReason||null,
-        }, id, prev?.title||id)
+        const entry = mkAuditEntry(evType, user, task?.org||user?.org,
+          { interventionReason: _interventionReason||null },
+          id, prev?.title||id, prev?.status||null, changes.status)
         setAuditLog(log=>[entry,...log])
-        if (isConfigured()) await supabase.from('audit_log').insert(entry).then(()=>{})
+        if (isConfigured()) {
+          const {error} = await supabase.from('audit_log').insert(entry)
+          if (error) console.warn('audit_log insert error:', error.message, entry)
+        }
       } else {
         const editableFields = ['title','priority','due_date','category','department','description']
         const changesMap = {}
         editableFields.filter(f=>f in changes && changes[f]!==prev?.[f]).forEach(f=>{changesMap[f]=changes[f]})
         if (Object.keys(changesMap).length>0) {
-          const edEntry = mkAuditEntry('task_edited', user, task?.org||user?.org, { changes:changesMap }, id, prev?.title||id)
+          const edEntry = mkAuditEntry('task_edited', user, task?.org||user?.org, { changes:changesMap }, id, prev?.title||id,
+            Object.keys(changesMap).join(','), Object.values(changesMap).join(','))
           setAuditLog(log=>[edEntry,...log])
-          if (isConfigured()) supabase.from('audit_log').insert(edEntry).catch(()=>{})
+          if (isConfigured()) {
+            const {error} = await supabase.from('audit_log').insert(edEntry)
+            if (error) console.warn('audit_log insert error:', error.message, edEntry)
+          }
         }
       }
       // Send email notifications for key status changes
