@@ -277,7 +277,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .sidebar.collapsed .sb-user-info{opacity:0;width:0}
 .sb-logout{width:100%;margin-top:6px;padding:7px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .content{flex:1;overflow-y:auto;padding:20px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-@media(max-width:768px){.content{padding:14px;padding-bottom:74px}}
+@media(max-width:768px){.content{padding:14px}}
 .ph{margin-bottom:20px}
 .ph-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .ph-title{font-size:20px;font-weight:800;letter-spacing:-.5px}
@@ -350,6 +350,8 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .btn-green{background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.25)}
 .btn-sm{padding:5px 10px;font-size:12px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-back-dashboard{justify-content:center}
+@media(max-width:768px){.btn-back-dashboard{width:100%}}
 .btn-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
 .esc-banner{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .esc-banner-body{flex:1}
@@ -433,23 +435,14 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .notif-entry.read:hover{background:var(--s3)}
 .notif-group-lbl{padding:5px 14px 3px;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;background:var(--s3);border-bottom:1px solid var(--border)}
 .notif-actions{display:flex;gap:2px;align-items:center;flex-shrink:0;margin-left:4px}
-.notif-icon-btn{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:4px;font-size:12px;line-height:1;color:var(--t3);font-family:inherit;transition:color .15s}
+.notif-icon-btn{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:4px;font-size:12px;line-height:1;color:var(--t3);font-family:inherit;transition:all .15s}
 .notif-icon-btn:hover{color:var(--text)}
-.notif-icon-btn.del:hover{color:var(--red)}
+.notif-icon-btn.del{min-width:28px;min-height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:17px;padding:4px}
+.notif-icon-btn.del:hover,.notif-icon-btn.del:active{color:var(--red);background:rgba(239,68,68,.12)}
 .notif-icon-btn.chk:hover{color:var(--green)}
 .notif-summary{padding:8px 14px;background:rgba(59,130,246,.04);border-bottom:1px solid var(--border);font-size:11px;color:var(--t2)}
 .notif-settings-panel{padding:10px 14px;border-bottom:1px solid var(--border);background:var(--s3)}
 .bottom-nav{display:none}
-@media(max-width:768px){
-  .bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;height:56px;background:#fff;border-top:1px solid var(--border);z-index:270;padding-bottom:env(safe-area-inset-bottom,0)}
-  .bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;cursor:pointer;padding:6px 4px;color:var(--t2);font-family:inherit;transition:color .15s;position:relative;-webkit-tap-highlight-color:transparent}
-  .bn-item.active{color:var(--brand)}
-  .bn-item svg{width:20px;height:20px;flex-shrink:0}
-  .bn-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
-  .bn-badge{position:absolute;top:5px;left:50%;margin-left:4px;width:14px;height:14px;border-radius:50%;background:var(--red);font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;color:#fff}
-  .undo-toast{bottom:72px}
-  .notif-panel{max-height:calc(100vh - 52px - 56px)}
-}
 `
 
 const IC = ({ n, s=16 }) => {
@@ -1012,7 +1005,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     }
   },[user.org])
 
-  useEffect(()=>{ if(isConfigured()) supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(user.role==='super_admin'?data:data.filter(u=>u.org===user.org)) }) },[])
+  useEffect(()=>{
+    if(!isConfigured()) return
+    if(user.role==='super_admin') {
+      supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(data) })
+    } else if(user.org) {
+      supabase.from('org_members').select('user_id,role').eq('org',user.org)
+        .then(async({data:members})=>{
+          if(!members?.length) return
+          const {data:profiles} = await supabase.from('profiles').select('*').in('id',members.map(m=>m.user_id))
+          if(profiles) setTeamUsers(profiles.map(p=>({...p,role:members.find(m=>m.user_id===p.id)?.role||p.role})))
+        }).catch(()=>{})
+    }
+  },[user.org])
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
 
 
@@ -1595,7 +1600,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             <div className="two-col">
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Due:</span> {sel.due_date}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Compliance:</span> {sel.compliance?'🔒 Yes':'—'}</div>
-              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Assigned:</span> {sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</div>
+              {(()=>{
+                const isOrphaned = !!sel.assigned_user_id && !teamUsers.find(u=>u.id===sel.assigned_user_id)
+                return (
+                  <div style={{fontSize:13,gridColumn:isOrphaned?'1 / -1':'auto'}}>
+                    <span style={{color:'var(--t2)'}}>Assigned:</span>{' '}
+                    <span style={isOrphaned?{color:'var(--t2)',textDecoration:'line-through'}:{}}>{sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</span>
+                    {isOrphaned&&<div style={{marginTop:4,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                      <span style={{fontSize:11,color:'var(--red)',fontWeight:600}}>⚠️ Assigned user no longer in organisation</span>
+                      {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>Reassign</button>}
+                    </div>}
+                  </div>
+                )
+              })()}
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
               {sel.project&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Project:</span> <span style={{color:'#3B82F6',fontWeight:600}}>📁 {sel.project}</span></div>}
             </div>
@@ -2662,10 +2679,14 @@ function UsersView({ user }) {
   },[])
 
   const deleteUser = async (id) => {
-    if (!confirm('Remove this user from your organisation?')) return
+    if (!confirm('Remove this user from your organisation?\n\nTheir active tasks will be unassigned — work history is preserved.')) return
     if(isConfigured()) {
-      // Remove from org_members for this org only — preserves their account in other orgs
+      // Remove from org_members — preserves account in other orgs
       await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
+      // Clear assigned_user_id on active tasks but keep assigned_user_name for history
+      await supabase.from('tasks').update({ assigned_user_id: null })
+        .eq('assigned_user_id', id).eq('org', user.org)
+        .not('status', 'in', '("completed","approved")')
     }
     setRealUsers(prev=>prev.filter(u=>u.id!==id))
   }
@@ -3180,8 +3201,6 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     r.onload = async ev => {
       const logoData = ev.target.result
       await supabase.from('organisations').update({logo:logoData}).eq('id',orgId)
-      // Also update all profiles in that org so their reports use the new logo
-      await supabase.from('profiles').update({avatar_url:logoData}).eq('org', orgs.find(o=>o.id===orgId)?.name)
       setOrgs(prev=>prev.map(o=>o.id===orgId?{...o,logo:logoData}:o))
     }
     r.readAsDataURL(file)
@@ -4271,8 +4290,11 @@ function AuditLogView({ tasks, user, auditLog }) {
 }
 
 
-function SuperAdminTaskStats({ tasks }) {
+function SuperAdminTaskStats({ tasks, setTasks, loadTasks }) {
   const [orgSearch, setOrgSearch] = useState('')
+  const [orphanedTasks, setOrphanedTasks] = useState(null)
+  const [orphanScanning, setOrphanScanning] = useState(false)
+  const [orphanMsg, setOrphanMsg] = useState('')
   
   // Build aggregate stats per org — no task content exposed
   const orgs = [...new Set(tasks.map(t=>t.org).filter(Boolean))].sort()
@@ -4349,6 +4371,71 @@ function SuperAdminTaskStats({ tasks }) {
               </table>
             </div>
         }
+      </div>
+
+      <div className="section" style={{marginTop:16}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap',gap:8}}>
+          <div>
+            <div className="section-title" style={{margin:0}}>Orphaned Task Assignment Cleanup</div>
+            <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>Find tasks assigned to users who are no longer in their organisation</div>
+          </div>
+          <button className="btn btn-secondary btn-sm" disabled={orphanScanning} onClick={async()=>{
+            setOrphanScanning(true); setOrphanMsg(''); setOrphanedTasks(null)
+            try {
+              const {data:members} = await supabase.from('org_members').select('user_id,org')
+              const memberSet = new Set((members||[]).map(m=>m.user_id+'|'+m.org))
+              const orphaned = tasks.filter(t=>t.assigned_user_id && t.org && !memberSet.has(t.assigned_user_id+'|'+t.org) && !['completed','approved'].includes(t.status))
+              setOrphanedTasks(orphaned)
+              if(orphaned.length===0) setOrphanMsg('✅ No orphaned assignments found — all tasks are assigned to current members.')
+            } catch(e) { setOrphanMsg('Error scanning: '+e.message) }
+            setOrphanScanning(false)
+          }}>{orphanScanning?'Scanning…':'🔍 Scan for Orphaned Assignments'}</button>
+        </div>
+        {orphanMsg&&<div style={{fontSize:12,color:orphanMsg.startsWith('✅')?'var(--green)':'var(--red)',marginBottom:10,padding:'8px 12px',background:orphanMsg.startsWith('✅')?'rgba(16,185,129,.08)':'rgba(239,68,68,.06)',borderRadius:6,border:'1px solid '+(orphanMsg.startsWith('✅')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)')}}>{orphanMsg}</div>}
+        {orphanedTasks&&orphanedTasks.length>0&&(
+          <div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div style={{fontSize:12,color:'var(--red)',fontWeight:600}}>⚠️ {orphanedTasks.length} task{orphanedTasks.length!==1?'s':''} with orphaned assignments</div>
+              <button className="btn btn-danger btn-sm" onClick={async()=>{
+                if(!confirm('Unassign all '+orphanedTasks.length+' tasks? The assigned_user_name is kept for history.')) return
+                const ids = orphanedTasks.map(t=>t.id)
+                await supabase.from('tasks').update({assigned_user_id:null}).in('id',ids)
+                if(loadTasks) await loadTasks()
+                else if(setTasks) setTasks(prev=>prev.map(t=>ids.includes(t.id)?{...t,assigned_user_id:null}:t))
+                setOrphanedTasks([])
+                setOrphanMsg('✅ '+ids.length+' task'+( ids.length!==1?'s':'')+' unassigned. History preserved.')
+              }}>Unassign All</button>
+            </div>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead><tr style={{background:'var(--s3)'}}>
+                  {['Task','Organisation','Assigned To (removed)','Status','Due'].map(h=>(
+                    <th key={h} style={{padding:'6px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                  <th style={{padding:'6px 10px'}}></th>
+                </tr></thead>
+                <tbody>
+                  {orphanedTasks.map(t=>(
+                    <tr key={t.id} style={{borderBottom:'1px solid var(--border)'}}>
+                      <td style={{padding:'8px 10px',fontWeight:600,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</td>
+                      <td style={{padding:'8px 10px',color:'var(--t2)'}}>{t.org}</td>
+                      <td style={{padding:'8px 10px',color:'var(--red)',textDecoration:'line-through'}}>{t.assigned_user_name||t.assigned_user_id}</td>
+                      <td style={{padding:'8px 10px'}}><StatusBadge status={t.status}/></td>
+                      <td style={{padding:'8px 10px',color:'var(--t2)'}}>{t.due_date}</td>
+                      <td style={{padding:'8px 10px'}}>
+                        <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={async()=>{
+                          await supabase.from('tasks').update({assigned_user_id:null}).eq('id',t.id)
+                          if(setTasks) setTasks(prev=>prev.map(x=>x.id===t.id?{...x,assigned_user_id:null}:x))
+                          setOrphanedTasks(prev=>prev.filter(x=>x.id!==t.id))
+                        }}>Unassign</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -5656,6 +5743,7 @@ export default function App() {
   const undoTimer = useRef(null)
   const idleTimer = useRef(null)
   const countdownTimer = useRef(null)
+  const startTimerRef = useRef(null)
 
   const addNotifications = (newNotifs) => {
     if(!newNotifs.length) return
@@ -5741,6 +5829,8 @@ export default function App() {
       }, warnMs)
     }
 
+    startTimerRef.current = startTimer
+
     let lastFire = 0
     const onActivity = () => {
       const now = Date.now()
@@ -5749,7 +5839,7 @@ export default function App() {
       startTimer()
     }
 
-    const events = ['click', 'keydown', 'scroll', 'touchstart']
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'touchmove', 'touchend', 'input', 'click']
     events.forEach(e => window.addEventListener(e, onActivity, { passive: true }))
     startTimer()
 
@@ -5757,6 +5847,7 @@ export default function App() {
       events.forEach(e => window.removeEventListener(e, onActivity))
       clearTimeout(idleTimer.current)
       clearInterval(countdownTimer.current)
+      startTimerRef.current = null
     }
   }, [user, sessionTimeout])
 
@@ -5926,14 +6017,7 @@ export default function App() {
               <div style={{fontSize:40,fontWeight:800,color:warnCountdown<=30?'var(--red)':'var(--amber)',letterSpacing:1,marginBottom:20,fontVariantNumeric:'tabular-nums'}}>
                 {String(Math.floor(warnCountdown/60)).padStart(2,'0')}:{String(warnCountdown%60).padStart(2,'0')}
               </div>
-              <button className="btn btn-primary" style={{width:'100%',fontSize:14,padding:'10px 0'}} onClick={()=>{
-                clearTimeout(idleTimer.current); clearInterval(countdownTimer.current); setSessionWarning(false)
-                const minutes = sessionTimeout !== null ? sessionTimeout : (SESSION_ROLE_TIMEOUTS[user?.role]||15)
-                if(minutes>0) idleTimer.current=setTimeout(()=>{
-                  setSessionWarning(true); setWarnCountdown(WARN_BEFORE_MINS*60)
-                  let rem=WARN_BEFORE_MINS*60; countdownTimer.current=setInterval(()=>{ rem-=1; setWarnCountdown(rem); if(rem<=0){ clearInterval(countdownTimer.current); setSessionWarning(false); clearAuthCache(); setUser(null); setTasks(DEMO_TASKS); setPage('dashboard'); if(isConfigured()) supabase.auth.signOut().catch(()=>{}) } },1000)
-                },(minutes-WARN_BEFORE_MINS)*60*1000)
-              }}>Stay Logged In</button>
+              <button className="btn btn-primary" style={{width:'100%',fontSize:14,padding:'10px 0'}} onClick={()=>startTimerRef.current?.()}>Stay Logged In</button>
               <button className="btn btn-danger" style={{width:'100%',marginTop:8,fontSize:14,padding:'10px 0'}} onClick={()=>{setSessionWarning(false);logout()}}>Sign Out Now</button>
             </div>
           </div>
@@ -6056,6 +6140,7 @@ export default function App() {
             <div className="modal" onClick={e=>e.stopPropagation()}>
               <div className="modal-hdr"><div className="modal-title">My Profile</div><button className="modal-close" onClick={()=>setShowProfile(false)}>×</button></div>
               <div className="modal-body">
+                <button className="btn btn-secondary btn-back-dashboard" style={{marginBottom:16}} onClick={()=>{setShowProfile(false);navigate('dashboard')}}>← Back to Dashboard</button>
                 <div style={{display:'flex',alignItems:'center',gap:14,padding:'4px 0 16px',borderBottom:'1px solid var(--border)',marginBottom:16}}>
                   <div style={{position:'relative',flexShrink:0}}>
                     {user.avatar_url ? <img src={user.avatar_url} alt={user.name} style={{width:56,height:56,borderRadius:'50%',objectFit:'cover',border:'2px solid var(--border)'}}/> : <Avatar name={user.name} role={user.role} size={56}/>}
@@ -6121,28 +6206,6 @@ export default function App() {
                       {Object.values(DEPARTMENTS).flat().filter((d,i,a)=>a.indexOf(d)===i).sort().map(d=><option key={'all-'+d} value={d}>{d}</option>)}
                     </select>
                   </div>
-                  {['client_admin','manager'].includes(user.role)&&(
-                    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)'}}>
-                      <div style={{fontSize:11,color:'var(--t2)',marginBottom:6}}>Organisation Logo (used in reports)</div>
-                      <div style={{display:'flex',alignItems:'center',gap:10}}>
-                        {user.avatar_url&&<img src={user.avatar_url} alt="org logo" style={{height:32,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)'}}/>}
-                        <button className="btn btn-secondary btn-sm" onClick={()=>document.getElementById('org-logo-inp').click()}>
-                          {user.avatar_url?'Change Logo':'Upload Logo'}
-                        </button>
-                        <input id="org-logo-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{
-                          const f=e.target.files[0]; if(!f) return
-                          const r=new FileReader()
-                          r.onload=async ev=>{
-                            const d=ev.target.result
-                            setUser(prev=>({...prev,avatar_url:d}))
-                            if(isConfigured()) await supabase.from('profiles').update({avatar_url:d}).eq('id',user.id)
-                            setProfileMsg('✓ Organisation logo updated — will appear in reports')
-                          }
-                          r.readAsDataURL(f); e.target.value=''
-                        }}/>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:4}}>
@@ -6250,7 +6313,7 @@ export default function App() {
             ) : (
               <>
                 {page==='dashboard'   && <DashboardView   {...pageProps} tickets={tickets} leaveRecords={leaveRecords}/>}
-                {page==='tasks'       && (user.role==='super_admin' ? <SuperAdminTaskStats tasks={tasks} /> : <TasksView {...pageProps}/>)}
+                {page==='tasks'       && (user.role==='super_admin' ? <SuperAdminTaskStats tasks={tasks} setTasks={setTasks} loadTasks={loadTasks} /> : <TasksView {...pageProps}/>)}
                 {page==='evidence'    && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
                 {page==='escalations' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
                 {page==='reports'     && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
@@ -6271,24 +6334,6 @@ export default function App() {
           </div>
         </div>
 
-        {(()=>{
-          const BOTTOM_NAV_KEYS = ['dashboard','tasks','leave','help']
-          const bottomItems = navItems.filter(([key])=>BOTTOM_NAV_KEYS.includes(key))
-          return (
-            <nav className="bottom-nav">
-              {bottomItems.map(([key,label,icon])=>{
-                const badge = (key==='tasks'&&rejectedCount>0&&user.role==='worker')?rejectedCount:0
-                return (
-                  <button key={key} className={'bn-item'+(page===key?' active':'')} onClick={()=>navigate(key)}>
-                    <IC n={icon} s={20}/>
-                    {badge>0&&<span className="bn-badge">{badge}</span>}
-                    <span className="bn-label">{label.replace(' & Support','').replace('My ','')}</span>
-                  </button>
-                )
-              })}
-            </nav>
-          )
-        })()}
       </div>
     </>
   )
