@@ -4296,37 +4296,46 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
     logout:           { label:'Sign Out',        color:'#6B7280', icon:'→' },
   }
 
+  // Field accessors with snake_case primary, camelCase fallback for legacy DB rows
+  const ef = (e, snake, camel) => e[snake]??e[camel]
+
   const getType = (e) => {
-    if (e.type) return e.type
-    if (e.isChecklist) return 'checklist_toggled'
-    if (e.fromStatus!=null||e.toStatus!=null) return 'status_change'
+    const t = ef(e,'event_type','type')
+    if (t) return t
+    if (ef(e,'is_checklist','isChecklist')) return 'checklist_toggled'
+    if (ef(e,'old_value','fromStatus')!=null || ef(e,'new_value','toStatus')!=null) return 'status_change'
     return 'status_change'
   }
 
-  const getCfg = (e) => AUDIT_CFG[getType(e)] || { label:e.type||'Event', color:'#6B7280', icon:'·' }
+  const getCfg = (e) => AUDIT_CFG[getType(e)] || { label:getType(e)||'Event', color:'#6B7280', icon:'·' }
 
   const detailText = (e) => {
     const t = getType(e)
-    if (t==='status_change')     return ((e.fromStatus||'?')+' → '+(e.toStatus||'?')).replace(/_/g,' ')
-    if (t==='task_approved')     return 'task approved'
-    if (t==='task_rejected')     return 'sent back for revision'
-    if (t==='task_completed')    return 'marked complete'
-    if (t==='task_escalated')    return 'escalated'
-    if (t==='task_created')      return e.detail?.priority ? e.detail.priority+' priority'+(e.detail.assignedTo?' · '+e.detail.assignedTo:'') : 'new task'
-    if (t==='task_edited')       return Object.entries(e.detail?.changes||{}).map(([k,v])=>k.replace(/_/g,' ')+': '+v).join(' · ')||'fields updated'
-    if (t==='task_reassigned')   return 'to '+(e.detail?.toName||'—')
-    if (t==='checklist_toggled') return (e.checklistAction||e.detail?.action||'')+': '+(e.checklistItem||e.detail?.item||'')
-    if (t==='comment_added')     return '"'+(e.detail?.text||'').slice(0,100)+'"'
-    if (t==='evidence_added')    return 'photo added'
-    if (t==='evidence_removed')  return 'photo removed'
-    if (t==='member_removed')    return 'removed: '+(e.detail?.memberName||'—')
-    if (t==='member_edited')     return e.detail?.memberName||'member updated'
-    if (t==='role_changed')      return (e.detail?.memberName||'')+(e.detail?.fromRole?' · '+e.detail.fromRole+' → '+e.detail.toRole:'')
-    if (t==='leave_submitted')   return (e.detail?.leaveType||'').replace(/_/g,' ')+(e.detail?.dateFrom?' ('+e.detail.dateFrom+' – '+e.detail.dateTo+')':'')
-    if (t==='leave_cancelled')   return (e.detail?.leaveType||'').replace(/_/g,' ')+' cancelled'
-    if (t==='report_exported')   return (e.detail?.reportType||'')+(e.detail?.period?' · '+e.detail.period:'')
+    const ov = ef(e,'old_value','fromStatus')
+    const nv = ef(e,'new_value','toStatus')
+    const ca = ef(e,'checklist_action','checklistAction')
+    const ci = ef(e,'checklist_item','checklistItem')
+    const det = e.detail || {}
+    if (t==='status_change')     return ((ov||'?')+' → '+(nv||'?')).replace(/_/g,' ')
+    if (t==='task_approved')     return (ov||'awaiting review')+' → approved'
+    if (t==='task_rejected')     return (ov||'?')+' → sent back'
+    if (t==='task_completed')    return (ov||'?')+' → completed'
+    if (t==='task_escalated')    return (ov||'?')+' → escalated'
+    if (t==='task_created')      return det.priority ? det.priority+' priority'+(det.assignedTo?' · '+det.assignedTo:'') : (nv||'new task')
+    if (t==='task_edited')       return nv || Object.entries(det.changes||{}).map(([k,v])=>k.replace(/_/g,' ')+': '+v).join(' · ') || 'fields updated'
+    if (t==='task_reassigned')   return (ov||'?')+' → '+(nv||'?')
+    if (t==='checklist_toggled') return (ca||det.action||'')+': '+(ci||det.item||'')
+    if (t==='comment_added')     return '"'+(nv||det.text||'').slice(0,100)+'"'
+    if (t==='evidence_added')    return (ov||'')+(ov?' → ':'')+nv
+    if (t==='evidence_removed')  return (ov||'')+(ov?' → ':'')+nv
+    if (t==='member_removed')    return 'removed: '+(ov||det.memberName||'—')
+    if (t==='member_edited')     return det.memberName||'member updated'
+    if (t==='role_changed')      return (det.memberName||'')+(ov?' · '+ov+' → '+nv:'')
+    if (t==='leave_submitted')   return nv||(det.dateFrom?det.dateFrom+' – '+det.dateTo:'leave submitted')
+    if (t==='leave_cancelled')   return (ov||'leave')+' cancelled'
+    if (t==='report_exported')   return nv||(det.reportType||'')+(det.period?' / '+det.period:'')
     if (t==='logout')            return 'signed out'
-    return ''
+    return nv||ov||''
   }
 
   const fmtTs = (d) => {
