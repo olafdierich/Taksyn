@@ -4352,14 +4352,16 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
   const filtered = auditLog.filter(e => {
     const t = getType(e)
     const entryDate = e.at ? e.at.slice(0,10) : ''
+    const taskTitle = ef(e,'task_title','taskTitle')||''
+    const byRole = ef(e,'by_role','byRole')||''
     if (search) {
       const s = search.toLowerCase()
-      if (!(e.taskTitle||'').toLowerCase().includes(s) && !(e.by||'').toLowerCase().includes(s) && !detailText(e).toLowerCase().includes(s) && !(e.org||'').toLowerCase().includes(s)) return false
+      if (!taskTitle.toLowerCase().includes(s) && !(e.by||'').toLowerCase().includes(s) && !detailText(e).toLowerCase().includes(s) && !(e.org||'').toLowerCase().includes(s)) return false
     }
     if (dateFrom && entryDate < dateFrom) return false
     if (dateTo && entryDate > dateTo) return false
     if (typeFilter!=='all' && t!==typeFilter) return false
-    if (roleFilter!=='all' && e.byRole!==roleFilter) return false
+    if (roleFilter!=='all' && byRole!==roleFilter) return false
     if (orgFilter && e.org!==orgFilter) return false
     return true
   })
