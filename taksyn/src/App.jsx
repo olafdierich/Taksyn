@@ -5062,9 +5062,9 @@ function LeaveView({ user, tasks, setAuditLog }) {
     setLeaves(prev=>[entry,...prev])
     if(isCA) setTeamLeaves(prev=>[entry,...prev])
     if (setAuditLog) {
-      const lvEntry = mkAuditEntry('leave_submitted', user, user.org, { leaveType:form.type, dateFrom:form.date_from, dateTo:form.date_to })
+      const lvEntry = mkAuditEntry('leave_submitted', user, user.org, { dateFrom:form.date_from, dateTo:form.date_to }, null, null, null, (LEAVE_LABELS[form.type]||form.type)+' '+form.date_from+' – '+form.date_to)
       setAuditLog(prev=>[lvEntry,...prev])
-      if (isConfigured()) supabase.from('audit_log').insert(lvEntry).catch(()=>{})
+      if (isConfigured()) supabase.from('audit_log').insert(lvEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     }
     setShowApply(false)
     setForm({ type:'annual_leave', date_from:'', date_to:'', reason:'' })
