@@ -1252,9 +1252,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     // Do the async work in background
     const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     setTasks(prev=>[...prev,t])
-    const cEntry = mkAuditEntry('task_created', user, user.org, { priority:t.priority, category:t.category, assignedTo:t.assigned_user_name||t.assigned_role }, t.id, t.title)
+    const cEntry = mkAuditEntry('task_created', user, user.org, { priority:t.priority, category:t.category, assignedTo:t.assigned_user_name||t.assigned_role }, t.id, t.title, null, t.title)
     setAuditLog(prev=>[cEntry,...prev])
-    if (isConfigured()) supabase.from('audit_log').insert(cEntry).catch(()=>{})
+    if (isConfigured()) supabase.from('audit_log').insert(cEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     if (isConfigured()) {
       supabase.auth.getUser().then(({data:{user:authUser}})=>{
   supabase.from('tasks').insert({ ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' })
