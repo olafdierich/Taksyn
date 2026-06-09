@@ -2789,12 +2789,13 @@ function UsersView({ user, setAuditLog }) {
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...updates}:u))
     if (setAuditLog) {
       const oldUser = realUsers.find(u=>u.id===id)
-      const evType = oldUser?.role && oldUser.role!==editForm.role ? 'role_changed' : 'member_edited'
-      const detail = { memberName:updates.name, memberRole:updates.role }
-      if (evType==='role_changed') { detail.fromRole=ROLE_LABELS[oldUser.role]||oldUser.role; detail.toRole=ROLE_LABELS[editForm.role]||editForm.role }
-      const eEntry = mkAuditEntry(evType, user, user.org, detail)
+      const roleChanged = oldUser?.role && oldUser.role!==editForm.role
+      const evType = roleChanged ? 'role_changed' : 'member_edited'
+      const ov = roleChanged ? (ROLE_LABELS[oldUser.role]||oldUser.role) : null
+      const nv = roleChanged ? (ROLE_LABELS[editForm.role]||editForm.role) : null
+      const eEntry = mkAuditEntry(evType, user, user.org, { memberName:updates.name }, null, null, ov, nv)
       setAuditLog(prev=>[eEntry,...prev])
-      if (isConfigured()) supabase.from('audit_log').insert(eEntry).catch(()=>{})
+      if (isConfigured()) supabase.from('audit_log').insert(eEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     }
     setEditingUser(null)
     setEditForm({})
