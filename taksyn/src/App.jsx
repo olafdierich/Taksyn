@@ -2771,6 +2771,15 @@ function UsersView({ user, setAuditLog }) {
       await supabase.from('org_members').upsert({ user_id: id, org: targetOrg, role: editForm.role }, { onConflict: 'user_id,org' })
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...updates}:u))
+    if (setAuditLog) {
+      const oldUser = realUsers.find(u=>u.id===id)
+      const evType = oldUser?.role && oldUser.role!==editForm.role ? 'role_changed' : 'member_edited'
+      const detail = { memberName:updates.name, memberRole:updates.role }
+      if (evType==='role_changed') { detail.fromRole=ROLE_LABELS[oldUser.role]||oldUser.role; detail.toRole=ROLE_LABELS[editForm.role]||editForm.role }
+      const eEntry = mkAuditEntry(evType, user, user.org, detail)
+      setAuditLog(prev=>[eEntry,...prev])
+      if (isConfigured()) supabase.from('audit_log').insert(eEntry).catch(()=>{})
+    }
     setEditingUser(null)
     setEditForm({})
     setEditCustomDept('')
