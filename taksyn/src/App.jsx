@@ -2400,9 +2400,9 @@ function ReportsView({ tasks, user, setAuditLog }) {
     else if (reportType==='worker') exportWorkerPDF()
     else if (reportType==='org') exportOrgPDF()
     if (setAuditLog) {
-      const rEntry = mkAuditEntry('report_exported', user, user.org, { reportType:reportType, period:period })
+      const rEntry = mkAuditEntry('report_exported', user, user.org, { period }, null, null, null, reportType+' / '+period)
       setAuditLog(prev=>[rEntry,...prev])
-      if (isConfigured()) supabase.from('audit_log').insert(rEntry).catch(()=>{})
+      if (isConfigured()) supabase.from('audit_log').insert(rEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     }
   }
 
