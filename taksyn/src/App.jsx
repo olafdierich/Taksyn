@@ -4850,7 +4850,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 }
 
 
-function LeaveView({ user, tasks }) {
+function LeaveView({ user, tasks, setAuditLog }) {
   const [leaves, setLeaves] = useState([])
   const [showApply, setShowApply] = useState(false)
   const [form, setForm] = useState({ type:'annual_leave', date_from:'', date_to:'', reason:'', replacement_id:'', replacement_name:'' })
