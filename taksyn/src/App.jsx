@@ -6053,6 +6053,10 @@ export default function App() {
   const handleAuth = (userData) => { setUser(userData); setPage('dashboard') }
 
   const logout = () => {
+    if (user && isConfigured()) {
+      const loEntry = mkAuditEntry('logout', user, user.org, {})
+      supabase.from('audit_log').insert(loEntry).catch(()=>{})
+    }
     clearAuthCache()
     setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
     if(isConfigured()) supabase.auth.signOut().catch(()=>{})
