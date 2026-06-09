@@ -194,6 +194,26 @@ const sendEmailNotif = async (toEmail, subject, body) => {
   } catch(e) { console.log('Email notif failed:', e.message) }
 }
 
+const mkAuditEntry = (type, user, org, detail={}, taskId=null, taskTitle=null) => ({
+  id: Date.now()+'-'+Math.random().toString(36).slice(2,5),
+  type,
+  taskId,
+  taskTitle,
+  by: user?.name||'',
+  byId: user?.id||null,
+  byRole: user?.role||'',
+  org: org||user?.org||'',
+  at: new Date().toISOString(),
+  detail: detail||{},
+  isIntervention: user?.role==='super_admin',
+  interventionReason: detail?.interventionReason||null,
+  isChecklist: type==='checklist_toggled',
+  fromStatus: detail?.fromStatus||null,
+  toStatus: detail?.toStatus||null,
+  checklistAction: detail?.action||null,
+  checklistItem: detail?.item||null,
+})
+
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
 const avatarColor = role => ROLE_COLORS[role] || '#6B7280'
 const isConfigured = () => { const u = import.meta.env.VITE_SUPABASE_URL; return u && !u.includes('placeholder') }
