@@ -2728,6 +2728,7 @@ function UsersView({ user, setAuditLog }) {
 
   const deleteUser = async (id) => {
     if (!confirm('Remove this user from your organisation?\n\nTheir active tasks will be unassigned — work history is preserved.')) return
+    const target = realUsers.find(u=>u.id===id)
     if(isConfigured()) {
       // Remove from org_members — preserves account in other orgs
       await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
@@ -2737,6 +2738,11 @@ function UsersView({ user, setAuditLog }) {
         .not('status', 'in', '("completed","approved")')
     }
     setRealUsers(prev=>prev.filter(u=>u.id!==id))
+    if (setAuditLog) {
+      const rmEntry = mkAuditEntry('member_removed', user, user.org, { memberName:target?.name||id, memberRole:target?.role||'' })
+      setAuditLog(prev=>[rmEntry,...prev])
+      if (isConfigured()) supabase.from('audit_log').insert(rmEntry).catch(()=>{})
+    }
   }
 
   const saveEditUser = async () => {
