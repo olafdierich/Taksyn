@@ -5078,9 +5078,9 @@ function LeaveView({ user, tasks, setAuditLog }) {
     setLeaves(prev=>prev.filter(l=>l.id!==id))
     setTeamLeaves(prev=>prev.filter(l=>l.id!==id))
     if (setAuditLog) {
-      const lcEntry = mkAuditEntry('leave_cancelled', user, user.org, { leaveType:lv?.type||'', dateFrom:lv?.date_from||'', dateTo:lv?.date_to||'' })
+      const lcEntry = mkAuditEntry('leave_cancelled', user, user.org, {}, null, null, (LEAVE_LABELS[lv?.type]||lv?.type||'')+' '+(lv?.date_from||''), null)
       setAuditLog(prev=>[lcEntry,...prev])
-      if (isConfigured()) supabase.from('audit_log').insert(lcEntry).catch(()=>{})
+      if (isConfigured()) supabase.from('audit_log').insert(lcEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     }
   }
 
