@@ -2670,7 +2670,7 @@ function ReportsView({ tasks, user }) {
   )
 }
 
-function UsersView({ user }) {
+function UsersView({ user, setAuditLog }) {
   const [showInvite, setShowInvite] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('worker')
