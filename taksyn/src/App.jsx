@@ -1235,9 +1235,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     const task = tasks.find(t=>t.id===tid)
     const entry = { id: Date.now()+'', author: user.name, authorId: user.id, text: comment.trim(), timestamp: new Date().toISOString(), edits: [] }
     update(tid, { comments:[...(parseSafe(task.comments)||[]), entry] })
-    const cmEntry = mkAuditEntry('comment_added', user, task?.org||user.org, { text:comment.trim().slice(0,200) }, tid, task?.title)
+    const cmEntry = mkAuditEntry('comment_added', user, task?.org||user.org, {}, tid, task?.title, null, comment.trim().slice(0,200))
     setAuditLog(prev=>[cmEntry,...prev])
-    if (isConfigured()) supabase.from('audit_log').insert(cmEntry).catch(()=>{})
+    if (isConfigured()) supabase.from('audit_log').insert(cmEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     setComment('')
   }
 
