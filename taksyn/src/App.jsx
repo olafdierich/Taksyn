@@ -2194,7 +2194,7 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
 }
 
 
-function ReportsView({ tasks, user }) {
+function ReportsView({ tasks, user, setAuditLog }) {
   const [reportType, setReportType] = useState('compliance')
   const [period, setPeriod] = useState('weekly')
   const [customStart, setCustomStart] = useState('')
