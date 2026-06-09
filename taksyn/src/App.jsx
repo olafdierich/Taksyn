@@ -4253,106 +4253,242 @@ function CompanySettingsView({ user }) {
   )
 }
 
-function AuditLogView({ tasks, user, auditLog }) {
-  const [filter, setFilter] = useState('')
-  const [roleFilter, setRoleFilter] = useState('all')
+function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
+  const [view, setView] = useState('timeline')
+  const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [orgFilter, setOrgFilter] = useState('')
 
-  const STATUS_COLORS = {
-    pending:'#6B7280', in_progress:'#3B82F6', awaiting_review:'#F59E0B',
-    completed:'#10B981', approved:'#10B981', rejected:'#EF4444',
-    overdue:'#EF4444', escalated:'#EF4444'
+  const AUDIT_CFG = {
+    status_change:    { label:'Status Changed',  color:'#3B82F6', icon:'↔' },
+    task_created:     { label:'Task Created',    color:'#3B82F6', icon:'✚' },
+    task_edited:      { label:'Task Edited',     color:'#6B7280', icon:'✏' },
+    task_reassigned:  { label:'Reassigned',      color:'#6B7280', icon:'↗' },
+    task_approved:    { label:'Approved',        color:'#10B981', icon:'✓' },
+    task_completed:   { label:'Completed',       color:'#10B981', icon:'✔' },
+    task_rejected:    { label:'Sent Back',       color:'#EF4444', icon:'✗' },
+    task_escalated:   { label:'Escalated',       color:'#F59E0B', icon:'⚠' },
+    checklist_toggled:{ label:'Checklist',       color:'#3B82F6', icon:'☑' },
+    comment_added:    { label:'Comment Added',   color:'#3B82F6', icon:'💬' },
+    evidence_added:   { label:'Photo Added',     color:'#3B82F6', icon:'📷' },
+    evidence_removed: { label:'Photo Removed',   color:'#EF4444', icon:'🗑' },
+    member_removed:   { label:'Member Removed',  color:'#EF4444', icon:'✖' },
+    member_edited:    { label:'Member Updated',  color:'#6B7280', icon:'✏' },
+    role_changed:     { label:'Role Changed',    color:'#F59E0B', icon:'⬆' },
+    leave_submitted:  { label:'Leave Submitted', color:'#F59E0B', icon:'📅' },
+    leave_cancelled:  { label:'Leave Cancelled', color:'#EF4444', icon:'✖' },
+    report_exported:  { label:'Report Exported', color:'#6B7280', icon:'📊' },
+    logout:           { label:'Sign Out',        color:'#6B7280', icon:'→' },
   }
 
-  const fmtTs = (d) => new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+  const getType = (e) => {
+    if (e.type) return e.type
+    if (e.isChecklist) return 'checklist_toggled'
+    if (e.fromStatus!=null||e.toStatus!=null) return 'status_change'
+    return 'status_change'
+  }
+
+  const getCfg = (e) => AUDIT_CFG[getType(e)] || { label:e.type||'Event', color:'#6B7280', icon:'·' }
+
+  const detailText = (e) => {
+    const t = getType(e)
+    if (t==='status_change')     return ((e.fromStatus||'?')+' → '+(e.toStatus||'?')).replace(/_/g,' ')
+    if (t==='task_approved')     return 'task approved'
+    if (t==='task_rejected')     return 'sent back for revision'
+    if (t==='task_completed')    return 'marked complete'
+    if (t==='task_escalated')    return 'escalated'
+    if (t==='task_created')      return e.detail?.priority ? e.detail.priority+' priority'+(e.detail.assignedTo?' · '+e.detail.assignedTo:'') : 'new task'
+    if (t==='task_edited')       return Object.entries(e.detail?.changes||{}).map(([k,v])=>k.replace(/_/g,' ')+': '+v).join(' · ')||'fields updated'
+    if (t==='task_reassigned')   return 'to '+(e.detail?.toName||'—')
+    if (t==='checklist_toggled') return (e.checklistAction||e.detail?.action||'')+': '+(e.checklistItem||e.detail?.item||'')
+    if (t==='comment_added')     return '"'+(e.detail?.text||'').slice(0,100)+'"'
+    if (t==='evidence_added')    return 'photo added'
+    if (t==='evidence_removed')  return 'photo removed'
+    if (t==='member_removed')    return 'removed: '+(e.detail?.memberName||'—')
+    if (t==='member_edited')     return e.detail?.memberName||'member updated'
+    if (t==='role_changed')      return (e.detail?.memberName||'')+(e.detail?.fromRole?' · '+e.detail.fromRole+' → '+e.detail.toRole:'')
+    if (t==='leave_submitted')   return (e.detail?.leaveType||'').replace(/_/g,' ')+(e.detail?.dateFrom?' ('+e.detail.dateFrom+' – '+e.detail.dateTo+')':'')
+    if (t==='leave_cancelled')   return (e.detail?.leaveType||'').replace(/_/g,' ')+' cancelled'
+    if (t==='report_exported')   return (e.detail?.reportType||'')+(e.detail?.period?' · '+e.detail.period:'')
+    if (t==='logout')            return 'signed out'
+    return ''
+  }
+
+  const fmtTs = (d) => {
+    if (!d) return '—'
+    const dt = new Date(d); const now = new Date()
+    const timeStr = dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+    if (dt.toDateString()===now.toDateString()) return 'Today '+timeStr
+    if (dt.toDateString()===new Date(now-86400000).toDateString()) return 'Yesterday '+timeStr
+    return dt.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})+' '+timeStr
+  }
+
+  const allOrgs = user.role==='super_admin' ? [...new Set(auditLog.map(e=>e.org).filter(Boolean))].sort() : []
 
   const filtered = auditLog.filter(e => {
-    const matchText = !filter || e.taskTitle?.toLowerCase().includes(filter.toLowerCase()) || e.by?.toLowerCase().includes(filter.toLowerCase()) || e.checklistItem?.toLowerCase().includes(filter.toLowerCase())
-    const matchRole = roleFilter==='all' || e.byRole===roleFilter
-    const matchType = typeFilter==='all' || (typeFilter==='checklist'&&e.isChecklist) || (typeFilter==='status'&&!e.isChecklist)
-    return matchText && matchRole && matchType
+    const t = getType(e)
+    const entryDate = e.at ? e.at.slice(0,10) : ''
+    if (search) {
+      const s = search.toLowerCase()
+      if (!(e.taskTitle||'').toLowerCase().includes(s) && !(e.by||'').toLowerCase().includes(s) && !detailText(e).toLowerCase().includes(s) && !(e.org||'').toLowerCase().includes(s)) return false
+    }
+    if (dateFrom && entryDate < dateFrom) return false
+    if (dateTo && entryDate > dateTo) return false
+    if (typeFilter!=='all' && t!==typeFilter) return false
+    if (roleFilter!=='all' && e.byRole!==roleFilter) return false
+    if (orgFilter && e.org!==orgFilter) return false
+    return true
   })
+
+  const hasFilters = !!(search||dateFrom||dateTo||typeFilter!=='all'||roleFilter!=='all'||orgFilter)
+  const clearFilters = () => { setSearch(''); setDateFrom(''); setDateTo(''); setTypeFilter('all'); setRoleFilter('all'); setOrgFilter('') }
+
+  const exportCSV = () => {
+    const rows = [
+      ['Date','Task','Event','By','Role','Org','Detail'],
+      ...filtered.map(e=>[e.at||'', e.taskTitle||'', getCfg(e).label, e.by||'', ROLE_LABELS[e.byRole]||e.byRole||'', e.org||'', detailText(e)])
+    ]
+    const csv = rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(',')).join('\n')
+    const a = document.createElement('a')
+    a.href = 'data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv)
+    a.download = 'activity-log-'+new Date().toISOString().slice(0,10)+'.csv'
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  }
+
+  const byTask = (() => {
+    const groups = {}
+    filtered.filter(e=>e.taskId).forEach(e=>{
+      if (!groups[e.taskId]) groups[e.taskId] = { taskId:e.taskId, taskTitle:e.taskTitle||e.taskId, events:[] }
+      groups[e.taskId].events.push(e)
+    })
+    return Object.values(groups).sort((a,b)=>(b.events[0]?.at||'')>(a.events[0]?.at||'')?1:-1)
+  })()
+
+  const byPerson = (() => {
+    const groups = {}
+    filtered.forEach(e=>{
+      const key = e.by||'Unknown'
+      if (!groups[key]) groups[key] = { name:key, role:e.byRole, events:[] }
+      groups[key].events.push(e)
+    })
+    return Object.values(groups).sort((a,b)=>(b.events[0]?.at||'')>(a.events[0]?.at||'')?1:-1)
+  })()
+
+  const EntryRow = ({ e }) => {
+    const cfg = getCfg(e)
+    return (
+      <div style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',alignItems:'flex-start',borderLeft:'3px solid '+cfg.color+'55',background:e.isIntervention?'rgba(245,158,11,.04)':'transparent'}}>
+        <div style={{width:28,height:28,borderRadius:'50%',background:cfg.color+'18',color:cfg.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0,marginTop:1}}>{cfg.icon}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:1}}>
+            <span style={{fontSize:12,fontWeight:700,color:cfg.color}}>{cfg.label}</span>
+            {e.isIntervention&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:8,background:'rgba(245,158,11,.18)',color:'#F59E0B',fontWeight:700,letterSpacing:.3}}>PLATFORM ACTION</span>}
+            {e.taskTitle&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}}>{e.taskTitle}</span>}
+          </div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:2}}>{detailText(e)}</div>
+          {e.interventionReason&&<div style={{fontSize:11,color:'#F59E0B',marginBottom:2}}>Reason: {e.interventionReason}</div>}
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+            {view!=='byperson'&&<span style={{fontSize:11,color:'var(--t2)'}}>{e.by||'—'} · <span style={{color:ROLE_COLORS[e.byRole]||'var(--t2)',fontWeight:600}}>{ROLE_LABELS[e.byRole]||e.byRole||'?'}</span></span>}
+            {user.role==='super_admin'&&e.org&&<span style={{fontSize:11,color:'var(--t2)'}}>· {e.org}</span>}
+            <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>{fmtTs(e.at)}</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="anim">
       <div className="ph">
-        <div className="ph-title">Audit Log</div>
-        <div className="ph-sub">{auditLog.length} events recorded — read only</div>
+        <div className="ph-title">Activity &amp; History Log</div>
+        <div className="ph-sub">{auditLog.length} events recorded · read only</div>
       </div>
 
       <div className="section" style={{marginBottom:14}}>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <input
-            className="form-input"
-            placeholder="Search task or person..."
-            value={filter}
-            onChange={e=>setFilter(e.target.value)}
-            style={{flex:1,minWidth:180,fontSize:13}}
-          />
-          <select className="form-input" value={roleFilter} onChange={e=>setRoleFilter(e.target.value)} style={{fontSize:13,padding:'6px 10px'}}>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
+          <input className="form-input" placeholder="Search task, person, detail…" value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1,minWidth:180,fontSize:13}}/>
+          {user.role==='super_admin'&&allOrgs.length>0&&(
+            <select className="form-input" value={orgFilter} onChange={e=>setOrgFilter(e.target.value)} style={{fontSize:13,padding:'6px 10px',minWidth:130}}>
+              <option value="">All Orgs</option>
+              {allOrgs.map(o=><option key={o} value={o}>{o}</option>)}
+            </select>
+          )}
+          <button className="btn btn-secondary btn-sm" onClick={exportCSV} style={{fontSize:12,whiteSpace:'nowrap'}}>⬇ Export CSV</button>
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+          <select className="form-input" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{fontSize:12,padding:'5px 8px',flex:1,minWidth:140}}>
+            <option value="all">All Event Types</option>
+            <optgroup label="Task Events">
+              {['task_created','task_edited','task_reassigned','status_change','task_approved','task_completed','task_rejected','task_escalated'].map(t=><option key={t} value={t}>{AUDIT_CFG[t]?.label||t}</option>)}
+            </optgroup>
+            <optgroup label="Checklist &amp; Evidence">
+              {['checklist_toggled','comment_added','evidence_added','evidence_removed'].map(t=><option key={t} value={t}>{AUDIT_CFG[t]?.label||t}</option>)}
+            </optgroup>
+            <optgroup label="Team &amp; Leave">
+              {['member_removed','member_edited','role_changed','leave_submitted','leave_cancelled'].map(t=><option key={t} value={t}>{AUDIT_CFG[t]?.label||t}</option>)}
+            </optgroup>
+            <optgroup label="Other">
+              {['report_exported','logout'].map(t=><option key={t} value={t}>{AUDIT_CFG[t]?.label||t}</option>)}
+            </optgroup>
+          </select>
+          <select className="form-input" value={roleFilter} onChange={e=>setRoleFilter(e.target.value)} style={{fontSize:12,padding:'5px 8px',minWidth:110}}>
             <option value="all">All Roles</option>
             {ROLES.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </select>
-          <select className="form-input" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{fontSize:13,padding:'6px 10px'}}>
-            <option value="all">All Events</option>
-            <option value="status">Status Changes</option>
-            <option value="checklist">Checklist Actions</option>
-          </select>
+          <input type="date" className="form-input" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{fontSize:12,padding:'5px 8px'}} title="From date"/>
+          <input type="date" className="form-input" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{fontSize:12,padding:'5px 8px'}} title="To date"/>
+          {hasFilters&&<button className="btn btn-secondary btn-sm" onClick={clearFilters} style={{fontSize:11,whiteSpace:'nowrap'}}>✕ Clear</button>}
         </div>
       </div>
 
-      {filtered.length===0 ? (
-        <div className="empty"><div className="empty-icon">📋</div><div style={{fontSize:15,fontWeight:700,marginBottom:6}}>No audit entries yet</div><div className="empty-text">Status changes and checklist actions will appear here.</div></div>
-      ) : (
-        <div className="section">
-          <div style={{overflowX:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
-              <thead>
-                <tr style={{background:'var(--s3)'}}>
-                  {['Date & Time','Task','By','Role','Event','Detail'].map(h=>(
-                    <th key={h} style={{padding:'8px 12px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:700,whiteSpace:'nowrap',borderBottom:'2px solid var(--border)'}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((e,i)=>(
-                  <tr key={e.id||i} style={{borderBottom:'1px solid var(--border)',background:e.isIntervention?'rgba(245,158,11,.06)':e.isChecklist?'rgba(59,130,246,.03)':i%2===0?'transparent':'var(--s3)',borderLeft:e.isIntervention?'3px solid #F59E0B':e.isChecklist?'3px solid #3B82F6':'3px solid transparent'}}>
-                    <td style={{padding:'9px 12px',color:'var(--t2)',whiteSpace:'nowrap'}}>
-                      {fmtTs(e.at)}
-                      {e.isIntervention&&<div style={{fontSize:9,color:'#F59E0B',fontWeight:700,marginTop:2}}>🔧 PLATFORM INTERVENTION</div>}
-                    </td>
-                    <td style={{padding:'9px 12px',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      <div style={{fontWeight:600}}>{e.taskTitle||e.taskId}</div>
-                      {e.interventionReason&&<div style={{fontSize:10,color:'var(--t2)',marginTop:2}}>Reason: {e.interventionReason}</div>}
-                    </td>
-                    <td style={{padding:'9px 12px'}}>{e.by}</td>
-                    <td style={{padding:'9px 12px'}}>
-                      <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:ROLE_COLORS[e.byRole]||'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>{ROLE_LABELS[e.byRole]||e.byRole}</span>
-                    </td>
-                    <td style={{padding:'9px 12px'}}>
-                      {e.isChecklist
-                        ? <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:'rgba(59,130,246,.1)',color:'#3B82F6',fontWeight:700}}>☑ {e.checklistAction}</span>
-                        : <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>status</span>
-                      }
-                    </td>
-                    <td style={{padding:'9px 12px',maxWidth:200}}>
-                      {e.isChecklist
-                        ? <span style={{fontSize:11}}>{e.checklistItem||'—'}</span>
-                        : <div style={{display:'flex',gap:6}}>
-                            <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:STATUS_COLORS[e.fromStatus]||'var(--t2)',fontWeight:600}}>{e.fromStatus?.replace(/_/g,' ')||'—'}</span>
-                            <span style={{color:'var(--t2)'}}>→</span>
-                            <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:STATUS_COLORS[e.toStatus]+'18'||'var(--s3)',color:STATUS_COLORS[e.toStatus]||'var(--t2)',fontWeight:700,border:'1px solid '+(STATUS_COLORS[e.toStatus]||'var(--border)')+'44'}}>{e.toStatus?.replace(/_/g,' ')||'—'}</span>
-                          </div>
-                      }
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div style={{marginTop:10,fontSize:11,color:'var(--t2)',textAlign:'right'}}>Showing {filtered.length} of {auditLog.length} entries · Read only</div>
+      <div className="section" style={{padding:0,overflow:'hidden'}}>
+        <div style={{display:'flex',gap:0,borderBottom:'1px solid var(--border)'}}>
+          {[['timeline','Timeline'],['bytask','By Task'],['byperson','By Person']].map(([k,l])=>(
+            <button key={k} onClick={()=>setView(k)} style={{padding:'9px 16px',fontSize:13,fontWeight:600,background:'none',border:'none',borderBottom:view===k?'2px solid var(--primary)':'2px solid transparent',color:view===k?'var(--primary)':'var(--t2)',cursor:'pointer',marginBottom:-1}}>
+              {l}
+            </button>
+          ))}
+          <span style={{marginLeft:'auto',fontSize:12,color:'var(--t2)',alignSelf:'center',paddingRight:12}}>{filtered.length} / {auditLog.length}</span>
         </div>
-      )}
+
+        {filtered.length===0 ? (
+          <div style={{padding:'40px 20px',textAlign:'center'}}>
+            <div style={{fontSize:32,marginBottom:10}}>📋</div>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>No entries found</div>
+            <div style={{fontSize:13,color:'var(--t2)'}}>Try adjusting your filters or date range.</div>
+          </div>
+        ) : view==='timeline' ? (
+          filtered.map((e,i)=><EntryRow key={e.id||i} e={e}/>)
+        ) : view==='bytask' ? (
+          byTask.length===0
+            ? <div style={{padding:'40px 20px',textAlign:'center',color:'var(--t2)',fontSize:13}}>No task-linked events match this filter.</div>
+            : byTask.map(g=>(
+              <div key={g.taskId} style={{borderBottom:'2px solid var(--border)'}}>
+                <div style={{padding:'10px 14px',background:'var(--s3)',fontWeight:700,fontSize:13,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.taskTitle}</span>
+                  <span style={{fontSize:11,color:'var(--t2)',fontWeight:400,flexShrink:0}}>{g.events.length} event{g.events.length!==1?'s':''}</span>
+                </div>
+                {g.events.map((e,i)=><EntryRow key={e.id||i} e={e}/>)}
+              </div>
+            ))
+        ) : (
+          byPerson.length===0
+            ? <div style={{padding:'40px 20px',textAlign:'center',color:'var(--t2)',fontSize:13}}>No events match this filter.</div>
+            : byPerson.map(g=>(
+              <div key={g.name} style={{borderBottom:'2px solid var(--border)'}}>
+                <div style={{padding:'10px 14px',background:'var(--s3)',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                  <span style={{fontSize:13,fontWeight:700}}>{g.name}</span>
+                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s4)',color:ROLE_COLORS[g.role]||'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>{ROLE_LABELS[g.role]||g.role}</span>
+                  <span style={{marginLeft:'auto',fontSize:11,color:'var(--t2)',fontWeight:400}}>{g.events.length} event{g.events.length!==1?'s':''}</span>
+                </div>
+                {g.events.map((e,i)=><EntryRow key={e.id||i} e={e}/>)}
+              </div>
+            ))
+        )}
+      </div>
     </div>
   )
 }
