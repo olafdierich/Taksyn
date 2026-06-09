@@ -1168,9 +1168,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     const histEntry = { action:newDone?'checked':'unchecked', by:user.name, byId:user.id, at:new Date().toISOString() }
     const newSubs = subs.map((x,i)=>i===idx?{...x,done:newDone,history:[...(x.history||[]),histEntry]}:x)
     update(tid, { subtasks: newSubs })
-    const auditEntry = mkAuditEntry('checklist_toggled', user, task.org||user.org, { action:newDone?'checked':'unchecked', item:s.text }, tid, task.title)
+    const auditEntry = mkAuditEntry('checklist_toggled', user, task.org||user.org, { action:newDone?'checked':'unchecked', item:s.text }, tid, task.title, newDone?'unchecked':'checked', newDone?'checked':'unchecked')
     setAuditLog(log=>[auditEntry,...log])
-    if(isConfigured()) supabase.from('audit_log').insert(auditEntry).catch(()=>{})
+    if(isConfigured()) supabase.from('audit_log').insert(auditEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
   }
 
   const addSubNote = (tid, idx, note) => {
