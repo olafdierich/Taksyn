@@ -194,24 +194,24 @@ const sendEmailNotif = async (toEmail, subject, body) => {
   } catch(e) { console.log('Email notif failed:', e.message) }
 }
 
-const mkAuditEntry = (type, user, org, detail={}, taskId=null, taskTitle=null) => ({
+const mkAuditEntry = (event_type, user, org, detail={}, task_id=null, task_title=null, old_value=null, new_value=null) => ({
   id: Date.now()+'-'+Math.random().toString(36).slice(2,5),
-  type,
-  taskId,
-  taskTitle,
+  event_type,
+  task_id,
+  task_title,
   by: user?.name||'',
-  byId: user?.id||null,
-  byRole: user?.role||'',
+  by_id: user?.id||null,
+  by_role: user?.role||'',
   org: org||user?.org||'',
   at: new Date().toISOString(),
   detail: detail||{},
-  isIntervention: user?.role==='super_admin',
-  interventionReason: detail?.interventionReason||null,
-  isChecklist: type==='checklist_toggled',
-  fromStatus: detail?.fromStatus||null,
-  toStatus: detail?.toStatus||null,
-  checklistAction: detail?.action||null,
-  checklistItem: detail?.item||null,
+  old_value: old_value!=null ? String(old_value) : null,
+  new_value: new_value!=null ? String(new_value) : null,
+  is_intervention: user?.role==='super_admin',
+  intervention_reason: detail?.interventionReason||null,
+  is_checklist: event_type==='checklist_toggled',
+  checklist_action: detail?.action||null,
+  checklist_item: detail?.item||null,
 })
 
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
