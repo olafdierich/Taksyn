@@ -246,6 +246,33 @@ CREATE INDEX IF NOT EXISTS user_positions_org ON public.user_positions (org);
 --     );
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- 3f. ORGANISATIONS — plan-based data retention columns
+-- Add these columns to the organisations table if they don't exist yet.
+-- Run in Supabase SQL Editor:
+--
+--   ALTER TABLE public.organisations
+--     ADD COLUMN IF NOT EXISTS plan              TEXT NOT NULL DEFAULT 'growth'
+--       CHECK (plan IN ('personal','starter','growth','professional','enterprise')),
+--     ADD COLUMN IF NOT EXISTS retention_extended BOOLEAN NOT NULL DEFAULT FALSE,
+--     ADD COLUMN IF NOT EXISTS retention_years    INTEGER;
+--
+-- plan             — subscription tier, drives automatic retention period:
+--                    personal=30d, starter=180d, growth=365d, professional=730d, enterprise=2555d
+-- retention_extended — Professional only: true = retention upgraded to 7 years (2555 days)
+-- retention_years  — Enterprise only: custom override (minimum 7); NULL = use default 7yr
+--
+-- Retention enforcement (soft-delete, not hard-delete):
+--   Tasks and audit_logs older than the plan's retention_days should have deleted_at set.
+--   This is enforced server-side (edge function / cron) — never by the client app.
+--
+-- ── RETENTION DAYS BY PLAN ───────────────────────────────────────────────────
+-- personal:      30 days
+-- starter:      180 days  (6 months)
+-- growth:       365 days  (12 months)
+-- professional: 730 days  (2 years) — or 2555 if retention_extended = true
+-- enterprise:  2555 days  (7 years) — or retention_years*365 if set (min 7yr)
+-- ─────────────────────────────────────────────────────────────────────────────
+
 -- 4. SEED DEMO DATA (optional – run after creating your admin account)
 -- Replace 'YOUR-ADMIN-UUID' with your actual user ID from auth.users
 
