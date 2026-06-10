@@ -2887,6 +2887,8 @@ function UsersView({ user, setAuditLog }) {
       const eEntry = mkAuditEntry(evType, user, user.org, { memberName:updates.name }, null, null, ov, nv)
       setAuditLog(prev=>[eEntry,...prev])
       if (isConfigured()) supabase.from('audit_log').insert(eEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+      if (roleChanged) logAuditEvent(user, 'member.role_changed', 'member', id, updates.name, (ROLE_LABELS[oldUser?.role]||oldUser?.role||'?')+' → '+(ROLE_LABELS[editForm.role]||editForm.role))
+      else logAuditEvent(user, 'member.edited', 'member', id, updates.name, 'Profile updated')
     }
     // Save positions
     if(isConfigured()&&editPositions.length>0) {
