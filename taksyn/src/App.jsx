@@ -3860,12 +3860,12 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   return (
     <div className="anim">
-      <div className="ph">
+      <div className="ph" style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
         <div>
           <div className="ph-title">Organisations</div>
           <div className="ph-sub">{orgs.length} organisations · {orgs.filter(o=>o.status==='active').length} active</div>
         </div>
-        <button className="btn btn-primary" onClick={()=>setShowCreate(true)}>+ New Organisation</button>
+        <button className="btn btn-primary" style={{flexShrink:0}} onClick={()=>setShowCreate(true)}>+ New Organisation</button>
       </div>
 
       <div className="section" style={{marginBottom:14}}>
