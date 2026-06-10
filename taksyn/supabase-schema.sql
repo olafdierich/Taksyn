@@ -130,6 +130,52 @@ CREATE INDEX IF NOT EXISTS audit_log_org_at ON public.audit_log (org, at DESC);
 --   toStatus       → new_value
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- 3c. USER POSITIONS (department-based roles per person)
+-- One row per person/department combination. is_primary = true on exactly one row per user.
+CREATE TABLE IF NOT EXISTS public.user_positions (
+  id             TEXT PRIMARY KEY,
+  user_id        TEXT NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  org            TEXT NOT NULL,
+  department     TEXT NOT NULL,
+  role           TEXT NOT NULL DEFAULT 'worker'
+                   CHECK (role IN ('manager','supervisor','worker')),
+  position_title TEXT,               -- custom label e.g. "Registered Nurse", "Team Leader"
+  is_primary     BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.user_positions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "user_positions_read_auth"   ON public.user_positions FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY "user_positions_insert_auth" ON public.user_positions FOR INSERT TO authenticated WITH CHECK (TRUE);
+CREATE POLICY "user_positions_update_auth" ON public.user_positions FOR UPDATE TO authenticated USING (TRUE);
+CREATE POLICY "user_positions_delete_auth" ON public.user_positions FOR DELETE TO authenticated USING (TRUE);
+
+CREATE INDEX IF NOT EXISTS user_positions_user_org ON public.user_positions (user_id, org);
+CREATE INDEX IF NOT EXISTS user_positions_org ON public.user_positions (org);
+
+-- ── MIGRATION for existing installations ──────────────────────────────────────
+-- Run this once in Supabase SQL Editor to create position rows for users
+-- who already have a department set in their profile:
+--
+--   INSERT INTO public.user_positions (id, user_id, org, department, role, position_title, is_primary, created_at)
+--   SELECT
+--     'POS' || gen_random_uuid()::text,
+--     p.id,
+--     om.org,
+--     p.department,
+--     om.role,
+--     '',
+--     TRUE,
+--     NOW()
+--   FROM public.profiles p
+--   JOIN public.org_members om ON om.user_id = p.id
+--   WHERE p.department IS NOT NULL AND p.department <> ''
+--     AND NOT EXISTS (
+--       SELECT 1 FROM public.user_positions up
+--       WHERE up.user_id = p.id AND up.org = om.org
+--     );
+-- ─────────────────────────────────────────────────────────────────────────────
+
 -- 4. SEED DEMO DATA (optional – run after creating your admin account)
 -- Replace 'YOUR-ADMIN-UUID' with your actual user ID from auth.users
 
