@@ -996,9 +996,10 @@ function computeAwards(tasks) {
 }
 
 function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgSLA=DEFAULT_SLA }) {
-  // Filter tasks by org - super admin sees no org's tasks on dashboard (use Organisations page)
+  if (user.role==='super_admin') return <SuperAdminDashboard user={user} setPage={setPage} tickets={tickets}/>
+  // Filter tasks by org
   const visibleAll = visibleTasks(tasks, user)
-  const visible = user.role==='super_admin' ? [] : visibleAll
+  const visible = visibleAll
   const done = visible.filter(t=>['completed','approved','awaiting_review'].includes(t.status)).length
   const overdue = visible.filter(t=>t.status==='overdue').length
   const esc = visible.filter(t=>t.escalation).length
