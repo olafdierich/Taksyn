@@ -7767,6 +7767,8 @@ export default function App() {
                 {page==='sla'         && ['client_admin','super_admin'].includes(user.role) && <SLASettingsView {...pageProps}/>}
                 {page==='company_settings' && ['client_admin','super_admin'].includes(user.role) && <CompanySettingsView user={user}/>}
                 {page==='notifications' && user.role==='super_admin' && <PlatformAnnouncementsView user={user}/>}
+                {page==='platform_industries' && user.role==='super_admin' && <PlatformIndustriesView user={user}/>}
+                {page==='roles_departments' && ['client_admin','super_admin'].includes(user.role) && <RolesDeptView user={user}/>}
               </>
             )}
           </div>
