@@ -683,25 +683,44 @@ function AuthView({ onAuth }) {
         })
         if (e) throw e
         if (signUpData?.user) {
-          await supabase.from('profiles').upsert({
-            id: signUpData.user.id, name: name.trim(), role: assignedRole, org: orgName, tier: 'Growth'
-          })
-          await supabase.from('org_members').upsert({
-            user_id: signUpData.user.id, org: orgName, role: assignedRole, tier: 'Growth'
-          })
+          const uid = signUpData.user.id
+          await supabase.from('profiles').upsert({ id:uid, name:name.trim(), role:assignedRole, org:orgName, tier:'Growth' })
+          await supabase.from('org_members').upsert(
+            { user_id:uid, org:orgName, role:assignedRole, tier:'Growth' },
+            { onConflict: 'user_id,org' }
+          )
           if (inviteParams?.teamId) {
-            // Auto-add to team from invite link
             await supabase.from('team_members').insert({
-              id: 'TM'+Date.now(), team_id: inviteParams.teamId, user_id: signUpData.user.id,
-              user_name: name.trim(), role: assignedRole, org: orgName,
-              added_by: 'invite_link', added_at: new Date().toISOString()
+              id: 'TM'+Date.now(), team_id:inviteParams.teamId, user_id:uid,
+              user_name:name.trim(), role:assignedRole, org:orgName,
+              added_by:'invite_link', added_at:new Date().toISOString()
             }).catch(()=>{})
           }
-          if (inviteParams) {
-            // Mark the invite link as used (best-effort)
-            supabase.from('invite_links').update({ used_at: new Date().toISOString(), used_by: name.trim() })
-              .eq('org_id', inviteParams.orgId).is('used_at', null).limit(1)
-              .then(()=>{}).catch(()=>{})
+          if (inviteParams?.position) {
+            // Store the position title in user_positions
+            supabase.from('user_positions').insert({
+              id: 'POS'+Date.now()+Math.random().toString(36).slice(2,5),
+              user_id: uid, org: orgName,
+              department: inviteParams.teamName || 'General',
+              role: assignedRole,
+              position_title: inviteParams.position,
+              is_primary: true
+            }).catch(()=>{})
+          }
+          if (inviteParams?.linkId) {
+            // Mark this specific invite link as used by ID
+            supabase.from('invite_links').update({ used_at:new Date().toISOString(), used_by:name.trim() })
+              .eq('id', inviteParams.linkId).then(()=>{}).catch(()=>{})
+          }
+          // Auto sign-in if Supabase returned a session (email confirmation disabled in project)
+          if (inviteParams && signUpData.session) {
+            const { data:profile } = await supabase.from('profiles').select('*').eq('id',uid).single()
+            if (profile) {
+              const userData = {...profile, email:signUpData.user.email, role:assignedRole, org:orgName}
+              localStorage.setItem('taksyn-user', JSON.stringify(userData))
+              onAuth(userData)
+              return
+            }
           }
         }
         setSuccess(inviteParams || signupType==='staff'
