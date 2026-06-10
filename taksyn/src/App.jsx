@@ -2860,10 +2860,22 @@ function UsersView({ user, setAuditLog }) {
       setAuditLog(prev=>[eEntry,...prev])
       if (isConfigured()) supabase.from('audit_log').insert(eEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     }
+    // Save positions
+    if(isConfigured()&&editPositions.length>0) {
+      await supabase.from('user_positions').delete().eq('user_id',id).eq('org',user.org).catch(()=>{})
+      const posEntries = editPositions.map((p,i)=>({ id:'POS'+Date.now()+i+Math.random().toString(36).slice(2,5), user_id:id, org:user.org, department:p.department, role:p.role, position_title:p.position_title||'', is_primary:!!p.is_primary, created_at:new Date().toISOString() }))
+      await supabase.from('user_positions').insert(posEntries).catch(()=>{})
+      setUserPositions(prev=>({...prev,[id]:posEntries}))
+    } else if(editPositions.length===0) {
+      await supabase.from('user_positions').delete().eq('user_id',id).eq('org',user.org).catch(()=>{})
+      setUserPositions(prev=>{ const n={...prev}; delete n[id]; return n })
+    }
     setEditingUser(null)
     setEditForm({})
     setEditCustomDept('')
     setEditOrgSearch('')
+    setEditPositions([])
+    setNewPosition({ dept:'', role:'worker', title:'' })
   }
 
   const addExistingUserToOrg = async (email, role) => {
