@@ -4436,77 +4436,48 @@ function CompanySettingsView({ user }) {
 }
 
 function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
+  // Reads directly from audit_logs — history is preserved even after task deletion
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(false)
   const [view, setView] = useState('timeline')
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
-  const [roleFilter, setRoleFilter] = useState('all')
   const [orgFilter, setOrgFilter] = useState('')
 
-  const AUDIT_CFG = {
-    status_change:    { label:'Status Changed',  color:'#3B82F6', icon:'↔' },
-    task_created:     { label:'Task Created',    color:'#3B82F6', icon:'✚' },
-    task_edited:      { label:'Task Edited',     color:'#6B7280', icon:'✏' },
-    task_reassigned:  { label:'Reassigned',      color:'#6B7280', icon:'↗' },
-    task_approved:    { label:'Approved',        color:'#10B981', icon:'✓' },
-    task_completed:   { label:'Completed',       color:'#10B981', icon:'✔' },
-    task_rejected:    { label:'Sent Back',       color:'#EF4444', icon:'✗' },
-    task_escalated:   { label:'Escalated',       color:'#F59E0B', icon:'⚠' },
-    checklist_toggled:{ label:'Checklist',       color:'#3B82F6', icon:'☑' },
-    comment_added:    { label:'Comment Added',   color:'#3B82F6', icon:'💬' },
-    evidence_added:   { label:'Photo Added',     color:'#3B82F6', icon:'📷' },
-    evidence_removed: { label:'Photo Removed',   color:'#EF4444', icon:'🗑' },
-    member_removed:   { label:'Member Removed',  color:'#EF4444', icon:'✖' },
-    member_edited:    { label:'Member Updated',  color:'#6B7280', icon:'✏' },
-    role_changed:     { label:'Role Changed',    color:'#F59E0B', icon:'⬆' },
-    leave_submitted:  { label:'Leave Submitted', color:'#F59E0B', icon:'📅' },
-    leave_cancelled:  { label:'Leave Cancelled', color:'#EF4444', icon:'✖' },
-    report_exported:  { label:'Report Exported', color:'#6B7280', icon:'📊' },
-    logout:           { label:'Sign Out',        color:'#6B7280', icon:'→' },
+  const ACTION_CFG = {
+    'task.created':           { label:'Task Created',      color:'#10B981', icon:'✚' },
+    'task.assigned':          { label:'Task Assigned',     color:'#3B82F6', icon:'↗' },
+    'task.status_changed':    { label:'Status Changed',    color:'#3B82F6', icon:'↔' },
+    'task.deleted':           { label:'Task Deleted',      color:'#EF4444', icon:'🗑' },
+    'task.comment_added':     { label:'Comment Added',     color:'#3B82F6', icon:'💬' },
+    'task.evidence_added':    { label:'Evidence Added',    color:'#3B82F6', icon:'📷' },
+    'task.evidence_removed':  { label:'Evidence Removed',  color:'#EF4444', icon:'🗑' },
+    'task.checklist_toggled': { label:'Checklist',         color:'#3B82F6', icon:'☑' },
+    'task.approved':          { label:'Approved',          color:'#10B981', icon:'✓' },
+    'task.rejected':          { label:'Sent Back',         color:'#EF4444', icon:'✗' },
+    'task.escalated':         { label:'Escalated',         color:'#F59E0B', icon:'⚠' },
+    'leave.submitted':        { label:'Leave Submitted',   color:'#F59E0B', icon:'📅' },
+    'leave.cancelled':        { label:'Leave Cancelled',   color:'#EF4444', icon:'✖' },
+    'member.invited':         { label:'Member Invited',    color:'#10B981', icon:'✚' },
+    'member.role_changed':    { label:'Role Changed',      color:'#F59E0B', icon:'⬆' },
+    'member.edited':          { label:'Member Updated',    color:'#6B7280', icon:'✏' },
+    'member.removed':         { label:'Member Removed',    color:'#EF4444', icon:'✖' },
+    'session.logout':         { label:'Signed Out',        color:'#6B7280', icon:'→' },
   }
 
-  // Field accessors with snake_case primary, camelCase fallback for legacy DB rows
-  const ef = (e, snake, camel) => e[snake]??e[camel]
+  const getCfg = (action) => ACTION_CFG[action] || { label: action||'Event', color:'#6B7280', icon:'·' }
 
-  const getType = (e) => {
-    const t = ef(e,'event_type','type')
-    if (t) return t
-    if (ef(e,'is_checklist','isChecklist')) return 'checklist_toggled'
-    if (ef(e,'old_value','fromStatus')!=null || ef(e,'new_value','toStatus')!=null) return 'status_change'
-    return 'status_change'
-  }
-
-  const getCfg = (e) => AUDIT_CFG[getType(e)] || { label:getType(e)||'Event', color:'#6B7280', icon:'·' }
-
-  const detailText = (e) => {
-    const t = getType(e)
-    const ov = ef(e,'old_value','fromStatus')
-    const nv = ef(e,'new_value','toStatus')
-    const ca = ef(e,'checklist_action','checklistAction')
-    const ci = ef(e,'checklist_item','checklistItem')
-    const det = e.detail || {}
-    if (t==='status_change')     return ((ov||'?')+' → '+(nv||'?')).replace(/_/g,' ')
-    if (t==='task_approved')     return (ov||'awaiting review')+' → approved'
-    if (t==='task_rejected')     return (ov||'?')+' → sent back'
-    if (t==='task_completed')    return (ov||'?')+' → completed'
-    if (t==='task_escalated')    return (ov||'?')+' → escalated'
-    if (t==='task_created')      return det.priority ? det.priority+' priority'+(det.assignedTo?' · '+det.assignedTo:'') : (nv||'new task')
-    if (t==='task_edited')       return nv || Object.entries(det.changes||{}).map(([k,v])=>k.replace(/_/g,' ')+': '+v).join(' · ') || 'fields updated'
-    if (t==='task_reassigned')   return (ov||'?')+' → '+(nv||'?')
-    if (t==='checklist_toggled') return (ca||det.action||'')+': '+(ci||det.item||'')
-    if (t==='comment_added')     return '"'+(nv||det.text||'').slice(0,100)+'"'
-    if (t==='evidence_added')    return (ov||'')+(ov?' → ':'')+nv
-    if (t==='evidence_removed')  return (ov||'')+(ov?' → ':'')+nv
-    if (t==='member_removed')    return 'removed: '+(ov||det.memberName||'—')
-    if (t==='member_edited')     return det.memberName||'member updated'
-    if (t==='role_changed')      return (det.memberName||'')+(ov?' · '+ov+' → '+nv:'')
-    if (t==='leave_submitted')   return nv||(det.dateFrom?det.dateFrom+' – '+det.dateTo:'leave submitted')
-    if (t==='leave_cancelled')   return (ov||'leave')+' cancelled'
-    if (t==='report_exported')   return nv||(det.reportType||'')+(det.period?' / '+det.period:'')
-    if (t==='logout')            return 'signed out'
-    return nv||ov||''
-  }
+  useEffect(()=>{
+    if (!isConfigured()) return
+    setLoading(true)
+    const q = supabase.from('audit_logs').select('*').order('created_at',{ascending:false}).limit(1000)
+    ;(user.role==='super_admin' ? q : q.eq('organisation_id', user.org))
+      .then(({data})=>{ if(data) setLogs(data) })
+      .catch(()=>{})
+      .finally(()=>setLoading(false))
+  },[user.org, user.role])
 
   const fmtTs = (d) => {
     if (!d) return '—'
@@ -4517,35 +4488,28 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
     return dt.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})+' '+timeStr
   }
 
-  const allOrgs = user.role==='super_admin' ? [...new Set(auditLog.map(e=>e.org).filter(Boolean))].sort() : []
+  const allOrgs = user.role==='super_admin' ? [...new Set(logs.map(e=>e.organisation_id).filter(Boolean))].sort() : []
 
-  const filtered = auditLog.filter(e => {
-    const t = getType(e)
-    const entryDate = e.at ? e.at.slice(0,10) : ''
-    const taskTitle = ef(e,'task_title','taskTitle')||''
-    const byRole = ef(e,'by_role','byRole')||''
+  const filtered = logs.filter(e=>{
+    const entryDate = e.created_at ? e.created_at.slice(0,10) : ''
     if (search) {
       const s = search.toLowerCase()
-      if (!taskTitle.toLowerCase().includes(s) && !(e.by||'').toLowerCase().includes(s) && !detailText(e).toLowerCase().includes(s) && !(e.org||'').toLowerCase().includes(s)) return false
+      if (!(e.entity_name||'').toLowerCase().includes(s) && !(e.user_name||'').toLowerCase().includes(s) && !(e.details||'').toLowerCase().includes(s) && !(e.action||'').toLowerCase().includes(s) && !(e.organisation_id||'').toLowerCase().includes(s)) return false
     }
     if (dateFrom && entryDate < dateFrom) return false
     if (dateTo && entryDate > dateTo) return false
-    if (typeFilter!=='all' && t!==typeFilter) return false
-    if (roleFilter!=='all' && byRole!==roleFilter) return false
-    if (orgFilter && e.org!==orgFilter) return false
+    if (typeFilter!=='all' && e.action!==typeFilter) return false
+    if (orgFilter && e.organisation_id!==orgFilter) return false
     return true
   })
 
-  const hasFilters = !!(search||dateFrom||dateTo||typeFilter!=='all'||roleFilter!=='all'||orgFilter)
-  const clearFilters = () => { setSearch(''); setDateFrom(''); setDateTo(''); setTypeFilter('all'); setRoleFilter('all'); setOrgFilter('') }
+  const hasFilters = !!(search||dateFrom||dateTo||typeFilter!=='all'||orgFilter)
+  const clearFilters = () => { setSearch(''); setDateFrom(''); setDateTo(''); setTypeFilter('all'); setOrgFilter('') }
 
   const exportCSV = () => {
     const rows = [
-      ['Date','Task','Event','By','Role','Org','Old Value','New Value','Detail'],
-      ...filtered.map(e=>{
-        const byRole = ef(e,'by_role','byRole')||''
-        return [e.at||'', ef(e,'task_title','taskTitle')||'', getCfg(e).label, e.by||'', ROLE_LABELS[byRole]||byRole||'', e.org||'', ef(e,'old_value','fromStatus')||'', ef(e,'new_value','toStatus')||'', detailText(e)]
-      })
+      ['Date','User','Action','Entity','Details','Organisation'],
+      ...filtered.map(e=>[e.created_at||'', e.user_name||'', getCfg(e.action).label, e.entity_name||'', e.details||'', e.organisation_id||''])
     ]
     const csv = rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(',')).join('\n')
     const a = document.createElement('a')
@@ -4554,48 +4518,40 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
   }
 
-  const byTask = (() => {
+  const byEntity = (() => {
     const groups = {}
-    filtered.filter(e=>ef(e,'task_id','taskId')).forEach(e=>{
-      const tid = ef(e,'task_id','taskId')
-      const ttl = ef(e,'task_title','taskTitle')||tid
-      if (!groups[tid]) groups[tid] = { taskId:tid, taskTitle:ttl, events:[] }
-      groups[tid].events.push(e)
+    filtered.filter(e=>e.entity_id).forEach(e=>{
+      if (!groups[e.entity_id]) groups[e.entity_id] = { id:e.entity_id, name:e.entity_name||e.entity_id, events:[] }
+      groups[e.entity_id].events.push(e)
     })
-    return Object.values(groups).sort((a,b)=>(b.events[0]?.at||'')>(a.events[0]?.at||'')?1:-1)
+    return Object.values(groups).sort((a,b)=>(b.events[0]?.created_at||'')>(a.events[0]?.created_at||'')?1:-1)
   })()
 
   const byPerson = (() => {
     const groups = {}
     filtered.forEach(e=>{
-      const key = e.by||'Unknown'
-      if (!groups[key]) groups[key] = { name:key, role:ef(e,'by_role','byRole'), events:[] }
+      const key = e.user_name||'Unknown'
+      if (!groups[key]) groups[key] = { name:key, events:[] }
       groups[key].events.push(e)
     })
-    return Object.values(groups).sort((a,b)=>(b.events[0]?.at||'')>(a.events[0]?.at||'')?1:-1)
+    return Object.values(groups).sort((a,b)=>(b.events[0]?.created_at||'')>(a.events[0]?.created_at||'')?1:-1)
   })()
 
   const EntryRow = ({ e }) => {
-    const cfg = getCfg(e)
-    const isIntervention = ef(e,'is_intervention','isIntervention')
-    const taskTitle = ef(e,'task_title','taskTitle')
-    const interventionReason = ef(e,'intervention_reason','interventionReason')
-    const byRole = ef(e,'by_role','byRole')||''
+    const cfg = getCfg(e.action)
     return (
-      <div style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',alignItems:'flex-start',borderLeft:'3px solid '+cfg.color+'55',background:isIntervention?'rgba(245,158,11,.04)':'transparent'}}>
+      <div style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',alignItems:'flex-start',borderLeft:'3px solid '+cfg.color+'55'}}>
         <div style={{width:28,height:28,borderRadius:'50%',background:cfg.color+'18',color:cfg.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0,marginTop:1}}>{cfg.icon}</div>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:1}}>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:2}}>
             <span style={{fontSize:12,fontWeight:700,color:cfg.color}}>{cfg.label}</span>
-            {isIntervention&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:8,background:'rgba(245,158,11,.18)',color:'#F59E0B',fontWeight:700,letterSpacing:.3}}>PLATFORM ACTION</span>}
-            {taskTitle&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}}>{taskTitle}</span>}
+            {e.entity_name&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{e.entity_name}</span>}
           </div>
-          <div style={{fontSize:12,color:'var(--t2)',marginBottom:2}}>{detailText(e)}</div>
-          {interventionReason&&<div style={{fontSize:11,color:'#F59E0B',marginBottom:2}}>Reason: {interventionReason}</div>}
+          {e.details&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:2}}>{e.details}</div>}
           <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-            {view!=='byperson'&&<span style={{fontSize:11,color:'var(--t2)'}}>{e.by||'—'} · <span style={{color:ROLE_COLORS[byRole]||'var(--t2)',fontWeight:600}}>{ROLE_LABELS[byRole]||byRole||'?'}</span></span>}
-            {user.role==='super_admin'&&e.org&&<span style={{fontSize:11,color:'var(--t2)'}}>· {e.org}</span>}
-            <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>{fmtTs(e.at)}</span>
+            {view!=='byperson'&&<span style={{fontSize:11,color:'var(--t2)'}}>{e.user_name||'—'}</span>}
+            {user.role==='super_admin'&&e.organisation_id&&<span style={{fontSize:11,color:'var(--t2)'}}>· {e.organisation_id}</span>}
+            <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>{fmtTs(e.created_at)}</span>
           </div>
         </div>
       </div>
@@ -4606,12 +4562,12 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
     <div className="anim">
       <div className="ph">
         <div className="ph-title">Activity &amp; History Log</div>
-        <div className="ph-sub">{auditLog.length} events recorded · read only</div>
+        <div className="ph-sub">{logs.length} events recorded · preserved after task deletion</div>
       </div>
 
       <div className="section" style={{marginBottom:14}}>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
-          <input className="form-input" placeholder="Search task, person, detail…" value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1,minWidth:180,fontSize:13}}/>
+          <input className="form-input" placeholder="Search action, task, person…" value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1,minWidth:180,fontSize:13}}/>
           {user.role==='super_admin'&&allOrgs.length>0&&(
             <select className="form-input" value={orgFilter} onChange={e=>setOrgFilter(e.target.value)} style={{fontSize:13,padding:'6px 10px',minWidth:130}}>
               <option value="">All Orgs</option>
@@ -4621,24 +4577,20 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
           <button className="btn btn-secondary btn-sm" onClick={exportCSV} style={{fontSize:12,whiteSpace:'nowrap'}}>⬇ Export CSV</button>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-          <select className="form-input" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{fontSize:12,padding:'5px 8px',flex:1,minWidth:140}}>
+          <select className="form-input" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{fontSize:12,padding:'5px 8px',flex:1,minWidth:160}}>
             <option value="all">All Event Types</option>
             <optgroup label="Task Events">
-              {['task_created','task_edited','task_reassigned','status_change','task_approved','task_completed','task_rejected','task_escalated'].map(t=><option key={t} value={t}>{AUDIT_CFG[t]?.label||t}</option>)}
+              {['task.created','task.assigned','task.status_changed','task.approved','task.rejected','task.escalated','task.deleted'].map(a=><option key={a} value={a}>{ACTION_CFG[a]?.label||a}</option>)}
             </optgroup>
-            <optgroup label="Checklist &amp; Evidence">
-              {['checklist_toggled','comment_added','evidence_added','evidence_removed'].map(t=><option key={t} value={t}>{AUDIT_CFG[t]?.label||t}</option>)}
+            <optgroup label="Task Activity">
+              {['task.comment_added','task.evidence_added','task.evidence_removed','task.checklist_toggled'].map(a=><option key={a} value={a}>{ACTION_CFG[a]?.label||a}</option>)}
             </optgroup>
             <optgroup label="Team &amp; Leave">
-              {['member_removed','member_edited','role_changed','leave_submitted','leave_cancelled'].map(t=><option key={t} value={t}>{AUDIT_CFG[t]?.label||t}</option>)}
+              {['member.invited','member.role_changed','member.edited','member.removed','leave.submitted','leave.cancelled'].map(a=><option key={a} value={a}>{ACTION_CFG[a]?.label||a}</option>)}
             </optgroup>
-            <optgroup label="Other">
-              {['report_exported','logout'].map(t=><option key={t} value={t}>{AUDIT_CFG[t]?.label||t}</option>)}
+            <optgroup label="Session">
+              {['session.logout'].map(a=><option key={a} value={a}>{ACTION_CFG[a]?.label||a}</option>)}
             </optgroup>
-          </select>
-          <select className="form-input" value={roleFilter} onChange={e=>setRoleFilter(e.target.value)} style={{fontSize:12,padding:'5px 8px',minWidth:110}}>
-            <option value="all">All Roles</option>
-            {ROLES.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </select>
           <input type="date" className="form-input" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{fontSize:12,padding:'5px 8px'}} title="From date"/>
           <input type="date" className="form-input" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{fontSize:12,padding:'5px 8px'}} title="To date"/>
@@ -4648,29 +4600,31 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
 
       <div className="section" style={{padding:0,overflow:'hidden'}}>
         <div style={{display:'flex',gap:0,borderBottom:'1px solid var(--border)'}}>
-          {[['timeline','Timeline'],['bytask','By Task'],['byperson','By Person']].map(([k,l])=>(
-            <button key={k} onClick={()=>setView(k)} style={{padding:'9px 16px',fontSize:13,fontWeight:600,background:'none',border:'none',borderBottom:view===k?'2px solid var(--primary)':'2px solid transparent',color:view===k?'var(--primary)':'var(--t2)',cursor:'pointer',marginBottom:-1}}>
+          {[['timeline','Timeline'],['bytask','By Entity'],['byperson','By Person']].map(([k,l])=>(
+            <button key={k} onClick={()=>setView(k)} style={{padding:'9px 16px',fontSize:13,fontWeight:600,background:'none',border:'none',borderBottom:view===k?'2px solid var(--brand)':'2px solid transparent',color:view===k?'var(--brand)':'var(--t2)',cursor:'pointer',marginBottom:-1}}>
               {l}
             </button>
           ))}
-          <span style={{marginLeft:'auto',fontSize:12,color:'var(--t2)',alignSelf:'center',paddingRight:12}}>{filtered.length} / {auditLog.length}</span>
+          <span style={{marginLeft:'auto',fontSize:12,color:'var(--t2)',alignSelf:'center',paddingRight:12}}>{filtered.length} / {logs.length}</span>
         </div>
 
-        {filtered.length===0 ? (
+        {loading ? (
+          <div style={{padding:40,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}}/></div>
+        ) : filtered.length===0 ? (
           <div style={{padding:'40px 20px',textAlign:'center'}}>
             <div style={{fontSize:32,marginBottom:10}}>📋</div>
-            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>No entries found</div>
-            <div style={{fontSize:13,color:'var(--t2)'}}>Try adjusting your filters or date range.</div>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>{logs.length===0?'No events yet':'No entries found'}</div>
+            <div style={{fontSize:13,color:'var(--t2)'}}>{logs.length===0?'Events will appear here as your team takes actions.':'Try adjusting your filters or date range.'}</div>
           </div>
         ) : view==='timeline' ? (
           filtered.map((e,i)=><EntryRow key={e.id||i} e={e}/>)
         ) : view==='bytask' ? (
-          byTask.length===0
-            ? <div style={{padding:'40px 20px',textAlign:'center',color:'var(--t2)',fontSize:13}}>No task-linked events match this filter.</div>
-            : byTask.map(g=>(
-              <div key={g.taskId} style={{borderBottom:'2px solid var(--border)'}}>
+          byEntity.length===0
+            ? <div style={{padding:'40px 20px',textAlign:'center',color:'var(--t2)',fontSize:13}}>No entity-linked events match this filter.</div>
+            : byEntity.map(g=>(
+              <div key={g.id} style={{borderBottom:'2px solid var(--border)'}}>
                 <div style={{padding:'10px 14px',background:'var(--s3)',fontWeight:700,fontSize:13,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.taskTitle}</span>
+                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}</span>
                   <span style={{fontSize:11,color:'var(--t2)',fontWeight:400,flexShrink:0}}>{g.events.length} event{g.events.length!==1?'s':''}</span>
                 </div>
                 {g.events.map((e,i)=><EntryRow key={e.id||i} e={e}/>)}
@@ -4683,7 +4637,6 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
               <div key={g.name} style={{borderBottom:'2px solid var(--border)'}}>
                 <div style={{padding:'10px 14px',background:'var(--s3)',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                   <span style={{fontSize:13,fontWeight:700}}>{g.name}</span>
-                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s4)',color:ROLE_COLORS[g.role]||'var(--t2)',fontWeight:600,textTransform:'uppercase'}}>{ROLE_LABELS[g.role]||g.role}</span>
                   <span style={{marginLeft:'auto',fontSize:11,color:'var(--t2)',fontWeight:400}}>{g.events.length} event{g.events.length!==1?'s':''}</span>
                 </div>
                 {g.events.map((e,i)=><EntryRow key={e.id||i} e={e}/>)}
