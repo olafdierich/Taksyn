@@ -3736,7 +3736,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
   const [showMemberOrgChange, setShowMemberOrgChange] = useState(false)
   const [memberOrgSearch, setMemberOrgSearch] = useState('')
 
-  const INDUSTRIES = ['Hospitality','Aged Care','Disability Care','Healthcare / Clinic','Wedding & Events','Facilities Management','Other']
+  const INDUSTRIES = PRESET_INDUSTRIES
 
   useEffect(()=>{
     if(isConfigured()) loadOrgs()
