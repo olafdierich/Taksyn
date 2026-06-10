@@ -1126,6 +1126,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [clNoteText, setClNoteText] = useState('')
   const [mandatoryWarn, setMandatoryWarn] = useState(null)
   const [photoWarn, setPhotoWarn] = useState(false)
+  // Multi-completion checklist state
+  const [clCompletions, setClCompletions] = useState({}) // {taskId: {itemId: [rows]}}
+  const [clExpanded, setClExpanded] = useState(new Set()) // keys 'taskId::itemId'
+  const [clMarkOpen, setClMarkOpen] = useState(null) // {taskId, idx, itemId, label}
+  const [clMarkNote, setClMarkNote] = useState('')
+  const [clFlash, setClFlash] = useState(null) // 'taskId::itemId' — brief ✓ flash
 
   useEffect(()=>{
     if(isConfigured()&&user.org) {
