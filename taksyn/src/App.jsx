@@ -4987,6 +4987,7 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
         <div className="ph-title">Activity &amp; History Log</div>
         <div className="ph-sub">{logs.length} events recorded · preserved after task deletion</div>
       </div>
+      {isSA&&<div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.25)',borderRadius:10,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'center'}}><span style={{fontSize:15,flexShrink:0}}>🔒</span><span>Showing structural data only: who acted, what type of action, and when. Task names, details, and operational content are not visible to platform support.</span></div>}
 
       <div className="section" style={{marginBottom:14}}>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
