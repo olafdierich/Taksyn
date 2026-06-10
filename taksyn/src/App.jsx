@@ -5281,7 +5281,7 @@ function ProjectsView({ user }) {
     setProjects(prev=>prev.filter(p=>p.id!==id))
   }
 
-  const isCA = user.role==='client_admin'
+  const isCA = ['client_admin','super_admin'].includes(user.role)
 
   return (
     <div className="anim">
