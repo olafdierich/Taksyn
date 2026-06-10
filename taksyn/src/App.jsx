@@ -3122,28 +3122,47 @@ function UsersView({ user, setAuditLog }) {
   const [inviteMethod, setInviteMethod] = useState('email')
   const [inviteOrg, setInviteOrg] = useState('')
   const [inviteIndustry, setInviteIndustry] = useState('')
-  const [inviteDept, setInviteDept] = useState('')
-  const [inviteCustomDept, setInviteCustomDept] = useState('')
-  const [invitePositions, setInvitePositions] = useState([{ dept:'', role:'worker', title:'', is_primary:true }])
+  const [invitePositions, setInvitePositions] = useState([''])
+  const [showManageIndustries, setShowManageIndustries] = useState(false)
+  const [newIndustry, setNewIndustry] = useState('')
   const [realUsers, setRealUsers] = useState([])
   const [editingUser, setEditingUser] = useState(null)
   const [editForm, setEditForm] = useState({})
-  const [editCustomDept, setEditCustomDept] = useState('')
   const [userSearch, setUserSearch] = useState('')
   const [collapsedRoles, setCollapsedRoles] = useState({})
-  const [orgCustomDepts, setOrgCustomDepts] = useState([])
+  const [orgCustomDepts, setOrgCustomDepts] = useState([]) // custom industry strings for this org
   const [orgsList, setOrgsList] = useState([])
   const [editOrgSearch, setEditOrgSearch] = useState('')
   const [userPositions, setUserPositions] = useState({})
   const [editPositions, setEditPositions] = useState([])
   const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
 
-  useEffect(()=>{
-    if(isConfigured()&&user.org) {
-      supabase.from('organisations').select('custom_departments').eq('name',user.org).single()
-        .then(({data})=>{ if(data?.custom_departments) setOrgCustomDepts(JSON.parse(data.custom_departments||'[]')) })
-        .catch(()=>{})
+  const allIndustries = [...PRESET_INDUSTRIES, ...orgCustomDepts.filter(d=>!PRESET_INDUSTRIES.includes(d))]
+
+  const saveCustomIndustry = async () => {
+    const name = newIndustry.trim()
+    if (!name || allIndustries.includes(name)) return
+    const updated = [...orgCustomDepts, name]
+    setOrgCustomDepts(updated)
+    setNewIndustry('')
+    if (isConfigured()) {
+      supabase.from('org_industries').insert({ name, org: user.org, created_by: user.name, created_at: new Date().toISOString() }).catch(()=>{})
     }
+  }
+
+  const removeCustomIndustry = async (name) => {
+    setOrgCustomDepts(prev=>prev.filter(d=>d!==name))
+    if (isConfigured()) {
+      supabase.from('org_industries').delete().eq('name', name).eq('org', user.org).catch(()=>{})
+    }
+  }
+
+  useEffect(()=>{
+    if(!isConfigured()||!user.org) return
+    // Load custom industries from org_industries table
+    supabase.from('org_industries').select('name').eq('org', user.org)
+      .then(({data})=>{ if(data?.length) setOrgCustomDepts(data.map(d=>d.name)) })
+      .catch(()=>{})
   },[user.org])
 
   useEffect(()=>{
