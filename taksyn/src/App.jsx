@@ -7002,8 +7002,8 @@ export default function App() {
           .then(({data})=>{ if(data?.sla_settings) updateOrgSLA({...DEFAULT_SLA,...JSON.parse(data.sla_settings)}) })
           .catch(()=>{})
       }
-      // Load leave records for org
-      if(isConfigured()&&user.org) {
+      // Load leave records for org (not for super_admin — leave is operational data)
+      if(isConfigured()&&user.org&&user.role!=='super_admin') {
         supabase.from('leave_records').select('*').eq('org',user.org)
           .then(({data})=>{ if(data) setLeaveRecords(data) }).catch(()=>{})
       }
