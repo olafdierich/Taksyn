@@ -1314,6 +1314,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     }
   },[user.org])
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('global_industries').select('name').order('sort_order',{nullsFirst:false}).order('name')
+      .then(({data})=>{ if(data?.length) setTaskGlobalIndustries(data.map(d=>d.name)) }).catch(()=>{})
+    if(user.org) {
+      supabase.from('org_industries').select('name').eq('org',user.org)
+        .then(({data})=>{ if(data?.length) setTaskOrgIndustries(data.map(d=>d.name)) }).catch(()=>{})
+    }
+  },[user.org])
 
 
   const visible = visibleTasks(tasks, user, leaveRecords)
