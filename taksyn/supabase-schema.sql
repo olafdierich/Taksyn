@@ -179,7 +179,28 @@ CREATE POLICY "invite_links_read_anon"   ON public.invite_links FOR SELECT TO an
 CREATE INDEX IF NOT EXISTS invite_links_org     ON public.invite_links (org_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS invite_links_used    ON public.invite_links (used_at) WHERE used_at IS NULL;
 
--- 3d. USER POSITIONS (department-based roles per person)
+-- 3d. CHECKLIST COMPLETIONS (multi-completion records per checklist item per day)
+-- Each row = one "Mark done" action. Items can be completed many times; no permanent tick.
+CREATE TABLE IF NOT EXISTS public.checklist_completions (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id             TEXT NOT NULL,
+  checklist_item_id   TEXT NOT NULL,         -- s.id or index string
+  checklist_item_label TEXT NOT NULL DEFAULT '',
+  completed_by        UUID NOT NULL REFERENCES public.profiles(id),
+  completed_by_name   TEXT NOT NULL,
+  completed_at        TIMESTAMPTZ DEFAULT NOW(),
+  note                TEXT,
+  organisation_id     TEXT NOT NULL
+);
+
+ALTER TABLE public.checklist_completions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "checklist_completions_read_auth"   ON public.checklist_completions FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY "checklist_completions_insert_auth" ON public.checklist_completions FOR INSERT TO authenticated WITH CHECK (TRUE);
+
+CREATE INDEX IF NOT EXISTS checklist_completions_task ON public.checklist_completions (task_id, completed_at DESC);
+CREATE INDEX IF NOT EXISTS checklist_completions_org  ON public.checklist_completions (organisation_id, completed_at DESC);
+
+-- 3e. USER POSITIONS (department-based roles per person)
 -- One row per person/department combination. is_primary = true on exactly one row per user.
 CREATE TABLE IF NOT EXISTS public.user_positions (
   id             TEXT PRIMARY KEY,
