@@ -1325,8 +1325,72 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
 
   const checkMandatory = (tid) => {
     const task = tasks.find(t=>t.id===tid)
-    return parseSafe(task.subtasks).filter(s=>s.mandatory&&!s.done).map(s=>s.text)
+    const todayStr = new Date().toISOString().slice(0,10)
+    const taskCompletions = clCompletions[tid] || {}
+    return parseSafe(task.subtasks).filter((s,idx)=>{
+      if (!s.mandatory) return false
+      const itemId = s.id || String(idx)
+      const rows = taskCompletions[itemId] || []
+      const doneToday = rows.some(r=>r.completed_at&&r.completed_at.slice(0,10)===todayStr)
+      return !doneToday && !s.done
+    }).map(s=>s.text)
   }
+
+  const markChecklistItem = async (tid, idx, note) => {
+    const task = tasks.find(t=>t.id===tid)
+    if (!task) return
+    const subs = parseSafe(task.subtasks)
+    const s = subs[idx]; if (!s) return
+    const itemId = s.id || String(idx)
+    const now = new Date().toISOString()
+    const orgId = task.org || user.org
+
+    const row = {
+      task_id: tid, checklist_item_id: itemId, checklist_item_label: s.text||'',
+      completed_by: user.id, completed_by_name: user.name,
+      completed_at: now, note: note||null, organisation_id: orgId
+    }
+
+    if (isConfigured()) {
+      const { data, error } = await supabase.from('checklist_completions').insert(row).select().single()
+      if (!error && data) {
+        setClCompletions(prev => {
+          const taskMap = { ...(prev[tid]||{}) }
+          taskMap[itemId] = [...(taskMap[itemId]||[]), data]
+          return { ...prev, [tid]: taskMap }
+        })
+      }
+    } else {
+      setClCompletions(prev => {
+        const taskMap = { ...(prev[tid]||{}) }
+        taskMap[itemId] = [...(taskMap[itemId]||[]), {...row, id: 'local-'+Date.now()}]
+        return { ...prev, [tid]: taskMap }
+      })
+    }
+
+    const flashKey = tid+'::'+itemId
+    setClFlash(flashKey)
+    setTimeout(()=>setClFlash(f=>f===flashKey?null:f), 1500)
+
+    logAuditEvent(user, 'checklist_item_completed', 'task', tid, task.title,
+      'Completed: '+s.text+(note?' — '+note:''))
+  }
+
+  // Load completions for currently selected task
+  useEffect(()=>{
+    const selId = selected
+    if (!selId || !isConfigured()) return
+    supabase.from('checklist_completions').select('*').eq('task_id', selId).order('completed_at',{ascending:true})
+      .then(({data})=>{
+        if (!data) return
+        const map = {}
+        data.forEach(row=>{
+          if (!map[row.checklist_item_id]) map[row.checklist_item_id] = []
+          map[row.checklist_item_id].push(row)
+        })
+        setClCompletions(prev=>({ ...prev, [selId]: map }))
+      }).catch(()=>{})
+  },[selected])
 
   const startTask = (tid) => {
     const doStart = (extra={}) => update(tid, { status:"in_progress", started_at:new Date().toISOString(), ...extra })
