@@ -2742,6 +2742,7 @@ function UsersView({ user, setAuditLog }) {
   const [inviteIndustry, setInviteIndustry] = useState('')
   const [inviteDept, setInviteDept] = useState('')
   const [inviteCustomDept, setInviteCustomDept] = useState('')
+  const [invitePositions, setInvitePositions] = useState([{ dept:'', role:'worker', title:'', is_primary:true }])
   const [realUsers, setRealUsers] = useState([])
   const [editingUser, setEditingUser] = useState(null)
   const [editForm, setEditForm] = useState({})
@@ -2751,6 +2752,9 @@ function UsersView({ user, setAuditLog }) {
   const [orgCustomDepts, setOrgCustomDepts] = useState([])
   const [orgsList, setOrgsList] = useState([])
   const [editOrgSearch, setEditOrgSearch] = useState('')
+  const [userPositions, setUserPositions] = useState({})
+  const [editPositions, setEditPositions] = useState([])
+  const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
 
   useEffect(()=>{
     if(isConfigured()&&user.org) {
