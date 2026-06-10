@@ -7307,24 +7307,7 @@ export default function App() {
       }
     })
 
-    // Sign out when the tab or browser is closed so the session is fully cleared
-    const handleBeforeUnload = () => { supabase.auth.signOut().catch(()=>{}) }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-
-    // When returning to this tab, verify the in-memory session is still valid
-    const handleVisibilityChange = () => {
-      if(document.hidden) return
-      supabase.auth.getSession().then(({data:{session}})=>{
-        if(!session?.user) setUser(null)
-      }).catch(()=>{})
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    return ()=>{
-      subscription.unsubscribe()
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
+    return ()=>{ subscription.unsubscribe() }
   },[])
 
   // Load user positions after login — show role selector if multiple assignments exist
