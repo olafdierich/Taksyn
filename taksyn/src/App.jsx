@@ -1014,7 +1014,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   return (
     <div className="anim">
       <div className="ph">
-        <div className="ph-title">{isSA?'Platform Overview':isCA?'Organisation Dashboard':isMgr?'Team Dashboard':isSup?'Supervisor Dashboard':'My Tasks Today'}</div>
+        <div className="ph-title">{isCA?'Organisation Dashboard':isMgr?'Team Dashboard':isSup?'Supervisor Dashboard':'My Tasks Today'}</div>
         <div className="ph-sub">{isWkr?'Hello '+user.name.split(' ')[0]+' — your tasks for today':user.org+' · '+visible.length+' tasks'}</div>
       </div>
       <div className="stat-grid">
