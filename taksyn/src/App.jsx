@@ -481,6 +481,8 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .notif-summary{padding:8px 14px;background:rgba(59,130,246,.04);border-bottom:1px solid var(--border);font-size:11px;color:var(--t2)}
 .notif-settings-panel{padding:10px 14px;border-bottom:1px solid var(--border);background:var(--s3)}
 .bottom-nav{display:none}
+.org-actions{display:flex;gap:6px;flex-wrap:wrap}
+@media(max-width:768px){.org-actions>.btn,.org-actions>label{flex:1 1 auto;justify-content:center}}
 `
 
 const IC = ({ n, s=16 }) => {
