@@ -3799,6 +3799,14 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoading(false)
   }
 
+  const removeMemberFromOrg = async (m) => {
+    if (!confirm('Remove '+m.name+' from '+selectedOrgView?.name+'?\n\nTheir Taksyn profile is preserved — only their org membership is removed.')) return
+    if (isConfigured()) {
+      await supabase.from('org_members').delete().eq('user_id', m.id).eq('org', selectedOrgView.name)
+    }
+    setOrgMembers(prev => prev.filter(mem => mem.id !== m.id))
+  }
+
   const toggleStatus = async (org) => {
     const newStatus = org.status==='active' ? 'inactive' : 'active'
     if (!confirm((newStatus==='inactive'?'Deactivate':'Reactivate')+' '+org.name+'?')) return
