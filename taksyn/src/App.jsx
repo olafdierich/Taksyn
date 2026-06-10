@@ -830,7 +830,6 @@ function AuthView({ onAuth }) {
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
                 if (profile) {
                   const userData = {...profile, email: user.email}
-                  localStorage.setItem('taksyn-user', JSON.stringify(userData))
                   onAuth(userData)
                 }
               }
