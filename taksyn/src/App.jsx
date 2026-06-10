@@ -1010,7 +1010,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   const review = visible.filter(t=>t.status==='awaiting_review').length
   const rejected = visible.filter(t=>t.status==='rejected').length
   const awards = computeAwards(tasks)
-  const isSA=user.role==='super_admin', isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor', isWkr=user.role==='worker'
+  const isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor', isWkr=user.role==='worker'
   return (
     <div className="anim">
       <div className="ph">
