@@ -3408,8 +3408,8 @@ function UsersView({ user, setAuditLog }) {
                       <option value="">— Department —</option>
                       {Object.values(DEPARTMENTS).flat().filter((d,i,a)=>a.indexOf(d)===i).sort().map(d=><option key={d} value={d}>{d}</option>)}
                     </select>
-                    <select className="form-select" value={newPosition.role} onChange={e=>setNewPosition(p=>({...p,role:e.target.value}))} style={{width:120,fontSize:12}}>
-                      <option value="worker">Worker</option>
+                    <select className="form-select" value={newPosition.role} onChange={e=>setNewPosition(p=>({...p,role:e.target.value}))} style={{width:130,fontSize:12}}>
+                      <option value="worker">Staff Member</option>
                       <option value="supervisor">Supervisor</option>
                       <option value="manager">Manager</option>
                     </select>
