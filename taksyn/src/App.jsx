@@ -1713,31 +1713,62 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 </div>
                 {mandatoryWarn&&<div className="cl-warn">⚠️ <strong>Cannot submit — complete mandatory items first:</strong><ul style={{margin:'6px 0 0 16px',padding:0}}>{mandatoryWarn.map((m,i)=><li key={i}>{m}</li>)}</ul><button className="cl-action-btn" style={{marginTop:8}} onClick={()=>setMandatoryWarn(null)}>Dismiss</button></div>}
                 {subs.map((s,idx)=>{
-                  const isOpen = clNoteOpen&&clNoteOpen.taskId===sel.id&&clNoteOpen.idx===idx
+                  const itemId = s.id || String(idx)
+                  const flashKey = sel.id+'::'+itemId
+                  const isFlashing = clFlash===flashKey
+                  const taskCompletions = clCompletions[sel.id] || {}
+                  const itemRows = taskCompletions[itemId] || []
+                  const todayStr = new Date().toISOString().slice(0,10)
+                  const todayRows = itemRows.filter(r=>r.completed_at&&r.completed_at.slice(0,10)===todayStr)
+                  const todayCount = todayRows.length
+                  const isExpandedKey = sel.id+'::'+itemId
+                  const isHistExpanded = clExpanded.has(isExpandedKey)
+                  const isMarkOpen = clMarkOpen&&clMarkOpen.taskId===sel.id&&clMarkOpen.idx===idx
+                  const canAct = isWorker || ['supervisor','manager','client_admin'].includes(user.role)
+                  const isNoteOpen = clNoteOpen&&clNoteOpen.taskId===sel.id&&clNoteOpen.idx===idx
                   return (
                     <div key={s.id||idx} className="cl-item">
-                      <div className={'checkbox'+(s.done?' checked':'')} style={{cursor:'pointer',marginTop:1}} onClick={()=>isWorker||['supervisor','manager','client_admin'].includes(user.role)?toggleSub(sel.id,idx):null}>
-                        {s.done&&<svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l3 3 5-6" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      <div className={'checkbox'+(isFlashing?' checked':(todayCount>0?' checked':''))} style={{cursor: canAct?'pointer':'default',marginTop:1,transition:'background 0.3s'}} onClick={()=>{ if(!canAct) return; if(isMarkOpen){ setClMarkOpen(null); setClMarkNote('') } else { setClMarkOpen({taskId:sel.id,idx,itemId,label:s.text}); setClMarkNote('') } }}>
+                        {(isFlashing||todayCount>0)&&<svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l3 3 5-6" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       </div>
                       <div className="cl-body">
-                        <div style={{display:'flex',alignItems:'center',gap:4}}>
-                          <span className={'cl-text'+(s.done?' done':'')}>{s.text||'(untitled)'}</span>
+                        <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+                          <span className="cl-text">{s.text||'(untitled)'}</span>
                           {s.mandatory&&<span className="cl-mandatory" title="Mandatory">*</span>}
                           {s.requirePhoto&&<span style={{fontSize:10,color:'#3B82F6',fontWeight:600}} title="Photo required">📷</span>}
+                          {todayCount>0&&(
+                            <span style={{fontSize:10,fontWeight:700,color:'#10B981',background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.25)',borderRadius:10,padding:'1px 7px',cursor:'pointer'}} onClick={()=>setClExpanded(prev=>{ const n=new Set(prev); n.has(isExpandedKey)?n.delete(isExpandedKey):n.add(isExpandedKey); return n })}>
+                              {todayCount}× today {isHistExpanded?'▲':'▼'}
+                            </span>
+                          )}
                         </div>
+                        {isHistExpanded&&(
+                          <div style={{marginTop:4,borderLeft:'2px solid rgba(16,185,129,.3)',paddingLeft:8}}>
+                            {todayRows.map((r,ri)=>(
+                              <div key={r.id||ri} style={{fontSize:11,color:'var(--t2)',marginBottom:2}}>
+                                <span style={{color:'var(--t3)'}}>{new Date(r.completed_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                                {' '}<span style={{fontWeight:600}}>{r.completed_by_name}</span>
+                                {r.note&&<span style={{color:'var(--t2)'}}> — {r.note}</span>}
+                              </div>
+                            ))}
+                            {itemRows.length>todayRows.length&&(
+                              <div style={{fontSize:10,color:'var(--t3)',marginTop:2}}>{itemRows.length-todayRows.length} more from previous days</div>
+                            )}
+                          </div>
+                        )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
                         {s.photo&&<img src={s.photo} alt="evidence" className="cl-photo-thumb" style={{marginTop:4}} onClick={()=>window.open(s.photo,'_blank')}/>}
-                        {(s.history||[]).length>1&&<div style={{fontSize:9,color:'var(--t3)',marginTop:3}}>🕐 {s.history.length} changes · last by {s.history[s.history.length-1].by}</div>}
-                        {isOpen?(
+                        {isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
-                            <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Add a note for this item…" value={clNoteText} onChange={e=>setClNoteText(e.target.value)}/>
+                            <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
                             <div style={{display:'flex',gap:6,marginTop:4}}>
-                              <button className="btn btn-primary btn-sm" onClick={()=>{ addSubNote(sel.id,idx,clNoteText); setClNoteOpen(null); setClNoteText('') }}>Save Note</button>
-                              <button className="btn btn-secondary btn-sm" onClick={()=>{setClNoteOpen(null);setClNoteText('')}}>Cancel</button>
+                              <button className="btn btn-primary btn-sm" onClick={async ()=>{ await markChecklistItem(sel.id,idx,clMarkNote||null); setClMarkOpen(null); setClMarkNote('') }}>✓ Mark Done</button>
+                              <button className="btn btn-secondary btn-sm" onClick={()=>{setClMarkOpen(null);setClMarkNote('')}}>Cancel</button>
                             </div>
                           </div>
                         ):(
                           <div className="cl-actions">
+                            {canAct&&<button className="cl-action-btn" style={{color:'#10B981',borderColor:'rgba(16,185,129,.3)',fontWeight:600}} onClick={()=>{ setClMarkOpen({taskId:sel.id,idx,itemId,label:s.text}); setClMarkNote('') }}>✓ Mark done</button>}
                             <button className="cl-action-btn" onClick={()=>{setClNoteOpen({taskId:sel.id,idx});setClNoteText(s.note||'')}}>{s.note?'✏️ Edit Note':'+ Note'}</button>
                             {s.requirePhoto&&!s.photo&&(
                               <>
@@ -1745,6 +1776,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                                 <input id={'cl-cam-'+sel.id+'-'+idx} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>addSubPhoto(sel.id,idx,ev.target.result); r.readAsDataURL(f); e.target.value='' }}/>
                               </>
                             )}
+                          </div>
+                        )}
+                        {isNoteOpen&&(
+                          <div style={{marginTop:6}}>
+                            <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Add a note for this item…" value={clNoteText} onChange={e=>setClNoteText(e.target.value)}/>
+                            <div style={{display:'flex',gap:6,marginTop:4}}>
+                              <button className="btn btn-primary btn-sm" onClick={()=>{ addSubNote(sel.id,idx,clNoteText); setClNoteOpen(null); setClNoteText('') }}>Save Note</button>
+                              <button className="btn btn-secondary btn-sm" onClick={()=>{setClNoteOpen(null);setClNoteText('')}}>Cancel</button>
+                            </div>
                           </div>
                         )}
                       </div>
