@@ -3329,16 +3329,27 @@ function UsersView({ user, setAuditLog }) {
     setInvitePositions([{industry:'',role:'',position:''}])
   }
 
+  const positionToSystemRole = (pos) => {
+    if(pos==='Manager') return 'manager'
+    if(pos==='Supervisor') return 'supervisor'
+    if(pos==='Client Admin') return 'client_admin'
+    return 'worker'
+  }
+
   const sendInvite = async () => {
     const targetOrg = user.role==='super_admin' ? inviteOrg.trim() : user.org
     if (user.role==='super_admin' && !targetOrg) { alert('Please enter the organisation name'); return }
     if (!inviteEmail.trim() || !inviteName.trim()) { alert('Please enter name and email'); return }
 
-    const validPositions = invitePositions.filter(p=>p.trim())
-    const positionsSummary = validPositions.length ? '\n\nPositions: '+validPositions.join(', ') : ''
+    const validRows = invitePositions.filter(p=>p.role||p.industry||p.position)
+    const roleOrder = ['client_admin','manager','supervisor','worker']
+    const systemRole = validRows.length ? validRows.reduce((best,p)=>{ const r=positionToSystemRole(p.position); return roleOrder.indexOf(r)<roleOrder.indexOf(best)?r:best }, 'worker') : 'worker'
+    const firstIndustry = validRows.find(p=>p.industry)?.industry || ''
+    const rolesSummary = validRows.map(p=>[p.industry,p.role,p.position].filter(Boolean).join(' / ')).join('; ')
+    const positionsSummary = rolesSummary ? '\n\nAssignments: '+rolesSummary : ''
 
     if (inviteMethod==='whatsapp') {
-      const msg=encodeURIComponent('Hi '+inviteName+'! You have been invited to join Taksyn as '+ROLE_LABELS[inviteRole]+' at '+targetOrg+'.'+(inviteIndustry?' Industry: '+inviteIndustry+'.':'')+positionsSummary+'\n\nSign up here: https://taksyn.vercel.app\n\nUse your email: '+inviteEmail+'\n\nOrganisation name to enter: '+targetOrg)
+      const msg=encodeURIComponent('Hi '+inviteName+'! You have been invited to join Taksyn at '+targetOrg+'.'+positionsSummary+'\n\nSign up here: https://taksyn.vercel.app\n\nUse your email: '+inviteEmail+'\n\nOrganisation name to enter: '+targetOrg)
       window.open('https://wa.me/?text='+msg,'_blank')
       setShowInvite(false); resetInviteForm()
       return
@@ -3350,12 +3361,12 @@ function UsersView({ user, setAuditLog }) {
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg, industry: inviteIndustry, positions: validPositions.join(', '), secret: import.meta.env.VITE_INVITE_SECRET || '' })
+        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: systemRole, org: targetOrg, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '' })
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
-      alert('Invite sent to '+inviteEmail+'!'+(validPositions.length?'\n\nPositions: '+validPositions.join(', '):''))
-      logAuditEvent(user, 'member.invited', 'member', null, inviteName.trim(), ROLE_LABELS[inviteRole]+' · '+inviteEmail.trim())
+      alert('Invite sent to '+inviteEmail+'!'+(rolesSummary?'\n\nAssignments: '+rolesSummary:''))
+      logAuditEvent(user, 'member.invited', 'member', null, inviteName.trim(), ROLE_LABELS[systemRole]+' · '+inviteEmail.trim())
       setShowInvite(false); resetInviteForm()
     } catch(e) {
       alert('Failed to send invite: '+e.message)
