@@ -6183,6 +6183,100 @@ function TeamsView({ user }) {
 }
 
 
+function PlatformAnnouncementsView({ user }) {
+  const [announcements, setAnnouncements] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [targetOrg, setTargetOrg] = useState('all')
+  const [orgs, setOrgs] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('organisations').select('id,name').order('name')
+      .then(({data})=>{ if(data) setOrgs(data) }).catch(()=>{})
+    setLoading(true)
+    supabase.from('platform_announcements').select('*').order('created_at',{ascending:false}).limit(50)
+      .then(({data})=>{ if(data) setAnnouncements(data) }).catch(()=>{}).finally(()=>setLoading(false))
+  },[])
+
+  const send = async () => {
+    if(!title.trim()) { setMsg('✗ Title is required'); return }
+    setSaving(true); setMsg('')
+    const row = {
+      id:'PA'+Date.now()+Math.random().toString(36).slice(2,5),
+      title:title.trim(), body:body.trim(),
+      target_org:targetOrg==='all'?null:targetOrg,
+      sent_by:user.name, sent_by_id:user.id,
+      created_at:new Date().toISOString()
+    }
+    if(isConfigured()){
+      const {error} = await supabase.from('platform_announcements').insert(row)
+      if(error){ setMsg('✗ '+error.message); setSaving(false); return }
+    }
+    setAnnouncements(prev=>[row,...prev])
+    setTitle(''); setBody('')
+    setMsg('✓ Announcement sent')
+    setSaving(false)
+  }
+
+  const fmtTs = (d) => {
+    if(!d) return '—'
+    const dt=new Date(d)
+    return dt.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+  }
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Platform Announcements</div>
+        <div className="ph-sub">Send messages to all organisations or a specific one</div>
+      </div>
+
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">Send Announcement</div>
+        <div className="form-field">
+          <label className="form-label">Audience</label>
+          <select className="form-input" value={targetOrg} onChange={e=>setTargetOrg(e.target.value)}>
+            <option value="all">All Organisations</option>
+            {orgs.map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
+          </select>
+        </div>
+        <div className="form-field">
+          <label className="form-label">Title <span style={{color:'var(--red)'}}>*</span></label>
+          <input className="form-input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Scheduled maintenance on Saturday"/>
+        </div>
+        <div className="form-field">
+          <label className="form-label">Message</label>
+          <textarea className="form-input" value={body} onChange={e=>setBody(e.target.value)} rows={4} style={{resize:'vertical'}} placeholder="Optional body text…"/>
+        </div>
+        {msg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:msg.startsWith('✓')?'var(--green)':'var(--red)'}}>{msg}</div>}
+        <button className="btn btn-primary" onClick={send} disabled={saving}>{saving?'Sending…':'📢 Send Announcement'}</button>
+      </div>
+
+      <div className="section">
+        <div className="section-title">Announcement History</div>
+        {loading
+          ? <div style={{padding:20,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}}/></div>
+          : announcements.length===0
+            ? <div className="empty"><div className="empty-icon">📢</div><div className="empty-text">No announcements sent yet</div></div>
+            : announcements.map((a,i)=>(
+              <div key={a.id||i} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,flexWrap:'wrap',marginBottom:3}}>
+                  <span style={{fontSize:13,fontWeight:700}}>{a.title}</span>
+                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:a.target_org?'rgba(59,130,246,.12)':'rgba(16,185,129,.12)',color:a.target_org?'#3B82F6':'#10B981',fontWeight:600,flexShrink:0}}>{a.target_org||'All orgs'}</span>
+                </div>
+                {a.body&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:3}}>{a.body}</div>}
+                <div style={{fontSize:11,color:'var(--t3)'}}>{a.sent_by} · {fmtTs(a.created_at)}</div>
+              </div>
+            ))}
+      </div>
+    </div>
+  )
+}
+
 function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }) {
   const [sla, setSla] = useState(orgSLA || DEFAULT_SLA)
   const [reviewSLA, setReviewSLA] = useState(10080) // 1 week in minutes
