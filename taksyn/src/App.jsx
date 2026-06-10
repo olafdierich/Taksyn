@@ -6610,7 +6610,18 @@ export default function App() {
     if(isConfigured()) supabase.auth.signOut().catch(()=>{})
   }
 
-  useEffect(()=>setPage('dashboard'),[user?.role])
+  // Keep sessionStorage in sync so the page is restored after tab eviction or WhatsApp return
+  useEffect(()=>{ if(page) sessionStorage.setItem('taksyn-page', page) },[page])
+
+  // Reset to dashboard only when the role genuinely changes mid-session (e.g. admin role update),
+  // NOT on the initial mount/restore — otherwise it would override the sessionStorage page.
+  const _prevRoleRef = useRef(undefined)
+  useEffect(()=>{
+    const prev = _prevRoleRef.current
+    _prevRoleRef.current = user?.role
+    // Skip first run (prev is undefined) — page already set from sessionStorage above
+    if(prev !== undefined && prev !== user?.role) setPage('dashboard')
+  },[user?.role])
 
   if(needsPasswordSetup) return <PasswordSetupView onDone={()=>setNeedsPasswordSetup(false)}/>
   if(!user) return <AuthView onAuth={handleAuth}/>
