@@ -2926,6 +2926,13 @@ function ReportsView({ tasks, user, setAuditLog }) {
                 </select>
               </div>
               <div>
+                <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.5px'}}>Industry</div>
+                <select className="form-input" style={{fontSize:12,width:'100%'}} value={filterIndustry} onChange={e=>setFilterIndustry(e.target.value)}>
+                  <option value="">All industries</option>
+                  {industryOptions.map(d=><option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
                 <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.5px'}}>Category</div>
                 <select className="form-input" style={{fontSize:12,width:'100%'}} value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}>
                   <option value="">All categories</option>
