@@ -603,18 +603,52 @@ function AuthView({ onAuth }) {
   const [inviteToken, setInviteToken] = useState(null) // invite token from URL
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [orgs, setOrgs] = useState([]) // for org dropdown in staff registration
+  const [inviteParams, setInviteParams] = useState(null) // pre-filled from WhatsApp invite link
 
-  // Check for invite/recovery token in URL on mount
+  // Check for invite/recovery token in URL hash, and WhatsApp invite params in query string
   useEffect(()=>{
+    // Supabase email-invite token (in URL hash)
     const hash = window.location.hash
-    const params = new URLSearchParams(hash.replace('#','?').replace('#','&'))
-    const accessToken = params.get('access_token')
-    const type = params.get('type')
+    const hashParams = new URLSearchParams(hash.replace('#','?').replace('#','&'))
+    const accessToken = hashParams.get('access_token')
+    const type = hashParams.get('type')
     if (accessToken && (type==='invite' || type==='recovery')) {
       window.__taksyn_invite_flow = true
       setInviteToken(accessToken)
-      // Clear hash from URL
       window.history.replaceState(null, '', window.location.pathname)
+    }
+
+    // WhatsApp invite link params (in query string)
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get('invite')==='true') {
+      if (sp.get('secret')!=='taksyn-secret-2024') {
+        setError('Invalid invite link — please ask your admin for a new one')
+      } else if (isConfigured()) {
+        const orgId    = sp.get('org') || ''
+        const teamId   = sp.get('team') || ''
+        const role     = sp.get('role') || 'worker'
+        const position = sp.get('position') || ''
+        Promise.all([
+          supabase.from('organisations').select('id,name').eq('id', orgId).single(),
+          teamId ? supabase.from('teams').select('id,name').eq('id', teamId).single() : Promise.resolve({data:null})
+        ]).then(([{data:orgData}, {data:teamData}])=>{
+          setInviteParams({ orgId, orgName:orgData?.name||orgId, teamId:teamId||null, teamName:teamData?.name||null, role, position })
+          setMode('register')
+          setSignupType('staff')
+        }).catch(()=>{
+          setInviteParams({ orgId, orgName:orgId, teamId:teamId||null, teamName:null, role, position })
+          setMode('register')
+          setSignupType('staff')
+        })
+        window.history.replaceState(null, '', window.location.pathname)
+      }
+    }
+
+    // Load orgs list for the staff registration dropdown (RLS disabled — publicly readable)
+    if (isConfigured()) {
+      supabase.from('organisations').select('id,name').order('name')
+        .then(({data})=>{ if(data) setOrgs(data) }).catch(()=>{})
     }
   }, [])
 
