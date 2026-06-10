@@ -4610,35 +4610,103 @@ function CompanySettingsView({ user }) {
       </>}
 
       {/* ── DATA & PRIVACY ──────────────────────── */}
-      {activeTab==='data'&&<>
-        <div className="section" style={{marginBottom:14}}>
-          <div className="section-title">Data Retention</div>
-          <div className="form-field">
-            <label className="form-label">Retain completed task data for</label>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
-              {[3,6,12,24,36,60].map(m=><PillBtn key={m} active={settings.data.retention_months===m} onClick={()=>setD('retention_months',m)}>{m>=12?`${m/12} yr${m/12!==1?'s':''}`:`${m} mo`}</PillBtn>)}
+      {activeTab==='data'&&(()=>{
+        const PLAN_RETENTION = {
+          personal:     { days:30,    label:'30 days',  display:'Personal' },
+          starter:      { days:180,   label:'6 months', display:'Starter' },
+          growth:       { days:365,   label:'12 months',display:'Growth' },
+          professional: { days:730,   label:'2 years',  display:'Professional' },
+          enterprise:   { days:2555,  label:'7 years',  display:'Enterprise' },
+        }
+        const planKey = orgPlan || 'growth'
+        const planCfg = PLAN_RETENTION[planKey] || PLAN_RETENTION.growth
+        const isPro = planKey==='professional'
+        const isEnt = planKey==='enterprise'
+        const isAdminRole = ['client_admin','super_admin'].includes(user.role)
+        const effectiveDays = isEnt
+          ? (orgRetentionYears ? orgRetentionYears*365 : planCfg.days)
+          : (isPro && orgRetentionExtended ? 2555 : planCfg.days)
+        const effectiveLabel = isEnt
+          ? (orgRetentionYears ? `${orgRetentionYears} year${orgRetentionYears!==1?'s':''}` : planCfg.label)
+          : (isPro && orgRetentionExtended ? '7 years' : planCfg.label)
+        const PLAN_COLOR = { personal:'#6B7280', starter:'#3B82F6', growth:'#10B981', professional:'#8B5CF6', enterprise:'#F59E0B' }
+        const planColor = PLAN_COLOR[planKey] || '#6B7280'
+
+        const saveRetention = async () => {
+          if (!orgId || !isConfigured()) return
+          setSavingRetention(true)
+          const yrs = parseInt(retentionYearsInput,10)
+          const payload = isEnt ? { retention_years: yrs>=7?yrs:7 } : {}
+          const { error } = await supabase.from('organisations').update(payload).eq('id',orgId)
+          if (!error) {
+            if (isEnt) { setOrgRetentionYears(yrs>=7?yrs:7); setRetentionYearsInput(String(yrs>=7?yrs:7)) }
+            setMsg('✓ Retention settings saved')
+          } else { setMsg('✗ '+error.message) }
+          setSavingRetention(false)
+        }
+
+        return <>
+          {showContactModal&&(
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={()=>setShowContactModal(false)}>
+              <div style={{background:'var(--bg)',borderRadius:14,padding:24,maxWidth:420,width:'100%',boxShadow:'0 8px 32px rgba(0,0,0,.2)'}} onClick={e=>e.stopPropagation()}>
+                <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>Request 7-Year Retention Upgrade</div>
+                <div style={{fontSize:13,color:'var(--t2)',marginBottom:16}}>Contact our team to upgrade your data retention to 7 years. We'll enable this on your account within 1 business day.</div>
+                <div style={{background:'var(--s2)',borderRadius:8,padding:'12px 14px',marginBottom:16,fontSize:12,color:'var(--t2)'}}>
+                  <div style={{marginBottom:4}}>📧 <strong>Email:</strong> support@taksyn.com</div>
+                  <div>💬 <strong>Subject:</strong> Retention upgrade – {user.org}</div>
+                </div>
+                <button className="btn btn-primary" style={{width:'100%'}} onClick={()=>setShowContactModal(false)}>Close</button>
+              </div>
+            </div>
+          )}
+
+          <div className="section" style={{marginBottom:14}}>
+            <div className="section-title">Data Retention Policy</div>
+            <div style={{background:'var(--s2)',borderRadius:10,padding:'14px 16px',border:'1px solid var(--border)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                <span style={{fontSize:11,fontWeight:700,color:planColor,background:`${planColor}18`,border:`1px solid ${planColor}30`,borderRadius:6,padding:'2px 10px',letterSpacing:'.4px',textTransform:'uppercase'}}>{planCfg.display}</span>
+                <span style={{fontSize:11,color:'var(--t2)'}}>plan</span>
+              </div>
+              <div style={{fontSize:13,color:'var(--text)',lineHeight:1.55}}>
+                Your task and audit log data is automatically retained for <strong>{effectiveLabel}</strong> in line with your {planCfg.display} subscription.
+              </div>
+              <div style={{fontSize:11,color:'var(--t3)',marginTop:8}}>
+                Data older than {effectiveLabel} is soft-archived automatically — never permanently deleted.
+              </div>
             </div>
           </div>
-          <button className="btn btn-primary btn-sm" style={{marginTop:10}} onClick={async()=>{ if(!orgId) return; const {error}=await supabase.from('organisations').update({org_settings:JSON.stringify(settings)}).eq('id',orgId); setMsg(error?'✗ '+error.message:'✓ Retention policy saved') }}>Save Retention Policy</button>
-        </div>
-        <div className="section" style={{marginBottom:14}}>
-          <div className="section-title">Export Data</div>
-          <div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>Download all task records for your organisation as a CSV file.</div>
-          <button className="btn btn-secondary" onClick={exportCSV} disabled={exporting}>{exporting?'Exporting…':'⬇ Export All Tasks as CSV'}</button>
-        </div>
-        <div className="section" style={{marginBottom:20,border:'1px solid rgba(239,68,68,.25)'}}>
-          <div className="section-title" style={{color:'var(--red)'}}>Danger Zone</div>
-          <div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>Permanently delete approved and completed tasks older than a set age. This action cannot be undone.</div>
-          <MsgBanner/>
-          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-            <span style={{fontSize:13,color:'var(--text)'}}>Delete tasks older than</span>
-            <select className="form-input" style={{width:'auto',fontSize:13,padding:'5px 10px'}} value={deleteMonths} onChange={e=>setDeleteMonths(Number(e.target.value))}>
-              {[1,2,3,6,12,24].map(m=><option key={m} value={m}>{m>=12?`${m/12} year${m/12!==1?'s':''}`:`${m} month${m!==1?'s':''}`}</option>)}
-            </select>
-            <button className="btn btn-danger" onClick={deleteOldTasks} disabled={deleting}>{deleting?'Deleting…':'🗑 Delete Old Tasks'}</button>
+
+          {isPro&&!orgRetentionExtended&&(
+            <div className="section" style={{marginBottom:14,border:'1px solid rgba(139,92,246,.25)',background:'rgba(139,92,246,.04)'}}>
+              <div className="section-title" style={{color:'#8B5CF6'}}>Extend retention to 7 years</div>
+              <div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>Upgrade your data retention to 7 years for full compliance and long-term reporting. Ideal for NDIS providers, aged care, and clinical practices.</div>
+              <button className="btn btn-primary" style={{background:'#8B5CF6',border:'none'}} onClick={()=>setShowContactModal(true)}>Request upgrade</button>
+            </div>
+          )}
+
+          {isEnt&&isAdminRole&&(
+            <div className="section" style={{marginBottom:14}}>
+              <div className="section-title">Custom Retention Period</div>
+              <div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>Set a custom retention period for your organisation. Minimum 7 years.</div>
+              <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <input className="form-input" type="number" min="7" max="50" style={{width:80,textAlign:'center'}} value={retentionYearsInput} onChange={e=>setRetentionYearsInput(e.target.value)}/>
+                  <span style={{fontSize:13,color:'var(--t2)'}}>years</span>
+                </div>
+                <button className="btn btn-primary btn-sm" onClick={saveRetention} disabled={savingRetention}>{savingRetention?'Saving…':'Save'}</button>
+              </div>
+              {orgRetentionYears&&<div style={{fontSize:11,color:'var(--t3)',marginTop:8}}>Current setting: {orgRetentionYears} years ({orgRetentionYears*365} days)</div>}
+              <MsgBanner/>
+            </div>
+          )}
+
+          <div className="section" style={{marginBottom:14}}>
+            <div className="section-title">Export Data</div>
+            <div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>Download all task records for your organisation as a CSV file.</div>
+            <button className="btn btn-secondary" onClick={exportCSV} disabled={exporting}>{exporting?'Exporting…':'⬇ Export All Tasks as CSV'}</button>
           </div>
-        </div>
-      </>}
+        </>
+      })()}
     </div>
   )
 }
