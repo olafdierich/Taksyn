@@ -7269,8 +7269,6 @@ export default function App() {
   useEffect(()=>{
     if(!isConfigured()) return
 
-    // persistSession:false — no session survives a page reload or browser close.
-    // On every fresh load, check if there is still an in-memory session (same tab, no eviction).
     supabase.auth.getSession().then(({data:{session}})=>{
       if(session?.user) {
         supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
