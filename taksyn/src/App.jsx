@@ -3350,10 +3350,6 @@ function UsersView({ user, setAuditLog }) {
                   </select>
                 </div>
               </div>
-              {editForm.department==='__custom__'&&<div className="form-field">
-                <label className="form-label">Custom Position</label>
-                <input className="form-input" value={editCustomDept} onChange={e=>setEditCustomDept(e.target.value)} placeholder="e.g. Night Shift Supervisor"/>
-              </div>}
               <div className="form-field">
                 <label className="form-label">Notes</label>
                 <textarea className="comment-box" style={{minHeight:60}} value={editForm.notes||''} onChange={e=>setEditForm({...editForm,notes:e.target.value})} placeholder="Any notes about this team member..."/>
