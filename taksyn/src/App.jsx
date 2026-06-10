@@ -662,35 +662,50 @@ function AuthView({ onAuth }) {
         return
       }
       if (mode==='register') {
-        if (signupType==='organisation' && !org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
         if (!name.trim()) { setError('Please enter your full name'); setLoading(false); return }
-        const orgName = signupType==='organisation' ? org.trim() : inviteCode.trim()
-        const assignedRole = signupType==='organisation' ? 'client_admin' : 'worker'
+        let orgName, assignedRole
+        if (inviteParams) {
+          orgName = inviteParams.orgName
+          assignedRole = inviteParams.role
+        } else if (signupType==='organisation') {
+          if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
+          orgName = org.trim()
+          assignedRole = 'client_admin'
+        } else {
+          if (!inviteCode.trim()) { setError('Please select your organisation'); setLoading(false); return }
+          orgName = inviteCode.trim()
+          assignedRole = 'worker'
+        }
         const { data:signUpData, error:e } = await supabase.auth.signUp({
           email, password,
           options:{ data:{ name:name.trim(), role:assignedRole, org:orgName } }
         })
         if (e) throw e
-        // Create profile immediately
         if (signUpData?.user) {
           await supabase.from('profiles').upsert({
-            id: signUpData.user.id,
-            name: name.trim(),
-            role: assignedRole,
-            org: orgName,
-            tier: 'Growth'
+            id: signUpData.user.id, name: name.trim(), role: assignedRole, org: orgName, tier: 'Growth'
           })
-          // Create org_members entry
           await supabase.from('org_members').upsert({
-            user_id: signUpData.user.id,
-            org: orgName,
-            role: assignedRole,
-            tier: 'Growth'
+            user_id: signUpData.user.id, org: orgName, role: assignedRole, tier: 'Growth'
           })
+          if (inviteParams?.teamId) {
+            // Auto-add to team from invite link
+            await supabase.from('team_members').insert({
+              id: 'TM'+Date.now(), team_id: inviteParams.teamId, user_id: signUpData.user.id,
+              user_name: name.trim(), role: assignedRole, org: orgName,
+              added_by: 'invite_link', added_at: new Date().toISOString()
+            }).catch(()=>{})
+          }
+          if (inviteParams) {
+            // Mark the invite link as used (best-effort)
+            supabase.from('invite_links').update({ used_at: new Date().toISOString(), used_by: name.trim() })
+              .eq('org_id', inviteParams.orgId).is('used_at', null).limit(1)
+              .then(()=>{}).catch(()=>{})
+          }
         }
-        setSuccess(signupType==='organisation'
-          ? 'Account created! Check your email to confirm, then sign in as your org admin.'
-          : 'Account created! Check your email to confirm, then sign in.')
+        setSuccess(inviteParams || signupType==='staff'
+          ? 'Account created! Check your email to confirm, then sign in.'
+          : 'Account created! Check your email to confirm, then sign in as your org admin.')
         setMode('login'); setLoading(false)
       } else {
         const { createClient } = await import('@supabase/supabase-js')
