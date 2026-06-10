@@ -6613,6 +6613,7 @@ export default function App() {
 
   const loadTasks = async () => {
     if(!isConfigured()) return
+    if(user?.role==='super_admin') return  // super_admin never loads task content — operational data is private
     const { data } = await supabase.from('tasks').select('*').order('created_at',{ascending:false})
     if(data) {
       const newTasks = data.map(t=>({...t, subtasks:parseSafe(t.subtasks), evidence:parseSafe(t.evidence), comments:parseSafe(t.comments,[])}))
