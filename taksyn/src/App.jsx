@@ -3684,7 +3684,11 @@ function OrganisationsView({ user }) {
 const [existingUserSearch, setExistingUserSearch] = useState('')
 const [existingUserRole, setExistingUserRole] = useState('client_admin')
 const [existingUserMsg, setExistingUserMsg] = useState('')
-  const [selectedOrgView, setSelectedOrgView] = useState(null) // org being viewed
+  const [selectedOrgView, setSelectedOrgView] = useState(null) // org being viewed in context
+  const [orgContextTab, setOrgContextTab] = useState('members')
+  const [orgContextSLA, setOrgContextSLA] = useState(null)
+  const [orgContextTickets, setOrgContextTickets] = useState([])
+  const [orgContextAudit, setOrgContextAudit] = useState([])
   const [orgMembers, setOrgMembers] = useState([])
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [viewingMember, setViewingMember] = useState(null)
