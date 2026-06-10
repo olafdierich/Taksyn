@@ -4886,12 +4886,15 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
   }
 
   const getCfg = (action) => ACTION_CFG[action] || { label: action||'Event', color:'#6B7280', icon:'·' }
+  const isSA = user.role==='super_admin'
 
   useEffect(()=>{
     if (!isConfigured()) return
     setLoading(true)
-    const q = supabase.from('audit_logs').select('*').order('created_at',{ascending:false}).limit(1000)
-    ;(user.role==='super_admin' ? q : q.eq('organisation_id', user.org))
+    // super_admin: fetch only structural columns — no entity_name or details
+    const cols = isSA ? 'id,organisation_id,user_id,user_name,action,created_at' : '*'
+    const q = supabase.from('audit_logs').select(cols).order('created_at',{ascending:false}).limit(1000)
+    ;(isSA ? q : q.eq('organisation_id', user.org))
       .then(({data})=>{ if(data) setLogs(data) })
       .catch(()=>{})
       .finally(()=>setLoading(false))
