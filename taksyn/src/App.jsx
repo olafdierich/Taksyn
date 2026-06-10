@@ -4228,9 +4228,8 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
         </div>
       )}
 
-      {/* Org Members Modal */}
-      {selectedOrgView&&(
-        <div className="modal-overlay" onClick={()=>{setSelectedOrgView(null);setShowAddMember(false);setAddMemberSearch('');setAddMemberSelectedId(null);setAddMemberMsg('')}}>
+      {/* Invite Admin Modal */}
+      {showInvite&&(
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:560}}>
             <div className="modal-hdr">
               <div>
