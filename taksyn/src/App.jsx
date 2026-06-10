@@ -3204,6 +3204,14 @@ function UsersView({ user, setAuditLog }) {
   },[])
 
   useEffect(()=>{
+    if(!isConfigured()||!inviteIndustry) { setOrgRoles([]); return }
+    const orgId = orgsList.find(o=>o.name===user.org)?.id
+    if(!orgId) { setOrgRoles([]); return }
+    supabase.from('org_roles').select('name').eq('organisation_id',orgId).eq('industry_name',inviteIndustry).order('sort_order',{nullsFirst:false}).order('name')
+      .then(({data})=>{ setOrgRoles(data?.map(r=>r.name)||[]) }).catch(()=>setOrgRoles([]))
+  },[inviteIndustry, orgsList, user.org])
+
+  useEffect(()=>{
     if(!isConfigured()) return
     if(user.role==='super_admin') {
       supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(data) })
