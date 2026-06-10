@@ -4968,12 +4968,12 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:2}}>
             <span style={{fontSize:12,fontWeight:700,color:cfg.color}}>{cfg.label}</span>
-            {e.entity_name&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{e.entity_name}</span>}
+            {!isSA&&e.entity_name&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{e.entity_name}</span>}
           </div>
-          {e.details&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:2}}>{e.details}</div>}
+          {!isSA&&e.details&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:2}}>{e.details}</div>}
           <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
             {view!=='byperson'&&<span style={{fontSize:11,color:'var(--t2)'}}>{e.user_name||'—'}</span>}
-            {user.role==='super_admin'&&e.organisation_id&&<span style={{fontSize:11,color:'var(--t2)'}}>· {e.organisation_id}</span>}
+            {isSA&&e.organisation_id&&<span style={{fontSize:11,color:'var(--t2)'}}>· {e.organisation_id}</span>}
             <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>{fmtTs(e.created_at)}</span>
           </div>
         </div>
