@@ -2102,10 +2102,24 @@ function EscalationsView({ tasks, setTasks, user, setAuditLog }) {
   )
 }
 
-function EvidenceView({ tasks, setTasks, user }) {
+function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
   const relevant = tasks.filter(t=>t.evidence?.length>0||t.status==='awaiting_review')
-  const approve = async (id) => { setTasks(prev=>prev.map(t=>t.id===id?{...t,status:'approved',reviewed_at:new Date().toISOString()}:t)); if(isConfigured()) await supabase.from('tasks').update({status:'approved',reviewed_at:new Date().toISOString()}).eq('id',id) }
-  const reject = async (id) => { setTasks(prev=>prev.map(t=>t.id===id?{...t,status:'rejected',reviewed_at:new Date().toISOString()}:t)); if(isConfigured()) await supabase.from('tasks').update({status:'rejected',reviewed_at:new Date().toISOString()}).eq('id',id) }
+  const approve = async (id) => {
+    const t = tasks.find(t=>t.id===id)
+    setTasks(prev=>prev.map(t=>t.id===id?{...t,status:'approved',reviewed_at:new Date().toISOString()}:t))
+    if(isConfigured()) await supabase.from('tasks').update({status:'approved',reviewed_at:new Date().toISOString()}).eq('id',id)
+    const aEntry = mkAuditEntry('task_approved', user, t?.org||user.org, {}, id, t?.title||id, 'awaiting_review', 'approved')
+    if(setAuditLog) setAuditLog(prev=>[aEntry,...prev])
+    if(isConfigured()) supabase.from('audit_log').insert(aEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+  }
+  const reject = async (id) => {
+    const t = tasks.find(t=>t.id===id)
+    setTasks(prev=>prev.map(t=>t.id===id?{...t,status:'rejected',reviewed_at:new Date().toISOString()}:t))
+    if(isConfigured()) await supabase.from('tasks').update({status:'rejected',reviewed_at:new Date().toISOString()}).eq('id',id)
+    const rEntry = mkAuditEntry('task_rejected', user, t?.org||user.org, {}, id, t?.title||id, 'awaiting_review', 'rejected')
+    if(setAuditLog) setAuditLog(prev=>[rEntry,...prev])
+    if(isConfigured()) supabase.from('audit_log').insert(rEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+  }
   return (
     <div className="anim">
       <div className="ph"><div className="ph-title">Evidence Review</div><div className="ph-sub">{tasks.filter(t=>t.status==='awaiting_review').length} pending review</div></div>
