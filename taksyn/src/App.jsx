@@ -861,7 +861,6 @@ function AuthView({ onAuth }) {
             {[...orgChoices].sort((a,b)=>a.org.localeCompare(b.org)||(a.role.localeCompare(b.role))).map((m,i)=>(
               <button key={i} onClick={()=>{
                 const userData = {...pendingAuthUser, role:m.role, org:m.org, tier:m.tier||'Growth'}
-                localStorage.setItem('taksyn-user', JSON.stringify(userData))
                 onAuth(userData)
               }} style={{padding:'14px 16px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',textAlign:'left',transition:'all .15s'}}
               onMouseOver={e=>e.currentTarget.style.borderColor='var(--brand)'}
