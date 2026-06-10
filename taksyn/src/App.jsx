@@ -7014,6 +7014,23 @@ export default function App() {
     return ()=>{ subscription.unsubscribe(); document.removeEventListener('visibilitychange', handleVisibilityChange) }
   },[])
 
+  // Load user positions after login — show role selector if multiple assignments exist
+  useEffect(()=>{
+    if(!user||!isConfigured()||['super_admin','client_admin'].includes(user.role)) return
+    supabase.from('user_positions').select('*').eq('user_id',user.id).eq('org',user.org||'')
+      .then(({data})=>{
+        if(data?.length>1) {
+          setUserPositionsList(data)
+          // Only show selector if user hasn't chosen yet this session
+          const saved = sessionStorage.getItem('taksyn-active-position')
+          if(saved) { try { setActivePosition(JSON.parse(saved)) } catch(e) {} }
+          else setShowRoleSelector(true)
+        } else if(data?.length===1) {
+          setActivePosition(data[0])
+        }
+      }).catch(()=>{})
+  },[user?.id])
+
   useEffect(()=>{
     if(user&&isConfigured()) {
       loadTasks()
