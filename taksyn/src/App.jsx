@@ -2928,11 +2928,11 @@ function UsersView({ user, setAuditLog }) {
   return (
     <div className="anim">
       {editingUser&&(
-        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch('') }}>
+        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch(''); setEditPositions([]); setNewPosition({dept:'',role:'worker',title:''}) }}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">Edit Team Member</div>
-              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch('') }}>×</button>
+              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch(''); setEditPositions([]); setNewPosition({dept:'',role:'worker',title:''}) }}>×</button>
             </div>
             <div className="modal-body">
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--s3)',borderRadius:8}}>
