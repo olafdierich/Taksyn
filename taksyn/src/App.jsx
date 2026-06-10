@@ -6302,6 +6302,7 @@ export default function App() {
               const slaEntry = mkAuditEntry('task_escalated', user, t.org||user?.org, { reason:'SLA breach — auto-escalated' }, t.id, t.title, 'awaiting_review', 'escalated')
               setAuditLog(prev=>[slaEntry,...prev])
               supabase.from('audit_log').insert(slaEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+              logAuditEvent(user, 'task.escalated', 'task', t.id, t.title, 'Auto-escalated: SLA breach')
             })
             addNotifications([{id:t.id+'_sla_breach', type:'sla', title:'Response Time Exceeded 🚨', body:`"${t.title}" review deadline exceeded — auto-escalated`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444'}])
           }
