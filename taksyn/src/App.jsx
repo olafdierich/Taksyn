@@ -4226,6 +4226,10 @@ function CompanySettingsView({ user }) {
             })
           } catch(e) {}
         }
+        setOrgPlan((data.plan||'').toLowerCase())
+        setOrgRetentionExtended(data.retention_extended||false)
+        setOrgRetentionYears(data.retention_years||null)
+        setRetentionYearsInput(String(data.retention_years||7))
       }
       setLoading(false)
     })
