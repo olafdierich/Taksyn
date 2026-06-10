@@ -4155,7 +4155,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
               {/* Name + chips row */}
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:5}}>
                 {org.logo&&<img src={org.logo} alt={org.name} style={{height:28,width:'auto',maxWidth:80,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>}
-                <span style={{fontWeight:700,fontSize:14,cursor:'pointer',color:'var(--brand)',textDecoration:'underline',flex:'1 1 120px',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} onClick={()=>{ setSelectedOrgView(org); loadOrgMembers(org.name) }}>{org.name}</span>
+                <span style={{fontWeight:700,fontSize:14,cursor:'pointer',color:'var(--brand)',textDecoration:'underline',flex:'1 1 120px',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} onClick={()=>enterOrgContext(org)}>{org.name}</span>
                 <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:600,flexShrink:0,background:org.status==='active'?'rgba(16,185,129,.12)':'var(--s3)',color:org.status==='active'?'var(--green)':'var(--t2)'}}>{org.status?.toUpperCase()}</span>
                 <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[org.tier]?.color||'var(--t2)',fontWeight:600,flexShrink:0}}>{org.tier}</span>
               </div>
