@@ -4960,6 +4960,20 @@ function CompanySettingsView({ user }) {
       {/* ── TASKS ───────────────────────────────── */}
       {activeTab==='tasks'&&<>
         <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Session &amp; Security</div>
+          <Row label="Auto logout after inactivity" sub="Sign out team members after this period of inactivity. Activity resets the timer.">
+            <select className="form-input" style={{width:'auto',fontSize:12}} value={autoLogoutMinutes} onChange={e=>setAutoLogoutMinutes(Number(e.target.value))}>
+              <option value={1}>1 minute</option>
+              <option value={2}>2 minutes</option>
+              <option value={5}>5 minutes</option>
+              <option value={10}>10 minutes</option>
+              <option value={30}>30 minutes (default)</option>
+              <option value={60}>1 hour</option>
+              <option value={0}>Never (not recommended)</option>
+            </select>
+          </Row>
+        </div>
+        <div className="section" style={{marginBottom:14}}>
           <div className="section-title">Defaults</div>
           <div className="two-col">
             <div className="form-field"><label className="form-label">Default Priority</label><select className="form-input" value={settings.tasks.default_priority} onChange={e=>setT('default_priority',e.target.value)}>{Object.keys(PRIORITY_CFG).map(p=><option key={p} value={p}>{PRIORITY_CFG[p].label}</option>)}</select></div>
