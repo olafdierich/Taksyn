@@ -4699,6 +4699,7 @@ function CompanySettingsView({ user }) {
   const [retentionYearsInput, setRetentionYearsInput] = useState('7')
   const [showContactModal, setShowContactModal] = useState(false)
   const [savingRetention, setSavingRetention] = useState(false)
+  const [autoLogoutMinutes, setAutoLogoutMinutes] = useState(30)
   const [tplList, setTplList] = useState([])
   const [tplName, setTplName] = useState('')
   const [tplItems, setTplItems] = useState([{text:'',mandatory:false,requirePhoto:false}])
@@ -4709,6 +4710,7 @@ function CompanySettingsView({ user }) {
     supabase.from('organisations').select('*').eq('name', user.org).single().then(({ data }) => {
       if (data) {
         setOrgId(data.id)
+        if(data.auto_logout_minutes!=null) setAutoLogoutMinutes(data.auto_logout_minutes)
         setForm({
           name:data.name||'', industry:data.industry||'', abn:data.abn||'',
           website:data.website||'', timezone:data.timezone||'',
