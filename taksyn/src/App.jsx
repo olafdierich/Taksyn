@@ -6539,24 +6539,33 @@ export default function App() {
       }
     })
 
-    // Re-validate session when the user returns to this tab (e.g., after viewing a PDF in another tab).
-    // This prevents a stale/null session from leaving the user stuck on the sign-in page.
+    // When the user returns to this tab (after WhatsApp, PDF, etc.):
+    // 1. Immediately restore from localStorage if React state was lost (iOS tab eviction)
+    // 2. Then verify the Supabase session asynchronously
     const handleVisibilityChange = () => {
       if(document.hidden) return
+      // Step 1 — synchronous: restore user from cache the moment the tab is visible
+      const cachedNow = localStorage.getItem('taksyn-user')
+      if(cachedNow) {
+        setUser(prev=>{
+          if(prev) return prev // already have a user, no need to overwrite
+          try { return JSON.parse(cachedNow) } catch(e) { return null }
+        })
+      }
+      // Step 2 — async: verify the session with Supabase
       supabase.auth.getSession().then(({data:{session}})=>{
         if(session?.user) {
-          // Session is alive — make sure the user object is current
-          const cachedNow = localStorage.getItem('taksyn-user')
           if(!cachedNow) {
+            // Session alive but no cache — fetch profile and restore
             supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
               if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
             }).catch(()=>{})
           }
-        } else {
-          // Truly signed out — clear only if localStorage is also empty
-          const cachedNow = localStorage.getItem('taksyn-user')
-          if(!cachedNow) { setUser(null) }
+        } else if(!cachedNow) {
+          // No session and no cache — genuinely signed out
+          setUser(null)
         }
+        // If cachedNow exists but no session: keep showing the app; token may still be refreshing
       }).catch(()=>{})
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
