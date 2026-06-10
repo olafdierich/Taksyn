@@ -3350,19 +3350,11 @@ function UsersView({ user, setAuditLog }) {
                 </select>
               </div>
               <div className="two-col">
-                <div className="form-field">
+                <div className="form-field" style={{gridColumn:'1/-1'}}>
                   <label className="form-label">Industry</label>
-                  <select className="form-input" value={editForm.industry||''} onChange={e=>setEditForm({...editForm,industry:e.target.value,department:''})}>
+                  <select className="form-input" value={editForm.industry||''} onChange={e=>setEditForm({...editForm,industry:e.target.value})}>
                     <option value="">— Select industry —</option>
-                    {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
-                  </select>
-                </div>
-                <div className="form-field">
-                  <label className="form-label">Department / Position</label>
-                  <select className="form-input" value={editForm.department||''} onChange={e=>setEditForm({...editForm,department:e.target.value})}>
-                    <option value="">— Select department —</option>
-                    {[...(DEPARTMENTS[editForm.industry||'General']||DEPARTMENTS.General),...orgCustomDepts.filter(d=>d.industry===(editForm.industry||'General')).map(d=>d.name)].map(d=><option key={d} value={d}>{d}</option>)}
-                    <option value="__custom__">+ Add custom position...</option>
+                    {[...PRESET_INDUSTRIES,...orgCustomDepts.filter(d=>!PRESET_INDUSTRIES.includes(d))].map(k=><option key={k} value={k}>{k}</option>)}
                   </select>
                 </div>
               </div>
