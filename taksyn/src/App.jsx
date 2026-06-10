@@ -3785,6 +3785,22 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoadingProfiles(false)
   }
 
+  const enterOrgContext = async (org) => {
+    setSelectedOrgView(org)
+    setOrgContextTab('members')
+    setOrgContextSLA(null); setOrgContextTickets([]); setOrgContextAudit([])
+    setViewingMember(null); setEditingMember(null); setShowAddMember(false)
+    setAddMemberSearch(''); setAddMemberSelectedId(null); setAddMemberMsg('')
+    loadOrgMembers(org.name)
+    if (!isConfigured()) return
+    supabase.from('organisations').select('sla_settings').eq('name', org.name).single()
+      .then(({data}) => { if(data?.sla_settings) try { setOrgContextSLA(JSON.parse(data.sla_settings)) } catch(e) {} }).catch(()=>{})
+    supabase.from('support_tickets').select('*').eq('org', org.name).order('created_at',{ascending:false})
+      .then(({data}) => { if(data) setOrgContextTickets(data) }).catch(()=>{})
+    supabase.from('audit_log').select('*').eq('org', org.name).order('at',{ascending:false}).limit(200)
+      .then(({data}) => { if(data) setOrgContextAudit(data) }).catch(()=>{})
+  }
+
   const addMemberToOrg = async () => {
     if (!addMemberSelectedId) { setAddMemberMsg('Please select a user'); return }
     if (!selectedOrgView) return
