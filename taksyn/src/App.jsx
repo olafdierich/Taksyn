@@ -4785,6 +4785,8 @@ function CompanySettingsView({ user }) {
       contact2_phone:form.contact2_phone.trim(), logo:form.logo, notes:form.notes.trim()
     } : activeTab==='branding' ? {
       logo:form.logo, org_settings:JSON.stringify(settings)
+    } : activeTab==='tasks' ? {
+      org_settings:JSON.stringify(settings), auto_logout_minutes:autoLogoutMinutes
     } : {
       org_settings:JSON.stringify(settings)
     }
