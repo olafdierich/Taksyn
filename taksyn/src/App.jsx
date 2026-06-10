@@ -5592,7 +5592,7 @@ function LeaveView({ user, tasks, setAuditLog }) {
   const [form, setForm] = useState({ type:'annual_leave', date_from:'', date_to:'', reason:'', replacement_id:'', replacement_name:'' })
   const [saving, setSaving] = useState(false)
   const [teamLeaves, setTeamLeaves] = useState([])
-  const isCA = user.role==='client_admin'
+  const isCA = ['client_admin','super_admin'].includes(user.role)
   const today = new Date().toISOString().split('T')[0]
   const [orgUsers, setOrgUsers] = useState([])
 
