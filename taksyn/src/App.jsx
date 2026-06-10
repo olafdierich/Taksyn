@@ -7427,6 +7427,16 @@ export default function App() {
               ))}
             </div>
             <div className="sb-bottom">
+              {activePosition&&!['super_admin','client_admin'].includes(user.role)&&(
+                <div style={{marginBottom:6,padding:'6px 8px',borderRadius:6,background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',cursor:'pointer',display:'flex',alignItems:'center',gap:6}} onClick={()=>setShowRoleSelector(true)} title="Switch role">
+                  <div className="sb-user-info" style={{flex:1}}>
+                    <div style={{fontSize:10,color:'var(--brand)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px'}}>Active Role</div>
+                    <div style={{fontSize:11,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{activePosition.position_title||ROLE_LABELS[activePosition.role]}</div>
+                    <div style={{fontSize:9,color:'var(--t2)'}}>{activePosition.department}</div>
+                  </div>
+                  <span style={{fontSize:10,color:'var(--brand)',flexShrink:0}}>⇄</span>
+                </div>
+              )}
               <div className="sb-user-card">
                 <Avatar name={user.name} role={user.role} size={28} avatarUrl={user.avatar_url}/>
                 <div className="sb-user-info">
