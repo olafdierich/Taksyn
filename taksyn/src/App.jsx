@@ -2947,6 +2947,7 @@ function UsersView({ user, setAuditLog }) {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
       alert('Invite sent to '+inviteEmail+'!'+(validPositions.length?'\n\nPositions to assign once they join:\n'+validPositions.map(p=>'• '+(p.title||ROLE_LABELS[p.role])+' in '+p.dept).join('\n'):''))
+      logAuditEvent(user, 'member.invited', 'member', null, inviteName.trim(), ROLE_LABELS[inviteRole]+' · '+inviteEmail.trim())
       setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg(''); setInviteIndustry(''); setInviteDept(''); setInviteCustomDept(''); setInvitePositions([{dept:'',role:'worker',title:'',is_primary:true}])
     } catch(e) {
       alert('Failed to send invite: '+e.message)
