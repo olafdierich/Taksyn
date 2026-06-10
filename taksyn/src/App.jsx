@@ -6475,30 +6475,39 @@ export default function App() {
 
   useEffect(()=>{
     if(!isConfigured()) return
+
+    // Restore cached user immediately so the app doesn't flash sign-in on load
     const cached = localStorage.getItem('taksyn-user')
     if(cached) { try { setUser(JSON.parse(cached)) } catch(e) { localStorage.removeItem('taksyn-user') } }
 
+    // Verify with Supabase — update user if session is valid, clear only if truly signed out
     supabase.auth.getSession().then(({data:{session}})=>{
       if(session?.user) {
         supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
           if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
         }).catch(()=>{})
-      } else { localStorage.removeItem('taksyn-user'); setUser(null) }
+      } else if(!cached) {
+        // No cached user and no Supabase session — definitely signed out
+        setUser(null)
+      }
+      // If cached user exists but getSession returns no session, keep showing the app;
+      // the token refresh may still be in flight. onAuthStateChange will fire if it fails.
     }).catch(()=>{})
 
     const {data:{subscription}} = supabase.auth.onAuthStateChange(async(event, session)=>{
-      if(!session) { setUser(null); localStorage.removeItem('taksyn-user') }
-      else if(event==='USER_UPDATED') {
-        // Password was just set — now log them in properly
+      if(event==='SIGNED_OUT') {
+        // Only clear the session on an explicit sign-out — not on token refresh or tab switch
+        setUser(null); localStorage.removeItem('taksyn-user')
+      } else if(event==='USER_UPDATED') {
+        // Password was just set — log them in properly
         try {
           const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
           if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
-      }
-      else if(event==='SIGNED_IN') {
+      } else if(event==='SIGNED_IN') {
         // Check if this is an invite or recovery — block auto sign-in and show password setup
-        const isInvite = session.user.app_metadata?.provider==='email' && 
-          (session.user.last_sign_in_at === null || 
+        const isInvite = session.user.app_metadata?.provider==='email' &&
+          (session.user.last_sign_in_at === null ||
            session.user.last_sign_in_at === session.user.created_at ||
            !session.user.confirmed_at ||
            window.__taksyn_invite_flow)
@@ -6512,8 +6521,41 @@ export default function App() {
           if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
         } catch(e) {}
       }
+      // TOKEN_REFRESHED and INITIAL_SESSION with a valid session are handled below
+      else if(session?.user && (event==='TOKEN_REFRESHED' || event==='INITIAL_SESSION')) {
+        const cachedNow = localStorage.getItem('taksyn-user')
+        if(!cachedNow) {
+          // Session refreshed but we lost the user object — restore it
+          supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
+            if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
+          }).catch(()=>{})
+        }
+      }
     })
-    return ()=>subscription.unsubscribe()
+
+    // Re-validate session when the user returns to this tab (e.g., after viewing a PDF in another tab).
+    // This prevents a stale/null session from leaving the user stuck on the sign-in page.
+    const handleVisibilityChange = () => {
+      if(document.hidden) return
+      supabase.auth.getSession().then(({data:{session}})=>{
+        if(session?.user) {
+          // Session is alive — make sure the user object is current
+          const cachedNow = localStorage.getItem('taksyn-user')
+          if(!cachedNow) {
+            supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
+              if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
+            }).catch(()=>{})
+          }
+        } else {
+          // Truly signed out — clear only if localStorage is also empty
+          const cachedNow = localStorage.getItem('taksyn-user')
+          if(!cachedNow) { setUser(null) }
+        }
+      }).catch(()=>{})
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return ()=>{ subscription.unsubscribe(); document.removeEventListener('visibilitychange', handleVisibilityChange) }
   },[])
 
   useEffect(()=>{
