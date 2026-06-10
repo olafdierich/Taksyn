@@ -3202,12 +3202,14 @@ function UsersView({ user, setAuditLog }) {
   },[])
 
   useEffect(()=>{
-    if(!isConfigured()||!inviteIndustry) { setOrgRoles([]); return }
+    if(!isConfigured()||!user.org) return
     const orgId = orgsList.find(o=>o.name===user.org)?.id
-    if(!orgId) { setOrgRoles([]); return }
-    supabase.from('org_roles').select('name').eq('organisation_id',orgId).eq('industry_name',inviteIndustry).order('sort_order',{nullsFirst:false}).order('name')
-      .then(({data})=>{ setOrgRoles(data?.map(r=>r.name)||[]) }).catch(()=>setOrgRoles([]))
-  },[inviteIndustry, orgsList, user.org])
+    if(!orgId) return
+    supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name')
+      .then(({data})=>{ setOrgCustomRoles(data||[]) }).catch(()=>{})
+    supabase.from('org_custom_positions').select('name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('name')
+      .then(({data})=>{ setOrgCustomPositions(data?.map(p=>p.name)||[]) }).catch(()=>{})
+  },[orgsList, user.org])
 
   useEffect(()=>{
     if(!isConfigured()) return
