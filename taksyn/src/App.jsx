@@ -2161,6 +2161,7 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
     const aEntry = mkAuditEntry('task_approved', user, t?.org||user.org, {}, id, t?.title||id, 'awaiting_review', 'approved')
     if(setAuditLog) setAuditLog(prev=>[aEntry,...prev])
     if(isConfigured()) supabase.from('audit_log').insert(aEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+    logAuditEvent(user, 'task.approved', 'task', id, t?.title||id, 'awaiting_review → approved')
   }
   const reject = async (id) => {
     const t = tasks.find(t=>t.id===id)
@@ -2169,6 +2170,7 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
     const rEntry = mkAuditEntry('task_rejected', user, t?.org||user.org, {}, id, t?.title||id, 'awaiting_review', 'rejected')
     if(setAuditLog) setAuditLog(prev=>[rEntry,...prev])
     if(isConfigured()) supabase.from('audit_log').insert(rEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+    logAuditEvent(user, 'task.rejected', 'task', id, t?.title||id, 'awaiting_review → rejected')
   }
   return (
     <div className="anim">
