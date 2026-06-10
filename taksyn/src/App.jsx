@@ -3209,11 +3209,9 @@ function UsersView({ user, setAuditLog }) {
   const saveEditUser = async () => {
     if (!editForm.name?.trim()) return
     const { id } = editingUser
-    const finalDept = editForm.department==='__custom__' ? editCustomDept.trim() : editForm.department||''
     const updates = {
       name: editForm.name.trim(),
       role: editForm.role,
-      department: finalDept,
       industry: editForm.industry||'',
       phone: editForm.phone||'',
       notes: editForm.notes||'',
