@@ -3879,49 +3879,35 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       ) : (
         <div style={{display:'flex',flexDirection:'column',gap:10}}>
           {filtered.map(org=>(
-            <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16,borderLeft:'4px solid '+(org.status==='active'?'var(--green)':'var(--border)')}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}>
-                <div style={{flex:1}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                    {org.logo&&<img src={org.logo} alt={org.name} style={{height:32,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)'}}/>}
-                    <div style={{fontWeight:700,fontSize:15,cursor:'pointer',color:'var(--brand)',textDecoration:'underline'}} onClick={()=>{ setSelectedOrgView(org); loadOrgMembers(org.name) }}>{org.name}</div>
-                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,
-                      background:org.status==='active'?'rgba(16,185,129,.12)':'var(--s3)',
-                      color:org.status==='active'?'var(--green)':'var(--t2)'
-                    }}>{org.status?.toUpperCase()}</span>
-                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:TIERS[org.tier]?.color||'var(--t2)',fontWeight:600}}>{org.tier}</span>
-                  </div>
-                  <div style={{fontSize:12,color:'var(--t2)',display:'flex',gap:16,flexWrap:'wrap'}}>
-                    <span>🏭 {org.industry||'—'}</span>
-                    {org.admin_name&&<span>👤 {org.admin_name}</span>}
-                    {org.admin_email&&<span>✉️ {org.admin_email}</span>}
-                    <span>📅 {new Date(org.created_at).toLocaleDateString('en-AU')}</span>
-                  </div>
-                  {org.notes&&<div style={{fontSize:11,color:'var(--t2)',marginTop:6,fontStyle:'italic'}}>{org.notes}</div>}
-                </div>
-                <div style={{display:'flex',gap:6,flexShrink:0}}>
-                  <button className="btn btn-primary btn-sm" onClick={()=>{ setShowInvite(org); setInviteEmail(''); setInviteName('') }}>✉️ Invite Admin</button>
-                  <label
-                    style={{
-                      display:'flex',alignItems:'center',justifyContent:'center',
-                      gap:6,padding:'5px 10px',borderRadius:6,fontSize:12,fontWeight:600,
-                      cursor:'pointer',transition:'all .15s',
-                      border:'2px dashed '+(dragOver===org.id?'var(--brand)':'var(--border)'),
-                      background:dragOver===org.id?'var(--brand-lt)':'var(--s3)',
-                      color:dragOver===org.id?'var(--brand)':'var(--t2)',
-                      minWidth:80,textAlign:'center'
-                    }}
-                    onDragOver={e=>{ e.preventDefault(); setDragOver(org.id) }}
-                    onDragLeave={()=>setDragOver(null)}
-                    onDrop={e=>{ e.preventDefault(); setDragOver(null); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/')) uploadOrgLogo(org.id,f) }}
-                  >
-                    {org.logo ? '🖼 Update Logo' : '🖼 Add Logo'}
-                    <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(f) uploadOrgLogo(org.id,f); e.target.value='' }}/>
-                  </label>
-                  <button className="btn btn-secondary btn-sm" style={{color:org.status==='active'?'var(--red)':'var(--green)'}} onClick={()=>toggleStatus(org)}>
-                    {org.status==='active'?'Deactivate':'Reactivate'}
-                  </button>
-                </div>
+            <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',borderLeft:'4px solid '+(org.status==='active'?'var(--green)':'var(--border)')}}>
+              {/* Name + chips row */}
+              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:5}}>
+                {org.logo&&<img src={org.logo} alt={org.name} style={{height:28,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>}
+                <span style={{fontWeight:700,fontSize:14,cursor:'pointer',color:'var(--brand)',textDecoration:'underline',flex:'1 1 120px'}} onClick={()=>{ setSelectedOrgView(org); loadOrgMembers(org.name) }}>{org.name}</span>
+                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:600,flexShrink:0,background:org.status==='active'?'rgba(16,185,129,.12)':'var(--s3)',color:org.status==='active'?'var(--green)':'var(--t2)'}}>{org.status?.toUpperCase()}</span>
+                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[org.tier]?.color||'var(--t2)',fontWeight:600,flexShrink:0}}>{org.tier}</span>
+              </div>
+              {/* Metadata row */}
+              <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}}>
+                <span>🏭 {org.industry||'—'}</span>
+                {org.admin_name&&<span>👤 {org.admin_name}</span>}
+                {org.admin_email&&<span style={{overflow:'hidden',textOverflow:'ellipsis',maxWidth:180}}>✉️ {org.admin_email}</span>}
+                <span>📅 {new Date(org.created_at).toLocaleDateString('en-AU')}</span>
+              </div>
+              {org.notes&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,fontStyle:'italic'}}>{org.notes}</div>}
+              {/* Action buttons — wrap on narrow screens */}
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                <button className="btn btn-primary btn-sm" onClick={()=>{ setShowInvite(org); setInviteEmail(''); setInviteName('') }}>✉️ Invite Admin</button>
+                <label style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:'1px dashed '+(dragOver===org.id?'var(--brand)':'var(--border)'),background:dragOver===org.id?'var(--brand-lt)':'transparent',color:dragOver===org.id?'var(--brand)':'var(--t2)'}}
+                  onDragOver={e=>{ e.preventDefault(); setDragOver(org.id) }}
+                  onDragLeave={()=>setDragOver(null)}
+                  onDrop={e=>{ e.preventDefault(); setDragOver(null); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/')) uploadOrgLogo(org.id,f) }}>
+                  🖼 {org.logo?'Update Logo':'Add Logo'}
+                  <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(f) uploadOrgLogo(org.id,f); e.target.value='' }}/>
+                </label>
+                <button className="btn btn-secondary btn-sm" style={{color:org.status==='active'?'var(--red)':'var(--green)'}} onClick={()=>toggleStatus(org)}>
+                  {org.status==='active'?'Deactivate':'Reactivate'}
+                </button>
               </div>
             </div>
           ))}
