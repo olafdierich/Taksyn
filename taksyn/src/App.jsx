@@ -99,7 +99,7 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
     // Alert 1: Worker hasn't done task on due date — alert supervisor
     if(t.status==='pending'&&t.due_date<today&&t.assigned_role==='worker') {
       if(['supervisor','manager','client_admin'].includes(user.role)) {
-        alerts.push({ type:'overdue_worker', task:t, msg:`Worker task overdue: "${t.title}" assigned to ${t.assigned_user_name||'worker'}`, level:'red' })
+        alerts.push({ type:'overdue_worker', task:t, msg:`Staff Member task overdue: "${t.title}" assigned to ${t.assigned_user_name||'staff member'}`, level:'red' })
       }
     }
 
