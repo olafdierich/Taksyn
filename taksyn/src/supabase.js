@@ -8,7 +8,7 @@ export const supabase = createClient(
   supabaseKey || 'placeholder',
   {
     auth: {
-      persistSession: false,
+      persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
     },
