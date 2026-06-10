@@ -3481,62 +3481,65 @@ function UsersView({ user, setAuditLog }) {
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr"><div className="modal-title">Invite Team Member</div><button className="modal-close" onClick={()=>setShowInvite(false)}>×</button></div>
             <div className="modal-body">
-              <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Emma Wilson"/></div>
-              <div className="form-field">
-                <label className="form-label">Email Address</label>
-                <input className="form-input" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="emma@yourorg.com"
-                  onBlur={()=>{
-                    const existing = realUsers.find(u=>u.email?.toLowerCase()===inviteEmail.trim().toLowerCase())
-                    if(existing) {
-                      if(window.confirm(existing.name+' ('+existing.email+') is already a member of this organisation.\n\nWould you like to add a new role assignment to their existing account instead?')) {
-                        setInviteName(existing.name)
+              <div className="two-col">
+                <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Emma Wilson"/></div>
+                <div className="form-field">
+                  <label className="form-label">Email Address</label>
+                  <input className="form-input" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="emma@yourorg.com"
+                    onBlur={()=>{
+                      const existing = realUsers.find(u=>u.email?.toLowerCase()===inviteEmail.trim().toLowerCase())
+                      if(existing) {
+                        if(window.confirm(existing.name+' ('+existing.email+') is already a member of this organisation.\n\nWould you like to add a new role assignment to their existing account instead?')) {
+                          setInviteName(existing.name)
+                        }
                       }
-                    }
-                  }}/>
-              </div>
-              <div className="form-field">
-                <label className="form-label">Industry</label>
-                <select className="form-select" value={inviteIndustry} onChange={e=>{ setInviteIndustry(e.target.value); setInvitePositions(['']) }}>
-                  <option value="">— Select industry —</option>
-                  {allIndustries.map(k=><option key={k} value={k}>{k}</option>)}
-                </select>
-              </div>
-              <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                  <label className="form-label" style={{margin:0}}>Role{inviteIndustry&&orgRoles.length>0?<span style={{fontSize:10,color:'var(--brand)',fontWeight:400,marginLeft:6}}>from {inviteIndustry}</span>:''}</label>
-                  <span style={{fontSize:10,color:'var(--t2)'}}>Add one or more</span>
+                    }}/>
                 </div>
-                {invitePositions.map((pos,i)=>(
-                  <div key={i} style={{display:'flex',gap:6,marginBottom:4}}>
-                    {orgRoles.length>0 ? (
-                      <select className="form-select" style={{flex:1,fontSize:12}} value={pos} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?e.target.value:p))}>
-                        <option value="">— Select role —</option>
-                        {orgRoles.map(r=><option key={r} value={r}>{r}</option>)}
-                      </select>
-                    ) : (
-                      <input className="form-input" value={pos} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?e.target.value:p))} placeholder={i===0?'e.g. Registered Nurse':'Additional role...'} style={{flex:1,fontSize:12}}/>
-                    )}
-                    {invitePositions.length>1&&<button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:18,padding:'0 6px',lineHeight:1}} onClick={()=>setInvitePositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>}
-                  </div>
-                ))}
-                <button className="btn btn-secondary btn-sm" style={{fontSize:11,marginTop:2}} onClick={()=>setInvitePositions(prev=>[...prev,''])}>+ Add another role</button>
-              </div>
-              <div className="form-field">
-                <label className="form-label">Position <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— access level</span></label>
-                <select className="form-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>
-                  <option value="worker">Staff Member</option>
-                  <option value="supervisor">Supervisor</option>
-                  <option value="manager">Manager</option>
-                  {['super_admin','client_admin'].includes(user.role)&&<option value="client_admin">Client Admin</option>}
-                </select>
               </div>
               {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
-              {inviteName.trim()&&(inviteIndustry||invitePositions.some(p=>p.trim()))&&(
+              <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                  <label className="form-label" style={{margin:0}}>Position Assignments</label>
+                  <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Role · Position</span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 4px'}}>
+                  {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
+                </div>
+                {invitePositions.map((row,i)=>{
+                  const rolesForIndustry = row.industry ? orgCustomRoles.filter(r=>r.industry_name===row.industry).map(r=>r.role_name) : []
+                  const defaultPositions = ['Staff Member','Supervisor','Manager',...(['super_admin','client_admin'].includes(user.role)?['Client Admin']:[])]
+                  const allPositions = [...defaultPositions, ...orgCustomPositions.filter(p=>!defaultPositions.includes(p))]
+                  return (
+                    <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
+                      <select className="form-select" style={{fontSize:11}} value={row.industry} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value,role:''}:p))}>
+                        <option value="">— Industry —</option>
+                        {allIndustries.map(k=><option key={k} value={k}>{k}</option>)}
+                      </select>
+                      {rolesForIndustry.length>0 ? (
+                        <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
+                          <option value="">— Role —</option>
+                          {rolesForIndustry.map(r=><option key={r} value={r}>{r}</option>)}
+                        </select>
+                      ) : (
+                        <input className="form-input" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))} placeholder="Role / title"/>
+                      )}
+                      <select className="form-select" style={{fontSize:11}} value={row.position} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
+                        <option value="">— Position —</option>
+                        {allPositions.map(p=><option key={p} value={p}>{p}</option>)}
+                      </select>
+                      <button style={{background:'none',border:'none',cursor:invitePositions.length>1?'pointer':'default',opacity:invitePositions.length>1?1:.3,color:'var(--red)',fontSize:16,padding:'0 4px',lineHeight:1}} onClick={()=>invitePositions.length>1&&setInvitePositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
+                    </div>
+                  )
+                })}
+                <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setInvitePositions(prev=>[...prev,{industry:'',role:'',position:''}])}>+ Add another position</button>
+              </div>
+              {inviteName.trim()&&invitePositions.some(p=>p.role||p.position)&&(
                 <div style={{background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--text)',lineHeight:1.5}}>
                   <div style={{fontSize:10,fontWeight:700,color:'var(--brand)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.8px'}}>Invite Summary</div>
-                  <strong>{inviteName.trim()}</strong> will join as <strong>{ROLE_LABELS[inviteRole]}</strong>
-                  {inviteIndustry&&<> in <strong>{inviteIndustry}</strong></>}
-                  {invitePositions.filter(p=>p.trim()).length>0&&<div style={{marginTop:4}}>Roles: {invitePositions.filter(p=>p.trim()).join(', ')}</div>}
+                  <strong>{inviteName.trim()}</strong> will be invited to <strong>{user.role==='super_admin'?inviteOrg||'(org required)':user.org}</strong>
+                  {invitePositions.filter(p=>p.role||p.position).map((p,i)=>(
+                    <div key={i} style={{marginTop:3,color:'var(--t2)'}}>{[p.industry,p.role,p.position].filter(Boolean).join(' · ')}</div>
+                  ))}
                 </div>
               )}
               <div className="form-field">
