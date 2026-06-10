@@ -489,6 +489,23 @@ const IC = ({ n, s=16 }) => {
 const StatusBadge = ({ status }) => { const c = STATUS_CFG[status]||STATUS_CFG.pending; return <span className="badge" style={{color:c.color,background:c.bg}}>{c.label}</span> }
 const PriBadge = ({ priority }) => { const c = PRIORITY_CFG[priority]||PRIORITY_CFG.medium; return <span className="badge" style={{color:c.color,background:c.color+'22'}}>{c.label}</span> }
 const RolePill = ({ role }) => <span className="role-pill" style={{color:avatarColor(role),background:avatarColor(role)+'22'}}>{ROLE_LABELS[role]||role}</span>
+const POSITION_ROLE_COLORS = { manager:'#8B5CF6', supervisor:'#F59E0B', worker:'#3B82F6' }
+const PositionChip = ({ pos, onRemove }) => {
+  const c = POSITION_ROLE_COLORS[pos.role]||'#6B7280'
+  return (
+    <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,fontSize:10,fontWeight:600,background:c+'18',color:c,border:'1px solid '+c+'44',whiteSpace:'nowrap'}}>
+      {CAT_ICONS[pos.department]||'🏢'} {pos.position_title||ROLE_LABELS[pos.role]} · {pos.department}
+      {pos.is_primary&&<span style={{fontSize:9,opacity:.7}}>★</span>}
+      {onRemove&&<button onClick={onRemove} style={{background:'none',border:'none',cursor:'pointer',color:c,fontSize:12,lineHeight:1,padding:'0 0 0 2px',fontFamily:'inherit'}}>×</button>}
+    </span>
+  )
+}
+const getUserDeptRole = (u, dept) => {
+  const positions = u.positions||[]
+  const match = positions.find(p=>p.department===dept)
+  if (match) return (match.position_title||ROLE_LABELS[match.role]||match.role)+' ('+dept+')'
+  return ROLE_LABELS[u.role]||u.role
+}
 const Avatar = ({ name, role, size=28, avatarUrl=null }) => avatarUrl
   ? <img src={avatarUrl} alt={name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0}} />
   : <div className="tb-avatar" style={{width:size,height:size,background:avatarColor(role)+'22',color:avatarColor(role)}}>{initials(name)}</div>
