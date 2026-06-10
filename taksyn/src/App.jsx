@@ -5826,7 +5826,7 @@ function TeamsView({ user }) {
   const [showInviteLink, setShowInviteLink] = useState(false)
   const [inviteLinkRole, setInviteLinkRole] = useState('worker')
   const [inviteLinkPosition, setInviteLinkPosition] = useState('')
-  const isCA = user.role==='client_admin'
+  const isCA = ['client_admin','super_admin'].includes(user.role)
 
   useEffect(()=>{
     if(!isConfigured()) return
