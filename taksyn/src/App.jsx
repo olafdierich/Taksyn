@@ -1769,6 +1769,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         const dEntry = mkAuditEntry('task_deleted', user, sel.org||user.org, { deleteScope }, sel.id, sel.title, sel.status, null)
                         setAuditLog(prev=>[dEntry,...prev])
                         if(isConfigured()) supabase.from('audit_log').insert(dEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+                        logAuditEvent(user, 'task.deleted', 'task', sel.id, sel.title, 'Deleted (scope: '+deleteScope+')')
                         setTasks(prev=>prev.filter(t=>t.id!==sel.id))
                         if(isConfigured()) await supabase.from('tasks').delete().eq('id',sel.id)
                         setShowDeleteConfirm(false); setDeleteScope(''); setSelected(null)
