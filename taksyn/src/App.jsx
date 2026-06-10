@@ -5818,21 +5818,22 @@ function TeamsView({ user }) {
 
   useEffect(()=>{
     if(!isConfigured()) return
-    // Load teams for this org
+    // Load teams in parallel with org data
     supabase.from('teams').select('*').eq('org',user.org).order('name')
       .then(({data})=>{ if(data) setTeams(data) }).catch(()=>{})
-    // Load team types and org id
+    // Load org id and team types first, then load members using both org name and id
     supabase.from('organisations').select('id,team_types').eq('name',user.org).single()
-      .then(({data})=>{
-        if(data?.team_types) setTeamTypes(JSON.parse(data.team_types||'[]'))
-        if(data?.id) setOrgId(data.id)
-      }).catch(()=>{})
-    // Load org users
-    supabase.from('org_members').select('user_id,role').eq('org',user.org)
-      .then(async({data:members})=>{
+      .then(async ({data}) => {
+        if(!data) return
+        if(data.team_types) setTeamTypes(JSON.parse(data.team_types||'[]'))
+        if(data.id) setOrgId(data.id)
+        // Fetch org members filtered by both org name and organisation_id for client_admin compatibility
+        const { data: members } = await supabase
+          .from('org_members').select('user_id,role,org,tier')
+          .eq('org', user.org)
         if(!members?.length) return
-        const {data:profiles} = await supabase.from('profiles').select('*').in('id',members.map(m=>m.user_id))
-        if(profiles) setOrgUsers(profiles.map(p=>({...p,role:members.find(m=>m.user_id===p.id)?.role||p.role})))
+        const { data: profiles } = await supabase.from('profiles').select('*').in('id', members.map(m=>m.user_id))
+        if(profiles) setOrgUsers(profiles.map(p=>({...p, role:members.find(m=>m.user_id===p.id)?.role||p.role})))
       }).catch(()=>{})
   },[user.org])
 
