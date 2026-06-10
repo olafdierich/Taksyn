@@ -2895,33 +2895,31 @@ function UsersView({ user, setAuditLog }) {
     if (user.role==='super_admin' && !targetOrg) { alert('Please enter the organisation name'); return }
     if (!inviteEmail.trim() || !inviteName.trim()) { alert('Please enter name and email'); return }
 
+    const validPositions = invitePositions.filter(p=>p.dept)
+    const positionsSummary = validPositions.length
+      ? '\n\nYour positions: '+validPositions.map((p,i)=>(p.title||ROLE_LABELS[p.role])+ ' in '+p.dept+(i===0?' (primary)':'')).join(', ')
+      : ''
+
     if (inviteMethod==='whatsapp') {
-      const msg=encodeURIComponent('Hi '+inviteName+'! You have been invited to join Taksyn as '+ROLE_LABELS[inviteRole]+' at '+targetOrg+'.\n\nSign up here: https://taksyn.vercel.app\n\nUse your email: '+inviteEmail+'\n\nOrganisation name to enter: '+targetOrg)
+      const msg=encodeURIComponent('Hi '+inviteName+'! You have been invited to join Taksyn as '+ROLE_LABELS[inviteRole]+' at '+targetOrg+'.'+positionsSummary+'\n\nSign up here: https://taksyn.vercel.app\n\nUse your email: '+inviteEmail+'\n\nOrganisation name to enter: '+targetOrg)
       window.open('https://wa.me/?text='+msg,'_blank')
-      setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg('')
+      setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg(''); setInvitePositions([{dept:'',role:'worker',title:'',is_primary:true}])
       return
     }
 
-    // Email invite via Supabase Edge Function
     if (!isConfigured()) { alert('Supabase not configured'); return }
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
+      const primaryPos = validPositions[0]
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg, industry: inviteIndustry, department: inviteDept==='__custom__'?inviteCustomDept:inviteDept, secret: import.meta.env.VITE_INVITE_SECRET || '' })
+        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, org: targetOrg, industry: inviteIndustry, department: primaryPos?.dept||inviteDept, secret: import.meta.env.VITE_INVITE_SECRET || '' })
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
-      alert('Invite sent to '+inviteEmail+'!')
-      // Save custom department to org if added
-      if(inviteDept==='__custom__'&&inviteCustomDept.trim()&&inviteIndustry&&isConfigured()) {
-        const newDept = {name:inviteCustomDept.trim(),industry:inviteIndustry}
-        const updatedDepts = [...orgCustomDepts,newDept]
-        setOrgCustomDepts(updatedDepts)
-        supabase.from('organisations').update({custom_departments:JSON.stringify(updatedDepts)}).eq('name',targetOrg).then(()=>{})
-      }
-      setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg(''); setInviteIndustry(''); setInviteDept(''); setInviteCustomDept('')
+      alert('Invite sent to '+inviteEmail+'!'+(validPositions.length?'\n\nPositions to assign once they join:\n'+validPositions.map(p=>'• '+(p.title||ROLE_LABELS[p.role])+' in '+p.dept).join('\n'):''))
+      setShowInvite(false); setInviteEmail(''); setInviteName(''); setInviteRole('worker'); setInviteOrg(''); setInviteIndustry(''); setInviteDept(''); setInviteCustomDept(''); setInvitePositions([{dept:'',role:'worker',title:'',is_primary:true}])
     } catch(e) {
       alert('Failed to send invite: '+e.message)
     }
