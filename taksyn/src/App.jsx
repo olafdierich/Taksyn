@@ -1285,6 +1285,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     const cmEntry = mkAuditEntry('comment_added', user, task?.org||user.org, {}, tid, task?.title, null, comment.trim().slice(0,200))
     setAuditLog(prev=>[cmEntry,...prev])
     if (isConfigured()) supabase.from('audit_log').insert(cmEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+    logAuditEvent(user, 'task.comment_added', 'task', tid, task?.title, '"'+comment.trim().slice(0,200)+'"')
     setComment('')
   }
 
