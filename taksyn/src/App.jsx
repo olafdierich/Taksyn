@@ -6125,11 +6125,12 @@ function TeamsView({ user }) {
                           {ROLE_LABELS[role]} ({grouped[role].length})
                         </div>
                         {grouped[role].map((m,i)=>(
-                          <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
                             <Avatar name={m.profile?.name||m.user_name||'?'} role={m.profile?.role||role} size={32} avatarUrl={m.profile?.avatar_url}/>
-                            <div style={{flex:1}}>
+                            <div style={{flex:1,minWidth:0}}>
                               <div style={{fontWeight:600,fontSize:13}}>{m.profile?.name||m.user_name||'—'}</div>
                               <div style={{fontSize:11,color:'var(--t2)'}}>{m.role_in_team||m.role||ROLE_LABELS[role]}{m.profile?.department?' · '+m.profile.department:''}</div>
+                              {m.positions?.length>0&&<div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>{m.positions.map((pos,pi)=><PositionChip key={pi} pos={pos}/>)}</div>}
                             </div>
                             <RolePill role={m.profile?.role||role}/>
                             {(isCA||user.role==='manager')&&<button className="btn btn-danger btn-sm" onClick={()=>removeMember(m.id)}>Remove</button>}
