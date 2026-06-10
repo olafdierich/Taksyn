@@ -2128,6 +2128,7 @@ function EscalationsView({ tasks, setTasks, user, setAuditLog }) {
     const rEntry = mkAuditEntry('status_change', user, t?.org||user.org, {}, id, t?.title||id, t?.status||'escalated', 'in_progress')
     if(setAuditLog) setAuditLog(prev=>[rEntry,...prev])
     if(isConfigured()) supabase.from('audit_log').insert(rEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+    logAuditEvent(user, 'task.status_changed', 'task', id, t?.title||id, (t?.status||'escalated')+' → in_progress (acknowledged)')
   }
   return (
     <div className="anim">
