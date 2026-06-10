@@ -7336,8 +7336,11 @@ export default function App() {
         .then(({data})=>{ if(data?.length) setNotifications(data.map(({user_id,...n})=>n)) }).catch(()=>{})
       // Load org SLA settings
       if(isConfigured()&&user.org) {
-        supabase.from('organisations').select('sla_settings').eq('name',user.org).single()
-          .then(({data})=>{ if(data?.sla_settings) updateOrgSLA({...DEFAULT_SLA,...JSON.parse(data.sla_settings)}) })
+        supabase.from('organisations').select('sla_settings,auto_logout_minutes').eq('name',user.org).single()
+          .then(({data})=>{
+            if(data?.sla_settings) updateOrgSLA({...DEFAULT_SLA,...JSON.parse(data.sla_settings)})
+            if(data?.auto_logout_minutes!=null) setSessionTimeout(data.auto_logout_minutes)
+          })
           .catch(()=>{})
       }
       // Load leave records for org (not for super_admin — leave is operational data)
