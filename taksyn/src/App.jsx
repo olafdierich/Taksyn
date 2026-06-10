@@ -1215,7 +1215,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
       <div className="section" style={{marginTop:14}}>
         <div className="section-title">Quick Navigation</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8}}>
-          {[['orgs','🏢','Organisations','View & manage orgs'],['users','👥','Users','Fix role & access issues'],['teams','👤','Teams','View team structure'],['audit','📋','Audit Log','Structural activity only'],['support','🎫','Support Tickets','Resolve user issues'],['notifications','📢','Announcements','Platform-wide messages']].map(([pg,icon,label,sub])=>(
+          {[['orgs','🏢','Organisations','View & manage orgs'],['users','👥','Users','Fix role & access issues'],['teams','👤','Teams','View team structure'],['audit','📋','Audit Log','Structural activity only'],['support','🎫','Support Tickets','Resolve user issues'],['notifications','📢','Announcements','Platform-wide messages'],['platform_industries','🏭','Platform Industries','Manage global industry list']].map(([pg,icon,label,sub])=>(
             <div key={pg} onClick={()=>setPage(pg)} style={{padding:'12px',borderRadius:10,border:'1px solid var(--border)',background:'var(--s2)',cursor:'pointer',textAlign:'center'}}>
               <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
               <div style={{fontSize:12,fontWeight:700}}>{label}</div>
