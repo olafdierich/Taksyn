@@ -6692,14 +6692,7 @@ function SupportView({ user, tickets=[], setTickets }) {
 
 
 export default function App() {
-  // Initialise user synchronously from localStorage so the first render never shows AuthView
-  // for a signed-in user — prevents the blank-page / sign-in flash after WhatsApp tab switch.
-  const [user, setUser] = useState(()=>{
-    if(!isConfigured()) return null
-    const cached = localStorage.getItem('taksyn-user')
-    if(cached) { try { return JSON.parse(cached) } catch(e) { localStorage.removeItem('taksyn-user') } }
-    return null
-  })
+  const [user, setUser] = useState(null)
   // Persist the active page in sessionStorage so it survives iOS tab eviction + WhatsApp return.
   const [page, setPage] = useState(()=>sessionStorage.getItem('taksyn-page')||'dashboard')
   const [tasks, setTasks] = useState(DEMO_TASKS)
