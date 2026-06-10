@@ -2999,8 +2999,42 @@ function UsersView({ user, setAuditLog }) {
                   {orgsList.filter(o=>o.name.toLowerCase().includes(editOrgSearch.toLowerCase())).map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
                 </select>
               </div>}
+              <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                  <label className="form-label" style={{margin:0}}>Department Positions</label>
+                  <span style={{fontSize:10,color:'var(--t2)'}}>Multiple roles across departments</span>
+                </div>
+                {editPositions.map((pos,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,background:'var(--s3)',borderRadius:8,padding:'8px 10px'}}>
+                    <div style={{flex:1,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                      <PositionChip pos={pos}/>
+                      {pos.is_primary&&<span style={{fontSize:10,color:'#F59E0B',fontWeight:600}}>PRIMARY</span>}
+                    </div>
+                    <div style={{display:'flex',gap:4,flexShrink:0}}>
+                      {!pos.is_primary&&<button className="btn btn-secondary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={()=>setEditPositions(prev=>prev.map((p,j)=>({...p,is_primary:j===i})))}>★ Primary</button>}
+                      <button className="btn btn-danger btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={()=>setEditPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{background:'var(--s3)',borderRadius:8,padding:10,marginTop:6}}>
+                  <div style={{fontSize:11,fontWeight:600,color:'var(--t2)',marginBottom:8}}>Add Position</div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    <select className="form-select" value={newPosition.dept} onChange={e=>setNewPosition(p=>({...p,dept:e.target.value}))} style={{flex:1,minWidth:130,fontSize:12}}>
+                      <option value="">— Department —</option>
+                      {Object.values(DEPARTMENTS).flat().filter((d,i,a)=>a.indexOf(d)===i).sort().map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <select className="form-select" value={newPosition.role} onChange={e=>setNewPosition(p=>({...p,role:e.target.value}))} style={{width:120,fontSize:12}}>
+                      <option value="worker">Worker</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="manager">Manager</option>
+                    </select>
+                    <input className="form-input" placeholder="Title e.g. Nurse" value={newPosition.title} onChange={e=>setNewPosition(p=>({...p,title:e.target.value}))} style={{flex:1,minWidth:110,fontSize:12}}/>
+                    <button className="btn btn-secondary btn-sm" disabled={!newPosition.dept} onClick={()=>{ if(!newPosition.dept) return; setEditPositions(prev=>[...prev,{department:newPosition.dept,role:newPosition.role,position_title:newPosition.title,is_primary:prev.length===0}]); setNewPosition({dept:'',role:'worker',title:''}) }}>+ Add</button>
+                  </div>
+                </div>
+              </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
-                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch('') }}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch(''); setEditPositions([]); setNewPosition({dept:'',role:'worker',title:''}) }}>Cancel</button>
                 <button className="btn btn-primary" disabled={!editForm.name?.trim()} onClick={saveEditUser}>Save Changes</button>
               </div>
             </div>
