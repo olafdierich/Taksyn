@@ -2775,19 +2775,32 @@ function UsersView({ user, setAuditLog }) {
     if(user.role==='super_admin') {
       supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(data) })
     } else {
-      // Load members from org_members joined with profiles
       supabase.from('org_members').select('user_id, role, org, tier').eq('org', user.org)
-        .then(async ({data:members, error:err1})=>{
+        .then(async ({data:members})=>{
           if(!members?.length) return
-          // Build user list from org_members data directly
-          // Also try to get profile details
           const ids = members.map(m=>m.user_id)
-          const {data:profiles} = await supabase.from('profiles').select('*').in('id', ids)
+          const [{data:profiles},{data:positions}] = await Promise.all([
+            supabase.from('profiles').select('*').in('id', ids),
+            supabase.from('user_positions').select('*').eq('org', user.org).catch(()=>({data:[]}))
+          ])
+          const posMap = {}
+          positions?.forEach(p=>{ if(!posMap[p.user_id]) posMap[p.user_id]=[]; posMap[p.user_id].push(p) })
+          setUserPositions(posMap)
           const merged = members.map(m=>{
             const p = profiles?.find(p=>p.id===m.user_id) || {}
             return {...p, id:m.user_id, role:m.role, org:m.org, tier:m.tier}
           })
           setRealUsers(merged)
+          // Auto-migrate: create position entry for users with dept but no position yet
+          const toMigrate = merged.filter(u=>u.department&&!(posMap[u.id]?.length))
+          if(toMigrate.length>0) {
+            const entries = toMigrate.map(u=>({ id:'POS'+Date.now()+Math.random().toString(36).slice(2,5), user_id:u.id, org:user.org, department:u.department, role:u.role||'worker', position_title:'', is_primary:true, created_at:new Date().toISOString() }))
+            supabase.from('user_positions').insert(entries).then(()=>{
+              const newMap = {...posMap}
+              entries.forEach(e=>{ if(!newMap[e.user_id]) newMap[e.user_id]=[]; newMap[e.user_id].push(e) })
+              setUserPositions(newMap)
+            }).catch(()=>{})
+          }
         })
     }
   },[])
