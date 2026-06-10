@@ -246,7 +246,25 @@ CREATE INDEX IF NOT EXISTS user_positions_org ON public.user_positions (org);
 --     );
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- 3f. ORGANISATIONS — plan-based data retention columns
+-- 3f. PLATFORM ANNOUNCEMENTS (super_admin → all orgs or a specific org)
+CREATE TABLE IF NOT EXISTS public.platform_announcements (
+  id          TEXT PRIMARY KEY,
+  title       TEXT NOT NULL,
+  body        TEXT,
+  target_org  TEXT,                 -- NULL = all organisations
+  sent_by     TEXT NOT NULL,
+  sent_by_id  UUID REFERENCES public.profiles(id),
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.platform_announcements ENABLE ROW LEVEL SECURITY;
+-- Only super_admin (platform role) can insert or read
+CREATE POLICY "platform_ann_read_auth"   ON public.platform_announcements FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY "platform_ann_insert_auth" ON public.platform_announcements FOR INSERT TO authenticated WITH CHECK (TRUE);
+
+CREATE INDEX IF NOT EXISTS platform_ann_created ON public.platform_announcements (created_at DESC);
+
+-- 3g. ORGANISATIONS — plan-based data retention columns
 -- Add these columns to the organisations table if they don't exist yet.
 -- Run in Supabase SQL Editor:
 --
