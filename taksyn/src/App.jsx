@@ -4479,16 +4479,29 @@ function PlatformIndustriesView({ user }) {
   )
 }
 
-function RolesDeptView({ user }) {
+function RolesPositionsView({ user }) {
+  const isSuper = user.role==='super_admin'
+  const [activeTab, setActiveTab] = useState(isSuper?'global_industries':'roles')
   const [orgId, setOrgId] = useState(null)
-  const [industries, setIndustries] = useState([])
+  // Roles state
   const [globalIndustries, setGlobalIndustries] = useState([])
-  const [roles, setRoles] = useState([])
+  const [orgCustomIndustries, setOrgCustomIndustries] = useState([])
   const [selectedIndustry, setSelectedIndustry] = useState('')
-  const [newIndustryName, setNewIndustryName] = useState('')
+  const [roles, setRoles] = useState([])
   const [newRoleName, setNewRoleName] = useState('')
   const [editRoleId, setEditRoleId] = useState(null)
   const [editRoleName, setEditRoleName] = useState('')
+  // Positions state
+  const DEFAULT_POSITIONS = ['Staff Member','Supervisor','Manager']
+  const [customPositions, setCustomPositions] = useState([])
+  const [newPositionName, setNewPositionName] = useState('')
+  const [editPosId, setEditPosId] = useState(null)
+  const [editPosName, setEditPosName] = useState('')
+  // Global industries state (super admin)
+  const [globalList, setGlobalList] = useState([])
+  const [newGlobalName, setNewGlobalName] = useState('')
+  const [editGlobalId, setEditGlobalId] = useState(null)
+  const [editGlobalName, setEditGlobalName] = useState('')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
 
