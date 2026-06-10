@@ -2155,7 +2155,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
                       </select>
                       <select className="form-input" value={archiveWorker} onChange={e=>setArchiveWorker(e.target.value)} style={{fontSize:12,flex:1,minWidth:130}}>
-                        <option value="">All Workers</option>
+                        <option value="">All Staff</option>
                         {[...new Set(orgFiltered.map(t=>t.assigned_user_name).filter(Boolean))].sort().map(n=><option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
