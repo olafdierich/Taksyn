@@ -1050,8 +1050,16 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       supabase.from('org_members').select('user_id,role').eq('org',user.org)
         .then(async({data:members})=>{
           if(!members?.length) return
-          const {data:profiles} = await supabase.from('profiles').select('*').in('id',members.map(m=>m.user_id))
-          if(profiles) setTeamUsers(profiles.map(p=>({...p,role:members.find(m=>m.user_id===p.id)?.role||p.role})))
+          const ids = members.map(m=>m.user_id)
+          const [{data:profiles},{data:positions}] = await Promise.all([
+            supabase.from('profiles').select('*').in('id',ids),
+            supabase.from('user_positions').select('*').eq('org',user.org).catch(()=>({data:[]}))
+          ])
+          if(profiles) setTeamUsers(profiles.map(p=>({
+            ...p,
+            role:members.find(m=>m.user_id===p.id)?.role||p.role,
+            positions:(positions||[]).filter(pos=>pos.user_id===p.id)
+          })))
         }).catch(()=>{})
     }
   },[user.org])
