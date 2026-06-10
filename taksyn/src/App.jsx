@@ -5491,15 +5491,31 @@ function TeamsView({ user }) {
       }).catch(()=>{})
   },[user.org])
 
-  const shareInviteLink = (team) => {
+  const shareInviteLink = async (team) => {
+    if (!orgId) { alert('Organisation data is still loading — please wait a moment and try again.'); return }
+    const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
+    // Record the invite in invite_links so we can mark it used on registration
+    if (isConfigured()) {
+      await supabase.from('invite_links').insert({
+        id: linkId,
+        org_id: orgId,
+        team_id: team.id,
+        role: inviteLinkRole,
+        position: inviteLinkPosition || null,
+        created_by: user.name,
+        org: user.org,
+        created_at: new Date().toISOString()
+      }).catch(()=>{})
+    }
     const base = window.location.origin + window.location.pathname
     const params = new URLSearchParams({
       invite: 'true',
-      org: orgId || user.org,
+      org: orgId,
       team: team.id,
       role: inviteLinkRole,
       position: inviteLinkPosition,
-      secret: 'taksyn-secret-2024'
+      secret: 'taksyn-secret-2024',
+      link: linkId
     })
     const inviteUrl = base + '?' + params.toString()
     const msg = encodeURIComponent(
