@@ -3404,15 +3404,15 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{fontSize:11,fontWeight:600,color:'var(--t2)',marginBottom:8}}>Add Position</div>
                   <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                     <select className="form-select" value={newPosition.dept} onChange={e=>setNewPosition(p=>({...p,dept:e.target.value}))} style={{flex:1,minWidth:130,fontSize:12}}>
-                      <option value="">— Department —</option>
-                      {Object.values(DEPARTMENTS).flat().filter((d,i,a)=>a.indexOf(d)===i).sort().map(d=><option key={d} value={d}>{d}</option>)}
+                      <option value="">— Industry —</option>
+                      {allIndustries.map(d=><option key={d} value={d}>{d}</option>)}
                     </select>
                     <select className="form-select" value={newPosition.role} onChange={e=>setNewPosition(p=>({...p,role:e.target.value}))} style={{width:130,fontSize:12}}>
                       <option value="worker">Staff Member</option>
                       <option value="supervisor">Supervisor</option>
                       <option value="manager">Manager</option>
                     </select>
-                    <input className="form-input" placeholder="Title e.g. Nurse" value={newPosition.title} onChange={e=>setNewPosition(p=>({...p,title:e.target.value}))} style={{flex:1,minWidth:110,fontSize:12}}/>
+                    <input className="form-input" placeholder="Position e.g. Nurse" value={newPosition.title} onChange={e=>setNewPosition(p=>({...p,title:e.target.value}))} style={{flex:1,minWidth:110,fontSize:12}}/>
                     <button className="btn btn-secondary btn-sm" disabled={!newPosition.dept} onClick={()=>{ if(!newPosition.dept) return; setEditPositions(prev=>[...prev,{department:newPosition.dept,role:newPosition.role,position_title:newPosition.title,is_primary:prev.length===0}]); setNewPosition({dept:'',role:'worker',title:''}) }}>+ Add</button>
                   </div>
                 </div>
