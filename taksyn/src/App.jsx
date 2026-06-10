@@ -7154,8 +7154,8 @@ export default function App() {
     })
   }
 
-  const SESSION_ROLE_TIMEOUTS = { worker:15, supervisor:20, manager:20, client_admin:30, super_admin:10 }
-  const WARN_BEFORE_MINS = 2
+  const SESSION_ROLE_TIMEOUTS = { worker:30, supervisor:30, manager:30, client_admin:30, super_admin:10 }
+  const WARN_BEFORE_MINS = 1
 
   useEffect(() => {
     if (!user) return
