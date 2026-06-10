@@ -3894,7 +3894,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
           <div className="empty-text">Create your first organisation to get started.</div>
         </div>
       ) : (
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        <div className="org-grid">
           {filtered.map(org=>(
             <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',borderLeft:'4px solid '+(org.status==='active'?'var(--green)':'var(--border)')}}>
               {/* Name + chips row */}
