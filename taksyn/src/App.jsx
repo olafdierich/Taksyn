@@ -5445,6 +5445,10 @@ function TeamsView({ user }) {
   const [showAddMember, setShowAddMember] = useState(false)
   const [addMemberUser, setAddMemberUser] = useState('')
   const [addMemberRole, setAddMemberRole] = useState('')
+  const [orgId, setOrgId] = useState('')
+  const [showInviteLink, setShowInviteLink] = useState(false)
+  const [inviteLinkRole, setInviteLinkRole] = useState('worker')
+  const [inviteLinkPosition, setInviteLinkPosition] = useState('')
   const isCA = user.role==='client_admin'
 
   useEffect(()=>{
@@ -5452,9 +5456,12 @@ function TeamsView({ user }) {
     // Load teams for this org
     supabase.from('teams').select('*').eq('org',user.org).order('name')
       .then(({data})=>{ if(data) setTeams(data) }).catch(()=>{})
-    // Load team types (stored in organisations table as JSON)
-    supabase.from('organisations').select('team_types').eq('name',user.org).single()
-      .then(({data})=>{ if(data?.team_types) setTeamTypes(JSON.parse(data.team_types||'[]')) }).catch(()=>{})
+    // Load team types and org id
+    supabase.from('organisations').select('id,team_types').eq('name',user.org).single()
+      .then(({data})=>{
+        if(data?.team_types) setTeamTypes(JSON.parse(data.team_types||'[]'))
+        if(data?.id) setOrgId(data.id)
+      }).catch(()=>{})
     // Load org users
     supabase.from('org_members').select('user_id,role').eq('org',user.org)
       .then(async({data:members})=>{
@@ -5463,6 +5470,26 @@ function TeamsView({ user }) {
         if(profiles) setOrgUsers(profiles.map(p=>({...p,role:members.find(m=>m.user_id===p.id)?.role||p.role})))
       }).catch(()=>{})
   },[user.org])
+
+  const shareInviteLink = (team) => {
+    const base = window.location.origin + window.location.pathname
+    const params = new URLSearchParams({
+      invite: 'true',
+      org: orgId || user.org,
+      team: team.id,
+      role: inviteLinkRole,
+      position: inviteLinkPosition,
+      secret: 'taksyn-secret-2024'
+    })
+    const inviteUrl = base + '?' + params.toString()
+    const msg = encodeURIComponent(
+      `Hi! You've been invited to join ${user.org} on Taksyn as ${ROLE_LABELS[inviteLinkRole]||inviteLinkRole}` +
+      (inviteLinkPosition ? ` (${inviteLinkPosition})` : '') +
+      ` in the team "${team.name}".\n\nClick the link below to register:\n${inviteUrl}`
+    )
+    window.open('https://wa.me/?text='+msg, '_blank')
+    setShowInviteLink(false)
+  }
 
   const loadTeamMembers = async (teamId) => {
     const {data} = await supabase.from('team_members').select('*').eq('team_id',teamId)
