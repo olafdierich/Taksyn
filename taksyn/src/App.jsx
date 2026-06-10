@@ -4899,6 +4899,22 @@ function CompanySettingsView({ user }) {
     }
   }, [user.org])
 
+  useEffect(()=>{
+    if(!orgId||!isConfigured()||tmLoaded) return
+    setTmLoaded(true)
+    Promise.all([
+      supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name'),
+      supabase.from('org_industries').select('*').eq('organisation_id',orgId),
+      supabase.from('org_custom_roles').select('*').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name'),
+      supabase.from('org_custom_positions').select('*').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name')
+    ]).then(([gi,oi,cr,cp])=>{
+      if(gi.data){ setTmGlobalInds(gi.data); setTmGlobalList(gi.data) }
+      if(oi.data) setTmOrgInds(oi.data)
+      if(cr.data) setTmAllRoles(cr.data)
+      if(cp.data) setTmCustomPos(cp.data)
+    }).catch(()=>{})
+  },[orgId, tmLoaded])
+
   const saveTemplate = async () => {
     const validItems = tplItems.filter(i=>i.text.trim())
     if (!tplName.trim() || !validItems.length) { setMsg('✗ Template needs a name and at least one item'); return }
