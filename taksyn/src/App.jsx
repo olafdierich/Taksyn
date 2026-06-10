@@ -4936,7 +4936,123 @@ function CompanySettingsView({ user }) {
     setTplList(prev=>prev.filter(t=>t.id!==id))
   }
 
+  // Team Management CRUD
+  const tmAllIndNames = () => [...tmGlobalInds,...tmOrgInds].map(i=>i.name.toLowerCase())
+  const tmRolesFor = (ind) => [...tmAllRoles].filter(r=>r.industry_name===ind).sort((a,b)=>(a.sort_order??999)-(b.sort_order??999))
+  const tmToggle = (name) => setTmExpanded(prev=>{ const s=new Set(prev); s.has(name)?s.delete(name):s.add(name); return s })
+
+  const tmAddInd = async () => {
+    const name=tmNewIndName.trim(); if(!name||!orgId) return
+    if(tmAllIndNames().includes(name.toLowerCase())) return
+    setTmSaving(true)
+    const {data,error}=await supabase.from('org_industries').insert({name,org:user.org,organisation_id:orgId,created_by:user.name,created_at:new Date().toISOString()}).select().single()
+    if(!error&&data){setTmOrgInds(prev=>[...prev,data]);setTmNewIndName('')}
+    else if(error) setMsg('✗ '+error.message)
+    setTmSaving(false)
+  }
+  const tmDeleteInd = async (id,name) => {
+    if(!window.confirm('Delete "'+name+'"? All its roles will also be deleted.')) return
+    await supabase.from('org_custom_roles').delete().eq('organisation_id',orgId).eq('industry_name',name).catch(()=>{})
+    await supabase.from('org_industries').delete().eq('id',id).catch(()=>{})
+    setTmOrgInds(prev=>prev.filter(i=>i.id!==id))
+    setTmAllRoles(prev=>prev.filter(r=>r.industry_name!==name))
+  }
+  const tmSaveInd = async () => {
+    if(!tmEditInd?.name?.trim()) return; setTmSaving(true)
+    await supabase.from('org_industries').update({name:tmEditInd.name.trim()}).eq('id',tmEditInd.id).catch(()=>{})
+    setTmOrgInds(prev=>prev.map(i=>i.id===tmEditInd.id?{...i,name:tmEditInd.name.trim()}:i))
+    setTmEditInd(null); setTmSaving(false)
+  }
+
+  const tmAddRole = async (industryName) => {
+    const name=(tmNewRoleName[industryName]||'').trim(); if(!name||!orgId) return
+    if(tmRolesFor(industryName).find(r=>r.role_name.toLowerCase()===name.toLowerCase())) return
+    setTmSaving(true)
+    const maxO=tmRolesFor(industryName).reduce((m,r)=>Math.max(m,r.sort_order||0),0)
+    const {data,error}=await supabase.from('org_custom_roles').insert({role_name:name,organisation_id:orgId,industry_name:industryName,sort_order:maxO+1}).select().single()
+    if(!error&&data){setTmAllRoles(prev=>[...prev,data]);setTmNewRoleName(prev=>({...prev,[industryName]:''}))}
+    setTmSaving(false)
+  }
+  const tmDeleteRole = async (id) => {
+    await supabase.from('org_custom_roles').delete().eq('id',id).catch(()=>{})
+    setTmAllRoles(prev=>prev.filter(r=>r.id!==id))
+  }
+  const tmSaveRole = async () => {
+    if(!tmEditRole?.role_name?.trim()) return; setTmSaving(true)
+    await supabase.from('org_custom_roles').update({role_name:tmEditRole.role_name.trim()}).eq('id',tmEditRole.id).catch(()=>{})
+    setTmAllRoles(prev=>prev.map(r=>r.id===tmEditRole.id?{...r,role_name:tmEditRole.role_name.trim()}:r))
+    setTmEditRole(null); setTmSaving(false)
+  }
+  const tmMoveRole = async (id,industryName,dir) => {
+    const list=tmRolesFor(industryName); const idx=list.findIndex(r=>r.id===id); if(idx<0) return
+    const swap=list[idx+dir]; if(!swap) return
+    const aO=list[idx].sort_order??idx, bO=swap.sort_order??(idx+dir)
+    await Promise.all([supabase.from('org_custom_roles').update({sort_order:bO}).eq('id',id),supabase.from('org_custom_roles').update({sort_order:aO}).eq('id',swap.id)]).catch(()=>{})
+    setTmAllRoles(prev=>prev.map(r=>r.id===id?{...r,sort_order:bO}:r.id===swap.id?{...r,sort_order:aO}:r))
+  }
+
+  const tmAddPos = async () => {
+    const name=tmNewPosName.trim(); if(!name||!orgId) return
+    const defaults=['Manager','Supervisor','Staff Member']
+    if([...defaults,...tmCustomPos.map(p=>p.position_name)].find(n=>n.toLowerCase()===name.toLowerCase())) return
+    setTmSaving(true)
+    const maxO=tmCustomPos.reduce((m,p)=>Math.max(m,p.sort_order||0),0)
+    const {data,error}=await supabase.from('org_custom_positions').insert({position_name:name,organisation_id:orgId,sort_order:maxO+1}).select().single()
+    if(!error&&data){setTmCustomPos(prev=>[...prev,data]);setTmNewPosName('')}
+    setTmSaving(false)
+  }
+  const tmDeletePos = async (id) => {
+    await supabase.from('org_custom_positions').delete().eq('id',id).catch(()=>{})
+    setTmCustomPos(prev=>prev.filter(p=>p.id!==id))
+  }
+  const tmSavePos = async () => {
+    if(!tmEditPos?.position_name?.trim()) return; setTmSaving(true)
+    await supabase.from('org_custom_positions').update({position_name:tmEditPos.position_name.trim()}).eq('id',tmEditPos.id).catch(()=>{})
+    setTmCustomPos(prev=>prev.map(p=>p.id===tmEditPos.id?{...p,position_name:tmEditPos.position_name.trim()}:p))
+    setTmEditPos(null); setTmSaving(false)
+  }
+  const tmMovePos = async (id,dir) => {
+    const sorted=[...tmCustomPos].sort((a,b)=>(a.sort_order??999)-(b.sort_order??999))
+    const idx=sorted.findIndex(p=>p.id===id); if(idx<0) return
+    const swap=sorted[idx+dir]; if(!swap) return
+    const aO=sorted[idx].sort_order??idx, bO=swap.sort_order??(idx+dir)
+    await Promise.all([supabase.from('org_custom_positions').update({sort_order:bO}).eq('id',id),supabase.from('org_custom_positions').update({sort_order:aO}).eq('id',swap.id)]).catch(()=>{})
+    setTmCustomPos(prev=>prev.map(p=>p.id===id?{...p,sort_order:bO}:p.id===swap.id?{...p,sort_order:aO}:p))
+  }
+
+  const tmAddGlobal = async () => {
+    const name=tmNewGlobalName.trim(); if(!name) return
+    if(tmGlobalList.find(i=>i.name.toLowerCase()===name.toLowerCase())) return
+    setTmSaving(true)
+    const maxO=tmGlobalList.reduce((m,i)=>Math.max(m,i.sort_order||0),0)
+    const {data,error}=await supabase.from('global_industries').insert({name,sort_order:maxO+1,created_by:user.name,created_at:new Date().toISOString()}).select().single()
+    if(!error&&data){setTmGlobalList(prev=>[...prev,data]);setTmGlobalInds(prev=>[...prev,data]);setTmNewGlobalName('')}
+    setTmSaving(false)
+  }
+  const tmDeleteGlobal = async (id) => {
+    if(!window.confirm('Delete this global industry? It will no longer appear in any organisation dropdowns.')) return
+    await supabase.from('global_industries').delete().eq('id',id).catch(()=>{})
+    setTmGlobalList(prev=>prev.filter(i=>i.id!==id))
+    setTmGlobalInds(prev=>prev.filter(i=>i.id!==id))
+  }
+  const tmSaveGlobal = async () => {
+    if(!tmEditGlobal?.name?.trim()) return; setTmSaving(true)
+    await supabase.from('global_industries').update({name:tmEditGlobal.name.trim()}).eq('id',tmEditGlobal.id).catch(()=>{})
+    const updated = (prev) => prev.map(i=>i.id===tmEditGlobal.id?{...i,name:tmEditGlobal.name.trim()}:i)
+    setTmGlobalList(updated); setTmGlobalInds(updated)
+    setTmEditGlobal(null); setTmSaving(false)
+  }
+  const tmMoveGlobal = async (id,dir) => {
+    const idx=tmGlobalList.findIndex(i=>i.id===id); if(idx<0) return
+    const swap=tmGlobalList[idx+dir]; if(!swap) return
+    const aO=tmGlobalList[idx].sort_order??idx, bO=swap.sort_order??(idx+dir)
+    await Promise.all([supabase.from('global_industries').update({sort_order:bO}).eq('id',id),supabase.from('global_industries').update({sort_order:aO}).eq('id',swap.id)]).catch(()=>{})
+    const upd = (prev) => {const n=[...prev];n[idx]={...n[idx],sort_order:bO};n[idx+dir]={...n[idx+dir],sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))}
+    setTmGlobalList(upd); setTmGlobalInds(upd)
+  }
+
   const save = async () => {
+    if (activeTab==='team') return
     if (activeTab==='company' && !form.name.trim()) { setMsg('✗ Company name is required'); return }
     setSaving(true); setMsg('')
     const updates = activeTab==='company' ? {
