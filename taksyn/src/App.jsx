@@ -194,6 +194,24 @@ const sendEmailNotif = async (toEmail, subject, body) => {
   } catch(e) { console.log('Email notif failed:', e.message) }
 }
 
+// Writes one row to audit_logs — fire-and-forget, safe to call anywhere.
+const logAuditEvent = (user, action, entityType=null, entityId=null, entityName=null, details=null) => {
+  if (!isConfigured() || !user) return
+  const entry = {
+    organisation_id: user.org||'',
+    user_id: user.id||null,
+    user_name: user.name||'',
+    action,
+    entity_type: entityType||null,
+    entity_id: entityId!=null ? String(entityId) : null,
+    entity_name: entityName||null,
+    details: details!=null ? (typeof details==='object' ? JSON.stringify(details) : String(details)) : null
+  }
+  supabase.from('audit_logs').insert(entry).then(({error})=>{
+    if (error) console.warn('audit_logs insert error:', error.message)
+  })
+}
+
 const mkAuditEntry = (event_type, user, org, detail={}, task_id=null, task_title=null, old_value=null, new_value=null) => ({
   id: Date.now()+'-'+Math.random().toString(36).slice(2,5),
   event_type,
