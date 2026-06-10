@@ -733,24 +733,18 @@ function AuthView({ onAuth }) {
           : 'Account created! Check your email to confirm, then sign in as your org admin.')
         setMode('login'); setLoading(false)
       } else {
-        const { createClient } = await import('@supabase/supabase-js')
-        const freshClient = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          import.meta.env.VITE_SUPABASE_ANON_KEY,
-          { auth: { persistSession: false, autoRefreshToken: false } }
-        )
-        // Race login against 10s timeout
+        // Race login against 10s timeout using the main persistent client
         const loginResult = await Promise.race([
-          freshClient.auth.signInWithPassword({ email, password }),
+          supabase.auth.signInWithPassword({ email, password }),
           new Promise((_,reject) => setTimeout(()=>reject(new Error('Login timed out. Please try again.')), 10000))
         ])
         const { data, error:e } = loginResult
         if (e) throw e
         if (data?.user) {
-          const { data:profile } = await freshClient.from('profiles').select('*').eq('id',data.user.id).single()
+          const { data:profile } = await supabase.from('profiles').select('*').eq('id',data.user.id).single()
           if (profile) {
             // Check org_members for multiple org memberships
-            const { data:memberships } = await freshClient.from('org_members').select('*').eq('user_id',data.user.id)
+            const { data:memberships } = await supabase.from('org_members').select('*').eq('user_id',data.user.id)
             if (memberships && memberships.length > 1) {
               // Multiple orgs — show picker
               setPendingAuthUser({...profile, email:data.user.email})
