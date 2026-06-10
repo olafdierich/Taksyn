@@ -5534,6 +5534,19 @@ function TeamsView({ user }) {
     if(isConfigured()) supabase.from('organisations').update({team_types:JSON.stringify(updated)}).eq('name',user.org).then(()=>{})
   }
 
+  const copyInviteLink = (team) => {
+    const base = window.location.origin + window.location.pathname
+    const params = new URLSearchParams({
+      invite: 'true',
+      org: orgId || user.org,
+      team: team.id,
+      role: inviteLinkRole,
+      position: inviteLinkPosition,
+      secret: 'taksyn-secret-2024'
+    })
+    navigator.clipboard.writeText(base + '?' + params.toString()).then(()=>alert('Invite link copied!')).catch(()=>{})
+  }
+
   const addMember = async () => {
     if(!addMemberUser||!selectedTeam) return
     const u = orgUsers.find(x=>x.id===addMemberUser)
