@@ -3904,6 +3904,230 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   const filtered = orgs.filter(o=>!search||o.name.toLowerCase().includes(search.toLowerCase())||o.industry?.toLowerCase().includes(search.toLowerCase()))
 
+  if (selectedOrgView) {
+    const contextUser = {...user, org: selectedOrgView.name}
+    return (
+      <div className="anim">
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,paddingBottom:12,borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{setSelectedOrgView(null);setViewingMember(null);setEditingMember(null);setShowAddMember(false);setAddMemberSearch('');setAddMemberSelectedId(null);setAddMemberMsg('')}}>
+            ← Back to all organisations
+          </button>
+          <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
+            {selectedOrgView.logo&&<img src={selectedOrgView.logo} alt={selectedOrgView.name} style={{height:28,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>}
+            <div style={{minWidth:0}}>
+              <div style={{fontWeight:800,fontSize:16,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedOrgView.name}</div>
+              <div style={{fontSize:11,color:'var(--t2)'}}>{selectedOrgView.industry||'—'} · <span style={{color:TIERS[selectedOrgView.tier]?.color||'var(--t2)',fontWeight:600}}>{selectedOrgView.tier}</span></div>
+            </div>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,flexWrap:'wrap'}}>
+          {[['members','👥 Members'],['teams','🏷 Teams'],['settings','⚙️ Settings'],['sla','⏱ Response Time'],['audit','📋 Audit Log'],['support','🎫 Support']].map(([k,l])=>(
+            <button key={k} onClick={()=>setOrgContextTab(k)} style={{flex:'1 1 auto',padding:'6px 8px',borderRadius:6,border:'none',background:orgContextTab===k?'#fff':'transparent',color:orgContextTab===k?'var(--text)':'var(--t2)',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:orgContextTab===k?'0 1px 4px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>{l}</button>
+          ))}
+        </div>
+        {orgContextTab==='members'&&(
+          <div>
+            {(()=>{
+              const filled = COMPANY_COMPLETENESS_FIELDS.filter(f=>selectedOrgView[f.key]&&String(selectedOrgView[f.key]).trim())
+              const missing = COMPANY_COMPLETENESS_FIELDS.filter(f=>!selectedOrgView[f.key]||!String(selectedOrgView[f.key]).trim())
+              const pct = Math.round((filled.length/COMPANY_COMPLETENESS_FIELDS.length)*100)
+              const color = pct===100?'var(--green)':pct>=60?'var(--amber)':'var(--red)'
+              return (
+                <div className="section" style={{marginBottom:14}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px'}}>Profile Completeness</div>
+                    <div style={{fontSize:18,fontWeight:800,color}}>{pct}%</div>
+                  </div>
+                  <div style={{height:6,background:'var(--s3)',borderRadius:4,overflow:'hidden',marginBottom:8}}>
+                    <div style={{height:'100%',width:pct+'%',background:color,borderRadius:4,transition:'width .3s'}}/>
+                  </div>
+                  <div style={{fontSize:11,color:'var(--t2)',marginBottom:missing.length?6:0}}>{filled.length} of {COMPANY_COMPLETENESS_FIELDS.length} fields completed</div>
+                  {missing.length>0&&(
+                    <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                      {missing.map(f=><span key={f.key} style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'rgba(239,68,68,.08)',color:'var(--red)',border:'1px solid rgba(239,68,68,.15)',fontWeight:500}}>{f.label}</span>)}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+            <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
+              <button className="btn btn-primary btn-sm" onClick={()=>{setShowAddMember(v=>!v);setAddMemberMsg('');setAddMemberSelectedId(null);setAddMemberSearch('');if(!allProfiles.length)loadAllProfiles()}}>
+                {showAddMember?'✕ Cancel':'+ Add Member'}
+              </button>
+            </div>
+            {showAddMember&&(
+              <div className="section" style={{marginBottom:14}}>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>Add member to {selectedOrgView.name}</div>
+                <input className="form-input" placeholder="Search by name or email..." value={addMemberSearch} onChange={e=>setAddMemberSearch(e.target.value)} style={{fontSize:13,marginBottom:6}}/>
+                {loadingProfiles?(
+                  <div style={{textAlign:'center',padding:12,color:'var(--t2)',fontSize:13}}>Loading users...</div>
+                ):(
+                  <div style={{maxHeight:200,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6}}>
+                    {allProfiles.filter(p=>!orgMembers.some(m=>m.id===p.id)).filter(p=>!addMemberSearch||p.name?.toLowerCase().includes(addMemberSearch.toLowerCase())||p.email?.toLowerCase().includes(addMemberSearch.toLowerCase())).map(p=>(
+                      <div key={p.id} onClick={()=>setAddMemberSelectedId(p.id===addMemberSelectedId?null:p.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',cursor:'pointer',background:p.id===addMemberSelectedId?'var(--brand-lt)':'transparent',borderBottom:'1px solid var(--border)'}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:600,fontSize:13,color:p.id===addMemberSelectedId?'var(--brand)':'inherit'}}>{p.name||'—'}</div>
+                          <div style={{fontSize:11,color:'var(--t2)'}}>{p.email||'—'}{p.org&&<span> · {p.org}</span>}</div>
+                        </div>
+                        {p.id===addMemberSelectedId&&<span style={{fontSize:11,color:'var(--brand)',fontWeight:700}}>✓</span>}
+                      </div>
+                    ))}
+                    {allProfiles.filter(p=>!orgMembers.some(m=>m.id===p.id)).length===0&&(
+                      <div style={{padding:16,textAlign:'center',color:'var(--t2)',fontSize:13}}>All users are already members of this org</div>
+                    )}
+                  </div>
+                )}
+                {addMemberSelectedId&&(
+                  <div style={{display:'flex',gap:8,alignItems:'center',marginTop:8,flexWrap:'wrap'}}>
+                    <select className="form-input" value={addMemberRole} onChange={e=>setAddMemberRole(e.target.value)} style={{flex:1,fontSize:13,padding:'6px 10px'}}>
+                      {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                    </select>
+                    <button className="btn btn-primary" onClick={addMemberToOrg} disabled={loading}>{loading?'Adding...':'Add to Org'}</button>
+                  </div>
+                )}
+                {addMemberMsg&&(
+                  <div style={{marginTop:8,fontSize:13,padding:'6px 10px',borderRadius:6,background:addMemberMsg.startsWith('✅')?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)',color:addMemberMsg.startsWith('✅')?'var(--green)':'#EF4444'}}>{addMemberMsg}</div>
+                )}
+              </div>
+            )}
+            {loadingMembers?<div style={{textAlign:'center',padding:20,color:'var(--t2)'}}>Loading members...</div>:
+            orgMembers.length===0?<div className="empty"><div className="empty-icon">👥</div><div className="empty-text">No members yet</div></div>:
+            <div>
+              {Object.entries(orgMembers.reduce((g,m)=>{ const r=m.role||'worker'; if(!g[r]) g[r]=[]; g[r].push(m); return g },{})).sort(([a],[b])=>['client_admin','manager','supervisor','worker'].indexOf(a)-['client_admin','manager','supervisor','worker'].indexOf(b)).map(([role,members])=>(
+                <div key={role} style={{marginBottom:14}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:8,paddingBottom:4,borderBottom:'1px solid var(--border)'}}>{ROLE_LABELS[role]} ({members.length})</div>
+                  {members.map((m,i)=>(
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={()=>setViewingMember(m)}>
+                      <Avatar name={m.name||'?'} role={m.role} size={36} avatarUrl={m.avatar_url}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:600,fontSize:13}}>{m.name||'—'}</div>
+                        <div style={{fontSize:11,color:'var(--t2)'}}>{m.email||'—'}</div>
+                        {m.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {m.department}</div>}
+                      </div>
+                      <RolePill role={m.role}/>
+                      <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,department:m.department||'',industry:m.industry||'',phone:m.phone||'',notes:m.notes||'',email:m.email||'',org:m.org||''})}}>✏️ Edit</button>
+                      <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();removeMemberFromOrg(m)}}>Remove</button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>}
+          </div>
+        )}
+        {orgContextTab==='teams'&&<TeamsView user={contextUser}/>}
+        {orgContextTab==='settings'&&<CompanySettingsView user={contextUser}/>}
+        {orgContextTab==='sla'&&<SLASettingsView user={contextUser} orgSLA={orgContextSLA} setOrgSLA={setOrgContextSLA} tasks={[]} setTasks={()=>{}} loadTasks={()=>{}}/>}
+        {orgContextTab==='audit'&&<AuditLogView user={contextUser} tasks={[]} auditLog={orgContextAudit} setAuditLog={setOrgContextAudit}/>}
+        {orgContextTab==='support'&&<SupportView user={contextUser} tickets={orgContextTickets} setTickets={setOrgContextTickets}/>}
+        {viewingMember&&(
+          <div className="modal-overlay" onClick={()=>{setViewingMember(null);setShowMemberOrgChange(false);setMemberOrgSearch('')}}>
+            <div className="modal" onClick={e=>e.stopPropagation()}>
+              <div className="modal-hdr"><div className="modal-title">👤 Member Profile</div><button className="modal-close" onClick={()=>{setViewingMember(null);setShowMemberOrgChange(false);setMemberOrgSearch('')}}>×</button></div>
+              <div className="modal-body">
+                <div style={{display:'flex',alignItems:'center',gap:14,padding:'12px 0 16px',borderBottom:'1px solid var(--border)',marginBottom:16}}>
+                  <Avatar name={viewingMember.name||'?'} role={viewingMember.role} size={56} avatarUrl={viewingMember.avatar_url}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:16,fontWeight:800}}>{viewingMember.name||'—'}</div>
+                    <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{viewingMember.email||'—'}</div>
+                    <div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap'}}><RolePill role={viewingMember.role}/>{viewingMember.tier&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>{viewingMember.tier}</span>}</div>
+                  </div>
+                </div>
+                <div className="two-col" style={{gap:8}}>
+                  {[['Organisation',viewingMember.org],['Industry',viewingMember.industry],['Department',viewingMember.department],['Phone',viewingMember.phone]].map(([l,v])=>v?(
+                    <div key={l} style={{background:'var(--s3)',borderRadius:8,padding:'8px 12px'}}>
+                      <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:2}}>{l}</div>
+                      <div style={{fontSize:13,fontWeight:600}}>{v}</div>
+                    </div>
+                  ):null)}
+                </div>
+                {viewingMember.notes&&<div style={{marginTop:10,background:'var(--s3)',borderRadius:8,padding:'8px 12px',fontSize:13,color:'var(--t2)',fontStyle:'italic'}}>{viewingMember.notes}</div>}
+                <div style={{marginTop:14,borderTop:'1px solid var(--border)',paddingTop:12}}>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setShowMemberOrgChange(v=>!v);setMemberOrgSearch('')}}>
+                    {showMemberOrgChange?'✕ Cancel':'🔄 Change Organisation'}
+                  </button>
+                  {showMemberOrgChange&&(
+                    <div style={{marginTop:10}}>
+                      <input className="form-input" placeholder="Filter organisations..." value={memberOrgSearch} onChange={e=>setMemberOrgSearch(e.target.value)} style={{fontSize:13,marginBottom:6}}/>
+                      <div style={{maxHeight:180,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6}}>
+                        {[...orgs].sort((a,b)=>a.name.localeCompare(b.name)).filter(o=>!memberOrgSearch||o.name.toLowerCase().includes(memberOrgSearch.toLowerCase())).map(o=>(
+                          <div key={o.id} onClick={()=>changeViewingMemberOrg(o.name)} style={{padding:'8px 12px',cursor:'pointer',fontSize:13,fontWeight:o.name===viewingMember.org?700:400,color:o.name===viewingMember.org?'var(--t2)':'inherit',background:o.name===viewingMember.org?'var(--s3)':'transparent',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            {o.name}
+                            {o.name===viewingMember.org&&<span style={{fontSize:11,color:'var(--t2)'}}>current</span>}
+                          </div>
+                        ))}
+                      </div>
+                      {loading&&<div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>Moving...</div>}
+                    </div>
+                  )}
+                </div>
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+                  <button className="btn btn-secondary" onClick={()=>{setViewingMember(null);setShowMemberOrgChange(false);setMemberOrgSearch('')}}>Close</button>
+                  <button className="btn btn-primary" onClick={()=>{setEditingMember(viewingMember);setMemberEditForm({name:viewingMember.name,role:viewingMember.role,department:viewingMember.department||'',industry:viewingMember.industry||'',phone:viewingMember.phone||'',notes:viewingMember.notes||'',email:viewingMember.email||'',org:viewingMember.org||''})}}>✏️ Edit Profile</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {editingMember&&(
+          <div className="modal-overlay" onClick={()=>setEditingMember(null)}>
+            <div className="modal" onClick={e=>e.stopPropagation()}>
+              <div className="modal-hdr"><div className="modal-title">✏️ Edit Member</div><button className="modal-close" onClick={()=>setEditingMember(null)}>×</button></div>
+              <div className="modal-body">
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--s3)',borderRadius:8,marginBottom:14}}>
+                  <Avatar name={editingMember.name||'?'} role={editingMember.role} size={36} avatarUrl={editingMember.avatar_url}/>
+                  <div><div style={{fontWeight:700}}>{editingMember.name}</div><div style={{fontSize:11,color:'var(--t2)'}}>{editingMember.email||'—'} · {editingMember.org}</div></div>
+                </div>
+                <div className="two-col">
+                  <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={memberEditForm.name||''} onChange={e=>setMemberEditForm({...memberEditForm,name:e.target.value})}/></div>
+                  <div className="form-field"><label className="form-label">Phone</label><input className="form-input" value={memberEditForm.phone||''} onChange={e=>setMemberEditForm({...memberEditForm,phone:e.target.value})} placeholder="+61 400 000 000"/></div>
+                </div>
+                <div className="form-field"><label className="form-label">Email</label>
+                  <input className="form-input" type="email" value={memberEditForm.email||''} onChange={e=>setMemberEditForm({...memberEditForm,email:e.target.value})} placeholder="email@example.com"/>
+                  <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates display email — user changes login email via their own Profile</div>
+                </div>
+                <div className="form-field"><label className="form-label">Role</label>
+                  <select className="form-input" value={memberEditForm.role||'worker'} onChange={e=>setMemberEditForm({...memberEditForm,role:e.target.value})}>
+                    {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </select>
+                </div>
+                <div className="form-field"><label className="form-label">Organisation</label>
+                  <input className="form-input" placeholder="Filter organisations..." value={orgChangeSearch} onChange={e=>setOrgChangeSearch(e.target.value)} style={{fontSize:13,marginBottom:4}}/>
+                  <select className="form-input" value={memberEditForm.org||editingMember?.org||''} onChange={e=>setMemberEditForm({...memberEditForm,org:e.target.value})} size={4} style={{fontSize:13,height:'auto'}}>
+                    {[...orgs].sort((a,b)=>a.name.localeCompare(b.name)).filter(o=>!orgChangeSearch||o.name.toLowerCase().includes(orgChangeSearch.toLowerCase())).map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
+                  </select>
+                  {memberEditForm.org&&memberEditForm.org!==editingMember?.org&&(
+                    <div style={{fontSize:11,color:'#F59E0B',marginTop:3}}>⚠️ Moving from <strong>{editingMember?.org}</strong> to <strong>{memberEditForm.org}</strong></div>
+                  )}
+                </div>
+                <div className="two-col">
+                  <div className="form-field"><label className="form-label">Industry</label>
+                    <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value,department:''})}>
+                      <option value="">— Select —</option>
+                      {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-field"><label className="form-label">Department</label>
+                    <select className="form-input" value={memberEditForm.department||''} onChange={e=>setMemberEditForm({...memberEditForm,department:e.target.value})}>
+                      <option value="">— Select —</option>
+                      {(DEPARTMENTS[memberEditForm.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="form-field"><label className="form-label">Notes</label>
+                  <textarea className="comment-box" style={{minHeight:60}} value={memberEditForm.notes||''} onChange={e=>setMemberEditForm({...memberEditForm,notes:e.target.value})} placeholder="Notes about this member..."/>
+                </div>
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                  <button className="btn btn-secondary" onClick={()=>{setEditingMember(null);setOrgChangeSearch('')}}>Cancel</button>
+                  <button className="btn btn-primary" disabled={!memberEditForm.name?.trim()} onClick={saveMemberEdit}>Save Changes</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="anim">
       <div className="ph" style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
