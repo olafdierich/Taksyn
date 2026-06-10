@@ -3032,7 +3032,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
       {/* Staff Performance Preview */}
       {reportType==='worker' && isClientAdmin && (
         <div className="section">
-          <div className="section-title">Worker Performance — {filteredPt.length} tasks · {pl}</div>
+          <div className="section-title">Staff Performance — {filteredPt.length} tasks · {pl}</div>
           <div style={{overflowX:'auto',marginTop:10}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
               <thead>
