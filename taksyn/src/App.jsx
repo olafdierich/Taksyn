@@ -3185,8 +3185,13 @@ function UsersView({ user, setAuditLog }) {
   }
 
   useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('global_industries').select('name').order('sort_order',{nullsFirst:false}).order('name')
+      .then(({data})=>{ if(data?.length) setGlobalIndustries(data.map(d=>d.name)) }).catch(()=>{})
+  },[])
+
+  useEffect(()=>{
     if(!isConfigured()||!user.org) return
-    // Load custom industries from org_industries table
     supabase.from('org_industries').select('name').eq('org', user.org)
       .then(({data})=>{ if(data?.length) setOrgCustomDepts(data.map(d=>d.name)) })
       .catch(()=>{})
