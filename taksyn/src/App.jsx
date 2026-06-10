@@ -2643,6 +2643,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const [filterTitle, setFilterTitle] = useState('')
   const [filterWorker, setFilterWorker] = useState('')
   const [filterDept, setFilterDept] = useState('')
+  const [filterIndustry, setFilterIndustry] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterStatuses, setFilterStatuses] = useState([])
   const [filterPriorities, setFilterPriorities] = useState([])
