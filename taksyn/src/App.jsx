@@ -6484,22 +6484,20 @@ export default function App() {
   useEffect(()=>{
     if(!isConfigured()) return
 
-    // Restore cached user immediately so the app doesn't flash sign-in on load
+    // user is already restored from localStorage by the useState lazy initializer above.
+    // Just verify the Supabase session to get fresh profile data.
     const cached = localStorage.getItem('taksyn-user')
-    if(cached) { try { setUser(JSON.parse(cached)) } catch(e) { localStorage.removeItem('taksyn-user') } }
-
-    // Verify with Supabase — update user if session is valid, clear only if truly signed out
     supabase.auth.getSession().then(({data:{session}})=>{
       if(session?.user) {
         supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
           if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
         }).catch(()=>{})
       } else if(!cached) {
-        // No cached user and no Supabase session — definitely signed out
+        // No cached user and no active Supabase session — definitely signed out
         setUser(null)
       }
-      // If cached user exists but getSession returns no session, keep showing the app;
-      // the token refresh may still be in flight. onAuthStateChange will fire if it fails.
+      // If there is a cached user but getSession returns nothing, keep the user visible;
+      // the token may be refreshing in the background — onAuthStateChange handles the result.
     }).catch(()=>{})
 
     const {data:{subscription}} = supabase.auth.onAuthStateChange(async(event, session)=>{
