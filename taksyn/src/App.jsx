@@ -4931,10 +4931,9 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
   const clearFilters = () => { setSearch(''); setDateFrom(''); setDateTo(''); setTypeFilter('all'); setOrgFilter('') }
 
   const exportCSV = () => {
-    const rows = [
-      ['Date','User','Action','Entity','Details','Organisation'],
-      ...filtered.map(e=>[e.created_at||'', e.user_name||'', getCfg(e.action).label, e.entity_name||'', e.details||'', e.organisation_id||''])
-    ]
+    const rows = isSA
+      ? [['Date','User','Action','Organisation'], ...filtered.map(e=>[e.created_at||'', e.user_name||'', getCfg(e.action).label, e.organisation_id||''])]
+      : [['Date','User','Action','Entity','Details','Organisation'], ...filtered.map(e=>[e.created_at||'', e.user_name||'', getCfg(e.action).label, e.entity_name||'', e.details||'', e.organisation_id||''])]
     const csv = rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(',')).join('\n')
     const a = document.createElement('a')
     a.href = 'data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv)
