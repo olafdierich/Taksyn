@@ -7373,22 +7373,23 @@ export default function App() {
             ) : (
               <>
                 {page==='dashboard'   && <DashboardView   {...pageProps} tickets={tickets} leaveRecords={leaveRecords}/>}
-                {page==='tasks'       && (user.role==='super_admin' ? <SuperAdminTaskStats tasks={tasks} setTasks={setTasks} loadTasks={loadTasks} /> : <TasksView {...pageProps}/>)}
-                {page==='evidence'    && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
-                {page==='escalations' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
-                {page==='reports'     && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
+                {page==='tasks'       && user.role!=='super_admin' && <TasksView {...pageProps}/>}
+                {page==='evidence'    && user.role!=='super_admin' && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
+                {page==='escalations' && user.role!=='super_admin' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
+                {page==='reports'     && user.role!=='super_admin' && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
                 {page==='audit'       && hasAccess(user.role,2) && <AuditLogView   {...pageProps}/>}
                 {page==='orgs'        && user.role==='super_admin' && <OrganisationsView {...pageProps}/>}
                 {page==='users'       && hasAccess(user.role,4) && <UsersView      {...pageProps}/>}
-                {page==='tiers'       && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
+                {page==='tiers'       && user.role!=='super_admin' && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
                 {page==='support'     && user.role==='super_admin' && <SupportView {...pageProps}/>}
-                {page==='help'        && <HelpView {...pageProps}/>}
-                {page==='projects'    && hasAccess(user.role,2) && <ProjectsView {...pageProps}/>}
-                {page==='performance' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
-                {page==='leave'       && <LeaveView {...pageProps}/>}
+                {page==='help'        && user.role!=='super_admin' && <HelpView {...pageProps}/>}
+                {page==='projects'    && user.role!=='super_admin' && hasAccess(user.role,2) && <ProjectsView {...pageProps}/>}
+                {page==='performance' && user.role!=='super_admin' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
+                {page==='leave'       && user.role!=='super_admin' && <LeaveView {...pageProps}/>}
                 {page==='teams'       && hasAccess(user.role,2) && <TeamsView {...pageProps}/>}
                 {page==='sla'         && user.role==='client_admin' && <SLASettingsView {...pageProps}/>}
                 {page==='company_settings' && user.role==='client_admin' && <CompanySettingsView user={user}/>}
+                {page==='notifications' && user.role==='super_admin' && <PlatformAnnouncementsView user={user}/>}
               </>
             )}
           </div>
