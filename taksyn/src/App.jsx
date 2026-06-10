@@ -5570,17 +5570,23 @@ function TeamsView({ user }) {
     if(isConfigured()) supabase.from('organisations').update({team_types:JSON.stringify(updated)}).eq('name',user.org).then(()=>{})
   }
 
-  const copyInviteLink = (team) => {
+  const copyInviteLink = async (team) => {
+    if (!orgId) { alert('Organisation data is still loading — please wait a moment and try again.'); return }
+    const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
+    if (isConfigured()) {
+      await supabase.from('invite_links').insert({
+        id: linkId, org_id: orgId, team_id: team.id, role: inviteLinkRole,
+        position: inviteLinkPosition || null, created_by: user.name, org: user.org,
+        created_at: new Date().toISOString()
+      }).catch(()=>{})
+    }
     const base = window.location.origin + window.location.pathname
     const params = new URLSearchParams({
-      invite: 'true',
-      org: orgId || user.org,
-      team: team.id,
-      role: inviteLinkRole,
-      position: inviteLinkPosition,
-      secret: 'taksyn-secret-2024'
+      invite: 'true', org: orgId, team: team.id, role: inviteLinkRole,
+      position: inviteLinkPosition, secret: 'taksyn-secret-2024', link: linkId
     })
-    navigator.clipboard.writeText(base + '?' + params.toString()).then(()=>alert('Invite link copied!')).catch(()=>{})
+    navigator.clipboard.writeText(base + '?' + params.toString())
+      .then(()=>alert('Invite link copied!')).catch(()=>{})
   }
 
   const addMember = async () => {
