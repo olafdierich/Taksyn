@@ -3558,7 +3558,7 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
                     {userPositions[u.id].map((pos,pi)=><PositionChip key={pi} pos={pos}/>)}
                   </div>
-                ) : (u.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {u.department}</div>)}
+                ) : (u.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {u.industry}</div>)}
               </div>
               <RolePill role={u.role}/>
               {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||'',phone:u.phone||'',notes:u.notes||'',email:u.email||'',org:u.org||''}); setEditPositions(userPositions[u.id]?.map(p=>({...p}))||[]) }}>✏️ Edit</button>}
