@@ -4169,7 +4169,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
               {org.notes&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,fontStyle:'italic'}}>{org.notes}</div>}
               {/* Action buttons — wrap on narrow screens */}
               <div className="org-actions">
-                <button className="btn btn-secondary btn-sm" onClick={()=>{ setSelectedOrgView(org); loadOrgMembers(org.name) }}>👥 View Members</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>enterOrgContext(org)}>👥 View & Manage</button>
                 <button className="btn btn-primary btn-sm" onClick={()=>{ setShowInvite(org); setInviteEmail(''); setInviteName('') }}>✉️ Invite Admin</button>
                 <label style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:'1px dashed '+(dragOver===org.id?'var(--brand)':'var(--border)'),background:dragOver===org.id?'var(--brand-lt)':'transparent',color:dragOver===org.id?'var(--brand)':'var(--t2)'}}
                   onDragOver={e=>{ e.preventDefault(); setDragOver(org.id) }}
