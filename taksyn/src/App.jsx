@@ -1055,34 +1055,9 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         </div>
       </div>
       <div style={{marginTop:4}}>
-        {isSA ? (
-          <>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-              <div style={{fontSize:14,fontWeight:700}}>🎫 Active Support Tickets</div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setPage('support')}>View All</button>
-            </div>
-            {tickets.filter(t=>t.status==='open'||t.status==='in_progress').length===0
-              ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No open tickets</div></div>
-              : tickets.filter(t=>t.status==='open'||t.status==='in_progress').slice(0,5).map((t,i)=>(
-                <div key={i} onClick={()=>setPage('support')} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:12,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(t.status==='open'?'#F59E0B':'#3B82F6')}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:600,marginBottom:2}}>{t.description?.slice(0,80)}{t.description?.length>80?'...':''}</div>
-                      <div style={{fontSize:11,color:'var(--t2)'}}>{t.user_name} · {t.org} · {t.device}</div>
-                    </div>
-                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='open'?'rgba(245,158,11,.15)':'rgba(59,130,246,.15)',color:t.status==='open'?'#F59E0B':'#3B82F6',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
-                  </div>
-                </div>
-              ))
-            }
-          </>
-        ) : (
-          <>
-            <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Active Tasks</div>
-            {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')}/>)}
-            {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
-          </>
-        )}
+        <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Active Tasks</div>
+        {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')}/>)}
+        {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
       </div>
     </div>
   )
