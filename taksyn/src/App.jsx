@@ -1192,6 +1192,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           const {error} = await supabase.from('audit_log').insert(rEntry)
           if (error) console.warn('audit_log insert error:', error.message)
         }
+        logAuditEvent(user, 'task.assigned', 'task', id, prev?.title||id, (prev.assigned_user_name||'Unassigned')+' → '+toName)
       }
     }
     const interventionTag = user?.role==='super_admin' ? { lastIntervention: { by: user.name, reason: _interventionReason, at: new Date().toISOString() } } : {}
