@@ -3049,11 +3049,39 @@ function UsersView({ user, setAuditLog }) {
             <div className="modal-body">
               <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Emma Wilson"/></div>
               <div className="form-field"><label className="form-label">Email Address</label><input className="form-input" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="emma@yourorg.com"/></div>
-              <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
+              <div className="form-field"><label className="form-label">System Role <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— determines page access</span></label><select className="form-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
               {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
-              <div className="form-field"><label className="form-label">Industry</label><select className="form-input" value={inviteIndustry} onChange={e=>{setInviteIndustry(e.target.value);setInviteDept('');setInviteCustomDept('')}}><option value="">— Select industry —</option>{Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}</select></div>
-              {inviteIndustry&&<div className="form-field"><label className="form-label">Department / Position</label><select className="form-input" value={inviteDept} onChange={e=>setInviteDept(e.target.value)}><option value="">— Select department —</option>{[...(DEPARTMENTS[inviteIndustry]||[]),...orgCustomDepts.filter(d=>d.industry===inviteIndustry).map(d=>d.name)].map(d=><option key={d} value={d}>{d}</option>)}<option value="__custom__">+ Add custom position...</option></select></div>}
-              {inviteDept==='__custom__'&&<div className="form-field"><label className="form-label">Custom Position <span style={{fontSize:10,color:'var(--t2)'}}>— will be saved to this org</span></label><input className="form-input" value={inviteCustomDept} onChange={e=>setInviteCustomDept(e.target.value)} placeholder="e.g. Night Shift Supervisor"/></div>}
+              <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                  <label className="form-label" style={{margin:0}}>Department Positions</label>
+                  <span style={{fontSize:10,color:'var(--t2)'}}>Add one or more</span>
+                </div>
+                {invitePositions.map((pos,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                    <select className="form-select" value={pos.dept} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,dept:e.target.value}:p))} style={{flex:1,fontSize:12}}>
+                      <option value="">— Department —</option>
+                      {Object.values(DEPARTMENTS).flat().filter((d,ix,a)=>a.indexOf(d)===ix).sort().map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <select className="form-select" value={pos.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))} style={{width:115,fontSize:12}}>
+                      <option value="worker">Worker</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="manager">Manager</option>
+                    </select>
+                    <input className="form-input" placeholder="Title" value={pos.title||''} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,title:e.target.value}:p))} style={{flex:1,fontSize:12}}/>
+                    {invitePositions.length>1&&<button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:16,padding:'0 4px'}} onClick={()=>setInvitePositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>}
+                  </div>
+                ))}
+                <button className="btn btn-secondary btn-sm" style={{fontSize:11,marginTop:2}} onClick={()=>setInvitePositions(prev=>[...prev,{dept:'',role:'worker',title:'',is_primary:false}])}>+ Add another position</button>
+              </div>
+              {inviteName.trim()&&invitePositions.some(p=>p.dept)&&(
+                <div style={{background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--text)',lineHeight:1.5}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'var(--brand)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.8px'}}>Invite Summary</div>
+                  <strong>{inviteName.trim()||'This person'}</strong> will join as <strong>{ROLE_LABELS[inviteRole]}</strong> and be assigned to:
+                  <ul style={{margin:'6px 0 0 16px',padding:0}}>
+                    {invitePositions.filter(p=>p.dept).map((p,i)=><li key={i}>{p.title?<strong>{p.title}</strong>:<em>{ROLE_LABELS[p.role]||p.role}</em>} in {p.dept}{i===0?' (primary)':''}</li>)}
+                  </ul>
+                </div>
+              )}
               <div className="form-field">
                 <label className="form-label">Send Via</label>
                 <div style={{display:'flex',gap:8}}>
@@ -3062,7 +3090,7 @@ function UsersView({ user, setAuditLog }) {
                 </div>
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                <button className="btn btn-secondary" onClick={()=>setShowInvite(false)}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setShowInvite(false); setInvitePositions([{dept:'',role:'worker',title:'',is_primary:true}]) }}>Cancel</button>
                 <button className="btn btn-primary" onClick={sendInvite}>{inviteMethod==='whatsapp'?'💬 Send via WhatsApp':'📧 Send Invite'}</button>
               </div>
             </div>
