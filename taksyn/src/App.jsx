@@ -155,7 +155,7 @@ const generateNotifications = (tasks, user, prevTasks=[]) => {
     if(t.status==='awaiting_review' && prev?.status!=='awaiting_review') {
       if(['supervisor','manager','client_admin'].includes(user.role) &&
         (t.assigned_role==='worker'||t.assigned_role===user.role)) {
-        notifs.push({ id:t.id+'_submitted', type:'submitted', title:'Task submitted for review', body:`"${t.title}" submitted by ${t.completed_by||t.assigned_user_name||'worker'}`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#F59E0B' })
+        notifs.push({ id:t.id+'_submitted', type:'submitted', title:'Task submitted for review', body:`"${t.title}" submitted by ${t.completed_by||t.assigned_user_name||'staff member'}`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#F59E0B' })
       }
     }
 
