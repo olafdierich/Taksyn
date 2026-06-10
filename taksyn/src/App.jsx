@@ -6152,7 +6152,11 @@ export default function App() {
         ).forEach(t=>{
           const sla = getSLAStatus(t, orgSLARef.current)
           if(sla?.status==='breached') {
-            supabase.from('tasks').update({escalation:true, status:'escalated', lastIntervention:'Response time exceeded — auto-escalated'}).eq('id',t.id).then(()=>{})
+            supabase.from('tasks').update({escalation:true, status:'escalated', lastIntervention:'Response time exceeded — auto-escalated'}).eq('id',t.id).then(()=>{
+              const slaEntry = mkAuditEntry('task_escalated', user, t.org||user?.org, { reason:'SLA breach — auto-escalated' }, t.id, t.title, 'awaiting_review', 'escalated')
+              setAuditLog(prev=>[slaEntry,...prev])
+              supabase.from('audit_log').insert(slaEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+            })
             addNotifications([{id:t.id+'_sla_breach', type:'sla', title:'Response Time Exceeded 🚨', body:`"${t.title}" review deadline exceeded — auto-escalated`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444'}])
           }
         })
