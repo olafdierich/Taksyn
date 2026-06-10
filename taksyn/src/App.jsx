@@ -4360,6 +4360,295 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
   )
 }
 
+function PlatformIndustriesView({ user }) {
+  const [industries, setIndustries] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [newName, setNewName] = useState('')
+  const [editId, setEditId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    setLoading(true)
+    supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name')
+      .then(({data})=>{ if(data) setIndustries(data) }).catch(()=>{}).finally(()=>setLoading(false))
+  },[])
+
+  const addIndustry = async () => {
+    const name = newName.trim()
+    if(!name||!isConfigured()) return
+    if(industries.find(i=>i.name.toLowerCase()===name.toLowerCase())) return
+    setSaving(true)
+    const maxOrder = industries.reduce((m,i)=>Math.max(m,i.sort_order||0),0)
+    const {data,error} = await supabase.from('global_industries').insert({name,sort_order:maxOrder+1,created_by:user.name,created_at:new Date().toISOString()}).select().single()
+    if(!error&&data) { setIndustries(prev=>[...prev,data]); setNewName('') }
+    setSaving(false)
+  }
+
+  const deleteIndustry = async (id) => {
+    if(!window.confirm('Delete this industry? This cannot be undone.')) return
+    await supabase.from('global_industries').delete().eq('id',id).catch(()=>{})
+    setIndustries(prev=>prev.filter(i=>i.id!==id))
+  }
+
+  const saveEdit = async () => {
+    const name = editName.trim()
+    if(!name||!editId) return
+    setSaving(true)
+    await supabase.from('global_industries').update({name}).eq('id',editId).catch(()=>{})
+    setIndustries(prev=>prev.map(i=>i.id===editId?{...i,name}:i))
+    setEditId(null); setEditName('')
+    setSaving(false)
+  }
+
+  const moveOrder = async (id, dir) => {
+    const idx = industries.findIndex(i=>i.id===id)
+    if(idx<0) return
+    const swap = industries[idx+dir]
+    if(!swap) return
+    const a = industries[idx], b = swap
+    const aOrder = a.sort_order??idx, bOrder = b.sort_order??(idx+dir)
+    await Promise.all([
+      supabase.from('global_industries').update({sort_order:bOrder}).eq('id',a.id),
+      supabase.from('global_industries').update({sort_order:aOrder}).eq('id',b.id)
+    ]).catch(()=>{})
+    setIndustries(prev=>{
+      const next=[...prev]
+      next[idx]={...a,sort_order:bOrder}
+      next[idx+dir]={...b,sort_order:aOrder}
+      return [...next].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999)||(x.name<y.name?-1:1))
+    })
+  }
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Platform Industries</div>
+        <div className="ph-sub">Global industry list available to all organisations as preset options</div>
+      </div>
+      <div className="section">
+        <div style={{display:'flex',gap:8,marginBottom:16}}>
+          <input className="form-input" style={{flex:1}} placeholder="New industry name…" value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addIndustry()}/>
+          <button className="btn btn-primary" onClick={addIndustry} disabled={saving||!newName.trim()}>Add Industry</button>
+        </div>
+        {loading ? <div className="spinner" style={{margin:'20px auto'}}/> : industries.length===0 ? (
+          <div style={{fontSize:13,color:'var(--t2)',padding:'12px 0'}}>No global industries yet — add the first one above.</div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {industries.map((ind,idx)=>(
+              <div key={ind.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
+                {editId===ind.id ? (
+                  <>
+                    <input className="form-input" style={{flex:1,fontSize:13}} value={editName} onChange={e=>setEditName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveEdit();if(e.key==='Escape'){setEditId(null);setEditName('')}}} autoFocus/>
+                    <button className="btn btn-primary btn-sm" onClick={saveEdit} disabled={saving}>Save</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditId(null);setEditName('')}}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{fontSize:14}}>🏭</span>
+                    <span style={{flex:1,fontSize:13,fontWeight:500}}>{ind.name}</span>
+                    <div style={{display:'flex',gap:4}}>
+                      <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:12,padding:'2px 5px'}} onClick={()=>moveOrder(ind.id,-1)} disabled={idx===0}>↑</button>
+                      <button style={{background:'none',border:'none',cursor:idx<industries.length-1?'pointer':'default',opacity:idx<industries.length-1?1:.3,fontSize:12,padding:'2px 5px'}} onClick={()=>moveOrder(ind.id,1)} disabled={idx===industries.length-1}>↓</button>
+                      <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>{setEditId(ind.id);setEditName(ind.name)}}>Edit</button>
+                      <button className="btn btn-danger btn-sm" style={{fontSize:11}} onClick={()=>deleteIndustry(ind.id)}>Delete</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RolesDeptView({ user }) {
+  const [orgId, setOrgId] = useState(null)
+  const [industries, setIndustries] = useState([])
+  const [globalIndustries, setGlobalIndustries] = useState([])
+  const [roles, setRoles] = useState([])
+  const [selectedIndustry, setSelectedIndustry] = useState('')
+  const [newIndustryName, setNewIndustryName] = useState('')
+  const [newRoleName, setNewRoleName] = useState('')
+  const [editRoleId, setEditRoleId] = useState(null)
+  const [editRoleName, setEditRoleName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('global_industries').select('name').order('sort_order',{nullsFirst:false}).order('name')
+      .then(({data})=>{ if(data?.length) setGlobalIndustries(data.map(d=>d.name)) }).catch(()=>{})
+    supabase.from('organisations').select('id').eq('name',user.org).single()
+      .then(({data})=>{ if(data?.id) setOrgId(data.id) }).catch(()=>{})
+  },[user.org])
+
+  useEffect(()=>{
+    if(!isConfigured()||!user.org) return
+    setLoading(true)
+    supabase.from('org_industries').select('*').eq('org',user.org)
+      .then(({data})=>{ if(data) setIndustries(data) }).catch(()=>{}).finally(()=>setLoading(false))
+  },[user.org])
+
+  useEffect(()=>{
+    if(!isConfigured()||!orgId||!selectedIndustry) { setRoles([]); return }
+    supabase.from('org_roles').select('*').eq('organisation_id',orgId).eq('industry_name',selectedIndustry).order('sort_order',{nullsFirst:false}).order('name')
+      .then(({data})=>{ setRoles(data||[]) }).catch(()=>setRoles([]))
+  },[orgId,selectedIndustry])
+
+  const addIndustry = async () => {
+    const name = newIndustryName.trim()
+    if(!name||!isConfigured()) return
+    const already = [...globalIndustries,...industries.map(i=>i.name)]
+    if(already.find(n=>n.toLowerCase()===name.toLowerCase())) return
+    setSaving(true)
+    const entry = { name, org:user.org, organisation_id:orgId||null, created_by:user.name, created_at:new Date().toISOString() }
+    const {data,error} = await supabase.from('org_industries').insert(entry).select().single()
+    if(!error&&data) { setIndustries(prev=>[...prev,data]); setNewIndustryName('') }
+    setSaving(false)
+  }
+
+  const removeIndustry = async (id, name) => {
+    if(!window.confirm('Remove industry "'+name+'"? All roles under it will also be deleted.')) return
+    if(orgId) await supabase.from('org_roles').delete().eq('organisation_id',orgId).eq('industry_name',name).catch(()=>{})
+    await supabase.from('org_industries').delete().eq('id',id).catch(()=>{})
+    setIndustries(prev=>prev.filter(i=>i.id!==id))
+    if(selectedIndustry===name) { setSelectedIndustry(''); setRoles([]) }
+  }
+
+  const addRole = async () => {
+    const name = newRoleName.trim()
+    if(!name||!orgId||!selectedIndustry||!isConfigured()) return
+    if(roles.find(r=>r.name.toLowerCase()===name.toLowerCase())) return
+    setSaving(true)
+    const maxOrder = roles.reduce((m,r)=>Math.max(m,r.sort_order||0),0)
+    const {data,error} = await supabase.from('org_roles').insert({name,organisation_id:orgId,industry_name:selectedIndustry,sort_order:maxOrder+1,created_at:new Date().toISOString()}).select().single()
+    if(!error&&data) { setRoles(prev=>[...prev,data]); setNewRoleName('') }
+    setSaving(false)
+  }
+
+  const deleteRole = async (id) => {
+    await supabase.from('org_roles').delete().eq('id',id).catch(()=>{})
+    setRoles(prev=>prev.filter(r=>r.id!==id))
+  }
+
+  const saveRoleEdit = async () => {
+    const name = editRoleName.trim()
+    if(!name||!editRoleId) return
+    setSaving(true)
+    await supabase.from('org_roles').update({name}).eq('id',editRoleId).catch(()=>{})
+    setRoles(prev=>prev.map(r=>r.id===editRoleId?{...r,name}:r))
+    setEditRoleId(null); setEditRoleName('')
+    setSaving(false)
+  }
+
+  const moveRole = async (id, dir) => {
+    const idx = roles.findIndex(r=>r.id===id)
+    if(idx<0) return
+    const swap = roles[idx+dir]
+    if(!swap) return
+    const a=roles[idx], b=swap
+    const aOrder=a.sort_order??idx, bOrder=b.sort_order??(idx+dir)
+    await Promise.all([
+      supabase.from('org_roles').update({sort_order:bOrder}).eq('id',a.id),
+      supabase.from('org_roles').update({sort_order:aOrder}).eq('id',b.id)
+    ]).catch(()=>{})
+    setRoles(prev=>{
+      const next=[...prev]
+      next[idx]={...a,sort_order:bOrder}
+      next[idx+dir]={...b,sort_order:aOrder}
+      return [...next].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999)||(x.name<y.name?-1:1))
+    })
+  }
+
+  const allAvailableIndustries = [...globalIndustries, ...industries.map(i=>i.name).filter(n=>!globalIndustries.includes(n))]
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Roles &amp; Departments</div>
+        <div className="ph-sub">Customise industries and roles for your organisation</div>
+      </div>
+
+      <div className="two-col" style={{alignItems:'flex-start'}}>
+        <div className="section">
+          <div className="section-title">Industries</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Global platform industries are shown below. Add custom ones for your organisation.</div>
+          {globalIndustries.length>0&&(
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Platform Industries</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                {globalIndustries.map(n=>(
+                  <button key={n} onClick={()=>setSelectedIndustry(n)} style={{padding:'4px 10px',borderRadius:10,fontSize:11,fontWeight:500,cursor:'pointer',border:'1px solid '+(selectedIndustry===n?'var(--brand)':'var(--border)'),background:selectedIndustry===n?'var(--brand-lt)':'var(--s3)',color:selectedIndustry===n?'var(--brand)':'var(--t2)',fontFamily:'inherit'}}>{n}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {loading ? <div className="spinner" style={{margin:'12px auto'}}/> : industries.length>0&&(
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Custom Industries</div>
+              {industries.map(ind=>(
+                <div key={ind.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:8,border:'1px solid '+(selectedIndustry===ind.name?'var(--brand)':'var(--border)'),background:selectedIndustry===ind.name?'var(--brand-lt)':'var(--s2)',marginBottom:4}}>
+                  <span style={{flex:1,fontSize:13,fontWeight:500,cursor:'pointer'}} onClick={()=>setSelectedIndustry(ind.name)}>{ind.name}</span>
+                  <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:14,padding:'0 4px'}} onClick={()=>removeIndustry(ind.id,ind.name)}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{display:'flex',gap:6}}>
+            <input className="form-input" style={{flex:1,fontSize:12}} placeholder="Add custom industry…" value={newIndustryName} onChange={e=>setNewIndustryName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addIndustry()}/>
+            <button className="btn btn-primary btn-sm" onClick={addIndustry} disabled={saving||!newIndustryName.trim()}>Add</button>
+          </div>
+        </div>
+
+        <div className="section">
+          <div className="section-title">Roles{selectedIndustry&&<span style={{fontSize:12,color:'var(--brand)',fontWeight:400,marginLeft:8}}>— {selectedIndustry}</span>}</div>
+          {!selectedIndustry ? (
+            <div style={{fontSize:13,color:'var(--t2)',padding:'8px 0'}}>Select an industry on the left to manage its roles.</div>
+          ) : (
+            <>
+              <div style={{display:'flex',gap:6,marginBottom:12}}>
+                <input className="form-input" style={{flex:1,fontSize:12}} placeholder="New role name…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
+                <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add</button>
+              </div>
+              {roles.length===0 ? (
+                <div style={{fontSize:13,color:'var(--t2)',padding:'8px 0'}}>No roles defined for {selectedIndustry} yet.</div>
+              ) : (
+                <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                  {roles.map((role,idx)=>(
+                    <div key={role.id} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
+                      {editRoleId===role.id ? (
+                        <>
+                          <input className="form-input" style={{flex:1,fontSize:12}} value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveRoleEdit();if(e.key==='Escape'){setEditRoleId(null);setEditRoleName('')}}} autoFocus/>
+                          <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving}>Save</button>
+                          <button className="btn btn-secondary btn-sm" onClick={()=>{setEditRoleId(null);setEditRoleName('')}}>×</button>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{flex:1,fontSize:12,fontWeight:500}}>{role.name}</span>
+                          <div style={{display:'flex',gap:3}}>
+                            <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,-1)} disabled={idx===0}>↑</button>
+                            <button style={{background:'none',border:'none',cursor:idx<roles.length-1?'pointer':'default',opacity:idx<roles.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,1)} disabled={idx===roles.length-1}>↓</button>
+                            <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditRoleId(role.id);setEditRoleName(role.name)}}>Edit</button>
+                            <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deleteRole(role.id)}>Delete</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CompanySettingsView({ user }) {
   const NOTIF_EVENTS = [
     { key:'task_submitted', label:'Task Submitted', sub:'When a worker submits a task for review' },
