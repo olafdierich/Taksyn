@@ -4507,171 +4507,281 @@ function RolesPositionsView({ user }) {
 
   useEffect(()=>{
     if(!isConfigured()) return
+    setLoading(true)
     supabase.from('global_industries').select('name').order('sort_order',{nullsFirst:false}).order('name')
       .then(({data})=>{ if(data?.length) setGlobalIndustries(data.map(d=>d.name)) }).catch(()=>{})
-    supabase.from('organisations').select('id').eq('name',user.org).single()
-      .then(({data})=>{ if(data?.id) setOrgId(data.id) }).catch(()=>{})
-  },[user.org])
-
-  useEffect(()=>{
-    if(!isConfigured()||!user.org) return
-    setLoading(true)
-    supabase.from('org_industries').select('*').eq('org',user.org)
-      .then(({data})=>{ if(data) setIndustries(data) }).catch(()=>{}).finally(()=>setLoading(false))
+    if(!isSuper&&user.org) {
+      supabase.from('organisations').select('id').eq('name',user.org).single()
+        .then(({data})=>{ if(data?.id) setOrgId(data.id) }).catch(()=>{})
+      supabase.from('org_industries').select('name').eq('org',user.org)
+        .then(({data})=>{ if(data) setOrgCustomIndustries(data.map(d=>d.name)) }).catch(()=>{})
+    }
+    if(isSuper) {
+      supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name')
+        .then(({data})=>{ if(data) setGlobalList(data) }).catch(()=>{})
+    }
+    setLoading(false)
   },[user.org])
 
   useEffect(()=>{
     if(!isConfigured()||!orgId||!selectedIndustry) { setRoles([]); return }
-    supabase.from('org_roles').select('*').eq('organisation_id',orgId).eq('industry_name',selectedIndustry).order('sort_order',{nullsFirst:false}).order('name')
+    supabase.from('org_custom_roles').select('*').eq('organisation_id',orgId).eq('industry_name',selectedIndustry).order('sort_order',{nullsFirst:false}).order('role_name')
       .then(({data})=>{ setRoles(data||[]) }).catch(()=>setRoles([]))
   },[orgId,selectedIndustry])
 
-  const addIndustry = async () => {
-    const name = newIndustryName.trim()
-    if(!name||!isConfigured()) return
-    const already = [...globalIndustries,...industries.map(i=>i.name)]
-    if(already.find(n=>n.toLowerCase()===name.toLowerCase())) return
-    setSaving(true)
-    const entry = { name, org:user.org, organisation_id:orgId||null, created_by:user.name, created_at:new Date().toISOString() }
-    const {data,error} = await supabase.from('org_industries').insert(entry).select().single()
-    if(!error&&data) { setIndustries(prev=>[...prev,data]); setNewIndustryName('') }
-    setSaving(false)
-  }
+  useEffect(()=>{
+    if(!isConfigured()||!orgId) return
+    supabase.from('org_custom_positions').select('*').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('name')
+      .then(({data})=>{ setCustomPositions(data||[]) }).catch(()=>{})
+  },[orgId])
 
-  const removeIndustry = async (id, name) => {
-    if(!window.confirm('Remove industry "'+name+'"? All roles under it will also be deleted.')) return
-    if(orgId) await supabase.from('org_roles').delete().eq('organisation_id',orgId).eq('industry_name',name).catch(()=>{})
-    await supabase.from('org_industries').delete().eq('id',id).catch(()=>{})
-    setIndustries(prev=>prev.filter(i=>i.id!==id))
-    if(selectedIndustry===name) { setSelectedIndustry(''); setRoles([]) }
-  }
+  const allIndustriesForRoles = [...globalIndustries, ...orgCustomIndustries.filter(n=>!globalIndustries.includes(n))]
 
+  // Roles CRUD
   const addRole = async () => {
     const name = newRoleName.trim()
     if(!name||!orgId||!selectedIndustry||!isConfigured()) return
-    if(roles.find(r=>r.name.toLowerCase()===name.toLowerCase())) return
+    if(roles.find(r=>r.role_name.toLowerCase()===name.toLowerCase())) return
     setSaving(true)
     const maxOrder = roles.reduce((m,r)=>Math.max(m,r.sort_order||0),0)
-    const {data,error} = await supabase.from('org_roles').insert({name,organisation_id:orgId,industry_name:selectedIndustry,sort_order:maxOrder+1,created_at:new Date().toISOString()}).select().single()
+    const {data,error} = await supabase.from('org_custom_roles').insert({role_name:name,organisation_id:orgId,industry_name:selectedIndustry,sort_order:maxOrder+1}).select().single()
     if(!error&&data) { setRoles(prev=>[...prev,data]); setNewRoleName('') }
     setSaving(false)
   }
-
   const deleteRole = async (id) => {
-    await supabase.from('org_roles').delete().eq('id',id).catch(()=>{})
+    await supabase.from('org_custom_roles').delete().eq('id',id).catch(()=>{})
     setRoles(prev=>prev.filter(r=>r.id!==id))
   }
-
   const saveRoleEdit = async () => {
     const name = editRoleName.trim()
     if(!name||!editRoleId) return
     setSaving(true)
-    await supabase.from('org_roles').update({name}).eq('id',editRoleId).catch(()=>{})
-    setRoles(prev=>prev.map(r=>r.id===editRoleId?{...r,name}:r))
-    setEditRoleId(null); setEditRoleName('')
+    await supabase.from('org_custom_roles').update({role_name:name}).eq('id',editRoleId).catch(()=>{})
+    setRoles(prev=>prev.map(r=>r.id===editRoleId?{...r,role_name:name}:r))
+    setEditRoleId(null); setEditRoleName(''); setSaving(false)
+  }
+  const moveRole = async (id,dir) => {
+    const idx=roles.findIndex(r=>r.id===id); if(idx<0) return
+    const swap=roles[idx+dir]; if(!swap) return
+    const a=roles[idx],b=swap,aO=a.sort_order??idx,bO=b.sort_order??(idx+dir)
+    await Promise.all([supabase.from('org_custom_roles').update({sort_order:bO}).eq('id',a.id),supabase.from('org_custom_roles').update({sort_order:aO}).eq('id',b.id)]).catch(()=>{})
+    setRoles(prev=>{const n=[...prev];n[idx]={...a,sort_order:bO};n[idx+dir]={...b,sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))})
+  }
+
+  // Positions CRUD
+  const addPosition = async () => {
+    const name = newPositionName.trim()
+    if(!name||!orgId||!isConfigured()) return
+    if([...DEFAULT_POSITIONS,...customPositions.map(p=>p.name)].find(n=>n.toLowerCase()===name.toLowerCase())) return
+    setSaving(true)
+    const maxOrder = customPositions.reduce((m,p)=>Math.max(m,p.sort_order||0),0)
+    const {data,error} = await supabase.from('org_custom_positions').insert({name,organisation_id:orgId,sort_order:maxOrder+1}).select().single()
+    if(!error&&data) { setCustomPositions(prev=>[...prev,data]); setNewPositionName('') }
     setSaving(false)
   }
-
-  const moveRole = async (id, dir) => {
-    const idx = roles.findIndex(r=>r.id===id)
-    if(idx<0) return
-    const swap = roles[idx+dir]
-    if(!swap) return
-    const a=roles[idx], b=swap
-    const aOrder=a.sort_order??idx, bOrder=b.sort_order??(idx+dir)
-    await Promise.all([
-      supabase.from('org_roles').update({sort_order:bOrder}).eq('id',a.id),
-      supabase.from('org_roles').update({sort_order:aOrder}).eq('id',b.id)
-    ]).catch(()=>{})
-    setRoles(prev=>{
-      const next=[...prev]
-      next[idx]={...a,sort_order:bOrder}
-      next[idx+dir]={...b,sort_order:aOrder}
-      return [...next].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999)||(x.name<y.name?-1:1))
-    })
+  const deletePosition = async (id) => {
+    await supabase.from('org_custom_positions').delete().eq('id',id).catch(()=>{})
+    setCustomPositions(prev=>prev.filter(p=>p.id!==id))
+  }
+  const savePosEdit = async () => {
+    const name = editPosName.trim()
+    if(!name||!editPosId) return
+    setSaving(true)
+    await supabase.from('org_custom_positions').update({name}).eq('id',editPosId).catch(()=>{})
+    setCustomPositions(prev=>prev.map(p=>p.id===editPosId?{...p,name}:p))
+    setEditPosId(null); setEditPosName(''); setSaving(false)
+  }
+  const movePos = async (id,dir) => {
+    const idx=customPositions.findIndex(p=>p.id===id); if(idx<0) return
+    const swap=customPositions[idx+dir]; if(!swap) return
+    const a=customPositions[idx],b=swap,aO=a.sort_order??idx,bO=b.sort_order??(idx+dir)
+    await Promise.all([supabase.from('org_custom_positions').update({sort_order:bO}).eq('id',a.id),supabase.from('org_custom_positions').update({sort_order:aO}).eq('id',b.id)]).catch(()=>{})
+    setCustomPositions(prev=>{const n=[...prev];n[idx]={...a,sort_order:bO};n[idx+dir]={...b,sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))})
   }
 
-  const allAvailableIndustries = [...globalIndustries, ...industries.map(i=>i.name).filter(n=>!globalIndustries.includes(n))]
+  // Global industries CRUD (super_admin only)
+  const addGlobal = async () => {
+    const name=newGlobalName.trim(); if(!name||!isConfigured()) return
+    if(globalList.find(i=>i.name.toLowerCase()===name.toLowerCase())) return
+    setSaving(true)
+    const maxOrder=globalList.reduce((m,i)=>Math.max(m,i.sort_order||0),0)
+    const {data,error}=await supabase.from('global_industries').insert({name,sort_order:maxOrder+1,created_by:user.name,created_at:new Date().toISOString()}).select().single()
+    if(!error&&data){setGlobalList(prev=>[...prev,data]);setNewGlobalName('')}
+    setSaving(false)
+  }
+  const deleteGlobal = async (id) => {
+    if(!window.confirm('Delete this global industry?')) return
+    await supabase.from('global_industries').delete().eq('id',id).catch(()=>{})
+    setGlobalList(prev=>prev.filter(i=>i.id!==id))
+  }
+  const saveGlobalEdit = async () => {
+    const name=editGlobalName.trim(); if(!name||!editGlobalId) return
+    setSaving(true)
+    await supabase.from('global_industries').update({name}).eq('id',editGlobalId).catch(()=>{})
+    setGlobalList(prev=>prev.map(i=>i.id===editGlobalId?{...i,name}:i))
+    setEditGlobalId(null);setEditGlobalName('');setSaving(false)
+  }
+  const moveGlobal = async (id,dir) => {
+    const idx=globalList.findIndex(i=>i.id===id); if(idx<0) return
+    const swap=globalList[idx+dir]; if(!swap) return
+    const a=globalList[idx],b=swap,aO=a.sort_order??idx,bO=b.sort_order??(idx+dir)
+    await Promise.all([supabase.from('global_industries').update({sort_order:bO}).eq('id',a.id),supabase.from('global_industries').update({sort_order:aO}).eq('id',b.id)]).catch(()=>{})
+    setGlobalList(prev=>{const n=[...prev];n[idx]={...a,sort_order:bO};n[idx+dir]={...b,sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))})
+  }
+
+  const TABS = isSuper
+    ? [['global_industries','Global Industries'],['roles','Roles per Industry'],['positions','Positions']]
+    : [['roles','Roles per Industry'],['positions','Positions']]
 
   return (
     <div className="anim">
       <div className="ph">
-        <div className="ph-title">Roles &amp; Departments</div>
-        <div className="ph-sub">Customise industries and roles for your organisation</div>
+        <div className="ph-title">Roles &amp; Positions</div>
+        <div className="ph-sub">Manage roles and position labels for your organisation</div>
       </div>
 
-      <div className="two-col" style={{alignItems:'flex-start'}}>
+      <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16}}>
+        {TABS.map(([k,l])=><button key={k} onClick={()=>setActiveTab(k)} style={{flex:'1 1 auto',padding:'6px 10px',borderRadius:6,border:'none',background:activeTab===k?'#fff':'transparent',color:activeTab===k?'var(--text)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:activeTab===k?'0 1px 4px rgba(0,0,0,.1)':'none'}}>{l}</button>)}
+      </div>
+
+      {/* Global Industries — super_admin only */}
+      {activeTab==='global_industries'&&(
         <div className="section">
-          <div className="section-title">Industries</div>
-          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Global platform industries are shown below. Add custom ones for your organisation.</div>
-          {globalIndustries.length>0&&(
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Platform Industries</div>
-              <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                {globalIndustries.map(n=>(
-                  <button key={n} onClick={()=>setSelectedIndustry(n)} style={{padding:'4px 10px',borderRadius:10,fontSize:11,fontWeight:500,cursor:'pointer',border:'1px solid '+(selectedIndustry===n?'var(--brand)':'var(--border)'),background:selectedIndustry===n?'var(--brand-lt)':'var(--s3)',color:selectedIndustry===n?'var(--brand)':'var(--t2)',fontFamily:'inherit'}}>{n}</button>
-                ))}
-              </div>
-            </div>
-          )}
-          {loading ? <div className="spinner" style={{margin:'12px auto'}}/> : industries.length>0&&(
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Custom Industries</div>
-              {industries.map(ind=>(
-                <div key={ind.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:8,border:'1px solid '+(selectedIndustry===ind.name?'var(--brand)':'var(--border)'),background:selectedIndustry===ind.name?'var(--brand-lt)':'var(--s2)',marginBottom:4}}>
-                  <span style={{flex:1,fontSize:13,fontWeight:500,cursor:'pointer'}} onClick={()=>setSelectedIndustry(ind.name)}>{ind.name}</span>
-                  <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:14,padding:'0 4px'}} onClick={()=>removeIndustry(ind.id,ind.name)}>×</button>
+          <div style={{display:'flex',gap:8,marginBottom:14}}>
+            <input className="form-input" style={{flex:1}} placeholder="New global industry…" value={newGlobalName} onChange={e=>setNewGlobalName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addGlobal()}/>
+            <button className="btn btn-primary" onClick={addGlobal} disabled={saving||!newGlobalName.trim()}>Add</button>
+          </div>
+          {globalList.length===0 ? <div style={{fontSize:13,color:'var(--t2)'}}>No global industries yet.</div> : (
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {globalList.map((ind,idx)=>(
+                <div key={ind.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
+                  {editGlobalId===ind.id ? (
+                    <>
+                      <input className="form-input" style={{flex:1,fontSize:13}} value={editGlobalName} onChange={e=>setEditGlobalName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveGlobalEdit();if(e.key==='Escape'){setEditGlobalId(null);setEditGlobalName('')}}} autoFocus/>
+                      <button className="btn btn-primary btn-sm" onClick={saveGlobalEdit} disabled={saving}>Save</button>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>{setEditGlobalId(null);setEditGlobalName('')}}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{fontSize:14}}>🏭</span>
+                      <span style={{flex:1,fontSize:13,fontWeight:500}}>{ind.name}</span>
+                      <div style={{display:'flex',gap:4}}>
+                        <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:12,padding:'2px 4px'}} onClick={()=>moveGlobal(ind.id,-1)} disabled={idx===0}>↑</button>
+                        <button style={{background:'none',border:'none',cursor:idx<globalList.length-1?'pointer':'default',opacity:idx<globalList.length-1?1:.3,fontSize:12,padding:'2px 4px'}} onClick={()=>moveGlobal(ind.id,1)} disabled={idx===globalList.length-1}>↓</button>
+                        <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>{setEditGlobalId(ind.id);setEditGlobalName(ind.name)}}>Edit</button>
+                        <button className="btn btn-danger btn-sm" style={{fontSize:11}} onClick={()=>deleteGlobal(ind.id)}>Delete</button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
           )}
-          <div style={{display:'flex',gap:6}}>
-            <input className="form-input" style={{flex:1,fontSize:12}} placeholder="Add custom industry…" value={newIndustryName} onChange={e=>setNewIndustryName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addIndustry()}/>
-            <button className="btn btn-primary btn-sm" onClick={addIndustry} disabled={saving||!newIndustryName.trim()}>Add</button>
+        </div>
+      )}
+
+      {/* Roles per Industry */}
+      {activeTab==='roles'&&(
+        <div className="two-col" style={{alignItems:'flex-start'}}>
+          <div className="section">
+            <div className="section-title">Select Industry</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+              {allIndustriesForRoles.map(n=>(
+                <button key={n} onClick={()=>setSelectedIndustry(n)} style={{padding:'4px 10px',borderRadius:10,fontSize:11,fontWeight:500,cursor:'pointer',border:'1px solid '+(selectedIndustry===n?'var(--brand)':'var(--border)'),background:selectedIndustry===n?'var(--brand-lt)':'var(--s3)',color:selectedIndustry===n?'var(--brand)':'var(--t2)',fontFamily:'inherit'}}>{n}</button>
+              ))}
+              {allIndustriesForRoles.length===0&&<div style={{fontSize:12,color:'var(--t2)'}}>No industries available — add them to global or org settings.</div>}
+            </div>
+          </div>
+
+          <div className="section">
+            <div className="section-title">Roles{selectedIndustry&&<span style={{fontSize:12,color:'var(--brand)',fontWeight:400,marginLeft:8}}>— {selectedIndustry}</span>}</div>
+            {!selectedIndustry ? (
+              <div style={{fontSize:13,color:'var(--t2)'}}>Select an industry to manage its roles.</div>
+            ) : !orgId ? (
+              <div style={{fontSize:13,color:'var(--t2)'}}>Loading organisation…</div>
+            ) : (
+              <>
+                <div style={{display:'flex',gap:6,marginBottom:10}}>
+                  <input className="form-input" style={{flex:1,fontSize:12}} placeholder="New role name…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
+                  <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add</button>
+                </div>
+                {roles.length===0 ? <div style={{fontSize:13,color:'var(--t2)'}}>No roles yet for {selectedIndustry}.</div> : (
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    {roles.map((role,idx)=>(
+                      <div key={role.id} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
+                        {editRoleId===role.id ? (
+                          <>
+                            <input className="form-input" style={{flex:1,fontSize:12}} value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveRoleEdit();if(e.key==='Escape'){setEditRoleId(null);setEditRoleName('')}}} autoFocus/>
+                            <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving}>Save</button>
+                            <button className="btn btn-secondary btn-sm" onClick={()=>{setEditRoleId(null);setEditRoleName('')}}>×</button>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{flex:1,fontSize:12,fontWeight:500}}>{role.role_name}</span>
+                            <div style={{display:'flex',gap:3}}>
+                              <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,-1)} disabled={idx===0}>↑</button>
+                              <button style={{background:'none',border:'none',cursor:idx<roles.length-1?'pointer':'default',opacity:idx<roles.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,1)} disabled={idx===roles.length-1}>↓</button>
+                              <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditRoleId(role.id);setEditRoleName(role.role_name)}}>Edit</button>
+                              <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deleteRole(role.id)}>Delete</button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
+      )}
 
+      {/* Positions */}
+      {activeTab==='positions'&&(
         <div className="section">
-          <div className="section-title">Roles{selectedIndustry&&<span style={{fontSize:12,color:'var(--brand)',fontWeight:400,marginLeft:8}}>— {selectedIndustry}</span>}</div>
-          {!selectedIndustry ? (
-            <div style={{fontSize:13,color:'var(--t2)',padding:'8px 0'}}>Select an industry on the left to manage its roles.</div>
-          ) : (
-            <>
-              <div style={{display:'flex',gap:6,marginBottom:12}}>
-                <input className="form-input" style={{flex:1,fontSize:12}} placeholder="New role name…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
-                <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add</button>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Default Positions</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {DEFAULT_POSITIONS.map(p=><span key={p} style={{padding:'4px 12px',borderRadius:10,fontSize:12,fontWeight:500,background:'var(--s3)',border:'1px solid var(--border)',color:'var(--t2)'}}>{p}</span>)}
+            </div>
+            <div style={{fontSize:11,color:'var(--t3)',marginTop:6}}>Default positions cannot be deleted. They appear at the top of every position dropdown.</div>
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:8}}>Custom Positions</div>
+            {!orgId ? <div style={{fontSize:13,color:'var(--t2)'}}>Loading…</div> : customPositions.length===0 ? (
+              <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>No custom positions yet.</div>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
+                {customPositions.map((pos,idx)=>(
+                  <div key={pos.id} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
+                    {editPosId===pos.id ? (
+                      <>
+                        <input className="form-input" style={{flex:1,fontSize:12}} value={editPosName} onChange={e=>setEditPosName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')savePosEdit();if(e.key==='Escape'){setEditPosId(null);setEditPosName('')}}} autoFocus/>
+                        <button className="btn btn-primary btn-sm" onClick={savePosEdit} disabled={saving}>Save</button>
+                        <button className="btn btn-secondary btn-sm" onClick={()=>{setEditPosId(null);setEditPosName('')}}>×</button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{flex:1,fontSize:12,fontWeight:500}}>{pos.name}</span>
+                        <div style={{display:'flex',gap:3}}>
+                          <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,-1)} disabled={idx===0}>↑</button>
+                          <button style={{background:'none',border:'none',cursor:idx<customPositions.length-1?'pointer':'default',opacity:idx<customPositions.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,1)} disabled={idx===customPositions.length-1}>↓</button>
+                          <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditPosId(pos.id);setEditPosName(pos.name)}}>Edit</button>
+                          <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deletePosition(pos.id)}>Delete</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
               </div>
-              {roles.length===0 ? (
-                <div style={{fontSize:13,color:'var(--t2)',padding:'8px 0'}}>No roles defined for {selectedIndustry} yet.</div>
-              ) : (
-                <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                  {roles.map((role,idx)=>(
-                    <div key={role.id} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
-                      {editRoleId===role.id ? (
-                        <>
-                          <input className="form-input" style={{flex:1,fontSize:12}} value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveRoleEdit();if(e.key==='Escape'){setEditRoleId(null);setEditRoleName('')}}} autoFocus/>
-                          <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving}>Save</button>
-                          <button className="btn btn-secondary btn-sm" onClick={()=>{setEditRoleId(null);setEditRoleName('')}}>×</button>
-                        </>
-                      ) : (
-                        <>
-                          <span style={{flex:1,fontSize:12,fontWeight:500}}>{role.name}</span>
-                          <div style={{display:'flex',gap:3}}>
-                            <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,-1)} disabled={idx===0}>↑</button>
-                            <button style={{background:'none',border:'none',cursor:idx<roles.length-1?'pointer':'default',opacity:idx<roles.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,1)} disabled={idx===roles.length-1}>↓</button>
-                            <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditRoleId(role.id);setEditRoleName(role.name)}}>Edit</button>
-                            <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deleteRole(role.id)}>Delete</button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
+            )}
+            <div style={{display:'flex',gap:6}}>
+              <input className="form-input" style={{flex:1,fontSize:12}} placeholder="e.g. Duty Manager, Head Chef, Team Leader…" value={newPositionName} onChange={e=>setNewPositionName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addPosition()}/>
+              <button className="btn btn-primary btn-sm" onClick={addPosition} disabled={saving||!newPositionName.trim()}>Add</button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
