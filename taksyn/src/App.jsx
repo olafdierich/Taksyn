@@ -3483,44 +3483,49 @@ function UsersView({ user, setAuditLog }) {
                     }
                   }}/>
               </div>
-              <div className="two-col">
-                <div className="form-field">
-                  <label className="form-label">Industry</label>
-                  <select className="form-select" value={inviteIndustry} onChange={e=>setInviteIndustry(e.target.value)}>
-                    <option value="">— Select industry —</option>
-                    {allIndustries.map(k=><option key={k} value={k}>{k}</option>)}
-                  </select>
-                </div>
-                <div className="form-field">
-                  <label className="form-label">Role <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— page access level</span></label>
-                  <select className="form-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>
-                    <option value="worker">Staff Member</option>
-                    <option value="supervisor">Supervisor</option>
-                    <option value="manager">Manager</option>
-                    {['super_admin','client_admin'].includes(user.role)&&<option value="client_admin">Client Admin</option>}
-                  </select>
-                </div>
+              <div className="form-field">
+                <label className="form-label">Industry</label>
+                <select className="form-select" value={inviteIndustry} onChange={e=>{ setInviteIndustry(e.target.value); setInvitePositions(['']) }}>
+                  <option value="">— Select industry —</option>
+                  {allIndustries.map(k=><option key={k} value={k}>{k}</option>)}
+                </select>
               </div>
-              {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
-              <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
+              <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                  <label className="form-label" style={{margin:0}}>Position(s)</label>
+                  <label className="form-label" style={{margin:0}}>Role{inviteIndustry&&orgRoles.length>0?<span style={{fontSize:10,color:'var(--brand)',fontWeight:400,marginLeft:6}}>from {inviteIndustry}</span>:''}</label>
                   <span style={{fontSize:10,color:'var(--t2)'}}>Add one or more</span>
                 </div>
                 {invitePositions.map((pos,i)=>(
                   <div key={i} style={{display:'flex',gap:6,marginBottom:4}}>
-                    <input className="form-input" value={pos} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?e.target.value:p))} placeholder={i===0?'e.g. Registered Nurse':'Additional position...'} style={{flex:1,fontSize:12}}/>
+                    {orgRoles.length>0 ? (
+                      <select className="form-select" style={{flex:1,fontSize:12}} value={pos} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?e.target.value:p))}>
+                        <option value="">— Select role —</option>
+                        {orgRoles.map(r=><option key={r} value={r}>{r}</option>)}
+                      </select>
+                    ) : (
+                      <input className="form-input" value={pos} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?e.target.value:p))} placeholder={i===0?'e.g. Registered Nurse':'Additional role...'} style={{flex:1,fontSize:12}}/>
+                    )}
                     {invitePositions.length>1&&<button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:18,padding:'0 6px',lineHeight:1}} onClick={()=>setInvitePositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>}
                   </div>
                 ))}
-                <button className="btn btn-secondary btn-sm" style={{fontSize:11,marginTop:2}} onClick={()=>setInvitePositions(prev=>[...prev,''])}>+ Add another position</button>
+                <button className="btn btn-secondary btn-sm" style={{fontSize:11,marginTop:2}} onClick={()=>setInvitePositions(prev=>[...prev,''])}>+ Add another role</button>
               </div>
+              <div className="form-field">
+                <label className="form-label">Position <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— access level</span></label>
+                <select className="form-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>
+                  <option value="worker">Staff Member</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="manager">Manager</option>
+                  {['super_admin','client_admin'].includes(user.role)&&<option value="client_admin">Client Admin</option>}
+                </select>
+              </div>
+              {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
               {inviteName.trim()&&(inviteIndustry||invitePositions.some(p=>p.trim()))&&(
                 <div style={{background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--text)',lineHeight:1.5}}>
                   <div style={{fontSize:10,fontWeight:700,color:'var(--brand)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.8px'}}>Invite Summary</div>
                   <strong>{inviteName.trim()}</strong> will join as <strong>{ROLE_LABELS[inviteRole]}</strong>
                   {inviteIndustry&&<> in <strong>{inviteIndustry}</strong></>}
-                  {invitePositions.filter(p=>p.trim()).length>0&&<div style={{marginTop:4}}>Positions: {invitePositions.filter(p=>p.trim()).join(', ')}</div>}
+                  {invitePositions.filter(p=>p.trim()).length>0&&<div style={{marginTop:4}}>Roles: {invitePositions.filter(p=>p.trim()).join(', ')}</div>}
                 </div>
               )}
               <div className="form-field">
