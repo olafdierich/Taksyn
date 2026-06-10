@@ -2694,13 +2694,16 @@ function ReportsView({ tasks, user, setAuditLog }) {
   // --- Filter helpers & filtered dataset ---
   const workerOptions = [...new Set(pt.map(t=>t.assigned_user_name).filter(Boolean))].sort()
   const deptOptions = [...new Set(pt.map(t=>t.department).filter(Boolean))].sort()
+  const industryOptions = [...new Set(pt.map(t=>t.industry).filter(Boolean))].sort()
   const categoryOptions = [...new Set(pt.map(t=>t.category).filter(Boolean))].sort()
   const projectOptions = [...new Set(pt.map(t=>t.project).filter(Boolean))].sort()
-  const activeFilterCount = [filterTitle, filterWorker, filterDept, filterCategory, filterStatuses.length>0, filterPriorities.length>0, filterCompliance, filterProject].filter(Boolean).length
+  const taskAllIndustries = [...(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES), ...taskOrgIndustries.filter(d=>!(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES).includes(d))]
+  const activeFilterCount = [filterTitle, filterWorker, filterDept, filterIndustry, filterCategory, filterStatuses.length>0, filterPriorities.length>0, filterCompliance, filterProject].filter(Boolean).length
   const filteredPt = pt.filter(t=>{
     if(filterTitle && !t.title?.toLowerCase().includes(filterTitle.toLowerCase())) return false
     if(filterWorker && (t.assigned_user_name||t.assigned_user_id||'')!==filterWorker) return false
     if(filterDept && t.department!==filterDept) return false
+    if(filterIndustry && t.industry!==filterIndustry) return false
     if(filterCategory && t.category!==filterCategory) return false
     if(filterStatuses.length>0 && !filterStatuses.includes(t.status)) return false
     if(filterPriorities.length>0 && !filterPriorities.includes(t.priority)) return false
@@ -2708,7 +2711,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
     if(filterProject && t.project!==filterProject) return false
     return true
   })
-  const clearFilters = ()=>{ setFilterTitle(''); setFilterWorker(''); setFilterDept(''); setFilterCategory(''); setFilterStatuses([]); setFilterPriorities([]); setFilterCompliance(false); setFilterProject('') }
+  const clearFilters = ()=>{ setFilterTitle(''); setFilterWorker(''); setFilterDept(''); setFilterIndustry(''); setFilterCategory(''); setFilterStatuses([]); setFilterPriorities([]); setFilterCompliance(false); setFilterProject('') }
   const toggleFStatus = s => setFilterStatuses(prev=>prev.includes(s)?prev.filter(x=>x!==s):[...prev,s])
   const toggleFPriority = p => setFilterPriorities(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])
 
