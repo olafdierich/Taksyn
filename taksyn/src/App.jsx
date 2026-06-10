@@ -2518,9 +2518,29 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const reportFooter = `<div class="ft"><span>Taksyn — Task Compliance & Accountability Platform</span><span>taksyn.vercel.app</span></div>`
 
   const openReport = (html) => {
-    const w = window.open('','_blank')
-    if (w) { w.document.write(html); w.document.close(); setTimeout(()=>w.print(),800) }
-    else { const a=document.createElement('a'); a.href='data:text/html;charset=utf-8,'+encodeURIComponent(html); a.download='taksyn-report.html'; a.click() }
+    // Use a Blob URL so the current tab is never navigated away from.
+    // window.open('','_blank') + document.write is blocked by mobile browsers as a popup
+    // and can cause the current tab to reload, losing the session.
+    try {
+      const blob = new Blob([html], {type:'text/html;charset=utf-8'})
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(()=>URL.revokeObjectURL(url), 15000)
+    } catch(e) {
+      // Last-resort fallback: download as an HTML file
+      const a = document.createElement('a')
+      a.href = 'data:text/html;charset=utf-8,'+encodeURIComponent(html)
+      a.download = 'taksyn-report.html'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
   }
 
   const exportCompliancePDF = () => {
