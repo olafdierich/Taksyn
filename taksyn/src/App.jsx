@@ -5664,8 +5664,37 @@ function TeamsView({ user }) {
             <div style={{borderTop:'1px solid var(--border)',paddingTop:14}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
                 <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>Members ({(selectedTeam.members||[]).length})</div>
-                {(isCA||user.role==='manager'||user.role==='supervisor')&&<button className="btn btn-primary btn-sm" onClick={()=>setShowAddMember(true)}><IC n="plus" s={12}/> Add Member</button>}
+                <div style={{display:'flex',gap:6}}>
+                  {(isCA||user.role==='manager')&&<button className="btn btn-secondary btn-sm" onClick={()=>setShowInviteLink(!showInviteLink)}>💬 Invite Link</button>}
+                  {(isCA||user.role==='manager'||user.role==='supervisor')&&<button className="btn btn-primary btn-sm" onClick={()=>setShowAddMember(true)}><IC n="plus" s={12}/> Add Member</button>}
+                </div>
               </div>
+
+              {showInviteLink&&(
+                <div style={{background:'rgba(16,185,129,.06)',border:'1px solid rgba(16,185,129,.2)',borderRadius:10,padding:14,marginBottom:14}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'#10B981',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:10}}>💬 WhatsApp Invite Link</div>
+                  <div className="two-col">
+                    <div className="form-field">
+                      <label className="form-label">Role</label>
+                      <select className="form-select" value={inviteLinkRole} onChange={e=>setInviteLinkRole(e.target.value)}>
+                        {ROLES.filter(r=>r!=='super_admin'&&r!=='client_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-field">
+                      <label className="form-label">Position Title <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
+                      <input className="form-input" value={inviteLinkPosition} onChange={e=>setInviteLinkPosition(e.target.value)} placeholder="e.g. Registered Nurse"/>
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>
+                    Link will pre-fill: <strong>{selectedTeam.name}</strong> · <strong>{ROLE_LABELS[inviteLinkRole]}</strong>{inviteLinkPosition&&<> · <strong>{inviteLinkPosition}</strong></>}
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button className="btn btn-primary btn-sm" onClick={()=>shareInviteLink(selectedTeam)}>💬 Send via WhatsApp</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>copyInviteLink(selectedTeam)}>📋 Copy Link</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setShowInviteLink(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
 
               {showAddMember&&(
                 <div style={{background:'var(--s3)',borderRadius:10,padding:14,marginBottom:14}}>
