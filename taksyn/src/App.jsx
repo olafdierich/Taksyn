@@ -3436,7 +3436,18 @@ function UsersView({ user, setAuditLog }) {
             <div className="modal-hdr"><div className="modal-title">Invite Team Member</div><button className="modal-close" onClick={()=>setShowInvite(false)}>×</button></div>
             <div className="modal-body">
               <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Emma Wilson"/></div>
-              <div className="form-field"><label className="form-label">Email Address</label><input className="form-input" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="emma@yourorg.com"/></div>
+              <div className="form-field">
+                <label className="form-label">Email Address</label>
+                <input className="form-input" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="emma@yourorg.com"
+                  onBlur={()=>{
+                    const existing = realUsers.find(u=>u.email?.toLowerCase()===inviteEmail.trim().toLowerCase())
+                    if(existing) {
+                      if(window.confirm(existing.name+' ('+existing.email+') is already a member of this organisation.\n\nWould you like to add a new role assignment to their existing account instead?')) {
+                        setInviteName(existing.name)
+                      }
+                    }
+                  }}/>
+              </div>
               <div className="form-field"><label className="form-label">System Role <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— determines page access</span></label><select className="form-select" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
               {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
               <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
