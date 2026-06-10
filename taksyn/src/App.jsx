@@ -7248,24 +7248,12 @@ export default function App() {
                   <label className="form-label">Industry</label>
                   <select className="form-input" value={user.industry||''} onChange={async e=>{
                     const ind = e.target.value
-                    setUser(prev=>({...prev,industry:ind,department:''}))
-                    if(isConfigured()) await supabase.from('profiles').update({industry:ind,department:''}).eq('id',user.id)
+                    setUser(prev=>({...prev,industry:ind}))
+                    if(isConfigured()) await supabase.from('profiles').update({industry:ind}).eq('id',user.id)
                     setProfileMsg('✓ Industry updated')
                   }}>
                     <option value="">— Select industry —</option>
-                    {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
-                  </select>
-                </div>
-                <div className="form-field">
-                  <label className="form-label">Department / Position</label>
-                  <select className="form-input" value={user.department||''} onChange={async e=>{
-                    const dept = e.target.value
-                    setUser(prev=>({...prev,department:dept}))
-                    if(isConfigured()) await supabase.from('profiles').update({department:dept}).eq('id',user.id)
-                    setProfileMsg('✓ Department updated')
-                  }}>
-                    <option value="">— Select department —</option>
-                    {(DEPARTMENTS[user.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
+                    {PRESET_INDUSTRIES.map(k=><option key={k} value={k}>{k}</option>)}
                   </select>
                 </div>
                 </>}
@@ -7279,18 +7267,10 @@ export default function App() {
                     <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Role</span>
                     <RolePill role={user.role}/>
                   </div>
-                  {user.department&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
-                    <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Department</span>
-                    <span style={{fontSize:12,fontWeight:600}}>{user.department}</span>
+                  {user.industry&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
+                    <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Industry</span>
+                    <span style={{fontSize:12,fontWeight:600}}>{user.industry}</span>
                   </div>}
-                  <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid var(--border)'}}>
-                    <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Department / Position</div>
-                    <select className="form-input" style={{fontSize:12}} value={user.department||''} onChange={async e=>{ const d=e.target.value; setUser(prev=>({...prev,department:d})); if(isConfigured()) await supabase.from('profiles').update({department:d}).eq('id',user.id) }}>
-                      <option value="">— Not set —</option>
-                      {(DEPARTMENTS[user.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
-                      {Object.values(DEPARTMENTS).flat().filter((d,i,a)=>a.indexOf(d)===i).sort().map(d=><option key={'all-'+d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
                 </div>
 
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:4}}>
