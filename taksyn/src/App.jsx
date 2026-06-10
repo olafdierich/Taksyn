@@ -760,7 +760,6 @@ function AuthView({ onAuth }) {
               // Single org from org_members — use that role/org
               const m = memberships[0]
               const userData = {...profile, email:data.user.email, role:m.role, org:m.org, tier:m.tier||'Growth'}
-              localStorage.setItem('taksyn-user', JSON.stringify(userData))
               onAuth(userData)
             } else {
               // No org_members entry — use profile directly (legacy/super_admin)
