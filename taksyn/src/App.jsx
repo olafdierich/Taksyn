@@ -3729,7 +3729,11 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids)
       const merged = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:m.org,tier:m.tier,email:p.email||''} })
       setOrgMembers(merged)
-    } else { setOrgMembers([]) }
+    } else {
+      // Fallback: query profiles directly by org name (handles name-mismatch in org_members)
+      const { data: fallback } = await supabase.from('profiles').select('*').eq('org', orgName)
+      setOrgMembers(fallback?.length ? fallback : [])
+    }
     setLoadingMembers(false)
   }
 
