@@ -3145,7 +3145,6 @@ function UsersView({ user, setAuditLog }) {
   const [inviteMethod, setInviteMethod] = useState('email')
   const [inviteOrg, setInviteOrg] = useState('')
   const [inviteIndustry, setInviteIndustry] = useState('')
-  const [inviteJobRole, setInviteJobRole] = useState('')
   const [invitePositions, setInvitePositions] = useState([''])
   const [showManageIndustries, setShowManageIndustries] = useState(false)
   const [newIndustry, setNewIndustry] = useState('')
