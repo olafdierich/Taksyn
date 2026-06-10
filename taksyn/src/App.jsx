@@ -3140,12 +3140,10 @@ function ReportsView({ tasks, user, setAuditLog }) {
 function UsersView({ user, setAuditLog }) {
   const [showInvite, setShowInvite] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState('worker')
   const [inviteName, setInviteName] = useState('')
   const [inviteMethod, setInviteMethod] = useState('email')
   const [inviteOrg, setInviteOrg] = useState('')
-  const [inviteIndustry, setInviteIndustry] = useState('')
-  const [invitePositions, setInvitePositions] = useState([''])
+  const [invitePositions, setInvitePositions] = useState([{industry:'',role:'',position:''}])
   const [showManageIndustries, setShowManageIndustries] = useState(false)
   const [newIndustry, setNewIndustry] = useState('')
   const [globalIndustries, setGlobalIndustries] = useState([])
