@@ -5270,6 +5270,7 @@ function LeaveView({ user, tasks, setAuditLog }) {
       setAuditLog(prev=>[lcEntry,...prev])
       if (isConfigured()) supabase.from('audit_log').insert(lcEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     }
+    logAuditEvent(user, 'leave.cancelled', 'leave', id, (LEAVE_LABELS[lv?.type]||lv?.type||'Leave'), (lv?.date_from||'')+' – '+(lv?.date_to||''))
   }
 
   const isOnLeave = leaves.some(l=>l.date_from<=today&&l.date_to>=today)
