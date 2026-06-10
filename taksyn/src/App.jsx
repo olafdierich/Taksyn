@@ -6406,6 +6406,7 @@ export default function App() {
     if (user && isConfigured()) {
       const loEntry = mkAuditEntry('logout', user, user.org, {})
       supabase.from('audit_log').insert(loEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+      logAuditEvent(user, 'session.logout', 'session', null, null, null)
     }
     clearAuthCache()
     setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
