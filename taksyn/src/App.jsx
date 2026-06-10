@@ -587,26 +587,38 @@ const TaskCard = ({ task, onClick }) => {
 }
 
 function AuthView({ onAuth }) {
-  const [mode, setMode] = useState('login')
+  // Parse URL params once synchronously so initial state is correct — avoids the login→register flash
+  const _sp = new URLSearchParams(window.location.search)
+  const _isInvite = _sp.get('invite')==='true' && _sp.get('secret')==='taksyn-secret-2024'
+
+  const [mode, setMode] = useState(_isInvite ? 'register' : 'login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [org, setOrg] = useState('')
-  const [signupType, setSignupType] = useState('organisation') // 'organisation' or 'staff'
+  const [signupType, setSignupType] = useState(_isInvite ? 'staff' : 'organisation')
   const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(_isInvite && _sp.get('secret')!=='taksyn-secret-2024' ? 'Invalid invite link — please ask your admin for a new one' : '')
   const [success, setSuccess] = useState('')
-  const [orgChoices, setOrgChoices] = useState(null) // [{org, role, tier, name}] for org picker
+  const [orgChoices, setOrgChoices] = useState(null)
   const [showPw, setShowPw] = useState(false)
-  const [pendingAuthUser, setPendingAuthUser] = useState(null) // auth user waiting for org pick
-  const [inviteToken, setInviteToken] = useState(null) // invite token from URL
+  const [pendingAuthUser, setPendingAuthUser] = useState(null)
+  const [inviteToken, setInviteToken] = useState(null)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [orgs, setOrgs] = useState([]) // for org dropdown in staff registration
-  const [inviteParams, setInviteParams] = useState(null) // pre-filled from WhatsApp invite link
+  const [orgs, setOrgs] = useState([])
+  // Invite params: set immediately from URL, names resolved async
+  const [inviteParams, setInviteParams] = useState(_isInvite ? {
+    orgId: _sp.get('org')||'',
+    orgName: null,   // filled in async
+    teamId: _sp.get('team')||null,
+    teamName: null,  // filled in async
+    role: _sp.get('role')||'worker',
+    position: _sp.get('position')||'',
+    linkId: _sp.get('link')||null
+  } : null)
 
-  // Check for invite/recovery token in URL hash, and WhatsApp invite params in query string
   useEffect(()=>{
     // Supabase email-invite token (in URL hash)
     const hash = window.location.hash
@@ -619,33 +631,22 @@ function AuthView({ onAuth }) {
       window.history.replaceState(null, '', window.location.pathname)
     }
 
-    // WhatsApp invite link params (in query string)
-    const sp = new URLSearchParams(window.location.search)
-    if (sp.get('invite')==='true') {
-      if (sp.get('secret')!=='taksyn-secret-2024') {
-        setError('Invalid invite link — please ask your admin for a new one')
-      } else if (isConfigured()) {
-        const orgId    = sp.get('org') || ''
-        const teamId   = sp.get('team') || ''
-        const role     = sp.get('role') || 'worker'
-        const position = sp.get('position') || ''
-        Promise.all([
-          supabase.from('organisations').select('id,name').eq('id', orgId).single(),
-          teamId ? supabase.from('teams').select('id,name').eq('id', teamId).single() : Promise.resolve({data:null})
-        ]).then(([{data:orgData}, {data:teamData}])=>{
-          setInviteParams({ orgId, orgName:orgData?.name||orgId, teamId:teamId||null, teamName:teamData?.name||null, role, position })
-          setMode('register')
-          setSignupType('staff')
-        }).catch(()=>{
-          setInviteParams({ orgId, orgName:orgId, teamId:teamId||null, teamName:null, role, position })
-          setMode('register')
-          setSignupType('staff')
-        })
-        window.history.replaceState(null, '', window.location.pathname)
-      }
+    // Resolve org/team names for the invite card, then clear the URL
+    if (_isInvite && isConfigured()) {
+      const orgId  = _sp.get('org')||''
+      const teamId = _sp.get('team')||''
+      Promise.all([
+        supabase.from('organisations').select('id,name').eq('id', orgId).single(),
+        teamId ? supabase.from('teams').select('id,name').eq('id', teamId).single() : Promise.resolve({data:null})
+      ]).then(([{data:orgData}, {data:teamData}])=>{
+        setInviteParams(prev => prev ? {...prev, orgName:orgData?.name||orgId, teamName:teamData?.name||null} : prev)
+      }).catch(()=>{
+        setInviteParams(prev => prev ? {...prev, orgName:orgId} : prev)
+      })
+      window.history.replaceState(null, '', window.location.pathname)
     }
 
-    // Load orgs list for the staff registration dropdown (RLS disabled — publicly readable)
+    // Load orgs list for the staff registration dropdown (organisations table has RLS disabled)
     if (isConfigured()) {
       supabase.from('organisations').select('id,name').order('name')
         .then(({data})=>{ if(data) setOrgs(data) }).catch(()=>{})
