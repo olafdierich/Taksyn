@@ -1303,6 +1303,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     const cEntry = mkAuditEntry('task_created', user, user.org, { priority:t.priority, category:t.category, assignedTo:t.assigned_user_name||t.assigned_role }, t.id, t.title, null, t.title)
     setAuditLog(prev=>[cEntry,...prev])
     if (isConfigured()) supabase.from('audit_log').insert(cEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+    logAuditEvent(user, 'task.created', 'task', t.id, t.title, t.priority+' priority'+(t.assigned_user_name?' · '+t.assigned_user_name:''))
     if (isConfigured()) {
       supabase.auth.getUser().then(({data:{user:authUser}})=>{
   supabase.from('tasks').insert({ ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' })
