@@ -7382,6 +7382,35 @@ export default function App() {
           </div>
         )}
 
+        {/* Role selector modal — shown when user has multiple position assignments */}
+        {showRoleSelector&&userPositionsList.length>1&&(
+          <div className="modal-overlay" style={{zIndex:600}}>
+            <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:440}}>
+              <div className="modal-hdr">
+                <div>
+                  <div className="modal-title">Which role are you working in today?</div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>You have multiple assignments — choose one to start your session</div>
+                </div>
+              </div>
+              <div className="modal-body">
+                {userPositionsList.map((pos,i)=>(
+                  <div key={i} onClick={()=>{ setActivePosition(pos); sessionStorage.setItem('taksyn-active-position',JSON.stringify(pos)); setShowRoleSelector(false) }}
+                    style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:10,border:'1px solid var(--border)',marginBottom:8,cursor:'pointer',transition:'all .15s',background:'var(--s3)'}}
+                    onMouseOver={e=>e.currentTarget.style.borderColor='var(--brand)'}
+                    onMouseOut={e=>e.currentTarget.style.borderColor='var(--border)'}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:14}}>{pos.position_title||ROLE_LABELS[pos.role]||pos.role}</div>
+                      <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{pos.department}{pos.is_primary?<span style={{fontSize:10,color:'var(--brand)',fontWeight:600,marginLeft:6}}>★ Primary</span>:''}</div>
+                    </div>
+                    <span style={{fontSize:18}}>▶</span>
+                  </div>
+                ))}
+                <button className="btn btn-secondary" style={{width:'100%',marginTop:4}} onClick={()=>setShowRoleSelector(false)}>Skip — show all tasks</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="main">
           <div className={"sidebar-overlay "+(sidebarOpen?'open':'')} onClick={()=>setSidebarOpen(false)}/>
           <div className={"sidebar "+(sidebarCollapsed?'collapsed ':''+(sidebarOpen?'mobile-open':''))}>
