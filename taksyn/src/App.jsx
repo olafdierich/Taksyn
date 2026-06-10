@@ -2069,11 +2069,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
 }
 
 
-function EscalationsView({ tasks, setTasks, user }) {
+function EscalationsView({ tasks, setTasks, user, setAuditLog }) {
   const esc = tasks.filter(t=>t.escalation||t.status==='overdue'||t.status==='escalated')
   const resolve = async (id) => {
+    const t = tasks.find(t=>t.id===id)
     setTasks(prev=>prev.map(t=>t.id===id?{...t,escalation:false,status:'in_progress'}:t))
     if(isConfigured()) await supabase.from('tasks').update({escalation:false,status:'in_progress'}).eq('id',id)
+    const rEntry = mkAuditEntry('status_change', user, t?.org||user.org, {}, id, t?.title||id, t?.status||'escalated', 'in_progress')
+    if(setAuditLog) setAuditLog(prev=>[rEntry,...prev])
+    if(isConfigured()) supabase.from('audit_log').insert(rEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
   }
   return (
     <div className="anim">
