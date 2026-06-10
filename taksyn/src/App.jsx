@@ -3385,8 +3385,8 @@ function UsersView({ user, setAuditLog }) {
               </div>}
               <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                  <label className="form-label" style={{margin:0}}>Department Positions</label>
-                  <span style={{fontSize:10,color:'var(--t2)'}}>Multiple roles across departments</span>
+                  <label className="form-label" style={{margin:0}}>Positions</label>
+                  <span style={{fontSize:10,color:'var(--t2)'}}>Multiple roles across industries</span>
                 </div>
                 {editPositions.map((pos,i)=>(
                   <div key={i} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,background:'var(--s3)',borderRadius:8,padding:'8px 10px'}}>
