@@ -130,6 +130,30 @@ CREATE INDEX IF NOT EXISTS audit_log_org_at ON public.audit_log (org, at DESC);
 --   toStatus       → new_value
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- 3b-2. AUDIT LOGS (event-driven, persists after task/entity deletion)
+-- NOTE: organisation_id and entity_id are TEXT (not UUID) because the app
+-- uses text-based IDs for orgs ('ORG…') and tasks ('T…').
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organisation_id TEXT,
+  user_id         UUID,
+  user_name       TEXT,
+  action          TEXT NOT NULL,          -- e.g. 'task.created', 'task.status_changed'
+  entity_type     TEXT,                   -- 'task', 'leave', 'member', etc.
+  entity_id       TEXT,                   -- task id ('T123'), leave id ('LV…'), etc.
+  entity_name     TEXT,                   -- human-readable name at time of event
+  details         TEXT,                   -- free-text or JSON description
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "audit_logs_read_auth"   ON public.audit_logs FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY "audit_logs_insert_auth" ON public.audit_logs FOR INSERT TO authenticated WITH CHECK (TRUE);
+
+CREATE INDEX IF NOT EXISTS audit_logs_org_at   ON public.audit_logs (organisation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS audit_logs_user_at  ON public.audit_logs (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS audit_logs_entity   ON public.audit_logs (entity_id);
+
 -- 3c. USER POSITIONS (department-based roles per person)
 -- One row per person/department combination. is_primary = true on exactly one row per user.
 CREATE TABLE IF NOT EXISTS public.user_positions (
