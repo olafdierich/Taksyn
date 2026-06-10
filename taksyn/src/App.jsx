@@ -5253,6 +5253,7 @@ function LeaveView({ user, tasks, setAuditLog }) {
       setAuditLog(prev=>[lvEntry,...prev])
       if (isConfigured()) supabase.from('audit_log').insert(lvEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     }
+    logAuditEvent(user, 'leave.submitted', 'leave', entry.id, LEAVE_LABELS[form.type]||form.type, form.date_from+' – '+form.date_to+(form.reason?' · '+form.reason.slice(0,100):''))
     setShowApply(false)
     setForm({ type:'annual_leave', date_from:'', date_to:'', reason:'' })
     setSaving(false)
