@@ -2653,7 +2653,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const reportOptions = [
     ...(isSupervisorUp ? [{ value:'compliance', label:'📋 Compliance Report' }] : []),
     ...(isClientAdmin ? [
-      { value:'worker', label:'👷 Worker Performance Report' },
+      { value:'worker', label:'👷 Staff Performance Report' },
       { value:'org', label:'🏢 Organisation Overview Report' },
     ] : []),
   ]
