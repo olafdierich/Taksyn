@@ -7468,8 +7468,8 @@ export default function App() {
                 {page==='performance' && user.role!=='super_admin' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
                 {page==='leave'       && user.role!=='super_admin' && <LeaveView {...pageProps}/>}
                 {page==='teams'       && hasAccess(user.role,2) && <TeamsView {...pageProps}/>}
-                {page==='sla'         && user.role==='client_admin' && <SLASettingsView {...pageProps}/>}
-                {page==='company_settings' && user.role==='client_admin' && <CompanySettingsView user={user}/>}
+                {page==='sla'         && ['client_admin','super_admin'].includes(user.role) && <SLASettingsView {...pageProps}/>}
+                {page==='company_settings' && ['client_admin','super_admin'].includes(user.role) && <CompanySettingsView user={user}/>}
                 {page==='notifications' && user.role==='super_admin' && <PlatformAnnouncementsView user={user}/>}
               </>
             )}
