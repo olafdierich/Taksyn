@@ -3499,7 +3499,36 @@ function UsersView({ user, setAuditLog }) {
           </div>
         </div>
       )}
-      <div className="ph"><div className="ph-top"><div><div className="ph-title">Team Members</div><div className="ph-sub">Manage staff access and roles</div></div>{['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-primary" onClick={()=>setShowInvite(true)}><IC n="plus" s={13}/> Invite</button>}</div></div>
+      {showManageIndustries&&(
+        <div className="modal-overlay" onClick={()=>setShowManageIndustries(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr"><div className="modal-title">🏭 Manage Industries</div><button className="modal-close" onClick={()=>setShowManageIndustries(false)}>×</button></div>
+            <div className="modal-body">
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Preset industries are always available. Add custom industries specific to your organisation.</div>
+              <div style={{display:'flex',gap:8,marginBottom:12}}>
+                <input className="form-input" value={newIndustry} onChange={e=>setNewIndustry(e.target.value)} placeholder="e.g. Childcare, Veterinary..." onKeyDown={e=>e.key==='Enter'&&saveCustomIndustry()}/>
+                <button className="btn btn-primary" onClick={saveCustomIndustry} disabled={!newIndustry.trim()}>Add</button>
+              </div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Preset Industries</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+                {PRESET_INDUSTRIES.map(i=><span key={i} style={{fontSize:11,padding:'3px 10px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:500}}>{i}</span>)}
+              </div>
+              {orgCustomDepts.length>0&&<>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Custom Industries ({orgCustomDepts.length})</div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                  {orgCustomDepts.map(i=>(
+                    <span key={i} style={{display:'flex',alignItems:'center',gap:4,fontSize:11,padding:'3px 10px',borderRadius:10,background:'rgba(99,102,241,.1)',color:'#6366F1',fontWeight:600,border:'1px solid rgba(99,102,241,.2)'}}>
+                      {i}
+                      <span style={{cursor:'pointer',opacity:.7,fontWeight:700}} onClick={()=>removeCustomIndustry(i)}>×</span>
+                    </span>
+                  ))}
+                </div>
+              </>}
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="ph"><div className="ph-top"><div><div className="ph-title">Team Members</div><div className="ph-sub">Manage staff access and roles</div></div><div style={{display:'flex',gap:8}}>{['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary" onClick={()=>setShowManageIndustries(true)}>🏭 Industries</button>}{['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-primary" onClick={()=>setShowInvite(true)}><IC n="plus" s={13}/> Invite</button>}</div></div></div>
       <div className="section">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div className="section-title" style={{margin:0}}>Active Users ({realUsers.length})</div>
