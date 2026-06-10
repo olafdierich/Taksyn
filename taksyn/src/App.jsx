@@ -4131,19 +4131,12 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                     <div style={{fontSize:11,color:'#F59E0B',marginTop:3}}>⚠️ Moving from <strong>{editingMember?.org}</strong> to <strong>{memberEditForm.org}</strong></div>
                   )}
                 </div>
-                <div className="two-col">
-                  <div className="form-field"><label className="form-label">Industry</label>
-                    <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value,department:''})}>
-                      <option value="">— Select —</option>
-                      {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-field"><label className="form-label">Department</label>
-                    <select className="form-input" value={memberEditForm.department||''} onChange={e=>setMemberEditForm({...memberEditForm,department:e.target.value})}>
-                      <option value="">— Select —</option>
-                      {(DEPARTMENTS[memberEditForm.industry||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
+                <div className="form-field">
+                  <label className="form-label">Industry</label>
+                  <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value})}>
+                    <option value="">— Select —</option>
+                    {PRESET_INDUSTRIES.map(k=><option key={k} value={k}>{k}</option>)}
+                  </select>
                 </div>
                 <div className="form-field"><label className="form-label">Notes</label>
                   <textarea className="comment-box" style={{minHeight:60}} value={memberEditForm.notes||''} onChange={e=>setMemberEditForm({...memberEditForm,notes:e.target.value})} placeholder="Notes about this member..."/>
