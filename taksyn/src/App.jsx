@@ -483,6 +483,9 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .bottom-nav{display:none}
 .org-actions{display:flex;gap:6px;flex-wrap:wrap}
 @media(max-width:768px){.org-actions>.btn,.org-actions>label{flex:1 1 auto;justify-content:center}}
+.org-grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:600px){.org-grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1024px){.org-grid{grid-template-columns:repeat(3,1fr)}}
 `
 
 const IC = ({ n, s=16 }) => {
