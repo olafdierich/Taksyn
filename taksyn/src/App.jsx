@@ -1122,6 +1122,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           const {error} = await supabase.from('audit_log').insert(entry)
           if (error) console.warn('audit_log insert error:', error.message, entry)
         }
+        const auditAction = changes.status==='approved'?'task.approved':changes.status==='rejected'?'task.rejected':changes.status==='escalated'?'task.escalated':'task.status_changed'
+        logAuditEvent(user, auditAction, 'task', id, prev?.title||id, (prev?.status||'?')+' → '+changes.status)
       } else {
         const editableFields = ['title','priority','due_date','category','department','description']
         const changesMap = {}
