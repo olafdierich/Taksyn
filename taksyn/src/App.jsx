@@ -5874,7 +5874,7 @@ function TeamsView({ user }) {
   }
 
   const loadTeamMembers = async (teamId) => {
-    const {data} = await supabase.from('team_members').select('*').eq('team_id',teamId)
+    const {data} = await supabase.from('team_members').select('*').eq('team_id',teamId).eq('org',user.org)
     if(data) {
       const ids = data.map(m=>m.user_id)
       const [{data:profiles},{data:positions}] = await Promise.all([
