@@ -154,7 +154,32 @@ CREATE INDEX IF NOT EXISTS audit_logs_org_at   ON public.audit_logs (organisatio
 CREATE INDEX IF NOT EXISTS audit_logs_user_at  ON public.audit_logs (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS audit_logs_entity   ON public.audit_logs (entity_id);
 
--- 3c. USER POSITIONS (department-based roles per person)
+-- 3c. INVITE LINKS (tracks WhatsApp invite links sent from Teams section)
+-- Created when an admin clicks "Send via WhatsApp"; marked used on registration.
+CREATE TABLE IF NOT EXISTS public.invite_links (
+  id          TEXT PRIMARY KEY,             -- 'IL' + timestamp + random (set by app)
+  org_id      TEXT NOT NULL,                -- UUID id from organisations table
+  org         TEXT NOT NULL,                -- org name (denormalised for display)
+  team_id     TEXT NOT NULL,                -- team id from teams table
+  role        TEXT NOT NULL DEFAULT 'worker',
+  position    TEXT,                         -- optional position title
+  created_by  TEXT NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  used_at     TIMESTAMPTZ,
+  used_by     TEXT
+);
+
+ALTER TABLE public.invite_links ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "invite_links_read_auth"   ON public.invite_links FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY "invite_links_insert_auth" ON public.invite_links FOR INSERT TO authenticated WITH CHECK (TRUE);
+CREATE POLICY "invite_links_update_auth" ON public.invite_links FOR UPDATE TO authenticated USING (TRUE);
+-- Anonymous users need SELECT to resolve the link on the registration page
+CREATE POLICY "invite_links_read_anon"   ON public.invite_links FOR SELECT TO anon USING (used_at IS NULL);
+
+CREATE INDEX IF NOT EXISTS invite_links_org     ON public.invite_links (org_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS invite_links_used    ON public.invite_links (used_at) WHERE used_at IS NULL;
+
+-- 3d. USER POSITIONS (department-based roles per person)
 -- One row per person/department combination. is_primary = true on exactly one row per user.
 CREATE TABLE IF NOT EXISTS public.user_positions (
   id             TEXT PRIMARY KEY,
