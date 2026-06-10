@@ -4065,7 +4065,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                   </div>
                 </div>
                 <div className="two-col" style={{gap:8}}>
-                  {[['Organisation',viewingMember.org],['Industry',viewingMember.industry],['Department',viewingMember.department],['Phone',viewingMember.phone]].map(([l,v])=>v?(
+                  {[['Organisation',viewingMember.org],['Industry',viewingMember.industry],['Phone',viewingMember.phone]].map(([l,v])=>v?(
                     <div key={l} style={{background:'var(--s3)',borderRadius:8,padding:'8px 12px'}}>
                       <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:2}}>{l}</div>
                       <div style={{fontSize:13,fontWeight:600}}>{v}</div>
