@@ -6905,31 +6905,26 @@ export default function App() {
   useEffect(()=>{
     if(!isConfigured()) return
 
-    // user is already restored from localStorage by the useState lazy initializer above.
-    // Just verify the Supabase session to get fresh profile data.
-    const cached = localStorage.getItem('taksyn-user')
+    // persistSession:false — no session survives a page reload or browser close.
+    // On every fresh load, check if there is still an in-memory session (same tab, no eviction).
     supabase.auth.getSession().then(({data:{session}})=>{
       if(session?.user) {
         supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
-          if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
+          if(data) setUser({...data,email:session.user.email})
         }).catch(()=>{})
-      } else if(!cached) {
-        // No cached user and no active Supabase session — definitely signed out
+      } else {
         setUser(null)
       }
-      // If there is a cached user but getSession returns nothing, keep the user visible;
-      // the token may be refreshing in the background — onAuthStateChange handles the result.
     }).catch(()=>{})
 
     const {data:{subscription}} = supabase.auth.onAuthStateChange(async(event, session)=>{
       if(event==='SIGNED_OUT') {
-        // Only clear the session on an explicit sign-out — not on token refresh or tab switch
-        setUser(null); localStorage.removeItem('taksyn-user')
+        setUser(null)
       } else if(event==='USER_UPDATED') {
         // Password was just set — log them in properly
         try {
           const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
-          if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
+          if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
       } else if(event==='SIGNED_IN') {
         // Check if this is an invite or recovery — block auto sign-in and show password setup
@@ -6945,53 +6940,29 @@ export default function App() {
         }
         try {
           const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
-          if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
+          if(data) setUser({...data,email:session.user.email})
         } catch(e) {}
-      }
-      // TOKEN_REFRESHED and INITIAL_SESSION with a valid session are handled below
-      else if(session?.user && (event==='TOKEN_REFRESHED' || event==='INITIAL_SESSION')) {
-        const cachedNow = localStorage.getItem('taksyn-user')
-        if(!cachedNow) {
-          // Session refreshed but we lost the user object — restore it
-          supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
-            if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
-          }).catch(()=>{})
-        }
       }
     })
 
-    // When the user returns to this tab (after WhatsApp, PDF, etc.):
-    // 1. Immediately restore from localStorage if React state was lost (iOS tab eviction)
-    // 2. Then verify the Supabase session asynchronously
+    // Sign out when the tab or browser is closed so the session is fully cleared
+    const handleBeforeUnload = () => { supabase.auth.signOut().catch(()=>{}) }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    // When returning to this tab, verify the in-memory session is still valid
     const handleVisibilityChange = () => {
       if(document.hidden) return
-      // Step 1 — synchronous: restore user from cache the moment the tab is visible
-      const cachedNow = localStorage.getItem('taksyn-user')
-      if(cachedNow) {
-        setUser(prev=>{
-          if(prev) return prev // already have a user, no need to overwrite
-          try { return JSON.parse(cachedNow) } catch(e) { return null }
-        })
-      }
-      // Step 2 — async: verify the session with Supabase
       supabase.auth.getSession().then(({data:{session}})=>{
-        if(session?.user) {
-          if(!cachedNow) {
-            // Session alive but no cache — fetch profile and restore
-            supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
-              if(data) { const u={...data,email:session.user.email}; setUser(u); localStorage.setItem('taksyn-user',JSON.stringify(u)) }
-            }).catch(()=>{})
-          }
-        } else if(!cachedNow) {
-          // No session and no cache — genuinely signed out
-          setUser(null)
-        }
-        // If cachedNow exists but no session: keep showing the app; token may still be refreshing
+        if(!session?.user) setUser(null)
       }).catch(()=>{})
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    return ()=>{ subscription.unsubscribe(); document.removeEventListener('visibilitychange', handleVisibilityChange) }
+    return ()=>{
+      subscription.unsubscribe()
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   },[])
 
   // Load user positions after login — show role selector if multiple assignments exist
