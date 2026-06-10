@@ -1717,6 +1717,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       <button className="btn btn-secondary btn-sm" onClick={()=>{setShowDeleteConfirm(false);setDeleteScope('')}}>Cancel</button>
                       <button className="btn btn-danger btn-sm" disabled={!deleteScope} onClick={async()=>{
                         if(pushUndo) pushUndo('Deleted: '+sel.title,tasks)
+                        const dEntry = mkAuditEntry('task_deleted', user, sel.org||user.org, { deleteScope }, sel.id, sel.title, sel.status, null)
+                        setAuditLog(prev=>[dEntry,...prev])
+                        if(isConfigured()) supabase.from('audit_log').insert(dEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
                         setTasks(prev=>prev.filter(t=>t.id!==sel.id))
                         if(isConfigured()) await supabase.from('tasks').delete().eq('id',sel.id)
                         setShowDeleteConfirm(false); setDeleteScope(''); setSelected(null)
