@@ -4033,7 +4033,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                       <div style={{flex:1}}>
                         <div style={{fontWeight:600,fontSize:13}}>{m.name||'—'}</div>
                         <div style={{fontSize:11,color:'var(--t2)'}}>{m.email||'—'}</div>
-                        {m.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {m.department}</div>}
+                        {m.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {m.industry}</div>}
                       </div>
                       <RolePill role={m.role}/>
                       <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,department:m.department||'',industry:m.industry||'',phone:m.phone||'',notes:m.notes||'',email:m.email||'',org:m.org||''})}}>✏️ Edit</button>
