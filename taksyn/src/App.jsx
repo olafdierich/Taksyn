@@ -2809,14 +2809,14 @@ function UsersView({ user, setAuditLog }) {
     if (!confirm('Remove this user from your organisation?\n\nTheir active tasks will be unassigned — work history is preserved.')) return
     const target = realUsers.find(u=>u.id===id)
     if(isConfigured()) {
-      // Remove from org_members — preserves account in other orgs
       await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
-      // Clear assigned_user_id on active tasks but keep assigned_user_name for history
+      await supabase.from('user_positions').delete().eq('user_id',id).eq('org',user.org).catch(()=>{})
       await supabase.from('tasks').update({ assigned_user_id: null })
         .eq('assigned_user_id', id).eq('org', user.org)
         .not('status', 'in', '("completed","approved")')
     }
     setRealUsers(prev=>prev.filter(u=>u.id!==id))
+    setUserPositions(prev=>{ const n={...prev}; delete n[id]; return n })
     if (setAuditLog) {
       const rmEntry = mkAuditEntry('member_removed', user, user.org, { memberRole:target?.role||'' }, null, null, target?.name||id, null)
       setAuditLog(prev=>[rmEntry,...prev])
