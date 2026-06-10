@@ -1695,7 +1695,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             <div className="modal-hdr"><div className="modal-title">Reject Task</div><button className="modal-close" onClick={()=>{setShowReject(null);setRejectNote('')}}>×</button></div>
             <div className="modal-body">
               <div style={{fontSize:13,color:'var(--t2)',marginBottom:14}}>The task will be sent back as <span style={{color:'var(--red)',fontWeight:600}}>Rejected</span> with your instructions.</div>
-              <div className="form-field"><label className="form-label">Instructions for Worker</label><textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Please re-clean the bathroom…" value={rejectNote} onChange={e=>setRejectNote(e.target.value)}/></div>
+              <div className="form-field"><label className="form-label">Instructions for Staff Member</label><textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Please re-clean the bathroom…" value={rejectNote} onChange={e=>setRejectNote(e.target.value)}/></div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>{setShowReject(null);setRejectNote('')}}>Cancel</button>
                 <button className="btn btn-danger" disabled={!rejectNote.trim()} onClick={()=>{
