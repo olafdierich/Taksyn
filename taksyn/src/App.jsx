@@ -768,7 +768,6 @@ function AuthView({ onAuth }) {
             }
           } else {
             const userData = { id:data.user.id, email:data.user.email, name:data.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' }
-            localStorage.setItem('taksyn-user', JSON.stringify(userData))
             onAuth(userData)
           }
         }
