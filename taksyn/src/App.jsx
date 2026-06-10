@@ -5023,7 +5023,7 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
 
       <div className="section" style={{padding:0,overflow:'hidden'}}>
         <div style={{display:'flex',gap:0,borderBottom:'1px solid var(--border)'}}>
-          {[['timeline','Timeline'],['bytask','By Entity'],['byperson','By Person']].map(([k,l])=>(
+          {[['timeline','Timeline'],...(isSA?[]:[['bytask','By Entity']]),['byperson','By Person']].map(([k,l])=>(
             <button key={k} onClick={()=>setView(k)} style={{padding:'9px 16px',fontSize:13,fontWeight:600,background:'none',border:'none',borderBottom:view===k?'2px solid var(--brand)':'2px solid transparent',color:view===k?'var(--brand)':'var(--t2)',cursor:'pointer',marginBottom:-1}}>
               {l}
             </button>
