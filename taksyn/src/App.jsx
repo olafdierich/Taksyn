@@ -6734,6 +6734,9 @@ export default function App() {
   const [showUndo, setShowUndo] = useState(false)
   const [auditLog, setAuditLog] = useState([])
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
+  const [activePosition, setActivePosition] = useState(null) // selected role assignment for multi-role users
+  const [showRoleSelector, setShowRoleSelector] = useState(false)
+  const [userPositionsList, setUserPositionsList] = useState([])
   const [tickets, setTickets] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
