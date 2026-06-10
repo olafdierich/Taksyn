@@ -4302,19 +4302,6 @@ function CompanySettingsView({ user }) {
     setExporting(false)
   }
 
-  const deleteOldTasks = async () => {
-    if (!confirm(`Permanently delete all approved/completed tasks older than ${deleteMonths} month${deleteMonths!==1?'s':''}?\nThis cannot be undone.`)) return
-    setDeleting(true)
-    try {
-      const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth()-deleteMonths)
-      const { error, count } = await supabase.from('tasks').delete({count:'exact'})
-        .eq('org',user.org).in('status',['approved','completed']).lt('completed_at',cutoff.toISOString())
-      if (error) throw new Error(error.message)
-      setMsg(`✓ Deleted ${count||0} task${count!==1?'s':''}`)
-    } catch(e) { setMsg('✗ '+e.message) }
-    setDeleting(false)
-  }
-
   const fld = k => ({ value:form[k], onChange:e=>setForm(p=>({...p,[k]:e.target.value})) })
   const setN  = (k,v) => setSettings(p=>({...p,notifications:{...p.notifications,[k]:v}}))
   const setNE = (ev,k,v) => setSettings(p=>({...p,notifications:{...p.notifications,events:{...p.notifications.events,[ev]:{...p.notifications.events[ev],[k]:v}}}}))
