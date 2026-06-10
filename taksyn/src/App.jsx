@@ -3482,7 +3482,7 @@ function UsersView({ user, setAuditLog }) {
           </div>
         </div>
       )}
-      <div className="ph"><div className="ph-top"><div><div className="ph-title">Team Members</div><div className="ph-sub">Manage staff access and roles</div></div><button className="btn btn-primary" onClick={()=>setShowInvite(true)}><IC n="plus" s={13}/> Invite</button></div></div>
+      <div className="ph"><div className="ph-top"><div><div className="ph-title">Team Members</div><div className="ph-sub">Manage staff access and roles</div></div>{['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-primary" onClick={()=>setShowInvite(true)}><IC n="plus" s={13}/> Invite</button>}</div></div>
       <div className="section">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div className="section-title" style={{margin:0}}>Active Users ({realUsers.length})</div>
