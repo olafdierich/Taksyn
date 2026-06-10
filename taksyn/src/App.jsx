@@ -3163,7 +3163,8 @@ function UsersView({ user, setAuditLog }) {
   const [editPositions, setEditPositions] = useState([])
   const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
 
-  const allIndustries = [...PRESET_INDUSTRIES, ...orgCustomDepts.filter(d=>!PRESET_INDUSTRIES.includes(d))]
+  const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
+  const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
 
   const saveCustomIndustry = async () => {
     const name = newIndustry.trim()
