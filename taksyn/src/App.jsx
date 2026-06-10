@@ -4915,7 +4915,10 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
     const entryDate = e.created_at ? e.created_at.slice(0,10) : ''
     if (search) {
       const s = search.toLowerCase()
-      if (!(e.entity_name||'').toLowerCase().includes(s) && !(e.user_name||'').toLowerCase().includes(s) && !(e.details||'').toLowerCase().includes(s) && !(e.action||'').toLowerCase().includes(s) && !(e.organisation_id||'').toLowerCase().includes(s)) return false
+      const fields = isSA
+        ? [(e.user_name||''),(e.action||''),(e.organisation_id||'')]
+        : [(e.entity_name||''),(e.user_name||''),(e.details||''),(e.action||''),(e.organisation_id||'')]
+      if (!fields.some(f=>f.toLowerCase().includes(s))) return false
     }
     if (dateFrom && entryDate < dateFrom) return false
     if (dateTo && entryDate > dateTo) return false
