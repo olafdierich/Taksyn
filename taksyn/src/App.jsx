@@ -764,7 +764,6 @@ function AuthView({ onAuth }) {
             } else {
               // No org_members entry — use profile directly (legacy/super_admin)
               const userData = {...profile, email:data.user.email}
-              localStorage.setItem('taksyn-user', JSON.stringify(userData))
               onAuth(userData)
             }
           } else {
