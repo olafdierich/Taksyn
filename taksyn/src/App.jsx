@@ -3218,12 +3218,6 @@ function UsersView({ user, setAuditLog }) {
       email: editForm.email||''
     }
     // Save custom dept to org
-    if (editForm.department==='__custom__' && editCustomDept.trim() && editForm.industry && isConfigured()) {
-      const newDept = {name:editCustomDept.trim(),industry:editForm.industry}
-      const updatedDepts = [...orgCustomDepts, newDept]
-      setOrgCustomDepts(updatedDepts)
-      supabase.from('organisations').update({custom_departments:JSON.stringify(updatedDepts)}).eq('name',user.org).then(()=>{})
-    }
     if (isConfigured()) {
       await supabase.from('profiles').update(updates).eq('id', id)
       const targetOrg = editForm.org || user.org
