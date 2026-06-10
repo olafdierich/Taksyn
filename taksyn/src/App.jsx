@@ -4836,6 +4836,24 @@ function CompanySettingsView({ user }) {
   const [tplName, setTplName] = useState('')
   const [tplItems, setTplItems] = useState([{text:'',mandatory:false,requirePhoto:false}])
   const [tplSaving, setTplSaving] = useState(false)
+  // Team Management tab state
+  const [tmGlobalInds, setTmGlobalInds] = useState([])
+  const [tmOrgInds, setTmOrgInds] = useState([])
+  const [tmAllRoles, setTmAllRoles] = useState([])
+  const [tmCustomPos, setTmCustomPos] = useState([])
+  const [tmExpanded, setTmExpanded] = useState(new Set())
+  const [tmNewIndName, setTmNewIndName] = useState('')
+  const [tmEditInd, setTmEditInd] = useState(null)
+  const [tmNewRoleName, setTmNewRoleName] = useState({})
+  const [tmEditRole, setTmEditRole] = useState(null)
+  const [tmNewPosName, setTmNewPosName] = useState('')
+  const [tmEditPos, setTmEditPos] = useState(null)
+  const [tmSaving, setTmSaving] = useState(false)
+  const [tmSubTab, setTmSubTab] = useState('industries')
+  const [tmGlobalList, setTmGlobalList] = useState([])
+  const [tmNewGlobalName, setTmNewGlobalName] = useState('')
+  const [tmEditGlobal, setTmEditGlobal] = useState(null)
+  const [tmLoaded, setTmLoaded] = useState(false)
 
   useEffect(() => {
     if (!isConfigured()) { setLoading(false); return }
