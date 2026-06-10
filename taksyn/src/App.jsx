@@ -7236,7 +7236,7 @@ export default function App() {
                     <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{user.email}</div>
                     <div style={{marginTop:4}}><RolePill role={user.role}/></div>
                   </div>
-                  {user.department&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}><span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Department</span><span style={{fontSize:12,fontWeight:600}}>{user.department}</span></div>}
+                  {user.industry&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}><span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Industry</span><span style={{fontSize:12,fontWeight:600}}>{user.industry}</span></div>}
                 </div>
                 {profileMsg&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:6,padding:'8px 12px',fontSize:13,color:'var(--green)',marginBottom:14}}>{profileMsg}</div>}
                 <div className="form-field"><label className="form-label">Display Name</label><input className="form-input" value={profileName} onChange={e=>setProfileName(e.target.value)}/></div>
