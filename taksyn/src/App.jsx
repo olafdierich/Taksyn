@@ -4797,7 +4797,7 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
               {['task.created','task.assigned','task.status_changed','task.approved','task.rejected','task.escalated','task.deleted'].map(a=><option key={a} value={a}>{ACTION_CFG[a]?.label||a}</option>)}
             </optgroup>
             <optgroup label="Task Activity">
-              {['task.comment_added','task.evidence_added','task.evidence_removed','task.checklist_toggled'].map(a=><option key={a} value={a}>{ACTION_CFG[a]?.label||a}</option>)}
+              {['task.comment_added','task.evidence_added','task.evidence_removed','task.checklist_toggled','checklist_item_completed'].map(a=><option key={a} value={a}>{ACTION_CFG[a]?.label||a}</option>)}
             </optgroup>
             <optgroup label="Team &amp; Leave">
               {['member.invited','member.role_changed','member.edited','member.removed','leave.submitted','leave.cancelled'].map(a=><option key={a} value={a}>{ACTION_CFG[a]?.label||a}</option>)}
