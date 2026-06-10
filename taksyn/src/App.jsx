@@ -896,10 +896,10 @@ function AuthView({ onAuth }) {
         )}
         {mode==='register'&&inviteParams&&(
           <div style={{background:'rgba(16,185,129,.07)',border:'1px solid rgba(16,185,129,.25)',borderRadius:8,padding:'10px 14px',marginBottom:8}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#10B981',marginBottom:6,textTransform:'uppercase',letterSpacing:'.6px'}}>✓ Invite Link Detected</div>
+            <div style={{fontSize:11,fontWeight:700,color:'#10B981',marginBottom:6,textTransform:'uppercase',letterSpacing:'.6px'}}>✓ You have been invited</div>
             <div style={{display:'flex',flexDirection:'column',gap:3}}>
-              <div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Organisation: </span><strong>{inviteParams.orgName}</strong></div>
-              {inviteParams.teamName&&<div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Team: </span><strong>{inviteParams.teamName}</strong></div>}
+              <div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Organisation: </span><strong>{inviteParams.orgName||<span style={{color:'var(--t3)',fontStyle:'italic'}}>Loading…</span>}</strong></div>
+              {(inviteParams.teamId)&&<div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Team: </span><strong>{inviteParams.teamName||<span style={{color:'var(--t3)',fontStyle:'italic'}}>Loading…</span>}</strong></div>}
               <div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Role: </span><strong>{ROLE_LABELS[inviteParams.role]||inviteParams.role}</strong></div>
               {inviteParams.position&&<div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Position: </span><strong>{inviteParams.position}</strong></div>}
             </div>
