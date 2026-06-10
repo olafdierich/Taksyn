@@ -3236,7 +3236,6 @@ function UsersView({ user, setAuditLog }) {
       notes: editForm.notes||'',
       email: editForm.email||''
     }
-    // Save custom dept to org
     if (isConfigured()) {
       await supabase.from('profiles').update(updates).eq('id', id)
       const targetOrg = editForm.org || user.org
