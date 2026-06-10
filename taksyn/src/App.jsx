@@ -1063,6 +1063,171 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   )
 }
 
+function SuperAdminDashboard({ user, setPage, tickets=[] }) {
+  const [stats, setStats] = useState({ orgs:0, users:0 })
+  const [recentAudit, setRecentAudit] = useState([])
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [searchResults, setSearchResults] = useState(null)
+  const [searching, setSearching] = useState(false)
+
+  const ACTION_LABEL = {
+    'task.created':'Task Created','task.assigned':'Task Assigned','task.status_changed':'Status Changed',
+    'task.approved':'Approved','task.rejected':'Sent Back','task.escalated':'Escalated',
+    'task.deleted':'Task Deleted','task.comment_added':'Comment Added','task.evidence_added':'Evidence Added',
+    'task.checklist_toggled':'Checklist','checklist_item_completed':'Item Completed',
+    'leave.submitted':'Leave Submitted','leave.cancelled':'Leave Cancelled',
+    'member.invited':'Member Invited','member.role_changed':'Role Changed',
+    'member.edited':'Member Updated','member.removed':'Member Removed',
+    'session.logout':'Signed Out',
+  }
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('organisations').select('id',{count:'exact',head:true}).then(({count})=>setStats(p=>({...p,orgs:count||0}))).catch(()=>{})
+    supabase.from('profiles').select('id',{count:'exact',head:true}).then(({count})=>setStats(p=>({...p,users:count||0}))).catch(()=>{})
+    setAuditLoading(true)
+    supabase.from('audit_logs').select('id,action,user_name,organisation_id,created_at')
+      .order('created_at',{ascending:false}).limit(10)
+      .then(({data})=>{ if(data) setRecentAudit(data) }).catch(()=>{}).finally(()=>setAuditLoading(false))
+  },[])
+
+  const doSearch = async () => {
+    const s = search.trim()
+    if(!s||!isConfigured()) return
+    setSearching(true)
+    const [orgRes, userRes] = await Promise.all([
+      supabase.from('organisations').select('id,name,plan,status').ilike('name','%'+s+'%').limit(5),
+      supabase.from('profiles').select('id,name,role,org').ilike('name','%'+s+'%').limit(5)
+    ])
+    setSearchResults({ orgs:orgRes.data||[], users:userRes.data||[] })
+    setSearching(false)
+  }
+
+  const openTickets = tickets.filter(t=>t.status==='open'||t.status==='in_progress').length
+  const fmtTs = (d) => {
+    if(!d) return '—'
+    const dt=new Date(d), now=new Date()
+    const t=dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+    if(dt.toDateString()===now.toDateString()) return 'Today '+t
+    return dt.toLocaleDateString('en-AU',{day:'numeric',month:'short'})+' '+t
+  }
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Platform Support Dashboard</div>
+        <div className="ph-sub">Organisation structure and support tools — operational data is private to each org</div>
+      </div>
+
+      <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.25)',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'center'}}>
+        <span style={{fontSize:15,flexShrink:0}}>🔒</span>
+        <span>You have read/write access to organisation settings and user management only. Task content, evidence, checklists, leave, and reports are strictly private to each organisation.</span>
+      </div>
+
+      <div className="stat-grid" style={{marginBottom:20}}>
+        <Stat label="Organisations" val={stats.orgs} sub="on platform" icon="🏢" color="#8B5CF6" bg="rgba(139,92,246,.1)"/>
+        <Stat label="Total Users" val={stats.users} sub="across all orgs" icon="👥" color="#3B82F6" bg="rgba(59,130,246,.1)"/>
+        <Stat label="Open Tickets" val={openTickets} sub={openTickets>0?'Need attention':'All clear'} icon="🎫" color={openTickets>0?'#EF4444':'#10B981'} bg={openTickets>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'}/>
+        <Stat label="Audit Events" val={recentAudit.length>0?'Live':0} sub="activity tracked" icon="📋" color="#6B7280" bg="rgba(107,114,128,.1)"/>
+      </div>
+
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">Quick Search</div>
+        <div style={{display:'flex',gap:8}}>
+          <input className="form-input" placeholder="Search organisation or user name…" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()} style={{flex:1,fontSize:13}}/>
+          <button className="btn btn-primary" onClick={doSearch} disabled={searching}>{searching?'Searching…':'Search'}</button>
+        </div>
+        {searchResults&&(
+          <div style={{marginTop:12}}>
+            {searchResults.orgs.length>0&&(
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Organisations</div>
+                {searchResults.orgs.map(o=>(
+                  <div key={o.id} onClick={()=>setPage('orgs')} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',marginBottom:4,cursor:'pointer',background:'var(--s2)'}}>
+                    <span style={{fontSize:14}}>🏢</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:600}}>{o.name}</div>
+                      <div style={{fontSize:11,color:'var(--t2)'}}>{o.plan||'—'} plan · {o.status||'active'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {searchResults.users.length>0&&(
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Users</div>
+                {searchResults.users.map(u=>(
+                  <div key={u.id} onClick={()=>setPage('users')} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',marginBottom:4,cursor:'pointer',background:'var(--s2)'}}>
+                    <span style={{fontSize:14}}>👤</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:600}}>{u.name}</div>
+                      <div style={{fontSize:11,color:'var(--t2)'}}>{ROLE_LABELS[u.role]||u.role} · {u.org}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {searchResults.orgs.length===0&&searchResults.users.length===0&&(
+              <div style={{fontSize:13,color:'var(--t2)',padding:'10px 0'}}>No results found for "{search}"</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="two-col">
+        <div className="section">
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <div className="section-title" style={{margin:0}}>🎫 Open Tickets</div>
+            <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setPage('support')}>View All</button>
+          </div>
+          {openTickets===0
+            ? <div style={{fontSize:13,color:'var(--t2)',padding:'8px 0'}}>No open tickets 🎉</div>
+            : tickets.filter(t=>t.status==='open'||t.status==='in_progress').slice(0,4).map((t,i)=>(
+              <div key={i} onClick={()=>setPage('support')} style={{padding:'8px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                  <div style={{fontSize:12,fontWeight:600,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.user_name} · {t.org}</div>
+                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:600,background:t.status==='open'?'rgba(245,158,11,.15)':'rgba(59,130,246,.15)',color:t.status==='open'?'#F59E0B':'#3B82F6',flexShrink:0}}>{t.status?.replace('_',' ').toUpperCase()}</span>
+                </div>
+                <div style={{fontSize:11,color:'var(--t2)'}}>{fmtTs(t.created_at)}</div>
+              </div>
+            ))}
+        </div>
+        <div className="section">
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <div className="section-title" style={{margin:0}}>📋 Recent Activity</div>
+            <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setPage('audit')}>View All</button>
+          </div>
+          {auditLoading
+            ? <div style={{padding:'12px 0'}}><div className="spinner" style={{margin:'0 auto'}}/></div>
+            : recentAudit.length===0
+              ? <div style={{fontSize:13,color:'var(--t2)',padding:'8px 0'}}>No recent events</div>
+              : recentAudit.map((e,i)=>(
+                <div key={e.id||i} style={{padding:'7px 0',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{fontSize:12,fontWeight:600}}>{ACTION_LABEL[e.action]||e.action}</div>
+                  <div style={{fontSize:11,color:'var(--t2)'}}>{e.user_name||'—'} · {e.organisation_id||'—'}</div>
+                  <div style={{fontSize:10,color:'var(--t3)'}}>{fmtTs(e.created_at)}</div>
+                </div>
+              ))}
+        </div>
+      </div>
+
+      <div className="section" style={{marginTop:14}}>
+        <div className="section-title">Quick Navigation</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8}}>
+          {[['orgs','🏢','Organisations','View & manage orgs'],['users','👥','Users','Fix role & access issues'],['teams','👤','Teams','View team structure'],['audit','📋','Audit Log','Structural activity only'],['support','🎫','Support Tickets','Resolve user issues'],['notifications','📢','Announcements','Platform-wide messages']].map(([pg,icon,label,sub])=>(
+            <div key={pg} onClick={()=>setPage(pg)} style={{padding:'12px',borderRadius:10,border:'1px solid var(--border)',background:'var(--s2)',cursor:'pointer',textAlign:'center'}}>
+              <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
+              <div style={{fontSize:12,fontWeight:700}}>{label}</div>
+              <div style={{fontSize:10,color:'var(--t2)',marginTop:2}}>{sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA }) {
   const [filter, setFilter] = useState('all')
   const [selectedOrg, setSelectedOrg] = useState('all')
