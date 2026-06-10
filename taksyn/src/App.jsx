@@ -7432,7 +7432,7 @@ export default function App() {
             <div style={{background:'var(--card)',borderRadius:12,padding:28,maxWidth:360,width:'90%',boxShadow:'0 8px 32px rgba(0,0,0,.25)',textAlign:'center'}}>
               <div style={{fontSize:36,marginBottom:8}}>⏱</div>
               <div style={{fontSize:17,fontWeight:700,marginBottom:6}}>Session Expiring Soon</div>
-              <div style={{fontSize:13,color:'var(--t2)',marginBottom:16}}>You will be signed out due to inactivity in</div>
+              <div style={{fontSize:13,color:'var(--t2)',marginBottom:16}}>You will be signed out due to inactivity in 1 minute. Tap anywhere to stay signed in.</div>
               <div style={{fontSize:40,fontWeight:800,color:warnCountdown<=30?'var(--red)':'var(--amber)',letterSpacing:1,marginBottom:20,fontVariantNumeric:'tabular-nums'}}>
                 {String(Math.floor(warnCountdown/60)).padStart(2,'0')}:{String(warnCountdown%60).padStart(2,'0')}
               </div>
