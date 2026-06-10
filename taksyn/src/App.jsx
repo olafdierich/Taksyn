@@ -3062,10 +3062,14 @@ function UsersView({ user, setAuditLog }) {
               <div className="user-info" style={{flex:1}}>
                 <div className="user-name">{u.name}</div>
                 <div className="user-email">{u.email||'—'}</div>
-                {u.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {u.department}</div>}
+                {(userPositions[u.id]?.length>0) ? (
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
+                    {userPositions[u.id].map((pos,pi)=><PositionChip key={pi} pos={pos}/>)}
+                  </div>
+                ) : (u.department&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏢 {u.department}</div>)}
               </div>
               <RolePill role={u.role}/>
-              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||'',phone:u.phone||'',notes:u.notes||'',email:u.email||'',org:u.org||''}) }}>✏️ Edit</button>}
+              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||'',phone:u.phone||'',notes:u.notes||'',email:u.email||'',org:u.org||''}); setEditPositions(userPositions[u.id]?.map(p=>({...p}))||[]) }}>✏️ Edit</button>}
               {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
             </div>
           ))}
