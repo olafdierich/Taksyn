@@ -3880,6 +3880,36 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoadingProfiles(false)
   }
 
+  const openEditMember = async (member) => {
+    setEditingMember(member)
+    setMemberEditForm({name:member.name,role:member.role,department:member.department||'',industry:member.industry||'',phone:member.phone||'',notes:member.notes||'',email:member.email||'',org:member.org||''})
+    setEditMemberPositions([])
+    setEditMemberNewPos({industry:'',role:'',position:''})
+    setEditOrgIndustries([])
+    setEditOrgCustomRoles([])
+    setEditOrgCustomPositions([])
+    if(!isConfigured()) return
+    // Load org ID for this member's org
+    const orgName = member.org || selectedOrgView?.name
+    if(!orgName) return
+    const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',orgName).single()
+    const orgId = orgRow?.id
+    const [gi,oi,cr,cp,up] = await Promise.all([
+      supabase.from('global_industries').select('name').order('sort_order',{nullsFirst:false}).order('name'),
+      orgId ? supabase.from('org_industries').select('name').eq('organisation_id',orgId) : Promise.resolve({data:[]}),
+      orgId ? supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name') : Promise.resolve({data:[]}),
+      orgId ? supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name') : Promise.resolve({data:[]}),
+      supabase.from('user_positions').select('*').eq('user_id',member.id).eq('org',orgName)
+    ])
+    const globalNames = gi.data?.map(i=>i.name)||[]
+    const orgNames = oi.data?.map(i=>i.name)||[]
+    const baseInds = globalNames.length ? globalNames : PRESET_INDUSTRIES
+    setEditOrgIndustries([...baseInds,...orgNames.filter(n=>!baseInds.includes(n))])
+    setEditOrgCustomRoles(cr.data||[])
+    setEditOrgCustomPositions(cp.data?.map(p=>p.position_name)||[])
+    setEditMemberPositions(up.data?.map(p=>({...p}))||[])
+  }
+
   const enterOrgContext = async (org) => {
     setSelectedOrgView(org)
     setOrgContextTab('members')
