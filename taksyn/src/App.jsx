@@ -816,6 +816,100 @@ function AuthView({ onAuth }) {
     finally { setLoading(false) }
   }
 
+  // ── Dedicated invite registration page ──
+  if (inviteParams && mode === 'register') {
+    const hasName = !!(inviteParams.name || name)
+    const hasEmail = !!(inviteParams.email || email)
+    const canSubmit = !loading && password.length >= 6 && password === confirmPassword && agreeChecked && !!inviteParams.orgName && hasName && hasEmail
+    return (
+      <div className="auth-bg">
+        <style>{CSS}</style>
+        <div className="auth-card" style={{maxWidth:480}}>
+          <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:44,objectFit:'contain'}} /></div>
+          <div style={{textAlign:'center',marginBottom:20}}>
+            <div style={{fontSize:13,color:'var(--t2)',marginBottom:4}}>You've been invited to join</div>
+            <div style={{fontSize:22,fontWeight:800,color:'var(--text)',lineHeight:1.2}}>{inviteParams.orgName||<span style={{color:'var(--t3)',fontStyle:'italic',fontWeight:400,fontSize:16}}>Loading…</span>}</div>
+          </div>
+          {error&&<div className="auth-error">{error}</div>}
+          {success ? (
+            <div style={{textAlign:'center',padding:'28px 0'}}>
+              <div style={{fontSize:48,marginBottom:14}}>✅</div>
+              <div style={{fontSize:18,fontWeight:700,color:'var(--green)',marginBottom:6}}>Account created successfully!</div>
+              <div style={{fontSize:13,color:'var(--t2)'}}>Redirecting you to sign in…</div>
+            </div>
+          ) : (
+            <>
+              {/* Read-only details */}
+              <div style={{background:'var(--s3)',borderRadius:10,padding:'4px 14px',marginBottom:16}}>
+                <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',padding:'10px 0 6px'}}>Your Details</div>
+                {inviteParams.name ? (
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderTop:'1px solid var(--border)'}}>
+                    <span style={{fontSize:12,color:'var(--t2)'}}>Full Name</span>
+                    <span style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{inviteParams.name}</span>
+                  </div>
+                ) : (
+                  <div style={{padding:'8px 0',borderTop:'1px solid var(--border)'}}>
+                    <label className="auth-label" style={{marginBottom:4}}>Full Name *</label>
+                    <input className="auth-input" placeholder="Your full name" value={name} onChange={e=>setName(e.target.value)} style={{marginBottom:0}}/>
+                  </div>
+                )}
+                {inviteParams.email ? (
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderTop:'1px solid var(--border)'}}>
+                    <span style={{fontSize:12,color:'var(--t2)'}}>Email</span>
+                    <span style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{inviteParams.email}</span>
+                  </div>
+                ) : (
+                  <div style={{padding:'8px 0',borderTop:'1px solid var(--border)'}}>
+                    <label className="auth-label" style={{marginBottom:4}}>Email Address *</label>
+                    <input className="auth-input" type="email" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} style={{marginBottom:0}}/>
+                  </div>
+                )}
+                {inviteParams.phone&&(
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderTop:'1px solid var(--border)'}}>
+                    <span style={{fontSize:12,color:'var(--t2)'}}>Phone</span>
+                    <span style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{inviteParams.phone}</span>
+                  </div>
+                )}
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderTop:'1px solid var(--border)'}}>
+                  <span style={{fontSize:12,color:'var(--t2)'}}>Organisation</span>
+                  <span style={{fontSize:13,fontWeight:700,color:'var(--brand)'}}>{inviteParams.orgName||'…'}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderTop:'1px solid var(--border)'}}>
+                  <span style={{fontSize:12,color:'var(--t2)'}}>Role</span>
+                  <span style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{inviteParams.position||ROLE_LABELS[inviteParams.role]||inviteParams.role}</span>
+                </div>
+              </div>
+              {/* Password fields */}
+              <div className="auth-field">
+                <label className="auth-label">Create Password</label>
+                <div style={{position:'relative'}}>
+                  <input className="auth-input" type={showPw?'text':'password'} placeholder="Min 6 characters" value={password} onChange={e=>setPassword(e.target.value)} style={{paddingRight:36}}/>
+                  <button type="button" onClick={()=>setShowPw(!showPw)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw?'👁':'🔒'}</button>
+                </div>
+              </div>
+              <div className="auth-field">
+                <label className="auth-label">Confirm Password</label>
+                <input className="auth-input" type="password" placeholder="Repeat your password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&canSubmit&&handleSubmit()}/>
+                {password&&confirmPassword&&password!==confirmPassword&&<div style={{fontSize:11,color:'var(--red)',marginTop:4}}>Passwords do not match</div>}
+              </div>
+              {/* Agree checkbox */}
+              <label style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 12px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:14,fontSize:13,color:'var(--text)',lineHeight:1.45}}>
+                <input type="checkbox" checked={agreeChecked} onChange={e=>setAgreeChecked(e.target.checked)} style={{marginTop:2,flexShrink:0,accentColor:'var(--brand)',width:15,height:15}}/>
+                My details above are correct and I agree to the <span style={{color:'var(--brand)',marginLeft:3}}>Terms of Use</span>
+              </label>
+              <button className="auth-btn" disabled={!canSubmit} onClick={handleSubmit}>
+                {loading?'Creating account…':'Create My Account'}
+              </button>
+              <div style={{textAlign:'center',marginTop:12}}>
+                <a style={{fontSize:12,color:'var(--t2)',cursor:'pointer'}} onClick={()=>setMode('login')}>Already have an account? Sign in</a>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   // Invite / password setup screen
   if (inviteToken) {
     return (
