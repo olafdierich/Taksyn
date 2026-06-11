@@ -5129,7 +5129,7 @@ function CompanySettingsView({ user }) {
     <div className="anim">
       <div className="ph">
         <div><div className="ph-title">Company Settings</div><div className="ph-sub">Configure your organisation, workflows and compliance</div></div>
-        {activeTab!=='data'&&activeTab!=='templates'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
+        {activeTab!=='data'&&activeTab!=='templates'&&activeTab!=='team'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
       </div>
 
       <MsgBanner/>
