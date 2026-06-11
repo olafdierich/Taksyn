@@ -3341,8 +3341,26 @@ function UsersView({ user, setAuditLog }) {
     const positionsSummary = rolesSummary ? '\n\nAssignments: '+rolesSummary : ''
 
     if (inviteMethod==='whatsapp') {
-      const msg=encodeURIComponent('Hi '+inviteName+'! You have been invited to join Taksyn at '+targetOrg+'.'+positionsSummary+'\n\nSign up here: https://taksyn.vercel.app\n\nUse your email: '+inviteEmail+'\n\nOrganisation name to enter: '+targetOrg)
-      window.open('https://wa.me/?text='+msg,'_blank')
+      const orgEntry = orgsList.find(o=>o.name===targetOrg)
+      const linkOrgId = orgEntry?.id || ''
+      const firstPosition = validRows.find(p=>p.position)?.position || ROLE_LABELS[systemRole] || systemRole
+      let inviteUrl = window.location.origin + window.location.pathname
+      if (linkOrgId && isConfigured()) {
+        const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
+        await supabase.from('invite_links').insert({
+          id: linkId, org_id: linkOrgId, role: systemRole,
+          position: validRows.find(p=>p.position)?.position || null,
+          created_by: user.name, org: targetOrg, created_at: new Date().toISOString()
+        }).catch(()=>{})
+        const params = new URLSearchParams({
+          invite: 'true', org: linkOrgId, role: systemRole,
+          position: validRows.find(p=>p.position)?.position || '',
+          secret: 'taksyn-secret-2024', link: linkId
+        })
+        inviteUrl = window.location.origin + window.location.pathname + '?' + params.toString()
+      }
+      const msg = encodeURIComponent(`Hi ${inviteName.trim()}, you've been invited to join ${targetOrg} on Taksyn as ${firstPosition}. Tap the link to set up your account: ${inviteUrl}`)
+      window.open('https://wa.me/?text='+msg, '_blank')
       setShowInvite(false); resetInviteForm()
       return
     }
