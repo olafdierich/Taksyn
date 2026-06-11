@@ -8692,9 +8692,9 @@ export default function App() {
           if (rem <= 0) {
             clearInterval(countdownTimer.current)
             setSessionWarning(false)
+            if (isConfigured()) supabase.auth.signOut().catch(() => {})
             clearAuthCache()
             setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
-            if (isConfigured()) supabase.auth.signOut().catch(() => {})
           }
         }, 1000)
       }, warnMs)
