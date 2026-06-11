@@ -217,7 +217,6 @@ const mkAuditEntry = (event_type, user, org, detail={}, task_id=null, task_title
   task_id,
   task_title,
   by: user?.name||'',
-  by_id: user?.id||null,
   by_role: user?.role||'',
   org: org||user?.org||'',
   at: new Date().toISOString(),
