@@ -1729,9 +1729,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       )}
 
       {showCreate&&(
-        <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
+        <div className="modal-overlay" onClick={()=>{ setShowCreate(false); setSelectedTplId('') }}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-hdr"><div className="modal-title">Create New Task</div><button className="modal-close" onClick={()=>setShowCreate(false)}>×</button></div>
+            <div className="modal-hdr"><div className="modal-title">Create New Task</div><button className="modal-close" onClick={()=>{ setShowCreate(false); setSelectedTplId('') }}>×</button></div>
             <div className="modal-body">
               <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/></div>
               <div className="two-col">
