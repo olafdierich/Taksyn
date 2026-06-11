@@ -5978,9 +5978,9 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
     if (!isConfigured()) return
     setLoading(true)
     // super_admin: fetch only structural columns — no entity_name or details
-    const cols = isSA ? 'id,organisation_id,user_id,user_name,action,created_at' : '*'
-    const q = supabase.from('audit_logs').select(cols).order('created_at',{ascending:false}).limit(1000)
-    ;(isSA ? q : q.eq('organisation_id', user.org))
+    const cols = isSA ? 'id,org,by,event_type,at,task_title,task_id' : '*'
+    const q = supabase.from('audit_log').select(cols).order('at',{ascending:false}).limit(1000)
+    ;(isSA ? q : q.eq('org', user.org))
       .then(({data})=>{ if(data) setLogs(data) })
       .catch(()=>{})
       .finally(()=>setLoading(false))
