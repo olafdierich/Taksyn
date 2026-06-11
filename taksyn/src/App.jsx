@@ -5162,6 +5162,7 @@ function CompanySettingsView({ user }) {
     setTplPriority(t.priority||'medium')
     setTplItems((t.items||[]).length ? t.items.map(it=>({label:it.label||it.text||'',required:!!(it.required||it.mandatory)})) : [{label:'',required:false}])
     setMsg('')
+    setTimeout(()=>tplFormRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),30)
   }
 
   const saveTemplate = async () => {
