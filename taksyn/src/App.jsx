@@ -889,40 +889,25 @@ function AuthView({ onAuth }) {
         <div className="auth-sub">Task compliance & accountability platform</div>
         {error&&<div className="auth-error">{error}</div>}
         {success&&<div className="auth-success" style={{fontSize:14,fontWeight:600,padding:'14px 16px',textAlign:'center'}}>{success}</div>}
-        {mode==='register'&&!inviteParams&&(
-          <div style={{display:'flex',gap:8,marginBottom:4}}>
-            <button onClick={()=>setSignupType('organisation')} style={{flex:1,padding:'8px',borderRadius:6,border:'2px solid '+(signupType==='organisation'?'var(--brand)':'var(--border)'),background:signupType==='organisation'?'var(--brand-lt)':'none',color:signupType==='organisation'?'var(--brand)':'var(--t2)',cursor:'pointer',fontSize:12,fontWeight:600}}>🏢 New Organisation</button>
-            <button onClick={()=>setSignupType('staff')} style={{flex:1,padding:'8px',borderRadius:6,border:'2px solid '+(signupType==='staff'?'var(--brand)':'var(--border)'),background:signupType==='staff'?'var(--brand-lt)':'none',color:signupType==='staff'?'var(--brand)':'var(--t2)',cursor:'pointer',fontSize:12,fontWeight:600}}>👤 Join Organisation</button>
-          </div>
-        )}
         {mode==='register'&&inviteParams&&(
-          <div style={{background:'rgba(16,185,129,.07)',border:'1px solid rgba(16,185,129,.25)',borderRadius:8,padding:'10px 14px',marginBottom:8}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#10B981',marginBottom:6,textTransform:'uppercase',letterSpacing:'.6px'}}>✓ You have been invited</div>
-            <div style={{display:'flex',flexDirection:'column',gap:3}}>
-              <div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Organisation: </span><strong>{inviteParams.orgName||<span style={{color:'var(--t3)',fontStyle:'italic'}}>Loading…</span>}</strong></div>
-              {(inviteParams.teamId)&&<div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Team: </span><strong>{inviteParams.teamName||<span style={{color:'var(--t3)',fontStyle:'italic'}}>Loading…</span>}</strong></div>}
-              <div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Role: </span><strong>{ROLE_LABELS[inviteParams.role]||inviteParams.role}</strong></div>
-              {inviteParams.position&&<div style={{fontSize:12,color:'var(--t1)'}}><span style={{color:'var(--t2)'}}>Position: </span><strong>{inviteParams.position}</strong></div>}
-            </div>
+          <div style={{background:'rgba(16,185,129,.07)',border:'1px solid rgba(16,185,129,.25)',borderRadius:8,padding:'14px 16px',marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#10B981',marginBottom:6,textTransform:'uppercase',letterSpacing:'.6px'}}>You are joining</div>
+            <div style={{fontSize:16,fontWeight:800,color:'var(--t1)',marginBottom:4}}>{inviteParams.orgName||<span style={{color:'var(--t3)',fontStyle:'italic'}}>Loading…</span>}</div>
+            <div style={{fontSize:13,color:'var(--t2)'}}>as <strong style={{color:'var(--t1)'}}>{inviteParams.position || ROLE_LABELS[inviteParams.role] || inviteParams.role}</strong></div>
           </div>
         )}
         {mode==='register'&&<div className="auth-field"><label className="auth-label">Full Name</label><input className="auth-input" placeholder="Your full name" value={name} onChange={e=>setName(e.target.value)} /></div>}
         <div className="auth-field"><label className="auth-label">Email</label><input className="auth-input" type="email" placeholder="you@organisation.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} /></div>
-        {mode!=='forgot'&&<div className="auth-field"><label className="auth-label">Password</label><div style={{position:'relative'}}><input className="auth-input" type={showPw?'text':'password'} placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw(!showPw)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw?'👁':'🔒'}</button></div></div>}
-        {mode==='register'&&signupType==='organisation'&&!inviteParams&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="e.g. Sunrise Aged Care" value={org} onChange={e=>setOrg(e.target.value)} /></div>}
-        {mode==='register'&&signupType==='staff'&&!inviteParams&&(
+        {mode!=='forgot'&&<div className="auth-field"><label className="auth-label">Password</label><div style={{position:'relative'}}><input className="auth-input" type={showPw?'text':'password'} placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&(!inviteParams&&handleSubmit())} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw(!showPw)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw?'👁':'🔒'}</button></div></div>}
+        {mode==='register'&&inviteParams&&(
           <div className="auth-field">
-            <label className="auth-label">Organisation</label>
-            {orgs.length>0
-              ? <select className="auth-input" value={inviteCode} onChange={e=>setInviteCode(e.target.value)} style={{cursor:'pointer'}}>
-                  <option value="">— Select your organisation —</option>
-                  {orgs.map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
-                </select>
-              : <input className="auth-input" placeholder="Enter your exact organisation name" value={inviteCode} onChange={e=>setInviteCode(e.target.value)} />
-            }
+            <label className="auth-label">Confirm Password</label>
+            <input className="auth-input" type="password" placeholder="Repeat your password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} />
+            {password&&confirmPassword&&password!==confirmPassword&&<div style={{fontSize:11,color:'var(--red)',marginTop:4}}>Passwords do not match</div>}
           </div>
         )}
-        {mode==='register'&&!inviteParams&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>{signupType==='organisation'?'🏢 You will be set up as the Client Admin for your organisation':'👤 You will join as a Staff Member — your admin can change your role'}</div>}
+        {mode==='register'&&!inviteParams&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="e.g. Sunrise Aged Care" value={org} onChange={e=>setOrg(e.target.value)} /></div>}
+        {mode==='register'&&!inviteParams&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>🏢 You will be set up as the Client Admin for your organisation</div>}
         {mode==='forgot'
           ? <button className="auth-btn" onClick={handleForgotPassword} disabled={loading}>{loading?'Sending…':'Send Reset Email'}</button>
           : <button className="auth-btn" onClick={handleSubmit} disabled={loading}>{loading?'Please wait…':mode==='login'?'Sign In':'Create Account'}</button>
