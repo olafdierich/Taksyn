@@ -8343,6 +8343,9 @@ function GettingStartedGuide({ user, setPage }) {
   const toggleSubChapter = (id) => setOpenSubChapters(prev => ({...prev, [id]: !prev[id]}))
   const toggleStep = (key) => setOpenSteps(prev => ({...prev, [key]: !prev[key]}))
 
+  const handleScTap = (e, id) => { e.preventDefault(); e.stopPropagation(); toggleSubChapter(id) }
+  const handleStepTap = (e, key) => { e.preventDefault(); e.stopPropagation(); toggleStep(key) }
+
   const handlePrint = () => {
     const prevTitle = document.title
     document.title = 'Taksyn-' + roleName.replace(/\s+/g, '-') + '-Guide'
