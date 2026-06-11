@@ -3218,6 +3218,10 @@ function UsersView({ user, setAuditLog }) {
   }
 
   useEffect(()=>{
+    if(user.role==='super_admin'&&inviteOrg.trim()) loadInviteOrgData(inviteOrg.trim())
+  },[inviteOrg])
+
+  useEffect(()=>{
     if(!isConfigured()||!user.id) return
     if(user.role==='super_admin') {
       supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(data) }).catch(()=>{})
