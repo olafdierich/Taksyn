@@ -6047,20 +6047,20 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
   })()
 
   const EntryRow = ({ e }) => {
-    const cfg = getCfg(e.action)
+    const cfg = getCfg(e.event_type)
     return (
       <div style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',alignItems:'flex-start',borderLeft:'3px solid '+cfg.color+'55'}}>
         <div style={{width:28,height:28,borderRadius:'50%',background:cfg.color+'18',color:cfg.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0,marginTop:1}}>{cfg.icon}</div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:2}}>
             <span style={{fontSize:12,fontWeight:700,color:cfg.color}}>{cfg.label}</span>
-            {!isSA&&e.entity_name&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{e.entity_name}</span>}
+            {!isSA&&e.task_title&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{e.task_title}</span>}
           </div>
           {!isSA&&e.details&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:2}}>{e.details}</div>}
           <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-            {view!=='byperson'&&<span style={{fontSize:11,color:'var(--t2)'}}>{e.user_name||'—'}</span>}
-            {isSA&&e.organisation_id&&<span style={{fontSize:11,color:'var(--t2)'}}>· {e.organisation_id}</span>}
-            <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>{fmtTs(e.created_at)}</span>
+            {view!=='byperson'&&<span style={{fontSize:11,color:'var(--t2)'}}>{e.by||'—'}</span>}
+            {isSA&&e.org&&<span style={{fontSize:11,color:'var(--t2)'}}>· {e.org}</span>}
+            <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>{fmtTs(e.at)}</span>
           </div>
         </div>
       </div>
