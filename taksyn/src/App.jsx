@@ -632,6 +632,7 @@ function AuthView({ onAuth }) {
   const [inviteToken, setInviteToken] = useState(null)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [agreeChecked, setAgreeChecked] = useState(false)
   const [orgs, setOrgs] = useState([])
   // Invite params: set immediately from URL, names resolved async
   const [inviteParams, setInviteParams] = useState(_isInvite ? {
@@ -641,7 +642,11 @@ function AuthView({ onAuth }) {
     teamName: null,  // filled in async
     role: _sp.get('role')||'worker',
     position: _sp.get('position')||'',
-    linkId: _sp.get('link')||null
+    linkId: _sp.get('link')||null,
+    name: _sp.get('name')||'',
+    email: _sp.get('email')||'',
+    phone: _sp.get('phone')||'',
+    industry: _sp.get('industry')||''
   } : null)
 
   useEffect(()=>{
