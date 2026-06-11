@@ -3193,29 +3193,29 @@ function UsersView({ user, setAuditLog }) {
       .then(({data})=>{ if(data) setOrgsList(data) })
   },[])
 
-  useEffect(()=>{
-    if(!isConfigured()||!user.org) return
-    supabase.from('organisations').select('id').eq('name', user.org).single()
-      .then(({data}) => {
-        const id = data?.id; if(!id) return
-        supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',id).order('sort_order',{nullsFirst:false}).order('role_name')
-          .then(({data})=>{ setOrgCustomRoles(data||[]) }).catch(()=>{})
-        supabase.from('org_custom_positions').select('position_name').eq('organisation_id',id).order('sort_order',{nullsFirst:false}).order('position_name')
-          .then(({data})=>{ setOrgCustomPositions(data?.map(p=>p.position_name)||[]) }).catch(()=>{})
-      }).catch(()=>{})
-  },[user.org, showInvite])
+  const loadInviteOrgData = async (orgName) => {
+    if(!isConfigured()||!orgName) return
+    const cached = orgsList.find(o=>o.name===orgName)
+    let orgId = cached?.id
+    if(!orgId) {
+      const {data} = await supabase.from('organisations').select('id').eq('name',orgName).single()
+      orgId = data?.id
+    }
+    if(!orgId) return
+    const [rolesRes, posRes] = await Promise.all([
+      supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name'),
+      supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name')
+    ])
+    setOrgCustomRoles(rolesRes.data||[])
+    setOrgCustomPositions(posRes.data?.map(p=>p.position_name)||[])
+  }
 
-  useEffect(()=>{
-    if(!isConfigured()||!inviteOrg.trim()||user.role!=='super_admin') return
-    supabase.from('organisations').select('id').eq('name', inviteOrg.trim()).single()
-      .then(({data}) => {
-        const id = data?.id; if(!id) return
-        supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',id).order('sort_order',{nullsFirst:false}).order('role_name')
-          .then(({data})=>{ setOrgCustomRoles(data||[]) }).catch(()=>{})
-        supabase.from('org_custom_positions').select('position_name').eq('organisation_id',id).order('sort_order',{nullsFirst:false}).order('position_name')
-          .then(({data})=>{ setOrgCustomPositions(data?.map(p=>p.position_name)||[]) }).catch(()=>{})
-      }).catch(()=>{})
-  },[inviteOrg])
+  const openInviteForm = async (method) => {
+    if(method) setInviteMethod(method)
+    setShowInvite(true)
+    const targetOrg = user.role==='super_admin' ? inviteOrg.trim()||'' : user.org
+    await loadInviteOrgData(targetOrg)
+  }
 
   useEffect(()=>{
     if(!isConfigured()||!user.id) return
