@@ -1312,6 +1312,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     }
   },[user.org])
 
+  const taskAllIndustries = [...(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES), ...taskOrgIndustries.filter(d=>!(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES).includes(d))]
 
   const visible = visibleTasks(tasks, user, leaveRecords)
   // Super admin: filter by selected org
