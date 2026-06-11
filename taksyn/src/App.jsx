@@ -616,9 +616,9 @@ function AuthView({ onAuth }) {
   const _isInvite = _sp.get('invite')==='true' && _sp.get('secret')==='taksyn-secret-2024'
 
   const [mode, setMode] = useState(_isInvite ? 'register' : 'login')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(_isInvite && _sp.get('email') ? _sp.get('email') : '')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
+  const [name, setName] = useState(_isInvite && _sp.get('name') ? _sp.get('name') : '')
   const [org, setOrg] = useState('')
   const [signupType, setSignupType] = useState(_isInvite ? 'staff' : 'organisation')
   const [inviteCode, setInviteCode] = useState('')
