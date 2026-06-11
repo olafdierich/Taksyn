@@ -5995,21 +5995,21 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
     return dt.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})+' '+timeStr
   }
 
-  const allOrgs = user.role==='super_admin' ? [...new Set(logs.map(e=>e.organisation_id).filter(Boolean))].sort() : []
+  const allOrgs = user.role==='super_admin' ? [...new Set(logs.map(e=>e.org).filter(Boolean))].sort() : []
 
   const filtered = logs.filter(e=>{
-    const entryDate = e.created_at ? e.created_at.slice(0,10) : ''
+    const entryDate = e.at ? e.at.slice(0,10) : ''
     if (search) {
       const s = search.toLowerCase()
       const fields = isSA
-        ? [(e.user_name||''),(e.action||''),(e.organisation_id||'')]
-        : [(e.entity_name||''),(e.user_name||''),(e.details||''),(e.action||''),(e.organisation_id||'')]
+        ? [(e.by||''),(e.event_type||''),(e.org||'')]
+        : [(e.task_title||''),(e.by||''),(e.details||''),(e.event_type||''),(e.org||'')]
       if (!fields.some(f=>f.toLowerCase().includes(s))) return false
     }
     if (dateFrom && entryDate < dateFrom) return false
     if (dateTo && entryDate > dateTo) return false
-    if (typeFilter!=='all' && e.action!==typeFilter) return false
-    if (orgFilter && e.organisation_id!==orgFilter) return false
+    if (typeFilter!=='all' && e.event_type!==typeFilter) return false
+    if (orgFilter && e.org!==orgFilter) return false
     return true
   })
 
