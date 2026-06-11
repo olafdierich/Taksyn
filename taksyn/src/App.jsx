@@ -4942,7 +4942,7 @@ function RolesPositionsView({ user }) {
                       {editRoleId===role.id ? (
                         <>
                           <input className="form-input" style={{flex:1,fontSize:12}} value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveRoleEdit();if(e.key==='Escape'){setEditRoleId(null);setEditRoleName('')}}} autoFocus/>
-                          <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving}>Save</button>
+                          <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving||!editRoleName.trim()}>Save</button>
                           <button className="btn btn-secondary btn-sm" onClick={()=>{setEditRoleId(null);setEditRoleName('')}}>×</button>
                         </>
                       ) : (
