@@ -5514,6 +5514,186 @@ function CompanySettingsView({ user }) {
           </div>
         </>
       })()}
+
+      {activeTab==='team'&&(()=>{
+        const TM_BTN = {fontSize:11,padding:'3px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',fontFamily:'inherit',color:'var(--text)'}
+        const TM_INPUT = {fontSize:12,padding:'5px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',flex:1,minWidth:0}
+        const TM_SAVE_BTN = {fontSize:11,padding:'3px 10px',borderRadius:6,border:'none',background:'var(--primary)',color:'#fff',cursor:'pointer',fontFamily:'inherit'}
+        const TM_DEL_BTN = {fontSize:11,padding:'3px 8px',borderRadius:6,border:'1px solid var(--red)',color:'var(--red)',background:'transparent',cursor:'pointer',fontFamily:'inherit'}
+        const TM_MOVE_BTN = {fontSize:11,padding:'2px 6px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',fontFamily:'inherit',color:'var(--t2)',lineHeight:1}
+
+        const allOrgInds = [...tmGlobalInds.map(i=>({...i,global:true})), ...tmOrgInds.map(i=>({...i,global:false}))]
+
+        return <>
+          {/* Sub-tabs for super_admin */}
+          {user?.role==='super_admin'&&(
+            <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,width:'fit-content'}}>
+              {[['industries','Industries & Roles'],['positions','Positions'],['global','Global Industries']].map(([k,l])=>(
+                <button key={k} onClick={()=>setTmSubTab(k)} style={{padding:'5px 14px',borderRadius:6,border:'none',background:tmSubTab===k?'var(--primary)':'transparent',color:tmSubTab===k?'#fff':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{l}</button>
+              ))}
+            </div>
+          )}
+          {user?.role!=='super_admin'&&(
+            <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,width:'fit-content'}}>
+              {[['industries','Industries & Roles'],['positions','Positions']].map(([k,l])=>(
+                <button key={k} onClick={()=>setTmSubTab(k)} style={{padding:'5px 14px',borderRadius:6,border:'none',background:tmSubTab===k?'var(--primary)':'transparent',color:tmSubTab===k?'#fff':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{l}</button>
+              ))}
+            </div>
+          )}
+
+          {/* INDUSTRIES & ROLES sub-tab */}
+          {tmSubTab==='industries'&&(
+            <div className="section" style={{marginBottom:14}}>
+              <div className="section-title">Industries</div>
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:12}}>Each industry can have custom roles assigned to it. Global industries are read-only; expand any to add your own roles.</div>
+
+              {allOrgInds.length===0&&<div style={{fontSize:13,color:'var(--t2)'}}>No industries yet.</div>}
+              {allOrgInds.map(ind=>{
+                const roles=tmRolesFor(ind.name)
+                const isExpanded=tmExpanded.has(ind.name)
+                return (
+                  <div key={ind.id||ind.name} style={{border:'1px solid var(--border)',borderRadius:10,marginBottom:8,overflow:'hidden'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'var(--s2)',cursor:'pointer'}} onClick={()=>tmToggle(ind.name)}>
+                      <span style={{fontSize:13,transform:isExpanded?'rotate(90deg)':'none',transition:'transform .15s',color:'var(--t2)',lineHeight:1}}>▶</span>
+                      {tmEditInd?.id===ind.id&&!ind.global?(
+                        <div style={{display:'flex',gap:6,flex:1,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+                          <input style={TM_INPUT} value={tmEditInd.name} onChange={e=>setTmEditInd({...tmEditInd,name:e.target.value})} onKeyDown={e=>e.key==='Enter'&&tmSaveInd()} autoFocus/>
+                          <button style={TM_SAVE_BTN} onClick={tmSaveInd} disabled={tmSaving}>Save</button>
+                          <button style={TM_BTN} onClick={()=>setTmEditInd(null)}>Cancel</button>
+                        </div>
+                      ):(
+                        <>
+                          <span style={{fontWeight:600,fontSize:13,flex:1}}>{ind.name}</span>
+                          {ind.global&&<span style={{fontSize:10,fontWeight:700,color:'var(--t3)',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 6px',letterSpacing:'.3px'}}>GLOBAL</span>}
+                          <span style={{fontSize:11,color:'var(--t2)'}}>{roles.length} role{roles.length!==1?'s':''}</span>
+                          {!ind.global&&<>
+                            <button style={TM_BTN} onClick={e=>{e.stopPropagation();setTmEditInd({...ind})}}>Edit</button>
+                            <button style={TM_DEL_BTN} onClick={e=>{e.stopPropagation();tmDeleteInd(ind.id,ind.name)}}>Delete</button>
+                          </>}
+                        </>
+                      )}
+                    </div>
+                    {isExpanded&&(
+                      <div style={{padding:'10px 14px',background:'var(--bg)'}}>
+                        {roles.length===0&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>No roles yet for this industry.</div>}
+                        {roles.map((r,ri)=>(
+                          <div key={r.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,padding:'6px 8px',background:'var(--s2)',borderRadius:7}}>
+                            <div style={{display:'flex',flexDirection:'column',gap:1,marginRight:2}}>
+                              <button style={TM_MOVE_BTN} onClick={()=>tmMoveRole(r.id,ind.name,-1)} disabled={ri===0}>▲</button>
+                              <button style={TM_MOVE_BTN} onClick={()=>tmMoveRole(r.id,ind.name,1)} disabled={ri===roles.length-1}>▼</button>
+                            </div>
+                            {tmEditRole?.id===r.id?(
+                              <>
+                                <input style={TM_INPUT} value={tmEditRole.role_name} onChange={e=>setTmEditRole({...tmEditRole,role_name:e.target.value})} onKeyDown={e=>e.key==='Enter'&&tmSaveRole()} autoFocus/>
+                                <button style={TM_SAVE_BTN} onClick={tmSaveRole} disabled={tmSaving}>Save</button>
+                                <button style={TM_BTN} onClick={()=>setTmEditRole(null)}>Cancel</button>
+                              </>
+                            ):(
+                              <>
+                                <span style={{fontSize:13,flex:1}}>{r.role_name}</span>
+                                <button style={TM_BTN} onClick={()=>setTmEditRole({...r})}>Edit</button>
+                                <button style={TM_DEL_BTN} onClick={()=>tmDeleteRole(r.id)}>Delete</button>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                        <div style={{display:'flex',gap:6,marginTop:8}}>
+                          <input style={TM_INPUT} placeholder="New role name…" value={tmNewRoleName[ind.name]||''} onChange={e=>setTmNewRoleName(prev=>({...prev,[ind.name]:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&tmAddRole(ind.name)}/>
+                          <button style={TM_SAVE_BTN} onClick={()=>tmAddRole(ind.name)} disabled={tmSaving}>Add Role</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              <div style={{display:'flex',gap:6,marginTop:12}}>
+                <input style={TM_INPUT} placeholder="New industry name…" value={tmNewIndName} onChange={e=>setTmNewIndName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&tmAddInd()}/>
+                <button style={TM_SAVE_BTN} onClick={tmAddInd} disabled={tmSaving}>Add Industry</button>
+              </div>
+            </div>
+          )}
+
+          {/* POSITIONS sub-tab */}
+          {tmSubTab==='positions'&&(
+            <div className="section" style={{marginBottom:14}}>
+              <div className="section-title">Positions</div>
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:12}}>Default positions are fixed and cannot be removed. Add custom positions below.</div>
+
+              {['Manager','Supervisor','Staff Member'].map(p=>(
+                <div key={p} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'var(--s2)',borderRadius:8,marginBottom:6,border:'1px solid var(--border)'}}>
+                  <span style={{fontSize:13,flex:1}}>{p}</span>
+                  <span style={{fontSize:11,color:'var(--t3)'}}>🔒 Default</span>
+                </div>
+              ))}
+
+              {tmCustomPos.length>0&&<div style={{marginTop:12,marginBottom:6,fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.4px'}}>Custom Positions</div>}
+              {[...tmCustomPos].sort((a,b)=>(a.sort_order??999)-(b.sort_order??999)).map((p,pi)=>(
+                <div key={p.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,padding:'6px 8px',background:'var(--s2)',borderRadius:7,border:'1px solid var(--border)'}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:1,marginRight:2}}>
+                    <button style={TM_MOVE_BTN} onClick={()=>tmMovePos(p.id,-1)} disabled={pi===0}>▲</button>
+                    <button style={TM_MOVE_BTN} onClick={()=>tmMovePos(p.id,1)} disabled={pi===tmCustomPos.length-1}>▼</button>
+                  </div>
+                  {tmEditPos?.id===p.id?(
+                    <>
+                      <input style={TM_INPUT} value={tmEditPos.position_name} onChange={e=>setTmEditPos({...tmEditPos,position_name:e.target.value})} onKeyDown={e=>e.key==='Enter'&&tmSavePos()} autoFocus/>
+                      <button style={TM_SAVE_BTN} onClick={tmSavePos} disabled={tmSaving}>Save</button>
+                      <button style={TM_BTN} onClick={()=>setTmEditPos(null)}>Cancel</button>
+                    </>
+                  ):(
+                    <>
+                      <span style={{fontSize:13,flex:1}}>{p.position_name}</span>
+                      <button style={TM_BTN} onClick={()=>setTmEditPos({...p})}>Edit</button>
+                      <button style={TM_DEL_BTN} onClick={()=>tmDeletePos(p.id)}>Delete</button>
+                    </>
+                  )}
+                </div>
+              ))}
+
+              <div style={{display:'flex',gap:6,marginTop:12}}>
+                <input style={TM_INPUT} placeholder="New position name…" value={tmNewPosName} onChange={e=>setTmNewPosName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&tmAddPos()}/>
+                <button style={TM_SAVE_BTN} onClick={tmAddPos} disabled={tmSaving}>Add Position</button>
+              </div>
+            </div>
+          )}
+
+          {/* GLOBAL INDUSTRIES sub-tab (super_admin only) */}
+          {tmSubTab==='global'&&user?.role==='super_admin'&&(
+            <div className="section" style={{marginBottom:14}}>
+              <div className="section-title">Global Industries</div>
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:12}}>These industries appear in every organisation's dropdown. Reorder or edit them here.</div>
+
+              {tmGlobalList.length===0&&<div style={{fontSize:13,color:'var(--t2)'}}>No global industries yet.</div>}
+              {tmGlobalList.map((ind,gi)=>(
+                <div key={ind.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,padding:'8px 12px',background:'var(--s2)',borderRadius:8,border:'1px solid var(--border)'}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:1,marginRight:2}}>
+                    <button style={TM_MOVE_BTN} onClick={()=>tmMoveGlobal(ind.id,-1)} disabled={gi===0}>▲</button>
+                    <button style={TM_MOVE_BTN} onClick={()=>tmMoveGlobal(ind.id,1)} disabled={gi===tmGlobalList.length-1}>▼</button>
+                  </div>
+                  {tmEditGlobal?.id===ind.id?(
+                    <>
+                      <input style={TM_INPUT} value={tmEditGlobal.name} onChange={e=>setTmEditGlobal({...tmEditGlobal,name:e.target.value})} onKeyDown={e=>e.key==='Enter'&&tmSaveGlobal()} autoFocus/>
+                      <button style={TM_SAVE_BTN} onClick={tmSaveGlobal} disabled={tmSaving}>Save</button>
+                      <button style={TM_BTN} onClick={()=>setTmEditGlobal(null)}>Cancel</button>
+                    </>
+                  ):(
+                    <>
+                      <span style={{fontSize:13,flex:1}}>{ind.name}</span>
+                      <button style={TM_BTN} onClick={()=>setTmEditGlobal({...ind})}>Edit</button>
+                      <button style={TM_DEL_BTN} onClick={()=>tmDeleteGlobal(ind.id)}>Delete</button>
+                    </>
+                  )}
+                </div>
+              ))}
+
+              <div style={{display:'flex',gap:6,marginTop:12}}>
+                <input style={TM_INPUT} placeholder="New global industry name…" value={tmNewGlobalName} onChange={e=>setTmNewGlobalName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&tmAddGlobal()}/>
+                <button style={TM_SAVE_BTN} onClick={tmAddGlobal} disabled={tmSaving}>Add Global Industry</button>
+              </div>
+            </div>
+          )}
+        </>
+      })()}
     </div>
   )
 }
