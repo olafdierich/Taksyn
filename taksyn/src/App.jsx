@@ -8179,7 +8179,7 @@ export default function App() {
     fresh.forEach(n=>notifIdsRef.current.add(n.id))
     setNotifications(prev=>[...fresh,...prev].slice(0,50))
     if(isConfigured()) {
-      fresh.forEach(n=>supabase.from('user_notifications').insert({...n,user_id:user?.id}).catch(()=>{}))
+      // user_notifications disabled — fresh.forEach(n=>supabase.from('user_notifications').insert({...n,user_id:user?.id}))
     }
     if(prefs.sound) {
       try { const ctx=new AudioContext(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=880; g.gain.setValueAtTime(0.1,ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3); o.start(); o.stop(ctx.currentTime+0.3) } catch{}
