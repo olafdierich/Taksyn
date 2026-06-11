@@ -4786,8 +4786,7 @@ function RolesPositionsView({ user }) {
     const name=newGlobalName.trim(); if(!name||!isConfigured()) return
     if(globalList.find(i=>i.name.toLowerCase()===name.toLowerCase())) return
     setSaving(true)
-    const maxOrder=globalList.reduce((m,i)=>Math.max(m,i.sort_order||0),0)
-    const {data,error}=await supabase.from('global_industries').insert({name,sort_order:maxOrder+1,created_by:user.name,created_at:new Date().toISOString()}).select().single()
+    const {data,error}=await supabase.from('global_industries').insert({name,created_by:user.name,created_at:new Date().toISOString()}).select().single()
     if(!error&&data){setGlobalList(prev=>[...prev,data]);setNewGlobalName('')}
     setSaving(false)
   }
