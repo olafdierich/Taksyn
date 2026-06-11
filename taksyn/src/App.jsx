@@ -3611,6 +3611,7 @@ function UsersView({ user, setAuditLog }) {
                     }}/>
                 </div>
               </div>
+              <div className="form-field"><label className="form-label">Phone Number <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>(optional)</span></label><input className="form-input" type="tel" value={invitePhone} onChange={e=>setInvitePhone(e.target.value)} placeholder="+61 400 000 000"/></div>
               {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
               <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
