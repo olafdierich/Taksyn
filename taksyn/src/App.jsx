@@ -4682,7 +4682,7 @@ function RolesPositionsView({ user }) {
     if(!name||!user.org||!isConfigured()) return
     if(allIndustriesForRoles.find(n=>n.toLowerCase()===name.toLowerCase())) return
     setSaving(true)
-    const row = {name, org:user.org, created_by:user.name, created_at:new Date().toISOString(), ...(orgId?{organisation_id:orgId}:{})}
+    const row = {name, organisation_id:orgId||null, created_by:user.name, created_at:new Date().toISOString()}
     const {data,error} = await supabase.from('org_industries').insert(row).select().single()
     if(!error&&data){setOrgIndustryObjs(prev=>[...prev,data]);setNewIndName('');setShowAddInd(false)}
     setSaving(false)
