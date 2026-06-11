@@ -697,17 +697,7 @@ function AuthView({ onAuth }) {
               added_by:'invite_link', added_at:new Date().toISOString()
             }).catch(()=>{})
           }
-          if (inviteParams?.position) {
-            // Store the position title in user_positions
-            supabase.from('user_positions').insert({
-              id: 'POS'+Date.now()+Math.random().toString(36).slice(2,5),
-              user_id: uid, org: orgName,
-              department: inviteParams.teamName || 'General',
-              role: assignedRole,
-              position_title: inviteParams.position,
-              is_primary: true
-            }).catch(()=>{})
-          }
+          // user_positions table removed
           if (inviteParams?.linkId) {
             // Mark this specific invite link as used by ID
             supabase.from('invite_links').update({ used_at:new Date().toISOString(), used_by:name.trim() })
