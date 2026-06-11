@@ -1264,11 +1264,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [clFlash, setClFlash] = useState(null) // 'taskId::itemId' — brief ✓ flash
 
   useEffect(()=>{
-    if(isConfigured()&&user.org) {
-      supabase.from('checklist_templates').select('*').eq('org',user.org).order('name')
-        .then(({data})=>{ if(data) setTemplates(data.map(t=>({...t,items:parseSafe(t.items)}))) })
-        .catch(()=>{})
-    }
+    if(!isConfigured()||!user.org) return
+    supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+      .then(({data:orgRow})=>{
+        const orgId = orgRow?.id; if(!orgId) return
+        supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
+          .then(({data})=>{ if(data) setTemplates(data.map(t=>({...t,items:parseSafe(t.items)}))) })
+          .catch(()=>{})
+      }).catch(()=>{})
   },[user.org])
 
   useEffect(()=>{
