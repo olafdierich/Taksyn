@@ -8398,8 +8398,8 @@ export default function App() {
       loadTasks()
       if(user.role==='super_admin') loadTickets()
       // Load persisted notifications from Supabase
-      supabase.from('user_notifications').select('*').eq('user_id',user.id).order('at',{ascending:false}).limit(50)
-        .then(({data})=>{ if(data?.length) setNotifications(data.map(({user_id,...n})=>n)) }).catch(()=>{})
+      // user_notifications table not yet created — disabled
+      // supabase.from('user_notifications').select('*').eq('user_id',user.id).order('at',{ascending:false}).limit(50)
       // Load org SLA settings
       if(isConfigured()&&user.org) {
         supabase.from('organisations').select('sla_settings,auto_logout_minutes').eq('name',user.org).single()
