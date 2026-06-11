@@ -8335,12 +8335,95 @@ const GUIDE_CONTENT = {
   },
 }
 
+function GuidePrintDocument({ guide, roleName, user }) {
+  const pages = {}
+  let pg = 3
+  guide.chapters.forEach(chapter => {
+    pages['ch_' + chapter.num] = pg
+    chapter.subChapters.forEach((sc, i) => { pages[sc.id] = pg + i })
+    pg += chapter.subChapters.length
+  })
+
+  const dateStr = new Date().toLocaleDateString('en-AU', { day:'numeric', month:'long', year:'numeric' })
+  const accentColor = guide.color || '#00A87E'
+
+  return (
+    <div className="print-only">
+
+      {/* PAGE 1 — COVER */}
+      <div className="cover-page" style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'2cm',position:'relative',fontFamily:'Arial,sans-serif'}}>
+        <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center',width:'100%'}}>
+          <div style={{fontSize:60,fontWeight:900,color:'#00A87E',letterSpacing:'-2px',marginBottom:6}}>Taksyn</div>
+          <div style={{fontSize:13,color:'#aaa',marginBottom:48,letterSpacing:'1px',textTransform:'uppercase'}}>Workforce Management Platform</div>
+          <div style={{width:56,height:4,background:accentColor,marginBottom:40,borderRadius:2}}/>
+          <div style={{fontSize:36,fontWeight:800,color:'#1A2033',marginBottom:14,lineHeight:1.2}}>Taksyn {roleName} Guide</div>
+          <div style={{fontSize:20,color:'#5A6478',marginBottom:44}}>Getting Started Guide</div>
+          {user.org && <div style={{fontSize:16,color:'#1A2033',marginBottom:14,fontWeight:600}}>{user.org}</div>}
+          <div style={{fontSize:13,color:'#888',marginBottom:8}}>Generated {dateStr}</div>
+          <div style={{fontSize:12,color:'#bbb'}}>Version 1.0</div>
+        </div>
+        <div style={{borderTop:'1px solid #E8EBF0',paddingTop:14,width:'100%',textAlign:'center',fontSize:11,color:'#aaa'}}>
+          <strong style={{color:'#00A87E'}}>Taksyn</strong> · Workforce Management Platform · taksyn.com
+        </div>
+      </div>
+
+      {/* PAGE 2 — INDEX */}
+      <div className="index-page" style={{fontFamily:'Arial,sans-serif',paddingTop:4}}>
+        <div style={{fontSize:26,fontWeight:800,color:'#1A2033',marginBottom:24,paddingBottom:12,borderBottom:'2pt solid '+accentColor}}>Contents</div>
+        {guide.chapters.map(chapter => (
+          <div key={chapter.num} style={{marginBottom:14}}>
+            <div style={{display:'flex',alignItems:'baseline',gap:0,marginBottom:5}}>
+              <span style={{fontWeight:700,fontSize:13,color:'#1A2033',whiteSpace:'nowrap'}}>{chapter.num}. {chapter.title}</span>
+              <span style={{flex:1,borderBottom:'1px dotted #aaa',margin:'0 8px 3px',minWidth:16}}/>
+              <span style={{fontSize:12,color:'#5A6478',whiteSpace:'nowrap'}}>{pages['ch_' + chapter.num]}</span>
+            </div>
+            {chapter.subChapters.map(sc => (
+              <div key={sc.id} style={{display:'flex',alignItems:'baseline',gap:0,marginBottom:4,paddingLeft:22}}>
+                <span style={{fontSize:11.5,color:'#5A6478',whiteSpace:'nowrap'}}>{sc.id} {sc.title}</span>
+                <span style={{flex:1,borderBottom:'1px dotted #ccc',margin:'0 8px 3px',minWidth:16}}/>
+                <span style={{fontSize:11,color:'#9AA3B2',whiteSpace:'nowrap'}}>{pages[sc.id]}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* PAGES 3+ — FULL CONTENT */}
+      {guide.chapters.map((chapter, ci) => (
+        <div key={chapter.num} className={'gp-chapter'} style={{fontFamily:'Arial,sans-serif'}}>
+          <div style={{fontSize:22,fontWeight:800,color:'#1A2033',marginBottom:20,paddingBottom:12,borderBottom:'2pt solid '+accentColor}}>
+            Chapter {chapter.num}: {chapter.title}
+          </div>
+          {chapter.subChapters.map((sc, sci) => (
+            <div key={sc.id} className="gp-subchapter" style={sci > 0 ? {pageBreakBefore:'always',breakBefore:'always'} : {}}>
+              <div style={{fontSize:16,fontWeight:700,color:'#1A2033',borderLeft:'4pt solid '+accentColor,paddingLeft:12,marginBottom:18}}>
+                {sc.id} — {sc.title}
+              </div>
+              {sc.steps.map((step, si) => (
+                <div key={si} className="gp-step">
+                  <div className="gp-step-title">Step {si + 1}: {step.summary}</div>
+                  <div style={{fontSize:11.5,color:'#333',lineHeight:1.75,marginBottom:6}}>{step.detail}</div>
+                  <div className="gp-step-location">Where to find it: {step.foundIn}</div>
+                  {step.tip && (
+                    <div className="gp-step-tip"><strong>Tip:</strong> {step.tip}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function GettingStartedGuide({ user, setPage }) {
   const isSA = user.role === 'super_admin'
   const defaultRole = isSA ? 'client_admin' : (user.role === 'worker' ? 'worker' : (user.role || 'worker'))
   const [activeRole, setActiveRole] = useState(defaultRole)
   const [openSubChapters, setOpenSubChapters] = useState({})
   const [openSteps, setOpenSteps] = useState({})
+  const [printMode, setPrintMode] = useState(false)
 
   const guide = GUIDE_CONTENT[activeRole] || GUIDE_CONTENT.worker
   const roleName = ROLE_LABELS[activeRole] || activeRole
@@ -8354,7 +8437,14 @@ function GettingStartedGuide({ user, setPage }) {
   const handlePrint = () => {
     const prevTitle = document.title
     document.title = 'Taksyn-' + roleName.replace(/\s+/g, '-') + '-Guide'
-    setTimeout(() => { window.print(); setTimeout(() => { document.title = prevTitle }, 1500) }, 80)
+    setPrintMode(true)
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => {
+        setPrintMode(false)
+        document.title = prevTitle
+      }, 1000)
+    }, 300)
   }
 
   const ROLE_TABS = [
@@ -8369,151 +8459,110 @@ function GettingStartedGuide({ user, setPage }) {
 
   return (
     <div className="anim guide-print-wrapper">
-      {/* Print header — only visible when printing */}
-      <div style={{display:'none'}} className="guide-print-header">
-        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20,paddingBottom:16,borderBottom:'2px solid #00A87E'}}>
-          <div style={{fontSize:28,fontWeight:900,color:'#00A87E'}}>Taksyn</div>
-          <div style={{flex:1}}/>
-          <div style={{fontSize:11,color:'#888'}}>Generated {new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}</div>
-        </div>
-      </div>
 
-      <div className="ph guide-no-print">
-        <div className="ph-top">
-          <div>
-            <div className="ph-title">Getting Started Guide</div>
-            <div className="ph-sub">{guide.icon} {guide.title}</div>
-          </div>
-          <div style={{display:'flex',gap:8}}>
-            <button className="btn btn-secondary" onClick={handlePrint}>🖨 Print</button>
-            <button className="btn btn-primary" onClick={handlePrint}>⬇ Download PDF</button>
-          </div>
-        </div>
-      </div>
-
-      {/* Role selector — super admin only */}
-      {isSA && (
-        <div className="section guide-no-print" style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>View guide for</div>
-          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {ROLE_TABS.map(t => (
-              <button key={t.key} className={'guide-role-tab'+(activeRole===t.key?' active':'')}
-                style={activeRole===t.key?{background:t.color,borderColor:t.color,color:'#fff'}:{}}
-                onClick={()=>{setActiveRole(t.key);setOpenSubChapters({});setOpenSteps({})}}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Guide header card */}
-      <div style={{background:'linear-gradient(135deg,'+guide.color+'18,'+guide.color+'08)',border:'1px solid '+guide.color+'33',borderRadius:12,padding:'20px 24px',marginBottom:16,display:'flex',alignItems:'center',gap:16}}>
-        <div style={{fontSize:40,lineHeight:1}}>{guide.icon}</div>
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:guide.color,textTransform:'uppercase',letterSpacing:'.8px',marginBottom:4}}>Getting Started Guide</div>
-          <div style={{fontSize:20,fontWeight:800,color:'var(--text)',lineHeight:1.2}}>{guide.title}</div>
-          <div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>{guide.chapters.length} chapters · {totalTopics} topics · {totalSteps} steps</div>
-        </div>
-        <div style={{marginLeft:'auto',display:'flex',flexDirection:'column',gap:6}} className="guide-no-print">
-          <button className="btn btn-primary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>⬇ Download PDF</button>
-          <button className="btn btn-secondary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>🖨 Print</button>
-        </div>
-      </div>
-
-      {/* Chapters — Level 1 */}
-      {guide.chapters.map((chapter) => (
-        <div key={chapter.num} className="guide-chapter">
-          <div className="guide-chapter-hdr">
-            <span style={{color:'var(--t3)',fontWeight:600,marginRight:8}}>Chapter {chapter.num}:</span>
-            {chapter.title}
-          </div>
-
-          {/* Sub-chapters — Level 2 */}
-          {chapter.subChapters.map((sc) => {
-            const isSubOpen = !!openSubChapters[sc.id]
-            return (
-              <div key={sc.id} className="guide-accordion-item">
-                <div className="guide-accordion-row"
-                  onClick={(e)=>handleScTap(e,sc.id)}
-                  onTouchEnd={(e)=>handleScTap(e,sc.id)}>
-                  <span className="guide-accordion-chevron" style={{transform:isSubOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
-                  <span className="guide-accordion-num">{sc.id}</span>
-                  <span className="guide-accordion-title">{sc.title}</span>
-                  <span style={{fontSize:10,color:'var(--t3)',flexShrink:0,marginLeft:4}}>{sc.steps.length} steps</span>
-                </div>
-
-                {/* Steps list — Level 3 */}
-                <div className="guide-steps-list" style={{display:isSubOpen?'block':'none'}}>
-                  {sc.steps.map((step, si) => {
-                    const stepKey = sc.id + '_' + si
-                    const isStepOpen = !!openSteps[stepKey]
-                    return (
-                      <div key={si} className="guide-step-item">
-                        <div className="guide-step-row"
-                          onClick={(e)=>handleStepTap(e,stepKey)}
-                          onTouchEnd={(e)=>handleStepTap(e,stepKey)}>
-                          <div className="guide-step-num" style={{background:guide.color+'20',color:guide.color}}>{si+1}</div>
-                          <span className="guide-step-summary">{step.summary}</span>
-                          <span className="guide-step-chevron" style={{transform:isStepOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
-                        </div>
-                        <div className="guide-step-detail" style={{display:isStepOpen?'block':'none'}}>
-                          <p className="guide-step-para">{step.detail}</p>
-                          <div className="guide-step-found">📍 <strong>Found in:</strong> {step.foundIn}</div>
-                          {step.tip && <div className="guide-step-tip">💡 <strong>Tip:</strong> {step.tip}</div>}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      ))}
-
-      {/* Footer */}
-      <div style={{marginTop:20,padding:'14px 16px',background:'var(--s3)',borderRadius:10,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-        <div style={{fontSize:12,color:'var(--t2)',flex:1}}>Need more help? Go to <strong>Help &amp; Support</strong> to raise a ticket and the Taksyn support team will respond within 24 hours.</div>
-        <button className="btn btn-secondary btn-sm guide-no-print" style={{fontSize:11}} onClick={()=>setPage('help')}>Go to Support →</button>
-      </div>
-
-      {/* Print-only div — always fully expanded, independent of accordion state */}
-      <div id="guide-print-content">
-        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',borderBottom:'2pt solid #00A87E',paddingBottom:14,marginBottom:28}}>
-          <div>
-            <div style={{fontSize:22,fontWeight:900,color:'#00A87E',letterSpacing:'-.5px'}}>Taksyn</div>
-            <div style={{fontSize:16,fontWeight:800,color:'#1A2033',marginTop:6}}>{guide.title}</div>
-            <div style={{fontSize:11,color:'#5A6478',marginTop:4}}>{guide.chapters.length} chapters · {totalTopics} topics · {totalSteps} steps</div>
-          </div>
-          <div style={{fontSize:10,color:'#9AA3B2',textAlign:'right',paddingTop:4}}>
-            Generated {new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}
-          </div>
-        </div>
-
-        {guide.chapters.map((chapter) => (
-          <div key={chapter.num} className="guide-print-chapter">
-            <div style={{fontSize:15,fontWeight:800,color:'#1A2033',borderBottom:'1pt solid #E8EBF0',paddingBottom:8,marginBottom:16}}>
-              Chapter {chapter.num}: {chapter.title}
+      {/* ── Screen UI ── */}
+      <div className="screen-only">
+        <div className="ph">
+          <div className="ph-top">
+            <div>
+              <div className="ph-title">Getting Started Guide</div>
+              <div className="ph-sub">{guide.icon} {guide.title}</div>
             </div>
-            {chapter.subChapters.map(sc => (
-              <div key={sc.id} style={{marginBottom:20}}>
-                <div style={{fontSize:13,fontWeight:700,color:'#1A2033',borderLeft:'3pt solid '+guide.color,paddingLeft:10,marginBottom:12}}>
-                  {sc.id} — {sc.title}
-                </div>
-                {sc.steps.map((step, si) => (
-                  <div key={si} className="guide-print-step" style={{marginBottom:12,paddingLeft:16}}>
-                    <div style={{fontSize:12,fontWeight:700,color:'#1A2033',marginBottom:4}}>{si+1}. {step.summary}</div>
-                    <div style={{fontSize:11,color:'#333',lineHeight:1.65,marginBottom:4}}>{step.detail}</div>
-                    <div style={{fontSize:10,color:'#5A6478',marginBottom:3}}>📍 <strong>Found in:</strong> {step.foundIn}</div>
-                    {step.tip && <div style={{fontSize:10,color:'#00694D',borderLeft:'2pt solid #00A87E',paddingLeft:7,marginTop:3}}>💡 <strong>Tip:</strong> {step.tip}</div>}
+            <div style={{display:'flex',gap:8}}>
+              <button className="btn btn-secondary" onClick={handlePrint}>🖨 Print</button>
+              <button className="btn btn-primary" onClick={handlePrint}>⬇ Download PDF</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Role selector — super admin only */}
+        {isSA && (
+          <div className="section" style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>View guide for</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {ROLE_TABS.map(t => (
+                <button key={t.key} className={'guide-role-tab'+(activeRole===t.key?' active':'')}
+                  style={activeRole===t.key?{background:t.color,borderColor:t.color,color:'#fff'}:{}}
+                  onClick={()=>{setActiveRole(t.key);setOpenSubChapters({});setOpenSteps({})}}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Guide header card */}
+        <div style={{background:'linear-gradient(135deg,'+guide.color+'18,'+guide.color+'08)',border:'1px solid '+guide.color+'33',borderRadius:12,padding:'20px 24px',marginBottom:16,display:'flex',alignItems:'center',gap:16}}>
+          <div style={{fontSize:40,lineHeight:1}}>{guide.icon}</div>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:guide.color,textTransform:'uppercase',letterSpacing:'.8px',marginBottom:4}}>Getting Started Guide</div>
+            <div style={{fontSize:20,fontWeight:800,color:'var(--text)',lineHeight:1.2}}>{guide.title}</div>
+            <div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>{guide.chapters.length} chapters · {totalTopics} topics · {totalSteps} steps</div>
+          </div>
+          <div style={{marginLeft:'auto',display:'flex',flexDirection:'column',gap:6}}>
+            <button className="btn btn-primary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>⬇ Download PDF</button>
+            <button className="btn btn-secondary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>🖨 Print</button>
+          </div>
+        </div>
+
+        {/* Chapters accordion */}
+        {guide.chapters.map((chapter) => (
+          <div key={chapter.num} className="guide-chapter">
+            <div className="guide-chapter-hdr">
+              <span style={{color:'var(--t3)',fontWeight:600,marginRight:8}}>Chapter {chapter.num}:</span>
+              {chapter.title}
+            </div>
+
+            {chapter.subChapters.map((sc) => {
+              const isSubOpen = !!openSubChapters[sc.id]
+              return (
+                <div key={sc.id} className="guide-accordion-item">
+                  <div className="guide-accordion-row"
+                    onClick={(e)=>handleScTap(e,sc.id)}
+                    onTouchEnd={(e)=>handleScTap(e,sc.id)}>
+                    <span className="guide-accordion-chevron" style={{transform:isSubOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+                    <span className="guide-accordion-num">{sc.id}</span>
+                    <span className="guide-accordion-title">{sc.title}</span>
+                    <span style={{fontSize:10,color:'var(--t3)',flexShrink:0,marginLeft:4}}>{sc.steps.length} steps</span>
                   </div>
-                ))}
-              </div>
-            ))}
+
+                  <div className="guide-steps-list" style={{display:isSubOpen?'block':'none'}}>
+                    {sc.steps.map((step, si) => {
+                      const stepKey = sc.id + '_' + si
+                      const isStepOpen = !!openSteps[stepKey]
+                      return (
+                        <div key={si} className="guide-step-item">
+                          <div className="guide-step-row"
+                            onClick={(e)=>handleStepTap(e,stepKey)}
+                            onTouchEnd={(e)=>handleStepTap(e,stepKey)}>
+                            <div className="guide-step-num" style={{background:guide.color+'20',color:guide.color}}>{si+1}</div>
+                            <span className="guide-step-summary">{step.summary}</span>
+                            <span className="guide-step-chevron" style={{transform:isStepOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+                          </div>
+                          <div className="guide-step-detail" style={{display:isStepOpen?'block':'none'}}>
+                            <p className="guide-step-para">{step.detail}</p>
+                            <div className="guide-step-found">📍 <strong>Found in:</strong> {step.foundIn}</div>
+                            {step.tip && <div className="guide-step-tip">💡 <strong>Tip:</strong> {step.tip}</div>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         ))}
+
+        {/* Footer */}
+        <div style={{marginTop:20,padding:'14px 16px',background:'var(--s3)',borderRadius:10,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          <div style={{fontSize:12,color:'var(--t2)',flex:1}}>Need more help? Go to <strong>Help &amp; Support</strong> to raise a ticket and the Taksyn support team will respond within 24 hours.</div>
+          <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setPage('help')}>Go to Support →</button>
+        </div>
       </div>
+
+      {/* ── Print document — always in DOM, visible only during print or printMode ── */}
+      <GuidePrintDocument guide={guide} roleName={roleName} user={user} />
     </div>
   )
 }
