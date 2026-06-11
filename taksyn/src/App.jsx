@@ -3598,7 +3598,7 @@ function UsersView({ user, setAuditLog }) {
       <div className="ph"><div className="ph-top"><div><div className="ph-title">Workforce</div><div className="ph-sub">Manage your organisation's workforce</div></div><div style={{display:'flex',gap:8}}>{['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary" onClick={()=>setShowManageIndustries(true)}>🏭 Industries</button>}{['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-primary" onClick={()=>setShowInvite(true)}><IC n="plus" s={13}/> Invite</button>}</div></div></div>
       <div className="section">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div className="section-title" style={{margin:0}}>Active Users ({realUsers.length})</div>
+          <div className="section-title" style={{margin:0}}>Workforce ({realUsers.length})</div>
           <input className="form-input" placeholder="Search by name or role..." value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{fontSize:12,padding:'5px 10px',maxWidth:220}}/>
         </div>
         {realUsers.length===0
