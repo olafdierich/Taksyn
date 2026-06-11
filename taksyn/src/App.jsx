@@ -1303,7 +1303,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     supabase.from('global_industries').select('name').order('name')
       .then(({data})=>{ if(data?.length) setTaskGlobalIndustries(data.map(d=>d.name)) }).catch(()=>{})
     if(user.org) {
-      supabase.from('organisations').select('id').eq('name',user.org).single()
+      supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
         .then(({data:orgRow})=>{
           if(!orgRow?.id) return
           supabase.from('org_industries').select('name').eq('organisation_id',orgRow.id)
