@@ -9157,6 +9157,10 @@ export default function App() {
                     <span style={{fontSize:10,color:'var(--brand)',flexShrink:0}}>⇄</span>
                   </div>
                 )}
+                <button className={'guide-help-btn'+(page==='guide'?' active':'')} onClick={()=>navigate('guide')} title="Getting Started Guide">
+                  <span style={{fontSize:14,fontWeight:800,width:18,height:18,borderRadius:'50%',background:page==='guide'?'var(--brand)':'var(--border2)',color:page==='guide'?'#fff':'var(--t2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,flexShrink:0}}>?</span>
+                  <span className="nav-item-label">Getting Started</span>
+                </button>
                 <div className="sb-user-card">
                   <Avatar name={user.name} role={user.role} size={28} avatarUrl={user.avatar_url}/>
                   <div className="sb-user-info">
