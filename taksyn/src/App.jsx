@@ -4641,8 +4641,7 @@ function RolesPositionsView({ user }) {
     ]
     if(!isSuper && user.org) {
       queries.push(
-        supabase.from('organisations').select('id').eq('name',user.org).single(),
-        supabase.from('org_industries').select('*').eq('org',user.org)
+        supabase.from('organisations').select('id').eq('name',user.org).single()
       )
     }
     Promise.all(queries).then(([gi, orgRow, oi])=>{
