@@ -240,8 +240,7 @@ const fmtDuration = (start, end) => {
 }
 const clearAuthCache = () => {
   try { indexedDB.deleteDatabase('supabase') } catch(e) {}
-  localStorage.removeItem('taksyn-auth')
-  localStorage.removeItem('taksyn-user')
+  localStorage.clear()
   sessionStorage.clear()
 }
 const parseSafe = (val, fallback=[]) => {
