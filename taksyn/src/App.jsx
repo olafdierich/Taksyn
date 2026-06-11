@@ -4788,6 +4788,9 @@ function RolesPositionsView({ user }) {
     ? [['global_industries','Global Industries'],['roles','Roles per Industry'],['positions','Positions']]
     : [['roles','Roles per Industry'],['positions','Positions']]
 
+  const ROW = {display:'flex',alignItems:'center',gap:6,padding:'8px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)',marginBottom:4}
+  const BADGE = (label, color='#6B7280') => <span style={{fontSize:9,fontWeight:700,color,background:color+'18',border:'1px solid '+color+'30',borderRadius:4,padding:'1px 6px',letterSpacing:'.4px',flexShrink:0}}>{label}</span>
+
   return (
     <div className="anim">
       <div className="ph">
@@ -4799,7 +4802,7 @@ function RolesPositionsView({ user }) {
         {TABS.map(([k,l])=><button key={k} onClick={()=>setActiveTab(k)} style={{flex:'1 1 auto',padding:'6px 10px',borderRadius:6,border:'none',background:activeTab===k?'#fff':'transparent',color:activeTab===k?'var(--text)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:activeTab===k?'0 1px 4px rgba(0,0,0,.1)':'none'}}>{l}</button>)}
       </div>
 
-      {/* Global Industries — super_admin only */}
+      {/* ── GLOBAL INDUSTRIES (super_admin) ── */}
       {activeTab==='global_industries'&&(
         <div className="section">
           <div style={{display:'flex',gap:8,marginBottom:14}}>
@@ -4807,9 +4810,9 @@ function RolesPositionsView({ user }) {
             <button className="btn btn-primary" onClick={addGlobal} disabled={saving||!newGlobalName.trim()}>Add</button>
           </div>
           {globalList.length===0 ? <div style={{fontSize:13,color:'var(--t2)'}}>No global industries yet.</div> : (
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
               {globalList.map((ind,idx)=>(
-                <div key={ind.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
+                <div key={ind.id} style={ROW}>
                   {editGlobalId===ind.id ? (
                     <>
                       <input className="form-input" style={{flex:1,fontSize:13}} value={editGlobalName} onChange={e=>setEditGlobalName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveGlobalEdit();if(e.key==='Escape'){setEditGlobalId(null);setEditGlobalName('')}}} autoFocus/>
@@ -4818,9 +4821,8 @@ function RolesPositionsView({ user }) {
                     </>
                   ) : (
                     <>
-                      <span style={{fontSize:14}}>🏭</span>
                       <span style={{flex:1,fontSize:13,fontWeight:500}}>{ind.name}</span>
-                      <div style={{display:'flex',gap:4}}>
+                      <div style={{display:'flex',gap:3,alignItems:'center'}}>
                         <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:12,padding:'2px 4px'}} onClick={()=>moveGlobal(ind.id,-1)} disabled={idx===0}>↑</button>
                         <button style={{background:'none',border:'none',cursor:idx<globalList.length-1?'pointer':'default',opacity:idx<globalList.length-1?1:.3,fontSize:12,padding:'2px 4px'}} onClick={()=>moveGlobal(ind.id,1)} disabled={idx===globalList.length-1}>↓</button>
                         <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>{setEditGlobalId(ind.id);setEditGlobalName(ind.name)}}>Edit</button>
@@ -4835,80 +4837,123 @@ function RolesPositionsView({ user }) {
         </div>
       )}
 
-      {/* Roles per Industry */}
+      {/* ── ROLES PER INDUSTRY ── */}
       {activeTab==='roles'&&(
-        <div className="two-col" style={{alignItems:'flex-start'}}>
-          <div className="section">
-            <div className="section-title">Select Industry</div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-              {allIndustriesForRoles.map(n=>(
-                <button key={n} onClick={()=>setSelectedIndustry(n)} style={{padding:'4px 10px',borderRadius:10,fontSize:11,fontWeight:500,cursor:'pointer',border:'1px solid '+(selectedIndustry===n?'var(--brand)':'var(--border)'),background:selectedIndustry===n?'var(--brand-lt)':'var(--s3)',color:selectedIndustry===n?'var(--brand)':'var(--t2)',fontFamily:'inherit'}}>{n}</button>
-              ))}
-              {allIndustriesForRoles.length===0&&<div style={{fontSize:12,color:'var(--t2)'}}>No industries available — add them to global or org settings.</div>}
-            </div>
+        <div style={{display:'grid',gridTemplateColumns:'240px 1fr',gap:12,alignItems:'start'}}>
+
+          {/* Left: industry list */}
+          <div className="section" style={{padding:'12px 10px'}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:8,padding:'0 2px'}}>Industries</div>
+            {loading ? <div style={{fontSize:12,color:'var(--t2)'}}>Loading…</div> : (
+              <>
+                {/* Global industries (read-only in this view) */}
+                {globalNames.map(n=>(
+                  <button key={n} onClick={()=>setSelectedIndustry(n)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',textAlign:'left',padding:'7px 8px',borderRadius:7,border:'none',background:selectedIndustry===n?'var(--brand-lt)':'transparent',color:selectedIndustry===n?'var(--brand)':'var(--text)',fontSize:12,fontWeight:selectedIndustry===n?600:400,cursor:'pointer',fontFamily:'inherit',marginBottom:2}}>
+                    <span style={{flex:1}}>{n}</span>
+                    {BADGE('Global','#6B7280')}
+                  </button>
+                ))}
+                {/* Org custom industries */}
+                {orgIndustryObjs.filter(i=>!globalNames.includes(i.name)).map(ind=>(
+                  <div key={ind.id} style={{marginBottom:2}}>
+                    {editIndId===ind.id ? (
+                      <div style={{display:'flex',gap:4,padding:'4px 2px'}}>
+                        <input className="form-input" style={{flex:1,fontSize:11,padding:'4px 6px'}} value={editIndName} onChange={e=>setEditIndName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveIndEdit();if(e.key==='Escape'){setEditIndId(null);setEditIndName('')}}} autoFocus/>
+                        <button className="btn btn-primary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={saveIndEdit} disabled={saving}>✓</button>
+                        <button className="btn btn-secondary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={()=>{setEditIndId(null);setEditIndName('')}}>✕</button>
+                      </div>
+                    ) : (
+                      <div style={{display:'flex',alignItems:'center',gap:4,padding:'4px 2px',borderRadius:7,background:selectedIndustry===ind.name?'var(--brand-lt)':'transparent'}}>
+                        <button onClick={()=>setSelectedIndustry(ind.name)} style={{flex:1,textAlign:'left',padding:'3px 6px',borderRadius:6,border:'none',background:'transparent',color:selectedIndustry===ind.name?'var(--brand)':'var(--text)',fontSize:12,fontWeight:selectedIndustry===ind.name?600:400,cursor:'pointer',fontFamily:'inherit'}}>{ind.name}</button>
+                        <button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--t2)',padding:'2px 3px',lineHeight:1}} onClick={()=>{setEditIndId(ind.id);setEditIndName(ind.name)}} title="Edit">✏</button>
+                        <button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--red)',padding:'2px 3px',lineHeight:1}} onClick={()=>deleteOrgIndustry(ind.id,ind.name)} title="Delete">✕</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Add Industry */}
+                {showAddInd ? (
+                  <div style={{display:'flex',gap:4,marginTop:6,padding:'4px 2px'}}>
+                    <input className="form-input" style={{flex:1,fontSize:11,padding:'4px 6px'}} placeholder="Industry name…" value={newIndName} onChange={e=>setNewIndName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addOrgIndustry();if(e.key==='Escape'){setShowAddInd(false);setNewIndName('')}}} autoFocus/>
+                    <button className="btn btn-primary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={addOrgIndustry} disabled={saving||!newIndName.trim()}>Add</button>
+                    <button className="btn btn-secondary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={()=>{setShowAddInd(false);setNewIndName('')}}>✕</button>
+                  </div>
+                ) : (
+                  <button className="btn btn-secondary btn-sm" style={{width:'100%',marginTop:8,fontSize:11}} onClick={()=>setShowAddInd(true)}>+ Add Industry</button>
+                )}
+              </>
+            )}
           </div>
 
+          {/* Right: roles for selected industry */}
           <div className="section">
-            <div className="section-title">Roles{selectedIndustry&&<span style={{fontSize:12,color:'var(--brand)',fontWeight:400,marginLeft:8}}>— {selectedIndustry}</span>}</div>
+            <div className="section-title" style={{marginBottom:10}}>
+              Roles
+              {selectedIndustry&&<span style={{fontSize:12,color:'var(--brand)',fontWeight:400,marginLeft:8}}>— {selectedIndustry}</span>}
+            </div>
             {!selectedIndustry ? (
-              <div style={{fontSize:13,color:'var(--t2)'}}>Select an industry to manage its roles.</div>
+              <div style={{fontSize:13,color:'var(--t2)',padding:'20px 0',textAlign:'center'}}>← Select an industry to manage its roles</div>
             ) : !orgId ? (
               <div style={{fontSize:13,color:'var(--t2)'}}>Loading organisation…</div>
             ) : (
               <>
-                <div style={{display:'flex',gap:6,marginBottom:10}}>
-                  <input className="form-input" style={{flex:1,fontSize:12}} placeholder="New role name…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
-                  <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add</button>
+                {roles.length===0 && <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>No roles defined yet — click Add Role to get started.</div>}
+                <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
+                  {roles.map((role,idx)=>(
+                    <div key={role.id} style={ROW}>
+                      {editRoleId===role.id ? (
+                        <>
+                          <input className="form-input" style={{flex:1,fontSize:12}} value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveRoleEdit();if(e.key==='Escape'){setEditRoleId(null);setEditRoleName('')}}} autoFocus/>
+                          <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving}>Save</button>
+                          <button className="btn btn-secondary btn-sm" onClick={()=>{setEditRoleId(null);setEditRoleName('')}}>×</button>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{flex:1,fontSize:12,fontWeight:500}}>{role.role_name}</span>
+                          <div style={{display:'flex',gap:3}}>
+                            <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,-1)} disabled={idx===0}>↑</button>
+                            <button style={{background:'none',border:'none',cursor:idx<roles.length-1?'pointer':'default',opacity:idx<roles.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,1)} disabled={idx===roles.length-1}>↓</button>
+                            <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditRoleId(role.id);setEditRoleName(role.role_name)}}>Edit</button>
+                            <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deleteRole(role.id)}>Delete</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                {roles.length===0 ? <div style={{fontSize:13,color:'var(--t2)'}}>No roles yet for {selectedIndustry}.</div> : (
-                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                    {roles.map((role,idx)=>(
-                      <div key={role.id} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
-                        {editRoleId===role.id ? (
-                          <>
-                            <input className="form-input" style={{flex:1,fontSize:12}} value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveRoleEdit();if(e.key==='Escape'){setEditRoleId(null);setEditRoleName('')}}} autoFocus/>
-                            <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving}>Save</button>
-                            <button className="btn btn-secondary btn-sm" onClick={()=>{setEditRoleId(null);setEditRoleName('')}}>×</button>
-                          </>
-                        ) : (
-                          <>
-                            <span style={{flex:1,fontSize:12,fontWeight:500}}>{role.role_name}</span>
-                            <div style={{display:'flex',gap:3}}>
-                              <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,-1)} disabled={idx===0}>↑</button>
-                              <button style={{background:'none',border:'none',cursor:idx<roles.length-1?'pointer':'default',opacity:idx<roles.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,1)} disabled={idx===roles.length-1}>↓</button>
-                              <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditRoleId(role.id);setEditRoleName(role.role_name)}}>Edit</button>
-                              <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deleteRole(role.id)}>Delete</button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div style={{display:'flex',gap:6}}>
+                  <input className="form-input" style={{flex:1,fontSize:12}} placeholder="New role name…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
+                  <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add Role</button>
+                </div>
               </>
             )}
           </div>
         </div>
       )}
 
-      {/* Positions */}
+      {/* ── POSITIONS ── */}
       {activeTab==='positions'&&(
         <div className="section">
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Default Positions</div>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {DEFAULT_POSITIONS.map(p=><span key={p} style={{padding:'4px 12px',borderRadius:10,fontSize:12,fontWeight:500,background:'var(--s3)',border:'1px solid var(--border)',color:'var(--t2)'}}>{p}</span>)}
-            </div>
-            <div style={{fontSize:11,color:'var(--t3)',marginTop:6}}>Default positions cannot be deleted. They appear at the top of every position dropdown.</div>
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:8}}>Default Positions</div>
+            {DEFAULT_POSITIONS.map(p=>(
+              <div key={p} style={{...ROW,marginBottom:6}}>
+                <span style={{flex:1,fontSize:13,fontWeight:500}}>{p}</span>
+                <span style={{fontSize:11,color:'var(--t3)'}}>🔒 Default</span>
+              </div>
+            ))}
+            <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>Default positions cannot be deleted. They appear at the top of every position dropdown.</div>
           </div>
-          <div style={{marginBottom:12}}>
+
+          <div>
             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:8}}>Custom Positions</div>
             {!orgId ? <div style={{fontSize:13,color:'var(--t2)'}}>Loading…</div> : customPositions.length===0 ? (
               <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>No custom positions yet.</div>
             ) : (
               <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
                 {customPositions.map((pos,idx)=>(
-                  <div key={pos.id} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
+                  <div key={pos.id} style={ROW}>
                     {editPosId===pos.id ? (
                       <>
                         <input className="form-input" style={{flex:1,fontSize:12}} value={editPosName} onChange={e=>setEditPosName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')savePosEdit();if(e.key==='Escape'){setEditPosId(null);setEditPosName('')}}} autoFocus/>
@@ -4932,7 +4977,7 @@ function RolesPositionsView({ user }) {
             )}
             <div style={{display:'flex',gap:6}}>
               <input className="form-input" style={{flex:1,fontSize:12}} placeholder="e.g. Duty Manager, Head Chef, Team Leader…" value={newPositionName} onChange={e=>setNewPositionName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addPosition()}/>
-              <button className="btn btn-primary btn-sm" onClick={addPosition} disabled={saving||!newPositionName.trim()}>Add</button>
+              <button className="btn btn-primary btn-sm" onClick={addPosition} disabled={saving||!newPositionName.trim()}>Add Position</button>
             </div>
           </div>
         </div>
