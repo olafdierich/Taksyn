@@ -637,6 +637,16 @@ function AuthView({ onAuth }) {
     if (_isInvite && isConfigured()) {
       const orgId  = _sp.get('org')||''
       const teamId = _sp.get('team')||''
+      const linkId = _sp.get('link')||''
+      // Validate invite link hasn't already been used
+      if (linkId) {
+        supabase.from('invite_links').select('is_active,used_at,org').eq('id', linkId).maybeSingle()
+          .then(({data:link})=>{
+            if (link && (link.is_active === false || link.used_at)) {
+              setError('This invite link has already been used or has expired. Please ask your admin for a new link.')
+            }
+          }).catch(()=>{})
+      }
       Promise.all([
         supabase.from('organisations').select('id,name').eq('id', orgId).single(),
         teamId ? supabase.from('teams').select('id,name').eq('id', teamId).single() : Promise.resolve({data:null})
