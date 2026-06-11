@@ -3212,29 +3212,35 @@ function UsersView({ user, setAuditLog }) {
     } else {
       supabase.from('org_members').select('user_id, role, org, tier').eq('org', user.org)
         .then(async ({data:members})=>{
-          if(!members?.length) return
-          const ids = members.map(m=>m.user_id)
-          const [{data:profiles},{data:positions}] = await Promise.all([
-            supabase.from('profiles').select('*').in('id', ids),
-            supabase.from('user_positions').select('*').eq('org', user.org).catch(()=>({data:[]}))
-          ])
-          const posMap = {}
-          positions?.forEach(p=>{ if(!posMap[p.user_id]) posMap[p.user_id]=[]; posMap[p.user_id].push(p) })
-          setUserPositions(posMap)
-          const merged = members.map(m=>{
-            const p = profiles?.find(p=>p.id===m.user_id) || {}
-            return {...p, id:m.user_id, role:m.role, org:m.org, tier:m.tier}
-          })
-          setRealUsers(merged)
-          // Auto-migrate: create position entry for users with dept but no position yet
-          const toMigrate = merged.filter(u=>u.department&&!(posMap[u.id]?.length))
-          if(toMigrate.length>0) {
-            const entries = toMigrate.map(u=>({ id:'POS'+Date.now()+Math.random().toString(36).slice(2,5), user_id:u.id, org:user.org, department:u.department, role:u.role||'worker', position_title:'', is_primary:true, created_at:new Date().toISOString() }))
-            supabase.from('user_positions').insert(entries).then(()=>{
-              const newMap = {...posMap}
-              entries.forEach(e=>{ if(!newMap[e.user_id]) newMap[e.user_id]=[]; newMap[e.user_id].push(e) })
-              setUserPositions(newMap)
-            }).catch(()=>{})
+          const applyMembers = async (list, source) => {
+            const ids = list.map(m=>m.user_id||m.id).filter(Boolean)
+            const [{data:profiles},{data:positions}] = await Promise.all([
+              source==='profiles' ? Promise.resolve({data:list}) : supabase.from('profiles').select('*').in('id', ids),
+              supabase.from('user_positions').select('*').eq('org', user.org).catch(()=>({data:[]}))
+            ])
+            const posMap = {}
+            positions?.forEach(p=>{ if(!posMap[p.user_id]) posMap[p.user_id]=[]; posMap[p.user_id].push(p) })
+            setUserPositions(posMap)
+            const merged = source==='profiles'
+              ? list.map(p=>({...p, id:p.id, role:p.role||'worker', org:p.org||user.org}))
+              : list.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:m.org,tier:m.tier} })
+            setRealUsers(merged)
+            const toMigrate = merged.filter(u=>u.department&&!(posMap[u.id]?.length))
+            if(toMigrate.length>0) {
+              const entries = toMigrate.map(u=>({ id:'POS'+Date.now()+Math.random().toString(36).slice(2,5), user_id:u.id, org:user.org, department:u.department, role:u.role||'worker', position_title:'', is_primary:true, created_at:new Date().toISOString() }))
+              supabase.from('user_positions').insert(entries).then(()=>{
+                const newMap = {...posMap}
+                entries.forEach(e=>{ if(!newMap[e.user_id]) newMap[e.user_id]=[]; newMap[e.user_id].push(e) })
+                setUserPositions(newMap)
+              }).catch(()=>{})
+            }
+          }
+          if(members?.length) {
+            await applyMembers(members, 'org_members')
+          } else {
+            // Fallback: org_members may store org as an ID while user.org is the name
+            const {data:fallback} = await supabase.from('profiles').select('*').eq('org', user.org)
+            if(fallback?.length) await applyMembers(fallback, 'profiles')
           }
         })
     }
