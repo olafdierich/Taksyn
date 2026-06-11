@@ -8653,40 +8653,75 @@ export default function App() {
 
         <div className="main">
           <div className={"sidebar-overlay "+(sidebarOpen?'open':'')} onClick={()=>setSidebarOpen(false)}/>
-          <div className={"sidebar "+(sidebarCollapsed?'collapsed ':''+(sidebarOpen?'mobile-open':''))}>
-            <div className="sb-section">
-              <div className="sb-label">Navigation</div>
-              {navItems.map(([key,label,icon])=>(
-                <button key={key} className={"nav-item "+(page===key?'active':'')} onClick={()=>navigate(key)} title={label}>
-                  <IC n={icon} s={15}/>
-                  <span className="nav-item-label">{label}</span>
-                  {key==='escalations'&&escalationCount>0&&<span className="nav-badge">{escalationCount}</span>}
-                  {key==='evidence'&&reviewCount>0&&<span className="nav-badge amber">{reviewCount}</span>}
-                  {key==='tasks'&&rejectedCount>0&&user.role==='worker'&&<span className="nav-badge">{rejectedCount}</span>}
-                </button>
-              ))}
-            </div>
-            <div className="sb-bottom">
-              {activePosition&&!['super_admin','client_admin'].includes(user.role)&&(
-                <div style={{marginBottom:6,padding:'6px 8px',borderRadius:6,background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',cursor:'pointer',display:'flex',alignItems:'center',gap:6}} onClick={()=>setShowRoleSelector(true)} title="Switch role">
-                  <div className="sb-user-info" style={{flex:1}}>
-                    <div style={{fontSize:10,color:'var(--brand)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px'}}>Active Role</div>
-                    <div style={{fontSize:11,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{activePosition.position_title||ROLE_LABELS[activePosition.role]}</div>
-                    <div style={{fontSize:9,color:'var(--t2)'}}>{activePosition.department}</div>
+
+          {user.role==='super_admin' ? (
+            /* ── SUPER ADMIN SIDEBAR ── dark platform-admin theme */
+            <div className={"sidebar "+(sidebarCollapsed?'collapsed ':''+(sidebarOpen?'mobile-open':''))} style={{background:'#0F172A',borderRight:'1px solid rgba(255,255,255,.06)'}}>
+              <div style={{padding:'16px 12px 8px'}}>
+                {!sidebarCollapsed&&(
+                  <div style={{marginBottom:16,padding:'10px 10px',borderRadius:8,background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)'}}>
+                    <div style={{fontSize:9,fontWeight:800,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'1.2px',marginBottom:2}}>Platform Admin</div>
+                    <div style={{fontSize:11,color:'rgba(255,255,255,.5)',lineHeight:1.3}}>Taksyn Control Panel</div>
                   </div>
-                  <span style={{fontSize:10,color:'var(--brand)',flexShrink:0}}>⇄</span>
-                </div>
-              )}
-              <div className="sb-user-card">
-                <Avatar name={user.name} role={user.role} size={28} avatarUrl={user.avatar_url}/>
-                <div className="sb-user-info">
-                  <div style={{fontSize:11,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.name}</div>
-                  <div style={{fontSize:9,color:TIERS[user.tier]?.color,fontWeight:600}}>{user.tier}</div>
-                </div>
+                )}
+                {navItems.map(([key,label,icon])=>{
+                  const active = page===key
+                  return (
+                    <button key={key} onClick={()=>navigate(key)} title={label} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',borderRadius:6,cursor:'pointer',width:'100%',textAlign:'left',fontFamily:'inherit',border:'none',marginBottom:2,fontSize:13,fontWeight:active?700:500,background:active?'rgba(245,158,11,.15)':'transparent',color:active?'#F59E0B':'rgba(255,255,255,.65)',transition:'all .15s',whiteSpace:'nowrap',overflow:'hidden'}}>
+                      <IC n={icon} s={15}/>
+                      <span className="nav-item-label">{label}</span>
+                    </button>
+                  )
+                })}
               </div>
-              <button className="sb-logout" onClick={logout}>Sign Out</button>
+              <div style={{marginTop:'auto',padding:'10px 12px',borderTop:'1px solid rgba(255,255,255,.06)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:6,background:'rgba(255,255,255,.05)',marginBottom:6,overflow:'hidden'}}>
+                  <Avatar name={user.name} role={user.role} size={28} avatarUrl={user.avatar_url}/>
+                  <div className="sb-user-info">
+                    <div style={{fontSize:11,fontWeight:600,color:'rgba(255,255,255,.9)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.name}</div>
+                    <div style={{fontSize:9,color:'#F59E0B',fontWeight:700,letterSpacing:'.3px'}}>Super Admin</div>
+                  </div>
+                </div>
+                <button onClick={logout} style={{width:'100%',padding:'7px',background:'rgba(239,68,68,.12)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6,color:'#F87171',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Sign Out</button>
+              </div>
             </div>
-          </div>
+          ) : (
+            /* ── STANDARD SIDEBAR ── */
+            <div className={"sidebar "+(sidebarCollapsed?'collapsed ':''+(sidebarOpen?'mobile-open':''))}>
+              <div className="sb-section">
+                <div className="sb-label">Navigation</div>
+                {navItems.map(([key,label,icon])=>(
+                  <button key={key} className={"nav-item "+(page===key?'active':'')} onClick={()=>navigate(key)} title={label}>
+                    <IC n={icon} s={15}/>
+                    <span className="nav-item-label">{label}</span>
+                    {key==='escalations'&&escalationCount>0&&<span className="nav-badge">{escalationCount}</span>}
+                    {key==='evidence'&&reviewCount>0&&<span className="nav-badge amber">{reviewCount}</span>}
+                    {key==='tasks'&&rejectedCount>0&&user.role==='worker'&&<span className="nav-badge">{rejectedCount}</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="sb-bottom">
+                {activePosition&&!['super_admin','client_admin'].includes(user.role)&&(
+                  <div style={{marginBottom:6,padding:'6px 8px',borderRadius:6,background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',cursor:'pointer',display:'flex',alignItems:'center',gap:6}} onClick={()=>setShowRoleSelector(true)} title="Switch role">
+                    <div className="sb-user-info" style={{flex:1}}>
+                      <div style={{fontSize:10,color:'var(--brand)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px'}}>Active Role</div>
+                      <div style={{fontSize:11,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{activePosition.position_title||ROLE_LABELS[activePosition.role]}</div>
+                      <div style={{fontSize:9,color:'var(--t2)'}}>{activePosition.department}</div>
+                    </div>
+                    <span style={{fontSize:10,color:'var(--brand)',flexShrink:0}}>⇄</span>
+                  </div>
+                )}
+                <div className="sb-user-card">
+                  <Avatar name={user.name} role={user.role} size={28} avatarUrl={user.avatar_url}/>
+                  <div className="sb-user-info">
+                    <div style={{fontSize:11,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.name}</div>
+                    <div style={{fontSize:9,color:TIERS[user.tier]?.color,fontWeight:600}}>{user.tier}</div>
+                  </div>
+                </div>
+                <button className="sb-logout" onClick={logout}>Sign Out</button>
+              </div>
+            </div>
+          )}
 
           <div className="content">
             {PAGE_ACCESS[page]&&!hasAccess(user.role,PAGE_ACCESS[page]) ? (
