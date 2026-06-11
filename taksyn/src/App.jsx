@@ -3422,7 +3422,7 @@ function UsersView({ user, setAuditLog }) {
   }
 
   const resetInviteForm = () => {
-    setInviteEmail(''); setInviteName(''); setInviteOrg('')
+    setInviteEmail(''); setInviteName(''); setInviteOrg(''); setInvitePhone('')
     setInvitePositions([{industry:'',role:'',position:''}])
   }
 
