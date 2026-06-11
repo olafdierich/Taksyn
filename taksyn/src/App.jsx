@@ -3190,20 +3190,13 @@ function UsersView({ user, setAuditLog }) {
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
-    // Query by org name first; after orgsList loads, also query by organisation_id for completeness
-    supabase.from('org_industries').select('name').eq('org', user.org)
-      .then(({data})=>{ if(data?.length) setOrgCustomDepts(data.map(d=>d.name)) })
-      .catch(()=>{})
+    supabase.from('organisations').select('id').eq('name', user.org).single()
+      .then(({data:orgRow})=>{
+        if(!orgRow?.id) return
+        supabase.from('org_industries').select('name').eq('organisation_id', orgRow.id)
+          .then(({data})=>{ if(data?.length) setOrgCustomDepts(data.map(d=>d.name)) }).catch(()=>{})
+      }).catch(()=>{})
   },[user.org])
-
-  useEffect(()=>{
-    if(!isConfigured()||!user.org||!orgsList.length) return
-    const orgId = orgsList.find(o=>o.name===user.org)?.id
-    if(!orgId) return
-    supabase.from('org_industries').select('name').eq('organisation_id', orgId)
-      .then(({data})=>{ if(data?.length) setOrgCustomDepts(prev=>{ const existing=new Set(prev); return [...prev,...data.map(d=>d.name).filter(n=>!existing.has(n))] }) })
-      .catch(()=>{})
-  },[orgsList, user.org])
 
   useEffect(()=>{
     if(!isConfigured()) return
