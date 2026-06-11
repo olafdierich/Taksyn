@@ -4426,6 +4426,42 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
             <input className="form-input" placeholder="Full Name *" value={inviteName} onChange={e=>setInviteName(e.target.value)} style={{fontSize:13}}/>
             <input className="form-input" type="email" placeholder="Email Address *" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} style={{fontSize:13}}/>
+            <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px'}}>Position Assignments</div>
+                <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Role · Position</span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 2px'}}>
+                {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
+              </div>
+              {inviteOrgPositions.map((row,i)=>{
+                const rolesForInd = row.industry ? editOrgCustomRoles.filter(r=>r.industry_name===row.industry).map(r=>r.role_name) : []
+                const defaultPos = ['Staff Member','Supervisor','Manager','Client Admin']
+                const allPos = [...defaultPos,...editOrgCustomPositions.filter(p=>!defaultPos.includes(p))]
+                return (
+                  <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
+                    <select className="form-select" style={{fontSize:11}} value={row.industry} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value,role:''}:p))}>
+                      <option value="">— Industry —</option>
+                      {(editOrgIndustries.length?editOrgIndustries:PRESET_INDUSTRIES).map(k=><option key={k} value={k}>{k}</option>)}
+                    </select>
+                    {rolesForInd.length>0 ? (
+                      <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
+                        <option value="">— Role —</option>
+                        {rolesForInd.map(r=><option key={r} value={r}>{r}</option>)}
+                      </select>
+                    ) : (
+                      <input className="form-input" style={{fontSize:11}} value={row.role} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))} placeholder="Role / title"/>
+                    )}
+                    <select className="form-select" style={{fontSize:11}} value={row.position} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
+                      <option value="">— Position —</option>
+                      {allPos.map(p=><option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <button style={{background:'none',border:'none',cursor:inviteOrgPositions.length>1?'pointer':'default',opacity:inviteOrgPositions.length>1?1:.3,color:'var(--red)',fontSize:16,padding:'0 4px',lineHeight:1}} onClick={()=>inviteOrgPositions.length>1&&setInviteOrgPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
+                  </div>
+                )
+              })}
+              <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setInviteOrgPositions(prev=>[...prev,{industry:'',role:'',position:''}])}>+ Add another position</button>
+            </div>
             <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
               <button className="btn btn-ghost" onClick={()=>setShowInvite(null)}>Cancel</button>
               <button className="btn btn-primary" onClick={sendInviteToOrg} disabled={loading}>{loading?'Sending...':'Send Invite'}</button>
