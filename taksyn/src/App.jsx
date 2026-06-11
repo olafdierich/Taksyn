@@ -8198,7 +8198,7 @@ export default function App() {
 
   const clearAllNotifs = () => {
     setNotifications([])
-    if(isConfigured()) supabase.from('user_notifications').delete().eq('user_id',user?.id).catch(()=>{})
+    // if(isConfigured()) supabase.from('user_notifications').delete().eq('user_id',user?.id)
   }
 
   const saveNotifPrefs = (prefs) => {
