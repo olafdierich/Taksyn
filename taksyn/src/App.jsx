@@ -7022,11 +7022,8 @@ function TeamsView({ user }) {
       link: linkId
     })
     const inviteUrl = base + '?' + params.toString()
-    const msg = encodeURIComponent(
-      `Hi! You've been invited to join ${user.org} on Taksyn as ${ROLE_LABELS[inviteLinkRole]||inviteLinkRole}` +
-      (inviteLinkPosition ? ` (${inviteLinkPosition})` : '') +
-      ` in the team "${team.name}".\n\nClick the link below to register:\n${inviteUrl}`
-    )
+    const positionLabel = inviteLinkPosition || ROLE_LABELS[inviteLinkRole] || inviteLinkRole
+    const msg = encodeURIComponent(`Hi [Name], you've been invited to join ${user.org} on Taksyn as ${positionLabel}. Tap the link to set up your account: ${inviteUrl}`)
     window.open('https://wa.me/?text='+msg, '_blank')
     setShowInviteLink(false)
   }
