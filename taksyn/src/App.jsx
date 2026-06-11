@@ -3224,54 +3224,9 @@ function UsersView({ user, setAuditLog }) {
       supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(data) }).catch(()=>{})
       return
     }
-    const applyProfiles = async (profileList, orgName) => {
-      // user_positions may be stored under org name or org ID — try both
-      const posQ1 = supabase.from('user_positions').select('*').eq('org', orgName).catch(()=>({data:[]}))
-      const posQ2 = user.org !== orgName ? supabase.from('user_positions').select('*').eq('org', user.org).catch(()=>({data:[]})) : Promise.resolve({data:[]})
-      const [{data:pos1},{data:pos2}] = await Promise.all([posQ1, posQ2])
-      const positions = [...(pos1||[]), ...(pos2||[]).filter(p=>!(pos1||[]).find(q=>q.id===p.id))]
-      const posMap = {}
-      positions.forEach(p=>{ if(!posMap[p.user_id]) posMap[p.user_id]=[]; posMap[p.user_id].push(p) })
-      setUserPositions(posMap)
-      const merged = profileList.map(p=>({...p, id:p.id, role:p.role||'worker', org:p.org||orgName}))
-      setRealUsers(merged)
-      const toMigrate = merged.filter(u=>u.department&&!(posMap[u.id]?.length))
-      if(toMigrate.length>0) {
-        const entries = toMigrate.map(u=>({ id:'POS'+Date.now()+Math.random().toString(36).slice(2,5), user_id:u.id, org:orgName, department:u.department, role:u.role||'worker', position_title:'', is_primary:true, created_at:new Date().toISOString() }))
-        supabase.from('user_positions').insert(entries).then(()=>{
-          setUserPositions(prev=>{ const m={...prev}; entries.forEach(e=>{ if(!m[e.user_id]) m[e.user_id]=[]; m[e.user_id].push(e) }); return m })
-        }).catch(()=>{})
-      }
-    }
-    const loadMembers = async () => {
-      // Step 1: get own profile to read org as a name (profiles.org is always a name, never an ID)
-      const {data:myProfile} = await supabase.from('profiles').select('org').eq('id', user.id).single().catch(()=>({data:null}))
-      const orgName = myProfile?.org || user.org
-      console.log('DEBUG orgName value is:', JSON.stringify(orgName))
-      if(!orgName) return
-
-      // Step 2: primary — all profiles matching org name
-      const {data:byName} = await supabase.from('profiles').select('*').eq('org', orgName).catch(()=>({data:null}))
-      if(byName?.length) { await applyProfiles(byName, orgName); return }
-
-      // Step 3: look up org row to get both name and ID for org_members lookup
-      const {data:orgRow} = await supabase.from('organisations').select('id,name').or(`name.eq.${orgName},id.eq.${orgName}`).single().catch(()=>({data:null}))
-      const resolvedName = orgRow?.name || orgName
-      const orgId = orgRow?.id
-
-      // Step 4: org_members lookup — try by name and by ID to cover both storage formats
-      const queries = [supabase.from('org_members').select('user_id,role,org,tier').eq('org', resolvedName).catch(()=>({data:[]}))]
-      if(orgId && orgId !== resolvedName) queries.push(supabase.from('org_members').select('user_id,role,org,tier').eq('org', orgId).catch(()=>({data:[]})))
-      const results = await Promise.all(queries)
-      const allMembers = results.flatMap(r=>r.data||[])
-      const uniqueMembers = allMembers.filter((m,i,a)=>a.findIndex(n=>n.user_id===m.user_id)===i)
-
-      if(!uniqueMembers.length) return
-      const {data:profilesById} = await supabase.from('profiles').select('*').in('id', uniqueMembers.map(m=>m.user_id)).catch(()=>({data:[]}))
-      const merged = uniqueMembers.map(m=>{ const p=profilesById?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:resolvedName,tier:m.tier} })
-      await applyProfiles(merged, resolvedName)
-    }
-    loadMembers().catch(()=>{})
+    supabase.from('profiles').select('*').eq('org', user.org)
+      .then(({data:workforceMembers})=>{ setRealUsers(workforceMembers||[]) })
+      .catch(()=>{})
   },[user.org])
 
   const deleteUser = async (id) => {
