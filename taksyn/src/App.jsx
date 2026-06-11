@@ -4756,11 +4756,11 @@ function RolesPositionsView({ user }) {
                       </>
                     ) : (
                       <>
-                        <span style={{flex:1,fontSize:12,fontWeight:500}}>{pos.name}</span>
+                        <span style={{flex:1,fontSize:12,fontWeight:500}}>{pos.position_name}</span>
                         <div style={{display:'flex',gap:3}}>
                           <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,-1)} disabled={idx===0}>↑</button>
                           <button style={{background:'none',border:'none',cursor:idx<customPositions.length-1?'pointer':'default',opacity:idx<customPositions.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,1)} disabled={idx===customPositions.length-1}>↓</button>
-                          <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditPosId(pos.id);setEditPosName(pos.name)}}>Edit</button>
+                          <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditPosId(pos.id);setEditPosName(pos.position_name)}}>Edit</button>
                           <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deletePosition(pos.id)}>Delete</button>
                         </div>
                       </>
