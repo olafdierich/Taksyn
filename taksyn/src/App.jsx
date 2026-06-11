@@ -3233,11 +3233,17 @@ function UsersView({ user, setAuditLog }) {
     if (!confirm('Remove this user from your organisation?\n\nTheir active tasks will be unassigned — work history is preserved.')) return
     const target = realUsers.find(u=>u.id===id)
     if(isConfigured()) {
-      await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
-      await supabase.from('user_positions').delete().eq('user_id',id).eq('org',user.org).catch(()=>{})
-      await supabase.from('tasks').update({ assigned_user_id: null })
-        .eq('assigned_user_id', id).eq('org', user.org)
-        .not('status', 'in', '("completed","approved")')
+      try {
+        await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
+      } catch(err) { console.error('Remove member org_members error:', err) }
+      try {
+        await supabase.from('user_positions').delete().eq('user_id',id).eq('org',user.org)
+      } catch(err) { console.error('Remove member user_positions error:', err) }
+      try {
+        await supabase.from('tasks').update({ assigned_user_id: null })
+          .eq('assigned_user_id', id).eq('org', user.org)
+          .not('status', 'in', '("completed","approved")')
+      } catch(err) { console.error('Remove member tasks error:', err) }
     }
     setRealUsers(prev=>prev.filter(u=>u.id!==id))
     setUserPositions(prev=>{ const n={...prev}; delete n[id]; return n })
