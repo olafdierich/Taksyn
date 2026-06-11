@@ -4658,7 +4658,11 @@ function RolesPositionsView({ user }) {
       .then(({data})=>{ setCustomPositions(data||[]) }).catch(()=>{})
   },[orgId])
 
-  const allIndustriesForRoles = [...globalIndustries, ...orgCustomIndustries.filter(n=>!globalIndustries.includes(n))]
+  // Global names: use DB data, fall back to PRESET_INDUSTRIES if table empty
+  const globalNames = globalIndustryObjs.length ? globalIndustryObjs.map(i=>i.name) : PRESET_INDUSTRIES
+  const orgCustomNames = orgIndustryObjs.map(i=>i.name)
+  // Combined list for the left panel: global first, then org-only customs
+  const allIndustriesForRoles = [...globalNames, ...orgCustomNames.filter(n=>!globalNames.includes(n))]
 
   // Roles CRUD
   const addRole = async () => {
