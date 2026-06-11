@@ -1248,6 +1248,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
   const [newTask, setNewTask] = useState({ title:'', category:'Hospitality', department:'', industry:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[] })
+  const [selectedTplId, setSelectedTplId] = useState('')
   const [taskGlobalIndustries, setTaskGlobalIndustries] = useState([])
   const [taskOrgIndustries, setTaskOrgIndustries] = useState([])
   const [orgProjects, setOrgProjects] = useState([])
