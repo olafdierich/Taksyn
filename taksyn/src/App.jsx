@@ -5141,7 +5141,7 @@ function CompanySettingsView({ user }) {
     const validItems = tplItems.filter(i=>i.text.trim())
     if (!tplName.trim() || !validItems.length) { setMsg('✗ Template needs a name and at least one item'); return }
     setTplSaving(true); setMsg('')
-    const entry = { id: Date.now()+'', org: user.org, name: tplName.trim(), items: JSON.stringify(validItems), created_by: user.name, created_at: new Date().toISOString() }
+    const entry = { id: Date.now()+'', organisation_id: orgId, name: tplName.trim(), items: JSON.stringify(validItems), created_by: user.name, created_at: new Date().toISOString() }
     if (isConfigured()) {
       const { error } = await supabase.from('checklist_templates').insert(entry)
       if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
