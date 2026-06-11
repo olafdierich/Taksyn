@@ -208,9 +208,7 @@ const logAuditEvent = (user, action, entityType=null, entityId=null, entityName=
     entity_name: entityName||null,
     details: details!=null ? (typeof details==='object' ? JSON.stringify(details) : String(details)) : null
   }
-  supabase.from('audit_logs').insert(entry).then(({error})=>{
-    if (error) console.warn('audit_logs insert error:', error.message)
-  })
+  // secondary log disabled — audit_log inserts handled via mkAuditEntry
 }
 
 const mkAuditEntry = (event_type, user, org, detail={}, task_id=null, task_title=null, old_value=null, new_value=null) => ({
