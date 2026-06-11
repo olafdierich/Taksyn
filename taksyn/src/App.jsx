@@ -4525,7 +4525,7 @@ function RolesPositionsView({ user }) {
 
   useEffect(()=>{
     if(!isConfigured()||!orgId) return
-    supabase.from('org_custom_positions').select('*').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('name')
+    supabase.from('org_custom_positions').select('*').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name')
       .then(({data})=>{ setCustomPositions(data||[]) }).catch(()=>{})
   },[orgId])
 
