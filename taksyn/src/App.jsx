@@ -493,6 +493,16 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .guide-step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;margin-top:1px}
 .guide-role-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;color:var(--t2);transition:all .15s}
 .guide-role-tab.active{background:var(--brand);border-color:var(--brand);color:#fff}
+.guide-chapter{background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:14px;overflow:hidden}
+.guide-chapter-hdr{padding:14px 18px 12px;font-size:13px;font-weight:800;color:var(--text);border-bottom:1px solid var(--s4)}
+.guide-accordion-item{border-bottom:1px solid var(--s4)}
+.guide-accordion-item:last-child{border-bottom:none}
+.guide-accordion-row{display:flex;align-items:center;gap:10px;padding:12px 18px;cursor:pointer;user-select:none;transition:background .12s}
+.guide-accordion-row:hover{background:var(--s3)}
+.guide-accordion-chevron{font-size:9px;color:var(--t3);flex-shrink:0;transition:transform .18s;width:14px;text-align:center;line-height:1}
+.guide-accordion-num{font-size:11px;font-weight:700;color:var(--t3);flex-shrink:0;min-width:26px}
+.guide-accordion-title{font-size:13px;font-weight:600;color:var(--text);flex:1}
+.guide-accordion-body{padding:2px 18px 16px 52px;font-size:13px;color:var(--t2);line-height:1.7}
 @media print{
   .topbar,.sidebar,.sidebar-overlay,.guide-no-print{display:none!important}
   .app{padding-top:0!important}
@@ -500,8 +510,9 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
   .content{overflow:visible!important;padding:0!important}
   .guide-print-wrapper{padding:20px!important}
   body{background:#fff!important}
-  .guide-section{break-inside:avoid;border:1px solid #ddd!important}
-  .guide-section-body{display:block!important}
+  .guide-chapter{break-inside:avoid;border:1px solid #ddd!important}
+  .guide-accordion-body{display:block!important}
+  .guide-accordion-chevron{transform:rotate(90deg)!important}
   @page{margin:15mm 15mm;size:A4}
 }
 `
