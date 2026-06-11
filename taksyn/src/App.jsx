@@ -9162,7 +9162,7 @@ export default function App() {
                   </div>
                 )}
                 <button className={'guide-help-btn'+(page==='guide'?' active':'')} onClick={()=>navigate('guide')} title="Getting Started Guide">
-                  <span style={{fontSize:14,fontWeight:800,width:18,height:18,borderRadius:'50%',background:page==='guide'?'var(--brand)':'var(--border2)',color:page==='guide'?'#fff':'var(--t2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,flexShrink:0}}>?</span>
+                  <span style={{width:18,height:18,borderRadius:'50%',background:page==='guide'?'var(--brand)':'var(--border2)',color:page==='guide'?'#fff':'var(--t2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0}}>?</span>
                   <span className="nav-item-label">Getting Started</span>
                 </button>
                 <div className="sb-user-card">
