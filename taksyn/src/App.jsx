@@ -1599,13 +1599,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     if (isConfigured()) supabase.from('audit_log').insert(cEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     logAuditEvent(user, 'task.created', 'task', t.id, t.title, t.priority+' priority'+(t.assigned_user_name?' · '+t.assigned_user_name:''))
     if (isConfigured()) {
-      supabase.auth.getUser().then(({data:{user:authUser}})=>{
-  supabase.from('tasks').insert({ ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' })
-          .then(({error})=>{
-            if (error) console.error('Task save error:', error)
-            // Real-time subscription will update the list automatically
-          })
-      }).finally(()=>setCreating(false))
+      supabase.from('tasks').insert({ ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' })
+        .then(({error})=>{ if(error) console.error('Task save error:', error) })
+        .finally(()=>setCreating(false))
     } else {
       setCreating(false)
     }
@@ -2663,7 +2659,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   useEffect(()=>{
     setOrgLogo(null) // reset on org change
     if(isConfigured() && user.org && user.role!=='super_admin') {
-      supabase.from('organisations').select('logo').eq('name', user.org).single()
+      supabase.from('organisations').select('logo').eq('name', user.org).maybeSingle()
         .then(({data})=>{ if(data?.logo) setOrgLogo(data.logo) })
         .catch(()=>{})
     }
@@ -3180,7 +3176,7 @@ function UsersView({ user, setAuditLog }) {
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
-    supabase.from('organisations').select('id').eq('name', user.org).single()
+    supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
       .then(({data:orgRow})=>{
         if(!orgRow?.id) return
         supabase.from('org_industries').select('name').eq('organisation_id', orgRow.id)
@@ -3199,7 +3195,7 @@ function UsersView({ user, setAuditLog }) {
     const cached = orgsList.find(o=>o.name===orgName)
     let orgId = cached?.id
     if(!orgId) {
-      const {data} = await supabase.from('organisations').select('id').eq('name',orgName).single()
+      const {data} = await supabase.from('organisations').select('id').eq('name',orgName).maybeSingle()
       orgId = data?.id
     }
     if(!orgId) return
@@ -3900,7 +3896,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     // Load org ID for this member's org
     const orgName = member.org || selectedOrgView?.name
     if(!orgName) return
-    const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',orgName).single()
+    const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',orgName).maybeSingle()
     const orgId = orgRow?.id
     const [gi,oi,cr,cp,up] = await Promise.all([
       supabase.from('global_industries').select('name').order('name'),
@@ -3926,7 +3922,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setAddMemberSearch(''); setAddMemberSelectedId(null); setAddMemberMsg('')
     loadOrgMembers(org.name)
     if (!isConfigured()) return
-    supabase.from('organisations').select('sla_settings').eq('name', org.name).single()
+    supabase.from('organisations').select('sla_settings').eq('name', org.name).maybeSingle()
       .then(({data}) => { if(data?.sla_settings) try { setOrgContextSLA(JSON.parse(data.sla_settings)) } catch(e) {} }).catch(()=>{})
     supabase.from('support_tickets').select('*').eq('org', org.name).order('created_at',{ascending:false})
       .then(({data}) => { if(data) setOrgContextTickets(data) }).catch(()=>{})
@@ -4647,7 +4643,7 @@ function RolesPositionsView({ user }) {
     ]
     if(!isSuper && user.org) {
       queries.push(
-        supabase.from('organisations').select('id').eq('name',user.org).single()
+        supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
       )
     }
     Promise.all(queries).then(([gi, orgRow])=>{
@@ -5078,7 +5074,7 @@ function CompanySettingsView({ user }) {
 
   useEffect(() => {
     if (!isConfigured()) { setLoading(false); return }
-    supabase.from('organisations').select('*').eq('name', user.org).single().then(({ data }) => {
+    supabase.from('organisations').select('*').eq('name', user.org).maybeSingle().then(({ data }) => {
       if (data) {
         setOrgId(data.id)
         if(data.auto_logout_minutes!=null) setAutoLogoutMinutes(data.auto_logout_minutes)
@@ -6887,7 +6883,7 @@ function TeamsView({ user }) {
     supabase.from('teams').select('*').eq('org',user.org).order('name')
       .then(({data})=>{ if(data) setTeams(data) }).catch(()=>{})
     // Load org id and team types first, then load members using both org name and id
-    supabase.from('organisations').select('id,team_types').eq('name',user.org).single()
+    supabase.from('organisations').select('id,team_types').eq('name',user.org).maybeSingle()
       .then(async ({data}) => {
         if(!data) return
         if(data.team_types) setTeamTypes(JSON.parse(data.team_types||'[]'))
@@ -8388,7 +8384,7 @@ export default function App() {
       // supabase.from('user_notifications').select('*').eq('user_id',user.id).order('at',{ascending:false}).limit(50)
       // Load org SLA settings
       if(isConfigured()&&user.org) {
-        supabase.from('organisations').select('sla_settings,auto_logout_minutes').eq('name',user.org).single()
+        supabase.from('organisations').select('sla_settings,auto_logout_minutes').eq('name',user.org).maybeSingle()
           .then(({data})=>{
             if(data?.sla_settings) updateOrgSLA({...DEFAULT_SLA,...JSON.parse(data.sla_settings)})
             if(data?.auto_logout_minutes!=null) setSessionTimeout(data.auto_logout_minutes)
