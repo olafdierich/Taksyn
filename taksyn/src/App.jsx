@@ -4408,11 +4408,11 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
       {/* Invite Admin Modal */}
       {showInvite&&(
-  <div className="modal-overlay" onClick={()=>setShowInvite(null)}>
+  <div className="modal-overlay" onClick={()=>{ setShowInvite(null); setInviteOrgPositions([{industry:'',role:'',position:''}]) }}>
     <div className="modal" onClick={e=>e.stopPropagation()}>
       <div className="modal-hdr">
         <div className="modal-title">Add to Organisation</div>
-        <button className="modal-close" onClick={()=>setShowInvite(null)}>×</button>
+        <button className="modal-close" onClick={()=>{ setShowInvite(null); setInviteOrgPositions([{industry:'',role:'',position:''}]) }}>×</button>
       </div>
       <div className="modal-body">
         <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:13}}>
