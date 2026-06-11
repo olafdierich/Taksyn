@@ -668,16 +668,21 @@ function AuthView({ onAuth }) {
         if (!name.trim()) { setError('Please enter your full name'); setLoading(false); return }
         let orgName, assignedRole
         if (inviteParams) {
+          if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
+          if (!inviteParams.orgName) { setError('Invite data is still loading — please wait a moment and try again'); setLoading(false); return }
+          if (isConfigured() && inviteParams.linkId) {
+            const {data:linkCheck} = await supabase.from('invite_links').select('is_active,used_at,org').eq('id', inviteParams.linkId).maybeSingle()
+            if (linkCheck && (linkCheck.is_active === false || linkCheck.used_at)) {
+              setError(`This invite link for ${inviteParams.orgName} has already been used. Please ask your admin for a new link.`)
+              setLoading(false); return
+            }
+          }
           orgName = inviteParams.orgName
           assignedRole = inviteParams.role
-        } else if (signupType==='organisation') {
+        } else {
           if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
           orgName = org.trim()
           assignedRole = 'client_admin'
-        } else {
-          if (!inviteCode.trim()) { setError('Please select your organisation'); setLoading(false); return }
-          orgName = inviteCode.trim()
-          assignedRole = 'worker'
         }
         const { data:signUpData, error:e } = await supabase.auth.signUp({
           email, password,
