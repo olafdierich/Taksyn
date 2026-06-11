@@ -3866,7 +3866,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       orgId ? supabase.from('org_industries').select('name').eq('organisation_id',orgId) : Promise.resolve({data:[]}),
       orgId ? supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name') : Promise.resolve({data:[]}),
       orgId ? supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name') : Promise.resolve({data:[]}),
-      supabase.from('user_positions').select('*').eq('user_id',member.id).eq('org',orgName)
+      Promise.resolve({data:[]})
     ])
     const globalNames = gi.data?.map(i=>i.name)||[]
     const orgNames = oi.data?.map(i=>i.name)||[]
