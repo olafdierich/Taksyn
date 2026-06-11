@@ -4664,6 +4664,34 @@ function RolesPositionsView({ user }) {
   // Combined list for the left panel: global first, then org-only customs
   const allIndustriesForRoles = [...globalNames, ...orgCustomNames.filter(n=>!globalNames.includes(n))]
 
+  // Industry CRUD (org-custom only)
+  const addOrgIndustry = async () => {
+    const name = newIndName.trim()
+    if(!name||!user.org||!isConfigured()) return
+    if(allIndustriesForRoles.find(n=>n.toLowerCase()===name.toLowerCase())) return
+    setSaving(true)
+    const row = {name, org:user.org, created_by:user.name, created_at:new Date().toISOString(), ...(orgId?{organisation_id:orgId}:{})}
+    const {data,error} = await supabase.from('org_industries').insert(row).select().single()
+    if(!error&&data){setOrgIndustryObjs(prev=>[...prev,data]);setNewIndName('');setShowAddInd(false)}
+    setSaving(false)
+  }
+  const deleteOrgIndustry = async (id,name) => {
+    if(!window.confirm(`Delete "${name}"? Roles assigned to this industry will be removed.`)) return
+    await supabase.from('org_industries').delete().eq('id',id).catch(()=>{})
+    await supabase.from('org_custom_roles').delete().eq('industry_name',name).eq('organisation_id',orgId).catch(()=>{})
+    setOrgIndustryObjs(prev=>prev.filter(i=>i.id!==id))
+    if(selectedIndustry===name) setSelectedIndustry('')
+  }
+  const saveIndEdit = async () => {
+    const name = editIndName.trim()
+    if(!name||!editIndId) return
+    setSaving(true)
+    await supabase.from('org_industries').update({name}).eq('id',editIndId).catch(()=>{})
+    setOrgIndustryObjs(prev=>prev.map(i=>i.id===editIndId?{...i,name}:i))
+    if(selectedIndustry===orgIndustryObjs.find(i=>i.id===editIndId)?.name) setSelectedIndustry(name)
+    setEditIndId(null); setEditIndName(''); setSaving(false)
+  }
+
   // Roles CRUD
   const addRole = async () => {
     const name = newRoleName.trim()
