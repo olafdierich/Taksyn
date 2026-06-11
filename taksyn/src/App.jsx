@@ -3609,8 +3609,8 @@ function UsersView({ user, setAuditLog }) {
       {['client_admin','super_admin'].includes(user.role)&&<div className="section">
         <div className="section-title">Invite Options</div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button className="btn btn-primary" onClick={()=>{setInviteMethod('email');setShowInvite(true)}}>📧 Invite via Email</button>
-          <button className="btn btn-green" onClick={()=>{setInviteMethod('whatsapp');setShowInvite(true)}}>💬 Invite via WhatsApp</button>
+          <button className="btn btn-primary" onClick={()=>openInviteForm('email')}>📧 Invite via Email</button>
+          <button className="btn btn-green" onClick={()=>openInviteForm('whatsapp')}>💬 Invite via WhatsApp</button>
         </div>
       </div>}
     </div>
