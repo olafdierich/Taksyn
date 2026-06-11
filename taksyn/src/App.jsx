@@ -3445,26 +3445,34 @@ function UsersView({ user, setAuditLog }) {
     const rolesSummary = validRows.map(p=>[p.industry,p.role,p.position].filter(Boolean).join(' / ')).join('; ')
     const positionsSummary = rolesSummary ? '\n\nAssignments: '+rolesSummary : ''
 
+    const buildInviteUrl = async (orgId) => {
+      if (!orgId || !isConfigured()) return window.location.origin + window.location.pathname
+      const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
+      await supabase.from('invite_links').insert({
+        id: linkId, org_id: orgId, role: systemRole,
+        position: validRows.find(p=>p.position)?.position || null,
+        created_by: user.name, org: targetOrg, created_at: new Date().toISOString()
+      }).catch(()=>{})
+      const params = new URLSearchParams({
+        invite: 'true',
+        org: orgId,
+        name: inviteName.trim(),
+        email: inviteEmail.trim(),
+        phone: invitePhone.trim(),
+        role: systemRole,
+        position: validRows.find(p=>p.position)?.position || '',
+        industry: firstIndustry,
+        secret: 'taksyn-secret-2024',
+        link: linkId
+      })
+      return window.location.origin + window.location.pathname + '?' + params.toString()
+    }
+
     if (inviteMethod==='whatsapp') {
       const orgEntry = orgsList.find(o=>o.name===targetOrg)
       const linkOrgId = orgEntry?.id || ''
-      const firstPosition = validRows.find(p=>p.position)?.position || ROLE_LABELS[systemRole] || systemRole
-      let inviteUrl = window.location.origin + window.location.pathname
-      if (linkOrgId && isConfigured()) {
-        const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
-        await supabase.from('invite_links').insert({
-          id: linkId, org_id: linkOrgId, role: systemRole,
-          position: validRows.find(p=>p.position)?.position || null,
-          created_by: user.name, org: targetOrg, created_at: new Date().toISOString()
-        }).catch(()=>{})
-        const params = new URLSearchParams({
-          invite: 'true', org: linkOrgId, role: systemRole,
-          position: validRows.find(p=>p.position)?.position || '',
-          secret: 'taksyn-secret-2024', link: linkId
-        })
-        inviteUrl = window.location.origin + window.location.pathname + '?' + params.toString()
-      }
-      const msg = encodeURIComponent(`Hi ${inviteName.trim()}, you've been invited to join ${targetOrg} on Taksyn as ${firstPosition}. Tap the link to set up your account: ${inviteUrl}`)
+      const inviteUrl = await buildInviteUrl(linkOrgId)
+      const msg = encodeURIComponent(`Hi ${inviteName.trim()}, ${targetOrg} has invited you to join Taksyn. Tap the link to set up your account: ${inviteUrl}`)
       window.open('https://wa.me/?text='+msg, '_blank')
       setShowInvite(false); resetInviteForm()
       return
@@ -3472,11 +3480,14 @@ function UsersView({ user, setAuditLog }) {
 
     if (!isConfigured()) { alert('Supabase not configured'); return }
     try {
+      const orgEntry = orgsList.find(o=>o.name===targetOrg)
+      const linkOrgId = orgEntry?.id || ''
+      const inviteUrl = await buildInviteUrl(linkOrgId)
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: systemRole, org: targetOrg, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '' })
+        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: systemRole, org: targetOrg, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl })
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
