@@ -4722,15 +4722,23 @@ function RolesPositionsView({ user }) {
   }
 
   // Roles CRUD
+  const refreshRoles = async () => {
+    if(!orgId||!selectedIndustry) return
+    const {data} = await supabase.from('org_custom_roles').select('*').eq('organisation_id',orgId).eq('industry_name',selectedIndustry).order('sort_order',{nullsFirst:false}).order('role_name')
+    setRoles(data||[])
+  }
   const addRole = async () => {
     const name = newRoleName.trim()
     if(!name||!orgId||!selectedIndustry||!isConfigured()) return
     if(roles.find(r=>r.role_name.toLowerCase()===name.toLowerCase())) return
     setSaving(true)
-    const maxOrder = roles.reduce((m,r)=>Math.max(m,r.sort_order||0),0)
-    const {data,error} = await supabase.from('org_custom_roles').insert({role_name:name,organisation_id:orgId,industry_name:selectedIndustry,sort_order:maxOrder+1}).select().single()
-    if(!error&&data) { setRoles(prev=>[...prev,data]); setNewRoleName('') }
-    setSaving(false)
+    try {
+      const maxOrder = roles.reduce((m,r)=>Math.max(m,r.sort_order||0),0)
+      const {error} = await supabase.from('org_custom_roles').insert({role_name:name,organisation_id:orgId,industry_name:selectedIndustry,sort_order:maxOrder+1})
+      if(!error) { await refreshRoles(); setNewRoleName('') }
+    } finally {
+      setSaving(false)
+    }
   }
   const deleteRole = async (id) => {
     await supabase.from('org_custom_roles').delete().eq('id',id).catch(()=>{})
@@ -4740,9 +4748,12 @@ function RolesPositionsView({ user }) {
     const name = editRoleName.trim()
     if(!name||!editRoleId) return
     setSaving(true)
-    await supabase.from('org_custom_roles').update({role_name:name}).eq('id',editRoleId).catch(()=>{})
-    setRoles(prev=>prev.map(r=>r.id===editRoleId?{...r,role_name:name}:r))
-    setEditRoleId(null); setEditRoleName(''); setSaving(false)
+    try {
+      const {error} = await supabase.from('org_custom_roles').update({role_name:name}).eq('id',editRoleId)
+      if(!error) { await refreshRoles(); setEditRoleId(null); setEditRoleName('') }
+    } finally {
+      setSaving(false)
+    }
   }
   const moveRole = async (id,dir) => {
     const idx=roles.findIndex(r=>r.id===id); if(idx<0) return
