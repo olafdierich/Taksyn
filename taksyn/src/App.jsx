@@ -1288,14 +1288,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         .then(async({data:members})=>{
           if(!members?.length) return
           const ids = members.map(m=>m.user_id)
-          const [{data:profiles},{data:positions}] = await Promise.all([
-            supabase.from('profiles').select('*').in('id',ids),
-            supabase.from('user_positions').select('*').eq('org',user.org).catch(()=>({data:[]}))
-          ])
+          const {data:profiles} = await supabase.from('profiles').select('*').in('id',ids)
           if(profiles) setTeamUsers(profiles.map(p=>({
             ...p,
             role:members.find(m=>m.user_id===p.id)?.role||p.role,
-            positions:(positions||[]).filter(pos=>pos.user_id===p.id)
+            positions:[]
           })))
         }).catch(()=>{})
     }
