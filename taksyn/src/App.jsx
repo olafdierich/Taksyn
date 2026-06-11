@@ -9121,6 +9121,10 @@ export default function App() {
                 })}
               </div>
               <div style={{marginTop:'auto',padding:'10px 12px',borderTop:'1px solid rgba(255,255,255,.06)'}}>
+                <button onClick={()=>navigate('guide')} title="Getting Started Guide" style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,.12)',background:page==='guide'?'rgba(245,158,11,.15)':'transparent',color:page==='guide'?'#F59E0B':'rgba(255,255,255,.5)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',width:'100%',textAlign:'left',marginBottom:6,overflow:'hidden'}}>
+                  <span style={{width:18,height:18,borderRadius:'50%',background:page==='guide'?'#F59E0B':'rgba(255,255,255,.15)',color:page==='guide'?'#0F172A':'rgba(255,255,255,.6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0}}>?</span>
+                  <span className="nav-item-label">Getting Started</span>
+                </button>
                 <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:6,background:'rgba(255,255,255,.05)',marginBottom:6,overflow:'hidden'}}>
                   <Avatar name={user.name} role={user.role} size={28} avatarUrl={user.avatar_url}/>
                   <div className="sb-user-info">
