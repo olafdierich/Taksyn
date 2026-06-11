@@ -5123,7 +5123,7 @@ function CompanySettingsView({ user }) {
   const filled = COMPANY_COMPLETENESS_FIELDS.filter(f=>form[f.key]&&String(form[f.key]).trim())
   const pct = Math.round((filled.length/COMPANY_COMPLETENESS_FIELDS.length)*100)
   const pctColor = pct===100?'var(--green)':pct>=60?'var(--amber)':'var(--red)'
-  const TABS = [['company','Company'],['notifications','Notifications'],['tasks','Tasks'],['compliance','Compliance'],['branding','Branding'],['templates','Templates'],['data','Data & Privacy']]
+  const TABS = [['company','Company'],['notifications','Notifications'],['tasks','Tasks'],['compliance','Compliance'],['branding','Branding'],['templates','Templates'],['data','Data & Privacy'],...(['client_admin','super_admin'].includes(user?.role)?[['team','Team Management']]:[])]
 
   return (
     <div className="anim">
