@@ -3248,14 +3248,11 @@ function UsersView({ user, setAuditLog }) {
     const loadMembers = async () => {
       // Step 1: get own profile to read org as a name (profiles.org is always a name, never an ID)
       const {data:myProfile} = await supabase.from('profiles').select('org').eq('id', user.id).single().catch(()=>({data:null}))
-      console.log('myProfile:', myProfile)
       const orgName = myProfile?.org || user.org
-      console.log('orgName:', orgName)
       if(!orgName) return
 
       // Step 2: primary — all profiles matching org name
       const {data:byName} = await supabase.from('profiles').select('*').eq('org', orgName).catch(()=>({data:null}))
-      console.log('byName:', byName)
       if(byName?.length) { await applyProfiles(byName, orgName); return }
 
       // Step 3: look up org row to get both name and ID for org_members lookup
