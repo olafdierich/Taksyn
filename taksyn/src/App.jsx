@@ -7239,6 +7239,378 @@ function PlatformAnnouncementsView({ user }) {
   )
 }
 
+const PLAN_DEFS = [
+  { key:'personal',     label:'Personal',     color:'#6B7280', price:0,   retention:'30 days',  features:['1 user','30-day data retention','Basic task management'] },
+  { key:'starter',      label:'Starter',      color:'#3B82F6', price:29,  retention:'6 months', features:['Up to 10 users','6-month retention','Tasks + reports'] },
+  { key:'growth',       label:'Growth',       color:'#10B981', price:79,  retention:'12 months',features:['Up to 50 users','12-month retention','Full feature set'] },
+  { key:'professional', label:'Professional', color:'#8B5CF6', price:149, retention:'2 years',  features:['Unlimited users','2-year retention','Priority support','Custom SLA'] },
+  { key:'enterprise',   label:'Enterprise',   color:'#F59E0B', price:399, retention:'7 years',  features:['Unlimited users','7-year retention','Dedicated support','Custom everything'] },
+]
+
+function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
+  const [tab, setTab] = useState('industries')
+
+  // Global Industries state
+  const [industries, setIndustries] = useState([])
+  const [indLoading, setIndLoading] = useState(false)
+  const [newIndName, setNewIndName] = useState('')
+  const [editIndId, setEditIndId] = useState(null)
+  const [editIndName, setEditIndName] = useState('')
+  const [indSaving, setIndSaving] = useState(false)
+
+  // Plans state
+  const [plans, setPlans] = useState(PLAN_DEFS.map(p=>({...p})))
+  const [editPlanKey, setEditPlanKey] = useState(null)
+  const [planSaving, setPlanSaving] = useState(false)
+  const [planMsg, setPlanMsg] = useState('')
+
+  // Announcements state
+  const [announcements, setAnnouncements] = useState([])
+  const [anLoading, setAnLoading] = useState(false)
+  const [anTitle, setAnTitle] = useState('')
+  const [anBody, setAnBody] = useState('')
+  const [anTarget, setAnTarget] = useState('all')
+  const [anOrgs, setAnOrgs] = useState([])
+  const [anSaving, setAnSaving] = useState(false)
+  const [anMsg, setAnMsg] = useState('')
+
+  // Security
+  const [secMsg, setSecMsg] = useState('')
+  const SESSION_TIMEOUTS = [1,2,5,10,30,60]
+  const SESSION_LABELS = {1:'1 min',2:'2 min',5:'5 min',10:'10 min',30:'30 min',60:'1 hour'}
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    // Load industries
+    setIndLoading(true)
+    supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name')
+      .then(({data})=>{ if(data) setIndustries(data) }).catch(()=>{}).finally(()=>setIndLoading(false))
+    // Load plans from DB if they exist
+    supabase.from('platform_plans').select('*')
+      .then(({data})=>{ if(data?.length) setPlans(PLAN_DEFS.map(d=>{ const r=data.find(p=>p.name===d.key); return r?{...d,price:r.price_monthly,features:r.features||d.features}:d })) }).catch(()=>{})
+    // Load orgs for announcement target
+    supabase.from('organisations').select('id,name').order('name')
+      .then(({data})=>{ if(data) setAnOrgs(data) }).catch(()=>{})
+    // Load announcements
+    setAnLoading(true)
+    supabase.from('platform_announcements').select('*').order('created_at',{ascending:false}).limit(50)
+      .then(({data})=>{ if(data) setAnnouncements(data) }).catch(()=>{}).finally(()=>setAnLoading(false))
+  },[])
+
+  // Industry CRUD
+  const addInd = async () => {
+    const name=newIndName.trim(); if(!name||!isConfigured()) return
+    if(industries.find(i=>i.name.toLowerCase()===name.toLowerCase())) return
+    setIndSaving(true)
+    const maxO=industries.reduce((m,i)=>Math.max(m,i.sort_order||0),0)
+    const {data,error}=await supabase.from('global_industries').insert({name,sort_order:maxO+1,created_by:user.name,created_at:new Date().toISOString()}).select().single()
+    if(!error&&data){setIndustries(prev=>[...prev,data]);setNewIndName('')}
+    setIndSaving(false)
+  }
+  const deleteInd = async (id) => {
+    if(!window.confirm('Delete this industry? This cannot be undone.')) return
+    await supabase.from('global_industries').delete().eq('id',id).catch(()=>{})
+    setIndustries(prev=>prev.filter(i=>i.id!==id))
+  }
+  const saveIndEdit = async () => {
+    const name=editIndName.trim(); if(!name||!editIndId) return
+    setIndSaving(true)
+    await supabase.from('global_industries').update({name}).eq('id',editIndId).catch(()=>{})
+    setIndustries(prev=>prev.map(i=>i.id===editIndId?{...i,name}:i))
+    setEditIndId(null); setEditIndName(''); setIndSaving(false)
+  }
+  const moveInd = async (id,dir) => {
+    const idx=industries.findIndex(i=>i.id===id); if(idx<0) return
+    const swap=industries[idx+dir]; if(!swap) return
+    const a=industries[idx],aO=a.sort_order??idx,bO=swap.sort_order??(idx+dir)
+    await Promise.all([supabase.from('global_industries').update({sort_order:bO}).eq('id',a.id),supabase.from('global_industries').update({sort_order:aO}).eq('id',swap.id)]).catch(()=>{})
+    setIndustries(prev=>{const n=[...prev];n[idx]={...a,sort_order:bO};n[idx+dir]={...swap,sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))})
+  }
+
+  // Plans save
+  const savePlan = async (planKey) => {
+    const plan=plans.find(p=>p.key===planKey); if(!plan) return
+    setPlanSaving(true); setPlanMsg('')
+    const row={name:plan.key,price_monthly:plan.price,retention_days:0,features:plan.features,updated_at:new Date().toISOString()}
+    if(isConfigured()) await supabase.from('platform_plans').upsert(row,{onConflict:'name'}).catch(e=>setPlanMsg('✗ '+e.message))
+    setEditPlanKey(null); setPlanMsg('✓ Plan saved'); setPlanSaving(false)
+    setTimeout(()=>setPlanMsg(''),3000)
+  }
+
+  // Announcements send
+  const sendAnn = async () => {
+    if(!anTitle.trim()){setAnMsg('✗ Title required');return}
+    setAnSaving(true); setAnMsg('')
+    const row={id:'PA'+Date.now()+Math.random().toString(36).slice(2,5),title:anTitle.trim(),body:anBody.trim(),target_org:anTarget==='all'?null:anTarget,sent_by:user.name,sent_by_id:user.id,created_at:new Date().toISOString()}
+    if(isConfigured()){const {error}=await supabase.from('platform_announcements').insert(row);if(error){setAnMsg('✗ '+error.message);setAnSaving(false);return}}
+    setAnnouncements(prev=>[row,...prev]); setAnTitle(''); setAnBody(''); setAnMsg('✓ Sent'); setAnSaving(false)
+    setTimeout(()=>setAnMsg(''),3000)
+  }
+
+  const fmtTs = d => d ? new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})+' '+new Date(d).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—'
+  const TABS=[['industries','Global Industries'],['plans','Subscription Plans'],['announcements','Announcements'],['security','Security']]
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">Platform Settings</div>
+        <div className="ph-sub">Manage global configuration for the Taksyn platform</div>
+      </div>
+
+      <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,flexWrap:'wrap'}}>
+        {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{flex:'1 1 auto',padding:'6px 10px',borderRadius:6,border:'none',background:tab===k?'#fff':'transparent',color:tab===k?'var(--text)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:tab===k?'0 1px 4px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>{l}</button>)}
+      </div>
+
+      {tab==='industries'&&(
+        <div className="section">
+          <div style={{display:'flex',gap:8,marginBottom:16}}>
+            <input className="form-input" style={{flex:1}} placeholder="New industry name…" value={newIndName} onChange={e=>setNewIndName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addInd()}/>
+            <button className="btn btn-primary" onClick={addInd} disabled={indSaving||!newIndName.trim()}>Add Industry</button>
+          </div>
+          {indLoading ? <div className="spinner" style={{margin:'20px auto'}}/> : industries.length===0 ? (
+            <div style={{fontSize:13,color:'var(--t2)',padding:'12px 0'}}>No global industries yet.</div>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {industries.map((ind,idx)=>(
+                <div key={ind.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)'}}>
+                  {editIndId===ind.id ? (
+                    <>
+                      <input className="form-input" style={{flex:1,fontSize:13}} value={editIndName} onChange={e=>setEditIndName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveIndEdit();if(e.key==='Escape'){setEditIndId(null);setEditIndName('')}}} autoFocus/>
+                      <button className="btn btn-primary btn-sm" onClick={saveIndEdit} disabled={indSaving}>Save</button>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>{setEditIndId(null);setEditIndName('')}}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{fontSize:13,flex:1,fontWeight:500}}>{ind.name}</span>
+                      <div style={{display:'flex',gap:4}}>
+                        <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:12,padding:'2px 5px'}} onClick={()=>moveInd(ind.id,-1)} disabled={idx===0}>↑</button>
+                        <button style={{background:'none',border:'none',cursor:idx<industries.length-1?'pointer':'default',opacity:idx<industries.length-1?1:.3,fontSize:12,padding:'2px 5px'}} onClick={()=>moveInd(ind.id,1)} disabled={idx===industries.length-1}>↓</button>
+                        <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>{setEditIndId(ind.id);setEditIndName(ind.name)}}>Edit</button>
+                        <button className="btn btn-danger btn-sm" style={{fontSize:11}} onClick={()=>deleteInd(ind.id)}>Delete</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab==='plans'&&(
+        <div>
+          {planMsg&&<div style={{marginBottom:12,padding:'8px 12px',borderRadius:6,fontSize:13,background:planMsg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(planMsg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:planMsg.startsWith('✓')?'var(--green)':'var(--red)'}}>{planMsg}</div>}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+            {plans.map(plan=>(
+              <div key={plan.key} style={{border:'2px solid '+plan.color+'40',borderRadius:12,padding:'16px',background:'var(--bg)',boxShadow:'0 2px 8px rgba(0,0,0,.06)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+                  <span style={{fontSize:11,fontWeight:700,color:plan.color,background:plan.color+'18',border:'1px solid '+plan.color+'30',borderRadius:6,padding:'2px 10px',letterSpacing:'.4px',textTransform:'uppercase'}}>{plan.label}</span>
+                </div>
+                {editPlanKey===plan.key ? (
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    <div>
+                      <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Monthly Price (USD)</div>
+                      <input className="form-input" style={{fontSize:13}} type="number" min={0} value={plan.price} onChange={e=>setPlans(prev=>prev.map(p=>p.key===plan.key?{...p,price:Number(e.target.value)}:p))}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Features (one per line)</div>
+                      <textarea className="form-input" rows={4} style={{fontSize:12,resize:'vertical'}} value={plan.features.join('\n')} onChange={e=>setPlans(prev=>prev.map(p=>p.key===plan.key?{...p,features:e.target.value.split('\n').filter(Boolean)}:p))}/>
+                    </div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button className="btn btn-primary btn-sm" onClick={()=>savePlan(plan.key)} disabled={planSaving}>Save</button>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>setEditPlanKey(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{fontSize:22,fontWeight:800,color:plan.color,marginBottom:4}}>${plan.price}<span style={{fontSize:12,fontWeight:400,color:'var(--t2)'}}>/mo</span></div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>Retention: {plan.retention}</div>
+                    <ul style={{margin:0,padding:'0 0 0 16px',fontSize:12,color:'var(--t2)',lineHeight:1.8}}>
+                      {plan.features.map((f,i)=><li key={i}>{f}</li>)}
+                    </ul>
+                    <button className="btn btn-secondary btn-sm" style={{marginTop:12,width:'100%',fontSize:11}} onClick={()=>setEditPlanKey(plan.key)}>Edit Plan</button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:16,padding:'12px 14px',background:'var(--s3)',borderRadius:8,fontSize:11,color:'var(--t2)'}}>
+            SQL to create platform_plans table if needed:<br/>
+            <code style={{fontFamily:'monospace',display:'block',marginTop:6,color:'var(--text)',lineHeight:1.8,whiteSpace:'pre-wrap'}}>{'CREATE TABLE IF NOT EXISTS platform_plans (\n  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n  name text UNIQUE NOT NULL,\n  price_monthly numeric DEFAULT 0,\n  price_yearly numeric DEFAULT 0,\n  retention_days integer DEFAULT 30,\n  features jsonb DEFAULT \'[]\'::jsonb,\n  created_at timestamptz DEFAULT now()\n);'}</code>
+          </div>
+        </div>
+      )}
+
+      {tab==='announcements'&&(
+        <div>
+          <div className="section" style={{marginBottom:14}}>
+            <div className="section-title">Send Announcement</div>
+            <div className="form-field"><label className="form-label">Audience</label>
+              <select className="form-input" value={anTarget} onChange={e=>setAnTarget(e.target.value)}>
+                <option value="all">All Organisations</option>
+                {anOrgs.map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
+              </select>
+            </div>
+            <div className="form-field"><label className="form-label">Title <span style={{color:'var(--red)'}}>*</span></label>
+              <input className="form-input" value={anTitle} onChange={e=>setAnTitle(e.target.value)} placeholder="e.g. Scheduled maintenance on Saturday"/>
+            </div>
+            <div className="form-field"><label className="form-label">Message</label>
+              <textarea className="form-input" value={anBody} onChange={e=>setAnBody(e.target.value)} rows={4} style={{resize:'vertical'}} placeholder="Optional body text…"/>
+            </div>
+            {anMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:anMsg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(anMsg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:anMsg.startsWith('✓')?'var(--green)':'var(--red)'}}>{anMsg}</div>}
+            <button className="btn btn-primary" onClick={sendAnn} disabled={anSaving}>{anSaving?'Sending…':'Send Announcement'}</button>
+          </div>
+          <div className="section">
+            <div className="section-title">History</div>
+            {anLoading ? <div style={{padding:20,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}}/></div>
+              : announcements.length===0 ? <div className="empty"><div className="empty-icon">📢</div><div className="empty-text">No announcements yet</div></div>
+              : announcements.map((a,i)=>(
+                <div key={a.id||i} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,flexWrap:'wrap',marginBottom:3}}>
+                    <span style={{fontSize:13,fontWeight:700}}>{a.title}</span>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:a.target_org?'rgba(59,130,246,.12)':'rgba(16,185,129,.12)',color:a.target_org?'#3B82F6':'#10B981',fontWeight:600,flexShrink:0}}>{a.target_org||'All orgs'}</span>
+                  </div>
+                  {a.body&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:3}}>{a.body}</div>}
+                  <div style={{fontSize:11,color:'var(--t3)'}}>{a.sent_by} · {fmtTs(a.created_at)}</div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {tab==='security'&&(
+        <div className="section">
+          <div className="section-title">Session Security</div>
+          <div style={{fontSize:13,color:'var(--t2)',marginBottom:16}}>Configure auto-logout timeout for your super admin session. This is stored locally and applies only to this device.</div>
+          <div style={{background:'var(--s2)',borderRadius:10,padding:'14px 16px',border:'1px solid var(--border)',marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:600,marginBottom:10}}>Auto-logout after inactivity</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+              {SESSION_TIMEOUTS.map(v=>{
+                const active = sessionTimeout===v||(sessionTimeout===null&&v===10)
+                return <button key={v} style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand)':'transparent',color:active?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:active?700:400}} onClick={()=>{
+                  const isDefault = v===10
+                  if(isDefault) localStorage.removeItem('taksyn_session_timeout'); else localStorage.setItem('taksyn_session_timeout',String(v))
+                  setSessionTimeout(isDefault?null:v)
+                  setSecMsg('Session timeout set to '+SESSION_LABELS[v])
+                  setTimeout(()=>setSecMsg(''),3000)
+                }}>{SESSION_LABELS[v]}</button>
+              })}
+              <button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'1px solid '+(sessionTimeout===0?'var(--brand)':'var(--border)'),background:sessionTimeout===0?'var(--brand)':'transparent',color:sessionTimeout===0?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:sessionTimeout===0?700:400}} onClick={()=>{localStorage.setItem('taksyn_session_timeout','0');setSessionTimeout(0);setSecMsg('Session will never expire');setTimeout(()=>setSecMsg(''),3000)}}>Never</button>
+            </div>
+            <div style={{fontSize:11,color:'var(--t2)'}}>Default for super admin: <strong>10 min</strong></div>
+            {secMsg&&<div style={{marginTop:8,fontSize:12,color:'var(--green)',fontWeight:500}}>{secMsg}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SuperAdminAccountView({ user, setUser }) {
+  const [form, setForm] = useState({name:user.name||'',email:user.email||''})
+  const [pwForm, setPwForm] = useState({current:'',next:'',confirm:''})
+  const [showPw, setShowPw] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState(user.avatar_url||'')
+  const [uploading, setUploading] = useState(false)
+
+  const save = async () => {
+    if(!form.name.trim()){setMsg('✗ Name is required');return}
+    setSaving(true); setMsg('')
+    const updates = {name:form.name.trim(),email:form.email.trim()}
+    if(isConfigured()){
+      await supabase.from('profiles').update(updates).eq('id',user.id).catch(e=>setMsg('✗ '+e.message))
+      if(form.email!==user.email) await supabase.auth.updateUser({email:form.email}).catch(()=>{})
+    }
+    if(setUser) setUser(prev=>({...prev,...updates}))
+    setMsg('✓ Profile saved')
+    setSaving(false)
+    setTimeout(()=>setMsg(''),3000)
+  }
+
+  const changePw = async () => {
+    if(pwForm.next.length<6){setMsg('✗ Password must be at least 6 characters');return}
+    if(pwForm.next!==pwForm.confirm){setMsg('✗ Passwords do not match');return}
+    setSaving(true); setMsg('')
+    const {error} = await supabase.auth.updateUser({password:pwForm.next})
+    if(error){setMsg('✗ '+error.message)}else{setMsg('✓ Password changed');setPwForm({current:'',next:'',confirm:''})}
+    setSaving(false); setTimeout(()=>setMsg(''),4000)
+  }
+
+  const uploadAvatar = async (e) => {
+    const file = e.target.files?.[0]; if(!file) return
+    setUploading(true); setMsg('')
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `avatars/${user.id}.${ext}`
+      const {error:upErr} = await supabase.storage.from('avatars').upload(path,file,{upsert:true})
+      if(upErr) throw upErr
+      const {data} = supabase.storage.from('avatars').getPublicUrl(path)
+      const url = data.publicUrl
+      await supabase.from('profiles').update({avatar_url:url}).eq('id',user.id)
+      setAvatarUrl(url)
+      if(setUser) setUser(prev=>({...prev,avatar_url:url}))
+      setMsg('✓ Photo updated')
+    } catch(err){setMsg('✗ '+err.message)}
+    setUploading(false); setTimeout(()=>setMsg(''),3000)
+  }
+
+  return (
+    <div className="anim">
+      <div className="ph">
+        <div className="ph-title">My Account</div>
+        <div className="ph-sub">Manage your super admin profile</div>
+      </div>
+
+      <div className="section" style={{maxWidth:480,marginBottom:16}}>
+        <div className="section-title">Profile Photo</div>
+        <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:12}}>
+          <Avatar name={form.name||'?'} role="super_admin" size={64} avatarUrl={avatarUrl}/>
+          <div>
+            <label style={{display:'inline-block',padding:'7px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:7,fontSize:12,cursor:'pointer',fontFamily:'inherit',color:'var(--text)'}}>
+              {uploading?'Uploading…':'Upload Photo'}
+              <input type="file" accept="image/*" style={{display:'none'}} onChange={uploadAvatar} disabled={uploading}/>
+            </label>
+            <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>PNG, JPG or GIF. Max 5MB.</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="section" style={{maxWidth:480,marginBottom:16}}>
+        <div className="section-title">Profile Details</div>
+        <div className="form-field"><label className="form-label">Full Name</label>
+          <input className="form-input" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>
+        </div>
+        <div className="form-field"><label className="form-label">Email</label>
+          <input className="form-input" type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/>
+          <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Changing email sends a confirmation link to the new address</div>
+        </div>
+        {msg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:msg.startsWith('✓')?'var(--green)':'var(--red)'}}>{msg}</div>}
+        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving…':'Save Profile'}</button>
+      </div>
+
+      <div className="section" style={{maxWidth:480}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <div className="section-title" style={{margin:0}}>Change Password</div>
+          <button style={{fontSize:12,color:'var(--brand)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}} onClick={()=>setShowPw(v=>!v)}>{showPw?'Hide':'Show'}</button>
+        </div>
+        {showPw&&(
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <div className="form-field"><label className="form-label">New Password</label>
+              <input className="form-input" type="password" value={pwForm.next} onChange={e=>setPwForm(f=>({...f,next:e.target.value}))} placeholder="Min 6 characters"/>
+            </div>
+            <div className="form-field"><label className="form-label">Confirm New Password</label>
+              <input className="form-input" type="password" value={pwForm.confirm} onChange={e=>setPwForm(f=>({...f,confirm:e.target.value}))} placeholder="Re-enter new password"/>
+            </div>
+            <button className="btn btn-secondary" onClick={changePw} disabled={saving||!pwForm.next||!pwForm.confirm}>Update Password</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }) {
   const [sla, setSla] = useState(orgSLA || DEFAULT_SLA)
   const [reviewSLA, setReviewSLA] = useState(10080) // 1 week in minutes
