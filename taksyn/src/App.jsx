@@ -3268,16 +3268,7 @@ function UsersView({ user, setAuditLog }) {
       if (roleChanged) logAuditEvent(user, 'member.role_changed', 'member', id, updates.name, (ROLE_LABELS[oldUser?.role]||oldUser?.role||'?')+' → '+(ROLE_LABELS[editForm.role]||editForm.role))
       else logAuditEvent(user, 'member.edited', 'member', id, updates.name, 'Profile updated')
     }
-    // Save positions
-    if(isConfigured()&&editPositions.length>0) {
-      await supabase.from('user_positions').delete().eq('user_id',id).eq('org',user.org).catch(()=>{})
-      const posEntries = editPositions.map((p,i)=>({ id:'POS'+Date.now()+i+Math.random().toString(36).slice(2,5), user_id:id, org:user.org, department:p.department, role:p.role, position_title:p.position_title||'', is_primary:!!p.is_primary, created_at:new Date().toISOString() }))
-      await supabase.from('user_positions').insert(posEntries).catch(()=>{})
-      setUserPositions(prev=>({...prev,[id]:posEntries}))
-    } else if(editPositions.length===0) {
-      await supabase.from('user_positions').delete().eq('user_id',id).eq('org',user.org).catch(()=>{})
-      setUserPositions(prev=>{ const n={...prev}; delete n[id]; return n })
-    }
+    // user_positions table removed — position edits not persisted
     setEditingUser(null)
     setEditForm({})
     setEditCustomDept('')
