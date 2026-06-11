@@ -8188,7 +8188,7 @@ export default function App() {
 
   const markNotifRead = (id) => {
     setNotifications(prev=>prev.map(n=>n.id===id?{...n,read:true}:n))
-    if(isConfigured()) supabase.from('user_notifications').update({read:true}).eq('id',id).catch(()=>{})
+    // if(isConfigured()) supabase.from('user_notifications').update({read:true}).eq('id',id)
   }
 
   const deleteNotif = (id) => {
