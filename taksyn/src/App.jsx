@@ -745,19 +745,15 @@ function AuthView({ onAuth }) {
             supabase.from('invite_links').update({ used_at:new Date().toISOString(), used_by:uid, is_active:false })
               .eq('id', inviteParams.linkId).then(()=>{}).catch(()=>{})
           }
-          // Auto sign-in if Supabase returned a session (email confirmation disabled in project)
-          if (inviteParams && signUpData.session) {
-            const { data:profile } = await supabase.from('profiles').select('*').eq('id',uid).single()
-            if (profile) {
-              const userData = {...profile, email:signUpData.user.email, role:assignedRole, org:orgName}
-              onAuth(userData)
-              return
-            }
+          // Invite flow: show success then redirect to sign-in with email pre-filled
+          if (inviteParams) {
+            setSuccess('Account created successfully!')
+            setLoading(false)
+            setTimeout(()=>{ setInviteParams(null); setMode('login'); setSuccess(''); setPassword(''); setConfirmPassword(''); setAgreeChecked(false) }, 2500)
+            return
           }
         }
-        setSuccess(inviteParams || signupType==='staff'
-          ? 'Account created! Check your email to confirm, then sign in.'
-          : 'Account created! Check your email to confirm, then sign in as your org admin.')
+        setSuccess('Account created! Check your email to confirm, then sign in as your org admin.')
         setMode('login'); setLoading(false)
       } else {
         // Race login against 10s timeout using the main persistent client
