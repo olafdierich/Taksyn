@@ -1772,18 +1772,28 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 <input type="checkbox" id="comp" checked={newTask.compliance} onChange={e=>setNewTask({...newTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
                 <label htmlFor="comp" style={{fontSize:13,cursor:'pointer'}}>Mark as compliance-critical</label>
               </div>
-              {templates.length>0&&(
-                <div className="form-field">
-                  <label className="form-label">From Template <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— pre-fill checklist</span></label>
-                  <select className="form-select" value="" onChange={e=>{ const tmpl=templates.find(t=>t.id===e.target.value); if(tmpl) setNewTask({...newTask,subtasks:tmpl.items.map(it=>({id:Date.now()+Math.random()+'',text:it.text,done:false,mandatory:!!it.mandatory,requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))})}}>
-                    <option value="">— Select template —</option>
-                    {templates.map(t=><option key={t.id} value={t.id}>{t.name} ({t.items?.length||0} items)</option>)}
-                  </select>
+              <div className="form-field">
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                  <label className="form-label" style={{margin:0}}>Checklist Template <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
+                  {selectedTplId&&<span style={{fontSize:11,color:'var(--brand)',cursor:'pointer',fontWeight:500}} onClick={()=>{ setSelectedTplId(''); setNewTask({...newTask,subtasks:[]}) }}>✕ Clear</span>}
                 </div>
-              )}
+                <select className="form-select" value={selectedTplId} onChange={e=>{
+                  const tmpl=templates.find(t=>t.id===e.target.value)
+                  if(tmpl){
+                    setSelectedTplId(e.target.value)
+                    setNewTask({...newTask, priority:tmpl.priority||newTask.priority, subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))})
+                  } else { setSelectedTplId('') }
+                }}>
+                  <option value="">— None (build from scratch) —</option>
+                  {templates.map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}
+                </select>
+                {selectedTplId&&templates.find(t=>t.id===selectedTplId)?.description&&(
+                  <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{templates.find(t=>t.id===selectedTplId).description}</div>
+                )}
+              </div>
               <div className="form-field">
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                  <label className="form-label" style={{margin:0}}>Checklist</label>
+                  <label className="form-label" style={{margin:0}}>Checklist Items</label>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setNewTask({...newTask,subtasks:[...(newTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
                 </div>
                 {(newTask.subtasks||[]).map((s,i)=>(
@@ -1797,7 +1807,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 {!(newTask.subtasks||[]).length&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                <button className="btn btn-secondary" onClick={()=>setShowCreate(false)}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setShowCreate(false); setSelectedTplId('') }}>Cancel</button>
                 <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id)} onClick={createTask}>{creating?'Creating…':'Create Task'}</button>
               </div>
             </div>
