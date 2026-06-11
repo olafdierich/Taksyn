@@ -3166,18 +3166,19 @@ function UsersView({ user, setAuditLog }) {
   const saveCustomIndustry = async () => {
     const name = newIndustry.trim()
     if (!name || allIndustries.includes(name)) return
-    const updated = [...orgCustomDepts, name]
-    setOrgCustomDepts(updated)
+    setOrgCustomDepts(prev=>[...prev, name])
     setNewIndustry('')
     if (isConfigured()) {
-      supabase.from('org_industries').insert({ name, org: user.org, created_by: user.name, created_at: new Date().toISOString() }).catch(()=>{})
+      const orgId = orgsList.find(o=>o.name===user.org)?.id
+      supabase.from('org_industries').insert({ name, organisation_id:orgId||null, created_by: user.name, created_at: new Date().toISOString() }).catch(()=>{})
     }
   }
 
   const removeCustomIndustry = async (name) => {
     setOrgCustomDepts(prev=>prev.filter(d=>d!==name))
     if (isConfigured()) {
-      supabase.from('org_industries').delete().eq('name', name).eq('org', user.org).catch(()=>{})
+      const orgId = orgsList.find(o=>o.name===user.org)?.id
+      if(orgId) supabase.from('org_industries').delete().eq('name', name).eq('organisation_id', orgId).catch(()=>{})
     }
   }
 
