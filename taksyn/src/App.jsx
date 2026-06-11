@@ -4195,7 +4195,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                 </div>
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
                   <button className="btn btn-secondary" onClick={()=>{setViewingMember(null);setShowMemberOrgChange(false);setMemberOrgSearch('')}}>Close</button>
-                  <button className="btn btn-primary" onClick={()=>{setEditingMember(viewingMember);setMemberEditForm({name:viewingMember.name,role:viewingMember.role,department:viewingMember.department||'',industry:viewingMember.industry||'',phone:viewingMember.phone||'',notes:viewingMember.notes||'',email:viewingMember.email||'',org:viewingMember.org||''})}}>✏️ Edit Profile</button>
+                  <button className="btn btn-primary" onClick={()=>openEditMember(viewingMember)}>✏️ Edit Profile</button>
                 </div>
               </div>
             </div>
