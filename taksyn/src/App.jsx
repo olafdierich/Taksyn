@@ -3203,7 +3203,19 @@ function UsersView({ user, setAuditLog }) {
         supabase.from('org_custom_positions').select('position_name').eq('organisation_id',id).order('sort_order',{nullsFirst:false}).order('position_name')
           .then(({data})=>{ setOrgCustomPositions(data?.map(p=>p.position_name)||[]) }).catch(()=>{})
       }).catch(()=>{})
-  },[user.org])
+  },[user.org, showInvite])
+
+  useEffect(()=>{
+    if(!isConfigured()||!inviteOrg.trim()||user.role!=='super_admin') return
+    supabase.from('organisations').select('id').eq('name', inviteOrg.trim()).single()
+      .then(({data}) => {
+        const id = data?.id; if(!id) return
+        supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',id).order('sort_order',{nullsFirst:false}).order('role_name')
+          .then(({data})=>{ setOrgCustomRoles(data||[]) }).catch(()=>{})
+        supabase.from('org_custom_positions').select('position_name').eq('organisation_id',id).order('sort_order',{nullsFirst:false}).order('position_name')
+          .then(({data})=>{ setOrgCustomPositions(data?.map(p=>p.position_name)||[]) }).catch(()=>{})
+      }).catch(()=>{})
+  },[inviteOrg])
 
   useEffect(()=>{
     if(!isConfigured()||!user.id) return
