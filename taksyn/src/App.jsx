@@ -3794,6 +3794,11 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
   const [loadingProfiles, setLoadingProfiles] = useState(false)
   const [showMemberOrgChange, setShowMemberOrgChange] = useState(false)
   const [memberOrgSearch, setMemberOrgSearch] = useState('')
+  const [editOrgIndustries, setEditOrgIndustries] = useState([])
+  const [editOrgCustomRoles, setEditOrgCustomRoles] = useState([])
+  const [editOrgCustomPositions, setEditOrgCustomPositions] = useState([])
+  const [editMemberPositions, setEditMemberPositions] = useState([])
+  const [editMemberNewPos, setEditMemberNewPos] = useState({industry:'',role:'',position:''})
 
   const INDUSTRIES = PRESET_INDUSTRIES
 
