@@ -6029,21 +6029,21 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
 
   const byEntity = (() => {
     const groups = {}
-    filtered.filter(e=>e.entity_id).forEach(e=>{
-      if (!groups[e.entity_id]) groups[e.entity_id] = { id:e.entity_id, name:e.entity_name||e.entity_id, events:[] }
-      groups[e.entity_id].events.push(e)
+    filtered.filter(e=>e.task_id).forEach(e=>{
+      if (!groups[e.task_id]) groups[e.task_id] = { id:e.task_id, name:e.task_title||e.task_id, events:[] }
+      groups[e.task_id].events.push(e)
     })
-    return Object.values(groups).sort((a,b)=>(b.events[0]?.created_at||'')>(a.events[0]?.created_at||'')?1:-1)
+    return Object.values(groups).sort((a,b)=>(b.events[0]?.at||'')>(a.events[0]?.at||'')?1:-1)
   })()
 
   const byPerson = (() => {
     const groups = {}
     filtered.forEach(e=>{
-      const key = e.user_name||'Unknown'
+      const key = e.by||'Unknown'
       if (!groups[key]) groups[key] = { name:key, events:[] }
       groups[key].events.push(e)
     })
-    return Object.values(groups).sort((a,b)=>(b.events[0]?.created_at||'')>(a.events[0]?.created_at||'')?1:-1)
+    return Object.values(groups).sort((a,b)=>(b.events[0]?.at||'')>(a.events[0]?.at||'')?1:-1)
   })()
 
   const EntryRow = ({ e }) => {
