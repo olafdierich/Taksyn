@@ -1318,8 +1318,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     supabase.from('global_industries').select('name').order('name')
       .then(({data})=>{ if(data?.length) setTaskGlobalIndustries(data.map(d=>d.name)) }).catch(()=>{})
     if(user.org) {
-      supabase.from('org_industries').select('name').eq('org',user.org)
-        .then(({data})=>{ if(data?.length) setTaskOrgIndustries(data.map(d=>d.name)) }).catch(()=>{})
+      supabase.from('organisations').select('id').eq('name',user.org).single()
+        .then(({data:orgRow})=>{
+          if(!orgRow?.id) return
+          supabase.from('org_industries').select('name').eq('organisation_id',orgRow.id)
+            .then(({data})=>{ if(data?.length) setTaskOrgIndustries(data.map(d=>d.name)) }).catch(()=>{})
+        }).catch(()=>{})
     }
   },[user.org])
 
