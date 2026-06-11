@@ -1203,9 +1203,9 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
               ? <div style={{fontSize:13,color:'var(--t2)',padding:'8px 0'}}>No recent events</div>
               : recentAudit.map((e,i)=>(
                 <div key={e.id||i} style={{padding:'7px 0',borderBottom:'1px solid var(--border)'}}>
-                  <div style={{fontSize:12,fontWeight:600}}>{ACTION_LABEL[e.action]||e.action}</div>
-                  <div style={{fontSize:11,color:'var(--t2)'}}>{e.user_name||'—'} · {e.organisation_id||'—'}</div>
-                  <div style={{fontSize:10,color:'var(--t3)'}}>{fmtTs(e.created_at)}</div>
+                  <div style={{fontSize:12,fontWeight:600}}>{ACTION_LABEL[e.event_type]||e.event_type}</div>
+                  <div style={{fontSize:11,color:'var(--t2)'}}>{e.by||'—'} · {e.org||'—'}</div>
+                  <div style={{fontSize:10,color:'var(--t3)'}}>{fmtTs(e.at)}</div>
                 </div>
               ))}
         </div>
