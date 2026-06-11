@@ -5628,7 +5628,7 @@ function CompanySettingsView({ user }) {
           {tplList.length===0 ? (
             <div style={{fontSize:13,color:'var(--t2)'}}>No templates yet — create one below.</div>
           ) : tplList.map(t=>(
-            <div key={t.id} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:12,marginBottom:8}}>
+            <div key={t.id} style={{background:'var(--s3)',border:'1px solid '+(editingTpl?.id===t.id?'rgba(99,102,241,.4)':'var(--border)'),borderRadius:10,padding:12,marginBottom:8,transition:'border-color .2s'}}>
               <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}}>
