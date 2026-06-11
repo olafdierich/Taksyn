@@ -4553,16 +4553,10 @@ function PlatformIndustriesView({ user }) {
     const swap = industries[idx+dir]
     if(!swap) return
     const a = industries[idx], b = swap
-    const aOrder = a.sort_order??idx, bOrder = b.sort_order??(idx+dir)
-    await Promise.all([
-      supabase.from('global_industries').update({sort_order:bOrder}).eq('id',a.id),
-      supabase.from('global_industries').update({sort_order:aOrder}).eq('id',b.id)
-    ]).catch(()=>{})
     setIndustries(prev=>{
       const next=[...prev]
-      next[idx]={...a,sort_order:bOrder}
-      next[idx+dir]={...b,sort_order:aOrder}
-      return [...next].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999)||(x.name<y.name?-1:1))
+      next[idx]=b; next[idx+dir]=a
+      return next
     })
   }
 
