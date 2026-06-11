@@ -5152,18 +5152,40 @@ function CompanySettingsView({ user }) {
     }).catch(()=>{})
   },[orgId, tmLoaded])
 
+  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setEditingTpl(null) }
+
+  const startEditTpl = (t) => {
+    setEditingTpl(t)
+    setTplName(t.name||'')
+    setTplDescription(t.description||'')
+    setTplPriority(t.priority||'medium')
+    setTplItems((t.items||[]).length ? t.items.map(it=>({label:it.label||it.text||'',required:!!(it.required||it.mandatory)})) : [{label:'',required:false}])
+    setMsg('')
+  }
+
   const saveTemplate = async () => {
-    const validItems = tplItems.filter(i=>i.text.trim())
+    const validItems = tplItems.filter(i=>(i.label||'').trim())
     if (!tplName.trim() || !validItems.length) { setMsg('✗ Template needs a name and at least one item'); return }
     setTplSaving(true); setMsg('')
-    const entry = { id: Date.now()+'', organisation_id: orgId, name: tplName.trim(), items: JSON.stringify(validItems), created_by: user.name, created_at: new Date().toISOString() }
-    if (isConfigured()) {
-      const { error } = await supabase.from('checklist_templates').insert(entry)
-      if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
+    const items = validItems.map((it,idx)=>({ id:String(idx+1), label:it.label.trim(), required:!!it.required }))
+    if (editingTpl) {
+      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, items:JSON.stringify(items) }
+      if (isConfigured()) {
+        const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id)
+        if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
+      }
+      setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
+      setMsg('✓ Template updated')
+    } else {
+      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      if (isConfigured()) {
+        const { error } = await supabase.from('checklist_templates').insert(entry)
+        if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
+      }
+      setTplList(prev=>[...prev,{...entry,items}])
+      setMsg('✓ Template saved')
     }
-    setTplList(prev=>[...prev,{...entry,items:validItems}])
-    setTplName(''); setTplItems([{text:'',mandatory:false,requirePhoto:false}])
-    setMsg('✓ Template saved')
+    resetTplForm()
     setTplSaving(false)
   }
 
