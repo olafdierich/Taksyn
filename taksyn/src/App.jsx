@@ -3602,7 +3602,7 @@ function UsersView({ user, setAuditLog }) {
           <input className="form-input" placeholder="Search by name or role..." value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{fontSize:12,padding:'5px 10px',maxWidth:220}}/>
         </div>
         {realUsers.length===0
-          ? <div style={{fontSize:13,color:'var(--t2)'}}>No users yet. Invite staff or ask them to sign up at taksyn.vercel.app</div>
+          ? <div style={{fontSize:13,color:'var(--t2)'}}>No workforce members yet. Use the Invite button to add staff.</div>
           : (() => {
               const filtered = [...realUsers]
                 .filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())||u.role?.toLowerCase().includes(userSearch.toLowerCase()))
