@@ -691,9 +691,9 @@ function AuthView({ onAuth }) {
         if (e) throw e
         if (signUpData?.user) {
           const uid = signUpData.user.id
-          await supabase.from('profiles').upsert({ id:uid, name:name.trim(), role:assignedRole, org:orgName, tier:'Growth' })
+          await supabase.from('profiles').upsert({ id:uid, name:name.trim(), role:assignedRole, org:orgName, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) })
           await supabase.from('org_members').upsert(
-            { user_id:uid, org:orgName, role:assignedRole, tier:'Growth' },
+            { user_id:uid, org:orgName, role:assignedRole, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
             { onConflict: 'user_id,org' }
           )
           if (inviteParams?.teamId) {
@@ -703,10 +703,8 @@ function AuthView({ onAuth }) {
               added_by:'invite_link', added_at:new Date().toISOString()
             }).catch(()=>{})
           }
-          // user_positions table removed
           if (inviteParams?.linkId) {
-            // Mark this specific invite link as used by ID
-            supabase.from('invite_links').update({ used_at:new Date().toISOString(), used_by:name.trim() })
+            supabase.from('invite_links').update({ used_at:new Date().toISOString(), used_by:uid, is_active:false })
               .eq('id', inviteParams.linkId).then(()=>{}).catch(()=>{})
           }
           // Auto sign-in if Supabase returned a session (email confirmation disabled in project)
