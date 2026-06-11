@@ -8385,20 +8385,22 @@ export default function App() {
           </div>
         )}
 
-        <div className="topbar">
-          <button className="tb-menu-btn" onClick={()=>{ if(window.innerWidth<=768) setSidebarOpen(!sidebarOpen); else setSidebarCollapsed(!sidebarCollapsed) }}><IC n="menu" s={18}/></button>
+        <div className="topbar" style={user.role==='super_admin'?{background:'#0F172A',borderBottom:'1px solid rgba(255,255,255,.06)'}:{}}>
+          <button className="tb-menu-btn" style={user.role==='super_admin'?{color:'rgba(255,255,255,.5)'}:{}} onClick={()=>{ if(window.innerWidth<=768) setSidebarOpen(!sidebarOpen); else setSidebarCollapsed(!sidebarCollapsed) }}><IC n="menu" s={18}/></button>
           <img src="/logo.jpeg" alt="Taksyn" className="tb-logo" onClick={()=>navigate('dashboard')}/>
-          <div className="tb-sep"/>
-          <span className="tb-org">{user.org||'My Organisation'}</span>
+          {user.role==='super_admin'
+            ? <><div className="tb-sep" style={{background:'rgba(255,255,255,.1)'}}/><span style={{fontSize:12,fontWeight:700,color:'#F59E0B',letterSpacing:'.5px'}}>PLATFORM ADMIN</span></>
+            : <><div className="tb-sep"/><span className="tb-org">{user.org||'My Organisation'}</span></>
+          }
           <div className="tb-space"/>
-          <div className="tb-search"><IC n="search" s={12}/><input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/></div>
-          <button className="tb-icon-btn" onClick={()=>setShowNotifPanel(v=>!v)}>
+          {user.role!=='super_admin'&&<div className="tb-search"><IC n="search" s={12}/><input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/></div>}
+          <button className="tb-icon-btn" style={user.role==='super_admin'?{color:'rgba(255,255,255,.5)'}:{}} onClick={()=>setShowNotifPanel(v=>!v)}>
             <IC n="bell" s={16}/>
             {notifications.filter(n=>!n.read).length>0&&<div className="tb-badge">{notifications.filter(n=>!n.read).length}</div>}
           </button>
-          <div className="tb-user" onClick={()=>{setShowProfile(true);setProfileName(user.name);setProfileMsg('')}}>
+          <div className="tb-user" style={user.role==='super_admin'?{color:'rgba(255,255,255,.8)'}:{}} onClick={()=>{ if(user.role==='super_admin') navigate('my_account'); else { setShowProfile(true);setProfileName(user.name);setProfileMsg('') } }}>
             <Avatar name={user.name} role={user.role} size={26} avatarUrl={user.avatar_url}/>
-            <div><div className="tb-user-name">{user.name?.split(' ')[0]}</div><div className="tb-user-role">{ROLE_LABELS[user.role]}</div></div>
+            <div><div className="tb-user-name" style={user.role==='super_admin'?{color:'rgba(255,255,255,.9)'}:{}}>{user.name?.split(' ')[0]}</div><div className="tb-user-role" style={user.role==='super_admin'?{color:'#F59E0B'}:{}}>{ROLE_LABELS[user.role]}</div></div>
           </div>
         </div>
 
