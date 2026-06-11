@@ -1315,7 +1315,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
   useEffect(()=>{
     if(!isConfigured()) return
-    supabase.from('global_industries').select('name').order('sort_order',{nullsFirst:false}).order('name')
+    supabase.from('global_industries').select('name').order('name')
       .then(({data})=>{ if(data?.length) setTaskGlobalIndustries(data.map(d=>d.name)) }).catch(()=>{})
     if(user.org) {
       supabase.from('org_industries').select('name').eq('org',user.org)
@@ -3183,7 +3183,7 @@ function UsersView({ user, setAuditLog }) {
 
   useEffect(()=>{
     if(!isConfigured()) return
-    supabase.from('global_industries').select('name').order('sort_order',{nullsFirst:false}).order('name')
+    supabase.from('global_industries').select('name').order('name')
       .then(({data})=>{ if(data?.length) setGlobalIndustries(data.map(d=>d.name)) }).catch(()=>{})
   },[])
 
@@ -3937,7 +3937,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',orgName).single()
     const orgId = orgRow?.id
     const [gi,oi,cr,cp,up] = await Promise.all([
-      supabase.from('global_industries').select('name').order('sort_order',{nullsFirst:false}).order('name'),
+      supabase.from('global_industries').select('name').order('name'),
       orgId ? supabase.from('org_industries').select('name').eq('organisation_id',orgId) : Promise.resolve({data:[]}),
       orgId ? supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name') : Promise.resolve({data:[]}),
       orgId ? supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name') : Promise.resolve({data:[]}),
@@ -4517,7 +4517,7 @@ function PlatformIndustriesView({ user }) {
   useEffect(()=>{
     if(!isConfigured()) return
     setLoading(true)
-    supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name')
+    supabase.from('global_industries').select('*').order('name')
       .then(({data})=>{ if(data) setIndustries(data) }).catch(()=>{}).finally(()=>setLoading(false))
   },[])
 
@@ -4646,7 +4646,7 @@ function RolesPositionsView({ user }) {
     if(!isConfigured()) return
     setLoading(true)
     const queries = [
-      supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name'),
+      supabase.from('global_industries').select('*').order('name'),
     ]
     if(!isSuper && user.org) {
       queries.push(
@@ -5143,7 +5143,7 @@ function CompanySettingsView({ user }) {
     if(!orgId||!isConfigured()||tmLoaded) return
     setTmLoaded(true)
     Promise.all([
-      supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name'),
+      supabase.from('global_industries').select('*').order('name'),
       supabase.from('org_industries').select('*').eq('organisation_id',orgId),
       supabase.from('org_custom_roles').select('*').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name'),
       supabase.from('org_custom_positions').select('*').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name')
@@ -7419,7 +7419,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
     if(!isConfigured()) return
     // Load industries
     setIndLoading(true)
-    supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name')
+    supabase.from('global_industries').select('*').order('name')
       .then(({data})=>{ if(data) setIndustries(data) }).catch(()=>{}).finally(()=>setIndLoading(false))
     // Load plans from DB if they exist
     supabase.from('platform_plans').select('*')
