@@ -8861,15 +8861,15 @@ export default function App() {
 
   const handleAuth = (userData) => { setUser(userData); setPage('dashboard') }
 
-  const logout = () => {
+  const logout = async () => {
     if (user && isConfigured()) {
       const loEntry = mkAuditEntry('logout', user, user.org, {})
       supabase.from('audit_log').insert(loEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
       logAuditEvent(user, 'session.logout', 'session', null, null, null)
     }
+    if (isConfigured()) { try { await supabase.auth.signOut() } catch(e) {} }
     clearAuthCache()
     setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
-    if(isConfigured()) supabase.auth.signOut().catch(()=>{})
   }
 
   // Keep sessionStorage in sync so the page is restored after tab eviction or WhatsApp return
