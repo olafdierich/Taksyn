@@ -4566,10 +4566,10 @@ function RolesPositionsView({ user }) {
   const addPosition = async () => {
     const name = newPositionName.trim()
     if(!name||!orgId||!isConfigured()) return
-    if([...DEFAULT_POSITIONS,...customPositions.map(p=>p.name)].find(n=>n.toLowerCase()===name.toLowerCase())) return
+    if([...DEFAULT_POSITIONS,...customPositions.map(p=>p.position_name)].find(n=>n.toLowerCase()===name.toLowerCase())) return
     setSaving(true)
     const maxOrder = customPositions.reduce((m,p)=>Math.max(m,p.sort_order||0),0)
-    const {data,error} = await supabase.from('org_custom_positions').insert({name,organisation_id:orgId,sort_order:maxOrder+1}).select().single()
+    const {data,error} = await supabase.from('org_custom_positions').insert({position_name:name,organisation_id:orgId,sort_order:maxOrder+1}).select().single()
     if(!error&&data) { setCustomPositions(prev=>[...prev,data]); setNewPositionName('') }
     setSaving(false)
   }
@@ -4581,8 +4581,8 @@ function RolesPositionsView({ user }) {
     const name = editPosName.trim()
     if(!name||!editPosId) return
     setSaving(true)
-    await supabase.from('org_custom_positions').update({name}).eq('id',editPosId).catch(()=>{})
-    setCustomPositions(prev=>prev.map(p=>p.id===editPosId?{...p,name}:p))
+    await supabase.from('org_custom_positions').update({position_name:name}).eq('id',editPosId).catch(()=>{})
+    setCustomPositions(prev=>prev.map(p=>p.id===editPosId?{...p,position_name:name}:p))
     setEditPosId(null); setEditPosName(''); setSaving(false)
   }
   const movePos = async (id,dir) => {
