@@ -6863,13 +6863,8 @@ function TeamsView({ user }) {
     const {data} = await supabase.from('team_members').select('*').eq('team_id',teamId).eq('org',user.org)
     if(data) {
       const ids = data.map(m=>m.user_id)
-      const [{data:profiles},{data:positions}] = await Promise.all([
-        supabase.from('profiles').select('*').in('id',ids),
-        ids.length ? supabase.from('user_positions').select('*').in('user_id',ids).eq('org',user.org) : Promise.resolve({data:[]})
-      ])
-      const posMap = {}
-      positions?.forEach(p=>{ if(!posMap[p.user_id]) posMap[p.user_id]=[]; posMap[p.user_id].push(p) })
-      return data.map(m=>({...m, profile:profiles?.find(p=>p.id===m.user_id)||{}, positions:posMap[m.user_id]||[]}))
+      const {data:profiles} = await supabase.from('profiles').select('*').in('id',ids)
+      return data.map(m=>({...m, profile:profiles?.find(p=>p.id===m.user_id)||{}, positions:[]}))
     }
     return []
   }
