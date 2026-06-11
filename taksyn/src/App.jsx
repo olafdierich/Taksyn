@@ -503,6 +503,17 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .guide-accordion-num{font-size:11px;font-weight:700;color:var(--t3);flex-shrink:0;min-width:26px}
 .guide-accordion-title{font-size:13px;font-weight:600;color:var(--text);flex:1}
 .guide-accordion-body{padding:2px 18px 16px 52px;font-size:13px;color:var(--t2);line-height:1.7}
+.guide-steps-list{border-top:1px solid var(--s4)}
+.guide-step-item{border-bottom:1px solid var(--s4)}
+.guide-step-item:last-child{border-bottom:none}
+.guide-step-row{display:flex;align-items:center;gap:10px;padding:10px 18px 10px 28px;cursor:pointer;user-select:none;transition:background .12s}
+.guide-step-row:hover{background:var(--s3)}
+.guide-step-summary{font-size:12px;font-weight:500;color:var(--text);flex:1;line-height:1.4}
+.guide-step-chevron{font-size:8px;color:var(--t3);flex-shrink:0;transition:transform .15s;width:12px;text-align:center;line-height:1}
+.guide-step-detail{padding:0 18px 14px 58px;background:rgba(0,0,0,.018)}
+.guide-step-para{font-size:12px;color:var(--text);line-height:1.65;margin:0 0 8px 0;padding-top:8px}
+.guide-step-found{font-size:11px;color:var(--t2);margin-bottom:6px}
+.guide-step-tip{font-size:11px;color:#00694D;background:rgba(0,168,126,.07);border-left:3px solid var(--brand);padding:6px 10px;border-radius:0 4px 4px 0;margin-top:4px}
 @media print{
   .topbar,.sidebar,.sidebar-overlay,.guide-no-print{display:none!important}
   .app{padding-top:0!important}
@@ -510,9 +521,10 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
   .content{overflow:visible!important;padding:0!important}
   .guide-print-wrapper{padding:20px!important}
   body{background:#fff!important}
-  .guide-chapter{break-inside:avoid;border:1px solid #ddd!important}
-  .guide-accordion-body{display:block!important}
-  .guide-accordion-chevron{transform:rotate(90deg)!important}
+  .guide-chapter{border:1px solid #ddd!important}
+  .guide-accordion-body,.guide-steps-list,.guide-step-detail{display:block!important}
+  .guide-accordion-chevron,.guide-step-chevron{transform:rotate(90deg)!important}
+  .guide-step-item{break-inside:avoid}
   @page{margin:15mm 15mm;size:A4}
 }
 `
