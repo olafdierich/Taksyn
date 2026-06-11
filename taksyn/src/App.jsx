@@ -4465,7 +4465,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
               <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setInviteOrgPositions(prev=>[...prev,{industry:'',role:'',position:''}])}>+ Add another position</button>
             </div>
             <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
-              <button className="btn btn-ghost" onClick={()=>setShowInvite(null)}>Cancel</button>
+              <button className="btn btn-ghost" onClick={()=>{ setShowInvite(null); setInviteOrgPositions([{industry:'',role:'',position:''}]) }}>Cancel</button>
               <button className="btn btn-primary" onClick={sendInviteToOrg} disabled={loading}>{loading?'Sending...':'Send Invite'}</button>
             </div>
           </div>
