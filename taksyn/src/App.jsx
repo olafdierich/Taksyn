@@ -4201,10 +4201,16 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
             </div>
           </div>
         )}
-        {editingMember&&(
-          <div className="modal-overlay" onClick={()=>setEditingMember(null)}>
+        {editingMember&&(()=>{
+          const closeEdit = () => { setEditingMember(null); setOrgChangeSearch(''); setEditMemberPositions([]); setEditOrgIndustries([]); setEditOrgCustomRoles([]); setEditOrgCustomPositions([]) }
+          const industryList = editOrgIndustries.length ? editOrgIndustries : PRESET_INDUSTRIES
+          const DEFAULT_POSITIONS = ['Manager','Supervisor','Staff Member']
+          const allPositions = [...DEFAULT_POSITIONS,...editOrgCustomPositions.filter(p=>!DEFAULT_POSITIONS.includes(p))]
+          const rolesForInd = (ind) => ind ? editOrgCustomRoles.filter(r=>r.industry_name===ind).map(r=>r.role_name) : []
+          return (
+          <div className="modal-overlay" onClick={closeEdit}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
-              <div className="modal-hdr"><div className="modal-title">✏️ Edit Member</div><button className="modal-close" onClick={()=>setEditingMember(null)}>×</button></div>
+              <div className="modal-hdr"><div className="modal-title">✏️ Edit Member</div><button className="modal-close" onClick={closeEdit}>×</button></div>
               <div className="modal-body">
                 <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--s3)',borderRadius:8,marginBottom:14}}>
                   <Avatar name={editingMember.name||'?'} role={editingMember.role} size={36} avatarUrl={editingMember.avatar_url}/>
@@ -4218,9 +4224,15 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                   <input className="form-input" type="email" value={memberEditForm.email||''} onChange={e=>setMemberEditForm({...memberEditForm,email:e.target.value})} placeholder="email@example.com"/>
                   <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates display email — user changes login email via their own Profile</div>
                 </div>
-                <div className="form-field"><label className="form-label">Role</label>
+                <div className="form-field"><label className="form-label">System Role</label>
                   <select className="form-input" value={memberEditForm.role||'worker'} onChange={e=>setMemberEditForm({...memberEditForm,role:e.target.value})}>
                     {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </select>
+                </div>
+                <div className="form-field"><label className="form-label">Industry</label>
+                  <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value})}>
+                    <option value="">— Select —</option>
+                    {industryList.map(k=><option key={k} value={k}>{k}</option>)}
                   </select>
                 </div>
                 <div className="form-field"><label className="form-label">Organisation</label>
@@ -4232,24 +4244,67 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                     <div style={{fontSize:11,color:'#F59E0B',marginTop:3}}>⚠️ Moving from <strong>{editingMember?.org}</strong> to <strong>{memberEditForm.org}</strong></div>
                   )}
                 </div>
-                <div className="form-field">
-                  <label className="form-label">Industry</label>
-                  <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value})}>
-                    <option value="">— Select —</option>
-                    {PRESET_INDUSTRIES.map(k=><option key={k} value={k}>{k}</option>)}
-                  </select>
+                <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                    <label className="form-label" style={{margin:0}}>Positions</label>
+                    <span style={{fontSize:10,color:'var(--t2)'}}>Multiple roles across industries</span>
+                  </div>
+                  {editMemberPositions.map((pos,i)=>{
+                    const posRoles = rolesForInd(pos.department||pos.industry||'')
+                    return (
+                      <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
+                        <select className="form-select" style={{fontSize:12}} value={pos.department||pos.industry||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,department:e.target.value,industry:e.target.value,role:'worker'}:p))}>
+                          <option value="">— Industry —</option>
+                          {industryList.map(d=><option key={d} value={d}>{d}</option>)}
+                        </select>
+                        {posRoles.length>0
+                          ? <select className="form-select" style={{fontSize:12}} value={pos.position_title||pos.role_name||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,position_title:e.target.value}:p))}>
+                              <option value="">— Role —</option>
+                              {posRoles.map(r=><option key={r} value={r}>{r}</option>)}
+                            </select>
+                          : <input className="form-input" style={{fontSize:12}} placeholder="Role…" value={pos.position_title||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,position_title:e.target.value}:p))}/>
+                        }
+                        <select className="form-select" style={{fontSize:12}} value={pos.role||'worker'} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
+                          {allPositions.map(p=><option key={p} value={p==='Manager'?'manager':p==='Supervisor'?'supervisor':'worker'}>{p}</option>)}
+                        </select>
+                        <button style={{padding:'4px 8px',borderRadius:6,border:'1px solid var(--border)',background:'transparent',color:'var(--red)',cursor:'pointer',fontSize:13,lineHeight:1}} onClick={()=>setEditMemberPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
+                      </div>
+                    )
+                  })}
+                  <div style={{background:'var(--s3)',borderRadius:8,padding:10,marginTop:6}}>
+                    <div style={{fontSize:11,fontWeight:600,color:'var(--t2)',marginBottom:8}}>Add Position</div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,alignItems:'center'}}>
+                      <select className="form-select" style={{fontSize:12}} value={editMemberNewPos.industry} onChange={e=>setEditMemberNewPos(p=>({...p,industry:e.target.value,role:''}))}>
+                        <option value="">— Industry —</option>
+                        {industryList.map(d=><option key={d} value={d}>{d}</option>)}
+                      </select>
+                      {rolesForInd(editMemberNewPos.industry).length>0
+                        ? <select className="form-select" style={{fontSize:12}} value={editMemberNewPos.role} onChange={e=>setEditMemberNewPos(p=>({...p,role:e.target.value}))}>
+                            <option value="">— Role —</option>
+                            {rolesForInd(editMemberNewPos.industry).map(r=><option key={r} value={r}>{r}</option>)}
+                          </select>
+                        : <input className="form-input" style={{fontSize:12}} placeholder="Role…" value={editMemberNewPos.role} onChange={e=>setEditMemberNewPos(p=>({...p,role:e.target.value}))}/>
+                      }
+                      <select className="form-select" style={{fontSize:12}} value={editMemberNewPos.position} onChange={e=>setEditMemberNewPos(p=>({...p,position:e.target.value}))}>
+                        <option value="">— Position —</option>
+                        {allPositions.map(p=><option key={p} value={p==='Manager'?'manager':p==='Supervisor'?'supervisor':'worker'}>{p}</option>)}
+                      </select>
+                      <button className="btn btn-secondary btn-sm" disabled={!editMemberNewPos.industry} onClick={()=>{ if(!editMemberNewPos.industry) return; setEditMemberPositions(prev=>[...prev,{department:editMemberNewPos.industry,industry:editMemberNewPos.industry,role:editMemberNewPos.position||'worker',position_title:editMemberNewPos.role,is_primary:prev.length===0}]); setEditMemberNewPos({industry:'',role:'',position:''}) }}>+ Add</button>
+                    </div>
+                  </div>
                 </div>
                 <div className="form-field"><label className="form-label">Notes</label>
                   <textarea className="comment-box" style={{minHeight:60}} value={memberEditForm.notes||''} onChange={e=>setMemberEditForm({...memberEditForm,notes:e.target.value})} placeholder="Notes about this member..."/>
                 </div>
-                <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                  <button className="btn btn-secondary" onClick={()=>{setEditingMember(null);setOrgChangeSearch('')}}>Cancel</button>
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
+                  <button className="btn btn-secondary" onClick={closeEdit}>Cancel</button>
                   <button className="btn btn-primary" disabled={!memberEditForm.name?.trim()} onClick={saveMemberEdit}>Save Changes</button>
                 </div>
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
       </div>
     )
   }
