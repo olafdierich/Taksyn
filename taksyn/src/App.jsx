@@ -4644,29 +4644,17 @@ function RolesPositionsView({ user }) {
         supabase.from('organisations').select('id').eq('name',user.org).single()
       )
     }
-    Promise.all(queries).then(([gi, orgRow, oi])=>{
-      // Global industries
+    Promise.all(queries).then(([gi, orgRow])=>{
       if(gi.data) {
         setGlobalIndustryObjs(gi.data)
         if(isSuper) setGlobalList(gi.data)
       }
-      // Org data
       if(orgRow?.data?.id) {
         const id = orgRow.data.id
         setOrgId(id)
-        // Also try loading org_industries by organisation_id in case org column is missing
         supabase.from('org_industries').select('*').eq('organisation_id',id)
-          .then(({data:d2})=>{
-            const byId = d2||[]
-            setOrgIndustryObjs(prev=>{
-              const byOrg = oi?.data||[]
-              // Merge both, dedup by name
-              const merged = [...byOrg,...byId.filter(r=>!byOrg.some(x=>x.name===r.name))]
-              return merged
-            })
-          }).catch(()=>{})
+          .then(({data})=>{ if(data) setOrgIndustryObjs(data) }).catch(()=>{})
       }
-      if(oi?.data) setOrgIndustryObjs(oi.data)
     }).catch(()=>{}).finally(()=>setLoading(false))
   },[user.org])
 
