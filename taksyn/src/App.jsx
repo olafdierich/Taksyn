@@ -214,20 +214,18 @@ const logAuditEvent = (user, action, entityType=null, entityId=null, entityName=
 const mkAuditEntry = (event_type, user, org, detail={}, task_id=null, task_title=null, old_value=null, new_value=null) => ({
   id: Date.now()+'-'+Math.random().toString(36).slice(2,5),
   event_type,
-  task_id,
+  taskId: task_id,
+  taskTitle: task_title,
   task_title,
   by: user?.name||'',
-  by_role: user?.role||'',
+  byRole: user?.role||'',
   org: org||user?.org||'',
   at: new Date().toISOString(),
-  detail: detail||{},
+  details: detail ? (typeof detail==='object' ? JSON.stringify(detail) : String(detail)) : null,
   old_value: old_value!=null ? String(old_value) : null,
   new_value: new_value!=null ? String(new_value) : null,
-  is_intervention: user?.role==='super_admin',
-  intervention_reason: detail?.interventionReason||null,
-  is_checklist: event_type==='checklist_toggled',
-  checklist_action: detail?.action||null,
-  checklist_item: detail?.item||null,
+  isIntervention: user?.role==='super_admin',
+  interventionReason: detail?.interventionReason||null,
 })
 
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
