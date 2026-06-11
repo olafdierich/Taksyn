@@ -4579,23 +4579,28 @@ function PlatformIndustriesView({ user }) {
 
 function RolesPositionsView({ user }) {
   const isSuper = user.role==='super_admin'
-  const [activeTab, setActiveTab] = useState(isSuper?'global_industries':'roles')
+  const [activeTab, setActiveTab] = useState('roles')
   const [orgId, setOrgId] = useState(null)
-  // Roles state
-  const [globalIndustries, setGlobalIndustries] = useState([])
-  const [orgCustomIndustries, setOrgCustomIndustries] = useState([])
+  // Industries
+  const [globalIndustryObjs, setGlobalIndustryObjs] = useState([]) // [{id,name}]
+  const [orgIndustryObjs, setOrgIndustryObjs] = useState([])       // [{id,name,org,organisation_id}]
   const [selectedIndustry, setSelectedIndustry] = useState('')
+  const [showAddInd, setShowAddInd] = useState(false)
+  const [newIndName, setNewIndName] = useState('')
+  const [editIndId, setEditIndId] = useState(null)
+  const [editIndName, setEditIndName] = useState('')
+  // Roles
   const [roles, setRoles] = useState([])
   const [newRoleName, setNewRoleName] = useState('')
   const [editRoleId, setEditRoleId] = useState(null)
   const [editRoleName, setEditRoleName] = useState('')
-  // Positions state
-  const DEFAULT_POSITIONS = ['Staff Member','Supervisor','Manager']
+  // Positions
+  const DEFAULT_POSITIONS = ['Manager','Supervisor','Staff Member']
   const [customPositions, setCustomPositions] = useState([])
   const [newPositionName, setNewPositionName] = useState('')
   const [editPosId, setEditPosId] = useState(null)
   const [editPosName, setEditPosName] = useState('')
-  // Global industries state (super admin)
+  // Global industries (super admin tab)
   const [globalList, setGlobalList] = useState([])
   const [newGlobalName, setNewGlobalName] = useState('')
   const [editGlobalId, setEditGlobalId] = useState(null)
@@ -4606,19 +4611,39 @@ function RolesPositionsView({ user }) {
   useEffect(()=>{
     if(!isConfigured()) return
     setLoading(true)
-    supabase.from('global_industries').select('name').order('sort_order',{nullsFirst:false}).order('name')
-      .then(({data})=>{ if(data?.length) setGlobalIndustries(data.map(d=>d.name)) }).catch(()=>{})
-    if(!isSuper&&user.org) {
-      supabase.from('organisations').select('id').eq('name',user.org).single()
-        .then(({data})=>{ if(data?.id) setOrgId(data.id) }).catch(()=>{})
-      supabase.from('org_industries').select('name').eq('org',user.org)
-        .then(({data})=>{ if(data) setOrgCustomIndustries(data.map(d=>d.name)) }).catch(()=>{})
+    const queries = [
+      supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name'),
+    ]
+    if(!isSuper && user.org) {
+      queries.push(
+        supabase.from('organisations').select('id').eq('name',user.org).single(),
+        supabase.from('org_industries').select('*').eq('org',user.org)
+      )
     }
-    if(isSuper) {
-      supabase.from('global_industries').select('*').order('sort_order',{nullsFirst:false}).order('name')
-        .then(({data})=>{ if(data) setGlobalList(data) }).catch(()=>{})
-    }
-    setLoading(false)
+    Promise.all(queries).then(([gi, orgRow, oi])=>{
+      // Global industries
+      if(gi.data) {
+        setGlobalIndustryObjs(gi.data)
+        if(isSuper) setGlobalList(gi.data)
+      }
+      // Org data
+      if(orgRow?.data?.id) {
+        const id = orgRow.data.id
+        setOrgId(id)
+        // Also try loading org_industries by organisation_id in case org column is missing
+        supabase.from('org_industries').select('*').eq('organisation_id',id)
+          .then(({data:d2})=>{
+            const byId = d2||[]
+            setOrgIndustryObjs(prev=>{
+              const byOrg = oi?.data||[]
+              // Merge both, dedup by name
+              const merged = [...byOrg,...byId.filter(r=>!byOrg.some(x=>x.name===r.name))]
+              return merged
+            })
+          }).catch(()=>{})
+      }
+      if(oi?.data) setOrgIndustryObjs(oi.data)
+    }).catch(()=>{}).finally(()=>setLoading(false))
   },[user.org])
 
   useEffect(()=>{
