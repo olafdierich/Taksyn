@@ -3249,6 +3249,7 @@ function UsersView({ user, setAuditLog }) {
       // Step 1: get own profile to read org as a name (profiles.org is always a name, never an ID)
       const {data:myProfile} = await supabase.from('profiles').select('org').eq('id', user.id).single().catch(()=>({data:null}))
       const orgName = myProfile?.org || user.org
+      console.log('DEBUG orgName value is:', JSON.stringify(orgName))
       if(!orgName) return
 
       // Step 2: primary — all profiles matching org name
