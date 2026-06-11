@@ -4805,9 +4805,7 @@ function RolesPositionsView({ user }) {
   const moveGlobal = async (id,dir) => {
     const idx=globalList.findIndex(i=>i.id===id); if(idx<0) return
     const swap=globalList[idx+dir]; if(!swap) return
-    const a=globalList[idx],b=swap,aO=a.sort_order??idx,bO=b.sort_order??(idx+dir)
-    await Promise.all([supabase.from('global_industries').update({sort_order:bO}).eq('id',a.id),supabase.from('global_industries').update({sort_order:aO}).eq('id',b.id)]).catch(()=>{})
-    setGlobalList(prev=>{const n=[...prev];n[idx]={...a,sort_order:bO};n[idx+dir]={...b,sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))})
+    setGlobalList(prev=>{const n=[...prev];n[idx]=swap;n[idx+dir]=prev[idx];return n})
   }
 
   const TABS = isSuper
