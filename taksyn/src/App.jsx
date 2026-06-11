@@ -3223,9 +3223,7 @@ function UsersView({ user, setAuditLog }) {
       try {
         await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
       } catch(err) { console.error('Remove member org_members error:', err) }
-      try {
-        await supabase.from('user_positions').delete().eq('user_id',id).eq('org',user.org)
-      } catch(err) { console.error('Remove member user_positions error:', err) }
+      // user_positions table removed
       try {
         await supabase.from('tasks').update({ assigned_user_id: null })
           .eq('assigned_user_id', id).eq('org', user.org)
