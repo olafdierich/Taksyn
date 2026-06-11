@@ -3488,7 +3488,7 @@ function UsersView({ user, setAuditLog }) {
       {showInvite&&(
         <div className="modal-overlay" onClick={()=>setShowInvite(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-hdr"><div className="modal-title">Invite Team Member</div><button className="modal-close" onClick={()=>setShowInvite(false)}>×</button></div>
+            <div className="modal-hdr"><div className="modal-title">Invite to Workforce</div><button className="modal-close" onClick={()=>setShowInvite(false)}>×</button></div>
             <div className="modal-body">
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Emma Wilson"/></div>
