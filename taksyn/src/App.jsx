@@ -1594,6 +1594,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     // Close and reset immediately — no await before this
     setShowCreate(false)
     setUserSearch('')
+    setSelectedTplId('')
     setNewTask({title:'',category:'Hospitality',department:'',industry:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[]})
     // Do the async work in background
     const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
