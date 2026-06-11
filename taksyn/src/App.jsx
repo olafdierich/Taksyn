@@ -5254,8 +5254,7 @@ function CompanySettingsView({ user }) {
     const name=tmNewGlobalName.trim(); if(!name) return
     if(tmGlobalList.find(i=>i.name.toLowerCase()===name.toLowerCase())) return
     setTmSaving(true)
-    const maxO=tmGlobalList.reduce((m,i)=>Math.max(m,i.sort_order||0),0)
-    const {data,error}=await supabase.from('global_industries').insert({name,sort_order:maxO+1,created_by:user.name,created_at:new Date().toISOString()}).select().single()
+    const {data,error}=await supabase.from('global_industries').insert({name,created_by:user.name,created_at:new Date().toISOString()}).select().single()
     if(!error&&data){setTmGlobalList(prev=>[...prev,data]);setTmGlobalInds(prev=>[...prev,data]);setTmNewGlobalName('')}
     setTmSaving(false)
   }
