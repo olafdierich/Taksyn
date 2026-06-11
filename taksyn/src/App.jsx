@@ -3219,39 +3219,45 @@ function UsersView({ user, setAuditLog }) {
   },[user.org])
 
   useEffect(()=>{
-    if(!isConfigured()||!user.org) return
+    if(!isConfigured()||!user.id) return
     if(user.role==='super_admin') {
       supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(data) }).catch(()=>{})
       return
     }
-    const applyProfiles = async (profileList) => {
-      const {data:positions} = await supabase.from('user_positions').select('*').eq('org', user.org).catch(()=>({data:[]}))
+    const applyProfiles = async (profileList, orgName) => {
+      const {data:positions} = await supabase.from('user_positions').select('*').eq('org', orgName).catch(()=>({data:[]}))
       const posMap = {}
       positions?.forEach(p=>{ if(!posMap[p.user_id]) posMap[p.user_id]=[]; posMap[p.user_id].push(p) })
       setUserPositions(posMap)
-      const merged = profileList.map(p=>({...p, id:p.id, role:p.role||'worker', org:p.org||user.org}))
+      const merged = profileList.map(p=>({...p, id:p.id, role:p.role||'worker', org:p.org||orgName}))
       setRealUsers(merged)
       const toMigrate = merged.filter(u=>u.department&&!(posMap[u.id]?.length))
       if(toMigrate.length>0) {
-        const entries = toMigrate.map(u=>({ id:'POS'+Date.now()+Math.random().toString(36).slice(2,5), user_id:u.id, org:user.org, department:u.department, role:u.role||'worker', position_title:'', is_primary:true, created_at:new Date().toISOString() }))
+        const entries = toMigrate.map(u=>({ id:'POS'+Date.now()+Math.random().toString(36).slice(2,5), user_id:u.id, org:orgName, department:u.department, role:u.role||'worker', position_title:'', is_primary:true, created_at:new Date().toISOString() }))
         supabase.from('user_positions').insert(entries).then(()=>{
           setUserPositions(prev=>{ const m={...prev}; entries.forEach(e=>{ if(!m[e.user_id]) m[e.user_id]=[]; m[e.user_id].push(e) }); return m })
         }).catch(()=>{})
       }
     }
-    // Primary: profiles table (org stored as name — most reliable)
-    supabase.from('profiles').select('*').eq('org', user.org)
-      .then(async ({data:profilesByOrg}) => {
+    // Fetch current user's own profile to get their org name.
+    // profiles.org is always the name (e.g. 'Kemrose'), never the ID.
+    // user.org may have been set from org_members.org which can store an ID.
+    supabase.from('profiles').select('org').eq('id', user.id).single()
+      .then(async ({data:myProfile}) => {
+        const orgName = myProfile?.org || user.org
+        if(!orgName) return
+        // Primary: all profiles in this org by name
+        const {data:profilesByOrg} = await supabase.from('profiles').select('*').eq('org', orgName)
         if(profilesByOrg?.length) {
-          await applyProfiles(profilesByOrg)
+          await applyProfiles(profilesByOrg, orgName)
           return
         }
         // Fallback: org_members (handles users whose profile.org may differ)
         const {data:members} = await supabase.from('org_members').select('user_id,role,org,tier').eq('org', user.org)
         if(members?.length) {
           const {data:profilesById} = await supabase.from('profiles').select('*').in('id', members.map(m=>m.user_id))
-          const merged = members.map(m=>{ const p=profilesById?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:m.org||user.org,tier:m.tier} })
-          await applyProfiles(merged)
+          const merged = members.map(m=>{ const p=profilesById?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:m.org||orgName,tier:m.tier} })
+          await applyProfiles(merged, orgName)
         }
       }).catch(()=>{})
   },[user.org])
