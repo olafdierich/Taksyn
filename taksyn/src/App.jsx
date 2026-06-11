@@ -8469,6 +8469,43 @@ function GettingStartedGuide({ user, setPage }) {
         <div style={{fontSize:12,color:'var(--t2)',flex:1}}>Need more help? Go to <strong>Help &amp; Support</strong> to raise a ticket and the Taksyn support team will respond within 24 hours.</div>
         <button className="btn btn-secondary btn-sm guide-no-print" style={{fontSize:11}} onClick={()=>setPage('help')}>Go to Support →</button>
       </div>
+
+      {/* Print-only div — always fully expanded, independent of accordion state */}
+      <div id="guide-print-content">
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',borderBottom:'2pt solid #00A87E',paddingBottom:14,marginBottom:28}}>
+          <div>
+            <div style={{fontSize:22,fontWeight:900,color:'#00A87E',letterSpacing:'-.5px'}}>Taksyn</div>
+            <div style={{fontSize:16,fontWeight:800,color:'#1A2033',marginTop:6}}>{guide.title}</div>
+            <div style={{fontSize:11,color:'#5A6478',marginTop:4}}>{guide.chapters.length} chapters · {totalTopics} topics · {totalSteps} steps</div>
+          </div>
+          <div style={{fontSize:10,color:'#9AA3B2',textAlign:'right',paddingTop:4}}>
+            Generated {new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}
+          </div>
+        </div>
+
+        {guide.chapters.map((chapter) => (
+          <div key={chapter.num} className="guide-print-chapter">
+            <div style={{fontSize:15,fontWeight:800,color:'#1A2033',borderBottom:'1pt solid #E8EBF0',paddingBottom:8,marginBottom:16}}>
+              Chapter {chapter.num}: {chapter.title}
+            </div>
+            {chapter.subChapters.map(sc => (
+              <div key={sc.id} style={{marginBottom:20}}>
+                <div style={{fontSize:13,fontWeight:700,color:'#1A2033',borderLeft:'3pt solid '+guide.color,paddingLeft:10,marginBottom:12}}>
+                  {sc.id} — {sc.title}
+                </div>
+                {sc.steps.map((step, si) => (
+                  <div key={si} className="guide-print-step" style={{marginBottom:12,paddingLeft:16}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'#1A2033',marginBottom:4}}>{si+1}. {step.summary}</div>
+                    <div style={{fontSize:11,color:'#333',lineHeight:1.65,marginBottom:4}}>{step.detail}</div>
+                    <div style={{fontSize:10,color:'#5A6478',marginBottom:3}}>📍 <strong>Found in:</strong> {step.foundIn}</div>
+                    {step.tip && <div style={{fontSize:10,color:'#00694D',borderLeft:'2pt solid #00A87E',paddingLeft:7,marginTop:3}}>💡 <strong>Tip:</strong> {step.tip}</div>}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
