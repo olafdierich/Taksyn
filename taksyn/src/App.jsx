@@ -5112,12 +5112,14 @@ function CompanySettingsView({ user }) {
       }
       setLoading(false)
     })
-    if (isConfigured()) {
-      supabase.from('checklist_templates').select('*').eq('org',user.org).order('name')
-        .then(({data})=>{ if(data) setTplList(data.map(t=>({...t,items:parseSafe(t.items)}))) })
-        .catch(()=>{})
-    }
   }, [user.org])
+
+  useEffect(()=>{
+    if(!isConfigured()||!orgId) return
+    supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
+      .then(({data})=>{ if(data) setTplList(data.map(t=>({...t,items:parseSafe(t.items)}))) })
+      .catch(()=>{})
+  },[orgId])
 
   useEffect(()=>{
     if(!orgId||!isConfigured()||tmLoaded) return
