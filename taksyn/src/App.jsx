@@ -3863,6 +3863,13 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       } else {
         await supabase.from('org_members').update({ role: memberEditForm.role }).eq('user_id', editingMember.id).eq('org', editingMember.org)
       }
+      // Save positions
+      const posOrg = orgChanged ? newOrg : (editingMember.org || selectedOrgView?.name)
+      await supabase.from('user_positions').delete().eq('user_id',editingMember.id).eq('org',posOrg).catch(()=>{})
+      if(editMemberPositions.length>0) {
+        const entries = editMemberPositions.map((p,i)=>({ id:'POS'+Date.now()+i+Math.random().toString(36).slice(2,5), user_id:editingMember.id, org:posOrg, department:p.department||p.industry||'', role:p.role||'worker', position_title:p.position_title||p.position||'', is_primary:!!p.is_primary, created_at:new Date().toISOString() }))
+        await supabase.from('user_positions').insert(entries).catch(()=>{})
+      }
     }
     if (orgChanged) {
       setOrgMembers(prev=>prev.filter(m=>m.id!==editingMember.id))
@@ -3871,6 +3878,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     }
     setViewingMember(null)
     setEditingMember(null); setMemberEditForm({}); setOrgChangeSearch('')
+    setEditMemberPositions([]); setEditOrgIndustries([]); setEditOrgCustomRoles([]); setEditOrgCustomPositions([])
   }
 
   const loadAllProfiles = async () => {
