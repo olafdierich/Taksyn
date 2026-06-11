@@ -1086,8 +1086,8 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
     supabase.from('organisations').select('id',{count:'exact',head:true}).then(({count})=>setStats(p=>({...p,orgs:count||0}))).catch(()=>{})
     supabase.from('profiles').select('id',{count:'exact',head:true}).then(({count})=>setStats(p=>({...p,users:count||0}))).catch(()=>{})
     setAuditLoading(true)
-    supabase.from('audit_logs').select('id,action,user_name,organisation_id,created_at')
-      .order('created_at',{ascending:false}).limit(10)
+    supabase.from('audit_log').select('id,event_type,by,org,at')
+      .order('at',{ascending:false}).limit(10)
       .then(({data})=>{ if(data) setRecentAudit(data) }).catch(()=>{}).finally(()=>setAuditLoading(false))
   },[])
 
