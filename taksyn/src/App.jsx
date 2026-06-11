@@ -524,18 +524,15 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
   .guide-step-found,.guide-step-tip{font-size:12px}
   .guide-step-tip{padding:8px 12px}
 }
+#guide-print-content{display:none}
 @media print{
-  .topbar,.sidebar,.sidebar-overlay,.guide-no-print{display:none!important}
-  .app{padding-top:0!important}
-  .app-inner{display:block!important}
-  .content{overflow:visible!important;padding:0!important}
-  .guide-print-wrapper{padding:20px!important}
-  body{background:#fff!important}
-  .guide-chapter{border:1px solid #ddd!important}
-  .guide-accordion-body,.guide-steps-list,.guide-step-detail{display:block!important}
-  .guide-accordion-chevron,.guide-step-chevron{transform:rotate(90deg)!important}
-  .guide-step-item{break-inside:avoid}
-  @page{margin:15mm 15mm;size:A4}
+  body,body *{visibility:hidden}
+  #guide-print-content{display:block!important;visibility:visible;position:absolute;top:0;left:0;width:100%;padding:15mm;background:#fff;font-family:'DM Sans',sans-serif}
+  #guide-print-content *{visibility:visible}
+  .guide-print-chapter{page-break-before:always;break-before:always}
+  .guide-print-chapter:first-child{page-break-before:avoid;break-before:avoid}
+  .guide-print-step{break-inside:avoid;page-break-inside:avoid}
+  @page{margin:15mm;size:A4}
 }
 `
 
