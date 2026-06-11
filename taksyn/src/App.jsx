@@ -604,6 +604,7 @@ function AuthView({ onAuth }) {
   const [success, setSuccess] = useState('')
   const [orgChoices, setOrgChoices] = useState(null)
   const [showPw, setShowPw] = useState(false)
+  const [showPw1, setShowPw1] = useState(false)
   const [pendingAuthUser, setPendingAuthUser] = useState(null)
   const [inviteToken, setInviteToken] = useState(null)
   const [newPassword, setNewPassword] = useState('')
