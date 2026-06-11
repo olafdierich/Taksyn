@@ -5160,7 +5160,7 @@ function CompanySettingsView({ user }) {
     const name=tmNewIndName.trim(); if(!name||!orgId) return
     if(tmAllIndNames().includes(name.toLowerCase())) return
     setTmSaving(true)
-    const {data,error}=await supabase.from('org_industries').insert({name,org:user.org,organisation_id:orgId,created_by:user.name,created_at:new Date().toISOString()}).select().single()
+    const {data,error}=await supabase.from('org_industries').insert({name,organisation_id:orgId,created_by:user.name,created_at:new Date().toISOString()}).select().single()
     if(!error&&data){setTmOrgInds(prev=>[...prev,data]);setTmNewIndName('')}
     else if(error) setMsg('✗ '+error.message)
     setTmSaving(false)
