@@ -8079,35 +8079,30 @@ const GUIDE_CONTENT = {
     title: 'Getting Started as Client Admin',
     icon: '🏢',
     color: '#00A87E',
-    sections: [
-      { num:1, icon:'🏢', title:'Set up your organisation', steps:[
-        'Complete your organisation profile — go to Company Settings to add your name, industry, logo, and contact details.',
-        'Set your data retention plan in the Plans section.',
-        'Configure auto logout timeout in Company Settings under Session Timeout.',
+    chapters: [
+      { num:1, title:'Setting Up Your Organisation', subChapters:[
+        { id:'1.1', title:'Complete your organisation profile', body:'Start by going to Settings and filling in your organisation details including your name, industry, logo, address, and contact information. A complete profile helps your team identify the organisation and ensures your reports and exports are correctly branded. Aim to complete at least 80% of the profile before inviting your first team member.' },
+        { id:'1.2', title:'Configure your settings', body:'In Settings you can configure key options including your auto logout timeout, data retention period, and notification preferences. The auto logout setting is especially important for shared devices — we recommend 10 to 30 minutes for most hospitality and care environments. Your data retention period is set automatically based on your subscription plan.' },
+        { id:'1.3', title:'Set up your industries, roles and positions', body:'Go to Settings > Roles & Positions to define the industries, roles and positions relevant to your organisation. For example a hotel might add Housekeeping as an industry with roles like Room Attendant and Laundry Staff. These will appear as dropdown options when you invite team members, making it easy to assign the right role to each person.' },
       ]},
-      { num:2, icon:'👥', title:'Build your workforce', steps:[
-        'Go to Roles & Positions to define your industries, roles, and positions.',
-        'Invite team members via WhatsApp or Email from the Workforce section.',
-        'Review and edit member details after they join.',
+      { num:2, title:'Building Your Workforce', subChapters:[
+        { id:'2.1', title:'Invite your first team member', body:'Go to the Workforce section and click Invite via WhatsApp or Invite via Email. Fill in the team member\'s name, email, phone number, industry, role and position. The system will generate a personalised invite link that takes them directly to a pre-filled registration page — they only need to create a password and they are in.' },
+        { id:'2.2', title:'Managing your workforce', body:'Once team members have joined you can view them all in the Workforce section grouped by role. You can edit their details, change their role or position, or remove them if needed. All changes are recorded in the Audit Log for compliance purposes.' },
+        { id:'2.3', title:'Staff with multiple roles', body:'Some staff work across multiple roles — for example a staff member who works in both housekeeping and food and beverage. You can assign multiple industry, role and position combinations to the same person. When they log in they can select which role they are working in for that session.' },
       ]},
-      { num:3, icon:'✅', title:'Create your first task', steps:[
-        'Click New Task from the Tasks section.',
-        'Assign it to a team member with a due date and priority.',
-        'Optionally attach a checklist template to the task.',
+      { num:3, title:'Creating and Managing Tasks', subChapters:[
+        { id:'3.1', title:'Create your first task', body:'Go to Tasks and click New Task. Give the task a clear title, assign it to a team member, set a due date and priority level. You can also add a description with specific instructions. Tasks appear instantly on the assigned member\'s dashboard so they can start work straight away.' },
+        { id:'3.2', title:'Using checklist templates', body:'When creating a task you can select a checklist template to pre-fill the task with a set of required steps. For example selecting the Hotel Room Cleaning template will add all the standard cleaning steps automatically. You can add, remove or modify items before saving the task.' },
+        { id:'3.3', title:'Approving completed tasks', body:'When a team member completes a task it moves to Awaiting Review. Open the task to see their photo evidence and completed checklist items with timestamps. You can approve the task or reject it with a reason — the team member will be notified either way.' },
       ]},
-      { num:4, icon:'📋', title:'Set up checklist templates', steps:[
-        'Go to Company Settings > Checklist Templates.',
-        'Create templates for recurring tasks — for example room cleaning or safety checks.',
-        'Templates can be reused across multiple tasks.',
+      { num:4, title:'Monitoring and Compliance', subChapters:[
+        { id:'4.1', title:'Using the Audit Log', body:'The Audit Log records every action taken in your organisation — task created, completed, approved, rejected, members added or removed. This is your compliance record. Even if a task is deleted the audit log entry remains permanently as evidence. You can filter by date, user or action type.' },
+        { id:'4.2', title:'Performance reports', body:'The Performance section shows you a breakdown of each team member\'s task completion rate, on-time percentage, and average response time. You can view weekly, monthly or quarterly data and export reports as PDF for record keeping or management meetings.' },
+        { id:'4.3', title:'Data retention and privacy', body:'Your data is retained automatically according to your subscription plan. You do not need to manage this manually — the system handles it. If you need longer retention for compliance purposes such as NDIS or aged care regulations, you can request an upgrade in Settings > Data & Privacy.' },
       ]},
-      { num:5, icon:'📊', title:'Monitor your team', steps:[
-        'Use the Performance section to track task completion rates across your team.',
-        'Use the Audit Log to see a full history of all actions taken in your organisation.',
-        'Use Reports to filter, view, and export data as a PDF.',
-      ]},
-      { num:6, icon:'🎫', title:'Support', steps:[
-        'Use Help & Support to raise a ticket if you need assistance.',
-        'Taksyn support responds within 24 hours.',
+      { num:5, title:'Support', subChapters:[
+        { id:'5.1', title:'Raising a support ticket', body:'If you encounter any issues or have questions, go to the Support section and click New Ticket. Describe the issue in as much detail as possible and our team will respond within 24 hours. You can track the status of your ticket and add follow-up messages at any time.' },
+        { id:'5.2', title:'Getting help from your Taksyn administrator', body:'Your Taksyn platform administrator (super admin) can access your organisation settings to help resolve technical issues. They cannot see your task content, photos or operational data — only your account structure and settings. If you need hands-on help contact support through the ticket system.' },
       ]},
     ]
   },
@@ -8115,25 +8110,18 @@ const GUIDE_CONTENT = {
     title: 'Getting Started as Manager',
     icon: '📊',
     color: '#8B5CF6',
-    sections: [
-      { num:1, icon:'🏠', title:'Your dashboard', steps:[
-        'Your dashboard gives you an overview of all tasks assigned to your team.',
-        'Key metrics shown include: completed, overdue, and pending approval.',
+    chapters: [
+      { num:1, title:'Your Dashboard', subChapters:[
+        { id:'1.1', title:'Understanding your dashboard', body:'Your dashboard gives you a real-time overview of your team\'s activity. You can see how many tasks are pending, in progress, awaiting your review, completed, or overdue. Use this as your daily starting point to spot any issues and keep your team on track.' },
+        { id:'1.2', title:'Filtering by team and role', body:'Use the filter options at the top of the Tasks view to narrow down by team member, priority, status or due date. This is useful when managing a large team across multiple areas — for example viewing only overdue kitchen tasks or all tasks assigned to a specific staff member.' },
       ]},
-      { num:2, icon:'✅', title:'Creating and assigning tasks', steps:[
-        'Click New Task from the Tasks section and fill in the task details.',
-        'Assign it to a team member and set a priority and due date.',
-        'Optionally attach a checklist template for structured task completion.',
-        'Tasks appear instantly in the assigned member\'s dashboard.',
+      { num:2, title:'Tasks', subChapters:[
+        { id:'2.1', title:'Creating and assigning tasks', body:'Click New Task to create a task. Assign it to a specific team member, set the priority and due date, and optionally attach a checklist template. Tasks with checklists give staff clear step-by-step instructions and create a verifiable completion record. The assigned staff member is notified immediately.' },
+        { id:'2.2', title:'Reviewing and approving tasks', body:'Completed tasks appear in Awaiting Review. Open each task to see the photo evidence, completed checklist items, and timestamps. If everything looks good tap Approve. If there is an issue tap Reject and add a reason — the staff member will be notified and the task will return to them for rework.' },
+        { id:'2.3', title:'Handling overdue tasks', body:'Overdue tasks are highlighted in red on your dashboard. You can reassign them, extend the due date, or escalate them. All changes are logged in the audit trail so there is always a record of what happened and when.' },
       ]},
-      { num:3, icon:'🔍', title:'Reviewing completed tasks', steps:[
-        'When a task is completed it moves to Awaiting Review — check the Evidence section.',
-        'Review the photo evidence and checklist completion submitted by the team member.',
-        'Approve the task or reject it with a reason — the member will be notified.',
-      ]},
-      { num:4, icon:'📈', title:'Monitoring performance', steps:[
-        'Use the Performance section to track each team member\'s completion stats.',
-        'Filter by weekly, monthly, or quarterly view.',
+      { num:3, title:'Performance', subChapters:[
+        { id:'3.1', title:'Monitoring your team', body:'The Performance section shows each team member\'s completion rate, on-time percentage and average task time. Use this for regular one-on-ones and performance reviews. You can export the data as a PDF report to share with management or keep on file.' },
       ]},
     ]
   },
@@ -8141,27 +8129,18 @@ const GUIDE_CONTENT = {
     title: 'Getting Started as Supervisor',
     icon: '👷',
     color: '#F59E0B',
-    sections: [
-      { num:1, icon:'👁', title:'Viewing your tasks', steps:[
-        'Your assigned tasks appear on your dashboard when you sign in.',
-        'Tasks are colour coded by priority: red is high, amber is medium, green is low.',
-        'Overdue tasks are highlighted — complete them as soon as possible.',
+    chapters: [
+      { num:1, title:'Your Tasks', subChapters:[
+        { id:'1.1', title:'Viewing your assigned tasks', body:'When you sign in your dashboard shows all tasks currently assigned to you. Tasks are colour coded by priority — red for critical, orange for high, yellow for medium and green for low. Tasks nearing their due date are highlighted so you always know what needs attention first.' },
+        { id:'1.2', title:'Understanding task details', body:'Tap any task to see the full details including the description, checklist items, due date, and any notes from your manager. Read through everything carefully before starting so you know exactly what is expected.' },
       ]},
-      { num:2, icon:'✅', title:'Completing a task', steps:[
-        'Open the task and tap Start to begin.',
-        'Complete all checklist items — required items must be checked before you can submit.',
-        'Upload a photo as evidence of completion.',
-        'Tap Submit for Review when done — your manager will review it.',
+      { num:2, title:'Completing Tasks', subChapters:[
+        { id:'2.1', title:'Starting a task', body:'When you are ready to begin a task tap the Start button. This records your start time and lets your manager know the task is in progress. Make sure you only start a task when you are actually about to work on it so the time records are accurate.' },
+        { id:'2.2', title:'Completing the checklist', body:'Work through each checklist item as you complete it and tap Mark Done for each one. Required items marked with an asterisk must be completed before you can submit the task. Some items may need to be completed multiple times throughout the day — each completion is timestamped separately.' },
+        { id:'2.3', title:'Adding photo evidence', body:'When the task is complete take a clear photo of the finished work. This is your evidence of completion and forms part of the compliance record. Make sure the photo clearly shows the area or equipment you have cleaned or checked. Tap Submit for Review when you are done.' },
       ]},
-      { num:3, icon:'📋', title:'Checklist items', steps:[
-        'Some checklist items need to be completed multiple times per day.',
-        'Each completion is automatically timestamped.',
-        'Tap Mark Done each time you complete the item.',
-      ]},
-      { num:4, icon:'🗓', title:'Leave requests', steps:[
-        'Go to Leave in the menu to submit a leave request.',
-        'Fill in your leave dates and reason.',
-        'Your manager will approve or reject it — you will be notified.',
+      { num:3, title:'Other Features', subChapters:[
+        { id:'3.1', title:'Requesting leave', body:'Go to Leave in the menu to submit a leave request. Select your leave dates, choose the leave type, and add a reason. Your manager will receive a notification and will approve or reject your request. You will be notified of the outcome.' },
       ]},
     ]
   },
@@ -8169,26 +8148,19 @@ const GUIDE_CONTENT = {
     title: 'Getting Started as Staff Member',
     icon: '👤',
     color: '#3B82F6',
-    sections: [
-      { num:1, icon:'🔑', title:'Signing in for the first time', steps:[
-        'Open the invite link sent to you by your manager via WhatsApp or email.',
-        'Enter your full name and create a secure password.',
-        'You will be automatically signed in to your organisation — no organisation code needed.',
+    chapters: [
+      { num:1, title:'Getting Started', subChapters:[
+        { id:'1.1', title:'Setting up your account', body:'You will receive an invite link from your manager via WhatsApp or email. Tap the link and it will open a registration page with your name, email and organisation already filled in. All you need to do is create a password, confirm your details are correct, and tap Create My Account. You will then be taken to the sign in page.' },
+        { id:'1.2', title:'Signing in', body:'Go to the Taksyn app and enter your email address and password. You will be taken straight to your dashboard showing your assigned tasks. If you forget your password tap Forgot Password on the sign in page and follow the instructions.' },
       ]},
-      { num:2, icon:'📋', title:'Your tasks', steps:[
-        'Your tasks appear on your home screen when you sign in.',
-        'Tap a task to see the full details, checklist items, and due date.',
+      { num:2, title:'Your Tasks', subChapters:[
+        { id:'2.1', title:'Finding your tasks', body:'Your tasks are listed on your home screen when you sign in. Each task shows the title, priority, and due date. Tap any task to see the full instructions and checklist. Tasks are sorted by due date so the most urgent ones appear at the top.' },
+        { id:'2.2', title:'Completing a task', body:'Tap Start when you begin working on a task. Work through the checklist ticking off each item as you complete it. When everything is done take a photo of your completed work and tap Submit for Review. Your supervisor or manager will review and approve your work.' },
+        { id:'2.3', title:'What happens after you submit', body:'After you submit a task your manager will review your photo and checklist. If they are happy they will approve the task and it will be marked as complete. If they need you to redo something they will reject it with a reason and it will appear back in your task list with their feedback.' },
       ]},
-      { num:3, icon:'✅', title:'Completing a task', steps:[
-        'Tap Start when you begin working on the task.',
-        'Check off each item on the checklist as you complete them.',
-        'Take a photo when the task is done as evidence.',
-        'Tap Submit when complete — your manager or supervisor will review it.',
-      ]},
-      { num:4, icon:'🗓', title:'Requesting leave', steps:[
-        'Go to Leave in the menu.',
-        'Fill in your leave dates and the reason for your leave.',
-        'Your supervisor or manager will approve or reject your request.',
+      { num:3, title:'Leave and Support', subChapters:[
+        { id:'3.1', title:'Requesting leave', body:'Go to Leave in the menu to request time off. Fill in your dates and the reason for your leave. Your manager will be notified and will approve or reject your request. Check back to see the outcome or wait for a notification.' },
+        { id:'3.2', title:'Getting help', body:'If you have any problems with the app speak to your supervisor or manager. They can raise a support ticket on your behalf if needed.' },
       ]},
     ]
   },
