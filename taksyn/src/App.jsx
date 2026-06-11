@@ -8324,20 +8324,19 @@ function GettingStartedGuide({ user, setPage }) {
   const isSA = user.role === 'super_admin'
   const defaultRole = isSA ? 'client_admin' : (user.role === 'worker' ? 'worker' : (user.role || 'worker'))
   const [activeRole, setActiveRole] = useState(defaultRole)
-  const [openItem, setOpenItem] = useState(null)
+  const [openSubChapters, setOpenSubChapters] = useState({})
+  const [openSteps, setOpenSteps] = useState({})
 
   const guide = GUIDE_CONTENT[activeRole] || GUIDE_CONTENT.worker
   const roleName = ROLE_LABELS[activeRole] || activeRole
 
-  const toggleItem = (key) => setOpenItem(prev => prev === key ? null : key)
+  const toggleSubChapter = (id) => setOpenSubChapters(prev => ({...prev, [id]: !prev[id]}))
+  const toggleStep = (key) => setOpenSteps(prev => ({...prev, [key]: !prev[key]}))
 
   const handlePrint = () => {
     const prevTitle = document.title
     document.title = 'Taksyn-' + roleName.replace(/\s+/g, '-') + '-Guide'
-    setTimeout(() => {
-      window.print()
-      setTimeout(() => { document.title = prevTitle }, 1500)
-    }, 80)
+    setTimeout(() => { window.print(); setTimeout(() => { document.title = prevTitle }, 1500) }, 80)
   }
 
   const ROLE_TABS = [
@@ -8348,6 +8347,7 @@ function GettingStartedGuide({ user, setPage }) {
   ]
 
   const totalTopics = guide.chapters.reduce((a,c)=>a+c.subChapters.length,0)
+  const totalSteps = guide.chapters.reduce((a,c)=>a+c.subChapters.reduce((b,s)=>b+s.steps.length,0),0)
 
   return (
     <div className="anim guide-print-wrapper">
@@ -8381,7 +8381,7 @@ function GettingStartedGuide({ user, setPage }) {
             {ROLE_TABS.map(t => (
               <button key={t.key} className={'guide-role-tab'+(activeRole===t.key?' active':'')}
                 style={activeRole===t.key?{background:t.color,borderColor:t.color,color:'#fff'}:{}}
-                onClick={()=>{setActiveRole(t.key);setOpenItem(null)}}>
+                onClick={()=>{setActiveRole(t.key);setOpenSubChapters({});setOpenSteps({})}}>
                 {t.label}
               </button>
             ))}
@@ -8395,7 +8395,7 @@ function GettingStartedGuide({ user, setPage }) {
         <div>
           <div style={{fontSize:11,fontWeight:700,color:guide.color,textTransform:'uppercase',letterSpacing:'.8px',marginBottom:4}}>Getting Started Guide</div>
           <div style={{fontSize:20,fontWeight:800,color:'var(--text)',lineHeight:1.2}}>{guide.title}</div>
-          <div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>{guide.chapters.length} chapters · {totalTopics} topics</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>{guide.chapters.length} chapters · {totalTopics} topics · {totalSteps} steps</div>
         </div>
         <div style={{marginLeft:'auto',display:'flex',flexDirection:'column',gap:6}} className="guide-no-print">
           <button className="btn btn-primary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>⬇ Download PDF</button>
@@ -8403,24 +8403,46 @@ function GettingStartedGuide({ user, setPage }) {
         </div>
       </div>
 
-      {/* Chapters */}
+      {/* Chapters — Level 1 */}
       {guide.chapters.map((chapter) => (
         <div key={chapter.num} className="guide-chapter">
           <div className="guide-chapter-hdr">
             <span style={{color:'var(--t3)',fontWeight:600,marginRight:8}}>Chapter {chapter.num}:</span>
             {chapter.title}
           </div>
+
+          {/* Sub-chapters — Level 2 */}
           {chapter.subChapters.map((sc) => {
-            const isOpen = openItem === sc.id
+            const isSubOpen = !!openSubChapters[sc.id]
             return (
               <div key={sc.id} className="guide-accordion-item">
-                <div className="guide-accordion-row" onClick={()=>toggleItem(sc.id)}>
-                  <span className="guide-accordion-chevron" style={{transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+                <div className="guide-accordion-row" onClick={()=>toggleSubChapter(sc.id)}>
+                  <span className="guide-accordion-chevron" style={{transform:isSubOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
                   <span className="guide-accordion-num">{sc.id}</span>
                   <span className="guide-accordion-title">{sc.title}</span>
+                  <span style={{fontSize:10,color:'var(--t3)',flexShrink:0,marginLeft:4}}>{sc.steps.length} steps</span>
                 </div>
-                <div className="guide-accordion-body" style={{display:isOpen?'block':'none'}}>
-                  {sc.body}
+
+                {/* Steps list — Level 3 */}
+                <div className="guide-steps-list" style={{display:isSubOpen?'block':'none'}}>
+                  {sc.steps.map((step, si) => {
+                    const stepKey = sc.id + '_' + si
+                    const isStepOpen = !!openSteps[stepKey]
+                    return (
+                      <div key={si} className="guide-step-item">
+                        <div className="guide-step-row" onClick={()=>toggleStep(stepKey)}>
+                          <div className="guide-step-num" style={{background:guide.color+'20',color:guide.color}}>{si+1}</div>
+                          <span className="guide-step-summary">{step.summary}</span>
+                          <span className="guide-step-chevron" style={{transform:isStepOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+                        </div>
+                        <div className="guide-step-detail" style={{display:isStepOpen?'block':'none'}}>
+                          <p className="guide-step-para">{step.detail}</p>
+                          <div className="guide-step-found">📍 <strong>Found in:</strong> {step.foundIn}</div>
+                          {step.tip && <div className="guide-step-tip">💡 <strong>Tip:</strong> {step.tip}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )
