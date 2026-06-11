@@ -5066,8 +5066,11 @@ function CompanySettingsView({ user }) {
   const [autoLogoutMinutes, setAutoLogoutMinutes] = useState(30)
   const [tplList, setTplList] = useState([])
   const [tplName, setTplName] = useState('')
-  const [tplItems, setTplItems] = useState([{text:'',mandatory:false,requirePhoto:false}])
+  const [tplDescription, setTplDescription] = useState('')
+  const [tplPriority, setTplPriority] = useState('medium')
+  const [tplItems, setTplItems] = useState([{label:'',required:false}])
   const [tplSaving, setTplSaving] = useState(false)
+  const [editingTpl, setEditingTpl] = useState(null)
   // Team Management tab state
   const [tmGlobalInds, setTmGlobalInds] = useState([])
   const [tmOrgInds, setTmOrgInds] = useState([])
