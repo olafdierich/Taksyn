@@ -3207,13 +3207,15 @@ function UsersView({ user, setAuditLog }) {
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
-    const orgId = orgsList.find(o=>o.name===user.org)?.id
-    if(!orgId) return
-    supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name')
-      .then(({data})=>{ setOrgCustomRoles(data||[]) }).catch(()=>{})
-    supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name')
-      .then(({data})=>{ setOrgCustomPositions(data?.map(p=>p.position_name)||[]) }).catch(()=>{})
-  },[orgsList, user.org])
+    supabase.from('organisations').select('id').eq('name', user.org).single()
+      .then(({data}) => {
+        const id = data?.id; if(!id) return
+        supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',id).order('sort_order',{nullsFirst:false}).order('role_name')
+          .then(({data})=>{ setOrgCustomRoles(data||[]) }).catch(()=>{})
+        supabase.from('org_custom_positions').select('position_name').eq('organisation_id',id).order('sort_order',{nullsFirst:false}).order('position_name')
+          .then(({data})=>{ setOrgCustomPositions(data?.map(p=>p.position_name)||[]) }).catch(()=>{})
+      }).catch(()=>{})
+  },[user.org])
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
