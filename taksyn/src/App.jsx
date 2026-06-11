@@ -854,14 +854,15 @@ function AuthView({ onAuth }) {
           <div className="auth-title">Select Organisation</div>
           <div className="auth-sub">You are a member of multiple organisations. Choose which one to sign in to.</div>
           <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16,maxHeight:'50vh',overflowY:'auto',paddingRight:4}}>
-            {[...orgChoices].sort((a,b)=>a.org.localeCompare(b.org)||(a.role.localeCompare(b.role))).map((m,i)=>(
+            {[...orgChoices].sort((a,b)=>(a.orgName||a.org).localeCompare(b.orgName||b.org)||(a.role.localeCompare(b.role))).map((m,i)=>(
               <button key={i} onClick={()=>{
-                const userData = {...pendingAuthUser, role:m.role, org:m.org, tier:m.tier||'Growth'}
+                // Prefer resolved org name; fall back to m.org which may be an ID
+                const userData = {...pendingAuthUser, role:m.role, org:m.orgName||pendingAuthUser.org||m.org, tier:m.tier||'Growth'}
                 onAuth(userData)
               }} style={{padding:'14px 16px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',textAlign:'left',transition:'all .15s'}}
               onMouseOver={e=>e.currentTarget.style.borderColor='var(--brand)'}
               onMouseOut={e=>e.currentTarget.style.borderColor='var(--border)'}>
-                <div style={{fontWeight:700,fontSize:14}}>{m.org}</div>
+                <div style={{fontWeight:700,fontSize:14}}>{m.orgName||m.org}</div>
                 <div style={{fontSize:12,color:'var(--t2)',marginTop:3}}>{ROLE_LABELS[m.role]||m.role}</div>
               </button>
             ))}
