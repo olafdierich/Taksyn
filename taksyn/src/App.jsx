@@ -7970,6 +7970,246 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
 }
 
 
+const GUIDE_CONTENT = {
+  client_admin: {
+    title: 'Getting Started as Client Admin',
+    icon: '🏢',
+    color: '#00A87E',
+    sections: [
+      { num:1, icon:'🏢', title:'Set up your organisation', steps:[
+        'Complete your organisation profile — go to Company Settings to add your name, industry, logo, and contact details.',
+        'Set your data retention plan in the Plans section.',
+        'Configure auto logout timeout in Company Settings under Session Timeout.',
+      ]},
+      { num:2, icon:'👥', title:'Build your workforce', steps:[
+        'Go to Roles & Positions to define your industries, roles, and positions.',
+        'Invite team members via WhatsApp or Email from the Workforce section.',
+        'Review and edit member details after they join.',
+      ]},
+      { num:3, icon:'✅', title:'Create your first task', steps:[
+        'Click New Task from the Tasks section.',
+        'Assign it to a team member with a due date and priority.',
+        'Optionally attach a checklist template to the task.',
+      ]},
+      { num:4, icon:'📋', title:'Set up checklist templates', steps:[
+        'Go to Company Settings > Checklist Templates.',
+        'Create templates for recurring tasks — for example room cleaning or safety checks.',
+        'Templates can be reused across multiple tasks.',
+      ]},
+      { num:5, icon:'📊', title:'Monitor your team', steps:[
+        'Use the Performance section to track task completion rates across your team.',
+        'Use the Audit Log to see a full history of all actions taken in your organisation.',
+        'Use Reports to filter, view, and export data as a PDF.',
+      ]},
+      { num:6, icon:'🎫', title:'Support', steps:[
+        'Use Help & Support to raise a ticket if you need assistance.',
+        'Taksyn support responds within 24 hours.',
+      ]},
+    ]
+  },
+  manager: {
+    title: 'Getting Started as Manager',
+    icon: '📊',
+    color: '#8B5CF6',
+    sections: [
+      { num:1, icon:'🏠', title:'Your dashboard', steps:[
+        'Your dashboard gives you an overview of all tasks assigned to your team.',
+        'Key metrics shown include: completed, overdue, and pending approval.',
+      ]},
+      { num:2, icon:'✅', title:'Creating and assigning tasks', steps:[
+        'Click New Task from the Tasks section and fill in the task details.',
+        'Assign it to a team member and set a priority and due date.',
+        'Optionally attach a checklist template for structured task completion.',
+        'Tasks appear instantly in the assigned member\'s dashboard.',
+      ]},
+      { num:3, icon:'🔍', title:'Reviewing completed tasks', steps:[
+        'When a task is completed it moves to Awaiting Review — check the Evidence section.',
+        'Review the photo evidence and checklist completion submitted by the team member.',
+        'Approve the task or reject it with a reason — the member will be notified.',
+      ]},
+      { num:4, icon:'📈', title:'Monitoring performance', steps:[
+        'Use the Performance section to track each team member\'s completion stats.',
+        'Filter by weekly, monthly, or quarterly view.',
+      ]},
+    ]
+  },
+  supervisor: {
+    title: 'Getting Started as Supervisor',
+    icon: '👷',
+    color: '#F59E0B',
+    sections: [
+      { num:1, icon:'👁', title:'Viewing your tasks', steps:[
+        'Your assigned tasks appear on your dashboard when you sign in.',
+        'Tasks are colour coded by priority: red is high, amber is medium, green is low.',
+        'Overdue tasks are highlighted — complete them as soon as possible.',
+      ]},
+      { num:2, icon:'✅', title:'Completing a task', steps:[
+        'Open the task and tap Start to begin.',
+        'Complete all checklist items — required items must be checked before you can submit.',
+        'Upload a photo as evidence of completion.',
+        'Tap Submit for Review when done — your manager will review it.',
+      ]},
+      { num:3, icon:'📋', title:'Checklist items', steps:[
+        'Some checklist items need to be completed multiple times per day.',
+        'Each completion is automatically timestamped.',
+        'Tap Mark Done each time you complete the item.',
+      ]},
+      { num:4, icon:'🗓', title:'Leave requests', steps:[
+        'Go to Leave in the menu to submit a leave request.',
+        'Fill in your leave dates and reason.',
+        'Your manager will approve or reject it — you will be notified.',
+      ]},
+    ]
+  },
+  worker: {
+    title: 'Getting Started as Staff Member',
+    icon: '👤',
+    color: '#3B82F6',
+    sections: [
+      { num:1, icon:'🔑', title:'Signing in for the first time', steps:[
+        'Open the invite link sent to you by your manager via WhatsApp or email.',
+        'Enter your full name and create a secure password.',
+        'You will be automatically signed in to your organisation — no organisation code needed.',
+      ]},
+      { num:2, icon:'📋', title:'Your tasks', steps:[
+        'Your tasks appear on your home screen when you sign in.',
+        'Tap a task to see the full details, checklist items, and due date.',
+      ]},
+      { num:3, icon:'✅', title:'Completing a task', steps:[
+        'Tap Start when you begin working on the task.',
+        'Check off each item on the checklist as you complete them.',
+        'Take a photo when the task is done as evidence.',
+        'Tap Submit when complete — your manager or supervisor will review it.',
+      ]},
+      { num:4, icon:'🗓', title:'Requesting leave', steps:[
+        'Go to Leave in the menu.',
+        'Fill in your leave dates and the reason for your leave.',
+        'Your supervisor or manager will approve or reject your request.',
+      ]},
+    ]
+  },
+}
+
+function GettingStartedGuide({ user, setPage }) {
+  const isSA = user.role === 'super_admin'
+  const defaultRole = isSA ? 'client_admin' : (user.role === 'worker' ? 'worker' : (user.role || 'worker'))
+  const [activeRole, setActiveRole] = useState(defaultRole)
+  const [collapsed, setCollapsed] = useState({})
+
+  const guide = GUIDE_CONTENT[activeRole] || GUIDE_CONTENT.worker
+  const roleName = ROLE_LABELS[activeRole] || activeRole
+
+  const toggleSection = (idx) => setCollapsed(prev => ({...prev, [activeRole+'_'+idx]: !prev[activeRole+'_'+idx]}))
+
+  const handlePrint = () => {
+    const prevTitle = document.title
+    document.title = 'Taksyn-' + roleName.replace(/\s+/g, '-') + '-Guide'
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => { document.title = prevTitle }, 1500)
+    }, 80)
+  }
+
+  const ROLE_TABS = [
+    {key:'client_admin', label:'Client Admin', color:'#00A87E'},
+    {key:'manager', label:'Manager', color:'#8B5CF6'},
+    {key:'supervisor', label:'Supervisor', color:'#F59E0B'},
+    {key:'worker', label:'Staff Member', color:'#3B82F6'},
+  ]
+
+  return (
+    <div className="anim guide-print-wrapper">
+      <style>{`@media print{.guide-no-print{display:none!important}.guide-section-body{display:block!important}}`}</style>
+
+      {/* Print header — only visible when printing */}
+      <div style={{display:'none'}} className="guide-print-header">
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20,paddingBottom:16,borderBottom:'2px solid #00A87E'}}>
+          <div style={{fontSize:28,fontWeight:900,color:'#00A87E'}}>Taksyn</div>
+          <div style={{flex:1}}/>
+          <div style={{fontSize:11,color:'#888'}}>Generated {new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}</div>
+        </div>
+      </div>
+
+      <div className="ph guide-no-print">
+        <div className="ph-top">
+          <div>
+            <div className="ph-title">Getting Started Guide</div>
+            <div className="ph-sub">{guide.icon} {guide.title}</div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-secondary guide-no-print" onClick={handlePrint} title="Print guide">🖨 Print</button>
+            <button className="btn btn-primary guide-no-print" onClick={handlePrint} title="Download as PDF">⬇ Download PDF</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Role selector — super admin only */}
+      {isSA && (
+        <div className="section guide-no-print" style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>View guide for</div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {ROLE_TABS.map(t => (
+              <button key={t.key} className={'guide-role-tab'+(activeRole===t.key?' active':'')}
+                style={activeRole===t.key?{background:t.color,borderColor:t.color,color:'#fff'}:{}}
+                onClick={()=>{setActiveRole(t.key);setCollapsed({})}}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Guide header card */}
+      <div style={{background:'linear-gradient(135deg,'+guide.color+'18,'+guide.color+'08)',border:'1px solid '+guide.color+'33',borderRadius:12,padding:'20px 24px',marginBottom:16,display:'flex',alignItems:'center',gap:16}}>
+        <div style={{fontSize:40,lineHeight:1}}>{guide.icon}</div>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:guide.color,textTransform:'uppercase',letterSpacing:'.8px',marginBottom:4}}>Getting Started Guide</div>
+          <div style={{fontSize:20,fontWeight:800,color:'var(--text)',lineHeight:1.2}}>{guide.title}</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>{guide.sections.length} sections · {guide.sections.reduce((a,s)=>a+s.steps.length,0)} steps</div>
+        </div>
+        <div style={{marginLeft:'auto',display:'flex',flexDirection:'column',gap:6}} className="guide-no-print">
+          <button className="btn btn-primary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>⬇ Download PDF</button>
+          <button className="btn btn-secondary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>🖨 Print</button>
+        </div>
+      </div>
+
+      {/* Sections */}
+      {guide.sections.map((section, idx) => {
+        const isCollapsed = collapsed[activeRole+'_'+idx]
+        return (
+          <div key={idx} className="guide-section">
+            <div className="guide-section-hdr" onClick={()=>toggleSection(idx)}>
+              <div style={{width:32,height:32,borderRadius:8,background:guide.color+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{section.icon}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:700,color:guide.color,textTransform:'uppercase',letterSpacing:'.6px'}}>Section {section.num}</div>
+                <div style={{fontSize:14,fontWeight:700,color:'var(--text)'}}>{section.title}</div>
+              </div>
+              <div style={{fontSize:11,color:'var(--t3)',flexShrink:0,fontWeight:600}}>{section.steps.length} step{section.steps.length!==1?'s':''}</div>
+              <div style={{fontSize:16,color:'var(--t3)',marginLeft:8,flexShrink:0,transition:'transform .2s',transform:isCollapsed?'rotate(-90deg)':'rotate(0deg)'}}>▾</div>
+            </div>
+            {!isCollapsed && (
+              <div className="guide-section-body">
+                {section.steps.map((step, si) => (
+                  <div key={si} className="guide-step">
+                    <div className="guide-step-num" style={{background:guide.color+'20',color:guide.color}}>{si+1}</div>
+                    <div style={{fontSize:13,color:'var(--text)',lineHeight:1.55,paddingTop:2}}>{step}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {/* Footer */}
+      <div style={{marginTop:20,padding:'14px 16px',background:'var(--s3)',borderRadius:10,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        <div style={{fontSize:12,color:'var(--t2)',flex:1}}>Need more help? Go to <strong>Help &amp; Support</strong> to raise a ticket and the Taksyn support team will respond within 24 hours.</div>
+        <button className="btn btn-secondary btn-sm guide-no-print" style={{fontSize:11}} onClick={()=>setPage('help')}>Go to Support →</button>
+      </div>
+    </div>
+  )
+}
+
 function HelpView({ user }) {
   const [desc, setDesc] = useState('')
   const [device, setDevice] = useState('')
