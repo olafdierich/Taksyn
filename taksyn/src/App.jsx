@@ -5622,52 +5622,73 @@ function CompanySettingsView({ user }) {
       {/* ── TEMPLATES ───────────────────────────── */}
       {activeTab==='templates'&&<>
         <div className="section" style={{marginBottom:14}}>
-          <div className="section-title">Existing Templates</div>
-          {tplList.length===0?<div style={{fontSize:13,color:'var(--t2)'}}>No templates yet — create one below.</div>:(
-            tplList.map(t=>(
-              <div key={t.id} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:12,marginBottom:8}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                  <div style={{fontWeight:700,fontSize:13}}>{t.name}</div>
+          <div className="section-title">Checklist Templates ({tplList.length})</div>
+          {tplList.length===0 ? (
+            <div style={{fontSize:13,color:'var(--t2)'}}>No templates yet — create one below.</div>
+          ) : tplList.map(t=>(
+            <div key={t.id} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:12,marginBottom:8}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}}>
+                    <span style={{fontWeight:700,fontSize:13}}>{t.name}</span>
+                    <PriBadge priority={t.priority||'medium'}/>
+                    <span style={{fontSize:11,color:'var(--t2)'}}>{t.items?.length||0} items</span>
+                  </div>
+                  {t.description&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:6}}>{t.description}</div>}
+                  <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                    {(t.items||[]).map((item,i)=>(
+                      <div key={i} style={{fontSize:12,color:'var(--t2)',display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{color:'var(--t3)'}}>◽</span>
+                        <span>{item.label||item.text}</span>
+                        {(item.required||item.mandatory)&&<span style={{color:'var(--red)',fontWeight:700,fontSize:10}}>required</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:6,flexShrink:0}}>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>startEditTpl(t)}>Edit</button>
                   <button className="btn btn-danger btn-sm" onClick={()=>deleteTemplate(t.id)}>🗑</button>
                 </div>
-                <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                  {(t.items||[]).map((item,i)=>(
-                    <div key={i} style={{fontSize:12,color:'var(--t2)',display:'flex',alignItems:'center',gap:6}}>
-                      <span>◽</span>
-                      <span>{item.text}</span>
-                      {item.mandatory&&<span style={{color:'var(--red)',fontWeight:700,fontSize:10}}>mandatory</span>}
-                      {item.requirePhoto&&<span style={{fontSize:10}}>📷</span>}
-                    </div>
-                  ))}
-                </div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
         <div className="section" style={{marginBottom:20}}>
-          <div className="section-title">Create New Template</div>
+          <div className="section-title">{editingTpl?'Edit Template':'Create New Template'}</div>
+          <div className="two-col">
+            <div className="form-field">
+              <label className="form-label">Template Name <span style={{color:'var(--red)'}}>*</span></label>
+              <input className="form-input" placeholder="e.g. Daily Kitchen Clean" value={tplName} onChange={e=>setTplName(e.target.value)}/>
+            </div>
+            <div className="form-field">
+              <label className="form-label">Priority</label>
+              <select className="form-select" value={tplPriority} onChange={e=>setTplPriority(e.target.value)}>
+                {Object.entries(PRIORITY_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+          </div>
           <div className="form-field">
-            <label className="form-label">Template Name</label>
-            <input className="form-input" placeholder="e.g. Daily Kitchen Clean" value={tplName} onChange={e=>setTplName(e.target.value)}/>
+            <label className="form-label">Description <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
+            <input className="form-input" placeholder="Brief description of when to use this template" value={tplDescription} onChange={e=>setTplDescription(e.target.value)}/>
           </div>
           <div className="form-field">
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-              <label className="form-label" style={{margin:0}}>Checklist Items</label>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setTplItems(p=>[...p,{text:'',mandatory:false,requirePhoto:false}])}>+ Add Item</button>
+              <label className="form-label" style={{margin:0}}>Checklist Items <span style={{color:'var(--red)'}}>*</span></label>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setTplItems(p=>[...p,{label:'',required:false}])}>+ Add Item</button>
             </div>
             {tplItems.map((s,i)=>(
               <div key={i} className="cl-build-item">
-                <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,text:e.target.value}:x))}/>
-                <button type="button" className="cl-flag-btn" title="Mandatory" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.08)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x))}><strong>*</strong></button>
-                <button type="button" className="cl-flag-btn" title="Require photo" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x))}>📷</button>
+                <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.label} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,label:e.target.value}:x))}/>
+                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button>
                 {tplItems.length>1&&<button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setTplItems(p=>p.filter((_,j)=>j!==i))}>×</button>}
               </div>
             ))}
-            <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>
-              <strong style={{color:'var(--red)'}}>*</strong> = mandatory (blocks submit) · 📷 = requires photo evidence
-            </div>
+            <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}><strong style={{color:'var(--red)'}}>*</strong> = required (worker must tick before submitting)</div>
           </div>
-          <button className="btn btn-primary" onClick={saveTemplate} disabled={tplSaving}>{tplSaving?'Saving…':'Save Template'}</button>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-primary" onClick={saveTemplate} disabled={tplSaving}>{tplSaving?'Saving…':editingTpl?'Update Template':'Save Template'}</button>
+            {editingTpl&&<button className="btn btn-secondary" onClick={resetTplForm}>Cancel</button>}
+          </div>
         </div>
         <MsgBanner/>
       </>}
