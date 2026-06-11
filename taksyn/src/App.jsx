@@ -5655,8 +5655,12 @@ function CompanySettingsView({ user }) {
             </div>
           ))}
         </div>
-        <div className="section" style={{marginBottom:20}}>
+        <div className="section" ref={tplFormRef} style={{marginBottom:20,scrollMarginTop:16}}>
           <div className="section-title">{editingTpl?'Edit Template':'Create New Template'}</div>
+          {editingTpl&&<div style={{background:'rgba(99,102,241,.08)',border:'1px solid rgba(99,102,241,.2)',borderRadius:8,padding:'8px 12px',marginBottom:12,fontSize:12,color:'#6366F1',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span>Editing: <strong>{editingTpl.name}</strong></span>
+            <span style={{cursor:'pointer',fontWeight:600,opacity:.7}} onClick={resetTplForm}>✕ Cancel edit</span>
+          </div>}
           <div className="two-col">
             <div className="form-field">
               <label className="form-label">Template Name <span style={{color:'var(--red)'}}>*</span></label>
