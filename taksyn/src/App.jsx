@@ -482,6 +482,29 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .org-grid{display:grid;grid-template-columns:1fr;gap:12px}
 @media(min-width:600px){.org-grid{grid-template-columns:repeat(2,1fr)}}
 @media(min-width:1024px){.org-grid{grid-template-columns:repeat(3,1fr)}}
+.guide-help-btn{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:none;cursor:pointer;color:var(--t2);font-size:12px;font-weight:600;font-family:inherit;width:100%;transition:all .15s;margin-bottom:6px}
+.guide-help-btn:hover{background:var(--brand-lt);border-color:var(--brand);color:var(--brand)}
+.guide-help-btn.active{background:var(--brand-lt);border-color:var(--brand);color:var(--brand)}
+.guide-section{background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.guide-section-hdr{display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;user-select:none;background:#fff;transition:background .15s}
+.guide-section-hdr:hover{background:var(--s3)}
+.guide-section-body{padding:0 16px 16px;border-top:1px solid var(--s4)}
+.guide-step{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--s4)}
+.guide-step:last-child{border-bottom:none}
+.guide-step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;margin-top:1px}
+.guide-role-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;color:var(--t2);transition:all .15s}
+.guide-role-tab.active{background:var(--brand);border-color:var(--brand);color:#fff}
+@media print{
+  .topbar,.sidebar,.sidebar-overlay,.guide-no-print{display:none!important}
+  .app{padding-top:0!important}
+  .app-inner{display:block!important}
+  .content{overflow:visible!important;padding:0!important}
+  .guide-print-wrapper{padding:20px!important}
+  body{background:#fff!important}
+  .guide-section{break-inside:avoid;border:1px solid #ddd!important}
+  .guide-section-body{display:block!important}
+  @page{margin:15mm 15mm;size:A4}
+}
 `
 
 const IC = ({ n, s=16 }) => {
