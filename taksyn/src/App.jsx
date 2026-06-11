@@ -747,8 +747,14 @@ function AuthView({ onAuth }) {
             const { data:memberships } = await supabase.from('org_members').select('*').eq('user_id',data.user.id)
             if (memberships && memberships.length > 1) {
               // Multiple orgs — show picker
+              // Enrich memberships with resolved org names (org_members.org may store an ID)
+              const {data:orgRows} = await supabase.from('organisations').select('id,name').catch(()=>({data:[]}))
+              const enriched = memberships.map(m => {
+                const orgRow = orgRows?.find(o=>o.id===m.org||o.name===m.org)
+                return {...m, orgName: orgRow?.name || m.org}
+              })
               setPendingAuthUser({...profile, email:data.user.email})
-              setOrgChoices(memberships)
+              setOrgChoices(enriched)
               setLoading(false)
               return
             } else if (memberships && memberships.length === 1) {
