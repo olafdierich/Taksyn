@@ -524,15 +524,23 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
   .guide-step-found,.guide-step-tip{font-size:12px}
   .guide-step-tip{padding:8px 12px}
 }
-#guide-print-content{display:none}
+.screen-only{display:block}.print-only{display:none}
 @media print{
-  body,body *{visibility:hidden}
-  #guide-print-content{display:block!important;visibility:visible;position:absolute;top:0;left:0;width:100%;padding:15mm;background:#fff;font-family:'DM Sans',sans-serif}
-  #guide-print-content *{visibility:visible}
-  .guide-print-chapter{page-break-before:always;break-before:always}
-  .guide-print-chapter:first-child{page-break-before:avoid;break-before:avoid}
-  .guide-print-step{break-inside:avoid;page-break-inside:avoid}
-  @page{margin:15mm;size:A4}
+  .screen-only{display:none!important}
+  .print-only{display:block!important}
+  body{margin:0;padding:0;font-family:Arial,sans-serif;font-size:12pt;color:#000}
+  .cover-page{page-break-after:always;text-align:center}
+  .index-page{page-break-after:always}
+  .gp-chapter{page-break-before:always}
+  .gp-chapter:first-of-type{page-break-before:avoid}
+  .gp-subchapter{margin-bottom:24pt}
+  .gp-step{margin-bottom:16pt;padding-left:16pt;border-left:2pt solid #ccc;break-inside:avoid;page-break-inside:avoid}
+  .gp-step-title{font-weight:bold;margin-bottom:4pt;font-size:12pt}
+  .gp-step-location{font-style:italic;color:#555;margin-top:4pt;font-size:10pt}
+  .gp-step-tip{background:#f5f5f5;padding:6pt;margin-top:4pt;font-size:10pt}
+  @page{margin:2cm}
+  @page :first{margin-top:0}
+  *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
 `
 
