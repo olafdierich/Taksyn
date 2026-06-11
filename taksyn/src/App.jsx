@@ -5274,9 +5274,7 @@ function CompanySettingsView({ user }) {
   const tmMoveGlobal = async (id,dir) => {
     const idx=tmGlobalList.findIndex(i=>i.id===id); if(idx<0) return
     const swap=tmGlobalList[idx+dir]; if(!swap) return
-    const aO=tmGlobalList[idx].sort_order??idx, bO=swap.sort_order??(idx+dir)
-    await Promise.all([supabase.from('global_industries').update({sort_order:bO}).eq('id',id),supabase.from('global_industries').update({sort_order:aO}).eq('id',swap.id)]).catch(()=>{})
-    const upd = (prev) => {const n=[...prev];n[idx]={...n[idx],sort_order:bO};n[idx+dir]={...n[idx+dir],sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))}
+    const upd = (prev) => {const n=[...prev];n[idx]=swap;n[idx+dir]=prev[idx];return n}
     setTmGlobalList(upd); setTmGlobalInds(upd)
   }
 
