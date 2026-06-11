@@ -5071,6 +5071,7 @@ function CompanySettingsView({ user }) {
   const [tplItems, setTplItems] = useState([{label:'',required:false}])
   const [tplSaving, setTplSaving] = useState(false)
   const [editingTpl, setEditingTpl] = useState(null)
+  const tplFormRef = useRef(null)
   // Team Management tab state
   const [tmGlobalInds, setTmGlobalInds] = useState([])
   const [tmOrgInds, setTmOrgInds] = useState([])
