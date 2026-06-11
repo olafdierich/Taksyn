@@ -7444,9 +7444,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
   const moveInd = async (id,dir) => {
     const idx=industries.findIndex(i=>i.id===id); if(idx<0) return
     const swap=industries[idx+dir]; if(!swap) return
-    const a=industries[idx],aO=a.sort_order??idx,bO=swap.sort_order??(idx+dir)
-    await Promise.all([supabase.from('global_industries').update({sort_order:bO}).eq('id',a.id),supabase.from('global_industries').update({sort_order:aO}).eq('id',swap.id)]).catch(()=>{})
-    setIndustries(prev=>{const n=[...prev];n[idx]={...a,sort_order:bO};n[idx+dir]={...swap,sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))})
+    setIndustries(prev=>{const n=[...prev];n[idx]=swap;n[idx+dir]=industries[idx];return n})
   }
 
   // Plans save
