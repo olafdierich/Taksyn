@@ -3776,12 +3776,36 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
   const [editOrgCustomPositions, setEditOrgCustomPositions] = useState([])
   const [editMemberPositions, setEditMemberPositions] = useState([])
   const [editMemberNewPos, setEditMemberNewPos] = useState({industry:'',role:'',position:''})
+  const [inviteOrgPositions, setInviteOrgPositions] = useState([{industry:'',role:'',position:''}])
 
   const INDUSTRIES = PRESET_INDUSTRIES
 
   useEffect(()=>{
     if(isConfigured()) loadOrgs()
   },[])
+
+  useEffect(()=>{
+    if(!isConfigured()||!showInvite?.id) return
+    const orgId = showInvite.id
+    setInviteOrgPositions([{industry:'',role:'',position:''}])
+    setEditOrgCustomRoles([])
+    setEditOrgCustomPositions([])
+    setEditOrgIndustries([])
+    supabase.from('global_industries').select('name').order('name')
+      .then(({data:gi}) => {
+        supabase.from('org_industries').select('name').eq('organisation_id', orgId)
+          .then(({data:oi}) => {
+            const globalNames = gi?.map(i=>i.name)||[]
+            const orgNames = oi?.map(i=>i.name)||[]
+            const base = globalNames.length ? globalNames : PRESET_INDUSTRIES
+            setEditOrgIndustries([...base,...orgNames.filter(n=>!base.includes(n))])
+          }).catch(()=>{})
+      }).catch(()=>{})
+    supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name')
+      .then(({data})=>{ setEditOrgCustomRoles(data||[]) }).catch(()=>{})
+    supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name')
+      .then(({data})=>{ setEditOrgCustomPositions(data?.map(p=>p.position_name)||[]) }).catch(()=>{})
+  },[showInvite])
 
   const loadOrgs = async () => {
     const { data } = await supabase.from('organisations').select('*').order('created_at',{ascending:false})
