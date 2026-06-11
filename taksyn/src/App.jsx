@@ -6206,13 +6206,18 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
     if(!isConfigured()||!user.org) return
     supabase.from('org_members').select('user_id,role').eq('org',user.org)
       .then(async({data:members})=>{
-        if(!members?.length) return
-        const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
-        if(profiles) setOrgMembers(profiles.map(p=>({
-          id: p.id,
-          name: p.name||'',
-          role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker'
-        })))
+        if(members?.length) {
+          const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
+          if(profiles) setOrgMembers(profiles.map(p=>({
+            id: p.id,
+            name: p.name||'',
+            role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker'
+          })))
+        } else {
+          // Fallback: org may be stored as name in profiles but as ID in org_members
+          const {data:fallback} = await supabase.from('profiles').select('id,name,role').eq('org',user.org)
+          if(fallback?.length) setOrgMembers(fallback.map(p=>({id:p.id,name:p.name||'',role:p.role||'worker'})))
+        }
       }).catch(()=>{})
   },[user.org])
 
