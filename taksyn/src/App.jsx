@@ -8429,7 +8429,9 @@ function GettingStartedGuide({ user, setPage }) {
             const isSubOpen = !!openSubChapters[sc.id]
             return (
               <div key={sc.id} className="guide-accordion-item">
-                <div className="guide-accordion-row" onClick={()=>toggleSubChapter(sc.id)}>
+                <div className="guide-accordion-row"
+                  onClick={(e)=>handleScTap(e,sc.id)}
+                  onTouchEnd={(e)=>handleScTap(e,sc.id)}>
                   <span className="guide-accordion-chevron" style={{transform:isSubOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
                   <span className="guide-accordion-num">{sc.id}</span>
                   <span className="guide-accordion-title">{sc.title}</span>
@@ -8443,7 +8445,9 @@ function GettingStartedGuide({ user, setPage }) {
                     const isStepOpen = !!openSteps[stepKey]
                     return (
                       <div key={si} className="guide-step-item">
-                        <div className="guide-step-row" onClick={()=>toggleStep(stepKey)}>
+                        <div className="guide-step-row"
+                          onClick={(e)=>handleStepTap(e,stepKey)}
+                          onTouchEnd={(e)=>handleStepTap(e,stepKey)}>
                           <div className="guide-step-num" style={{background:guide.color+'20',color:guide.color}}>{si+1}</div>
                           <span className="guide-step-summary">{step.summary}</span>
                           <span className="guide-step-chevron" style={{transform:isStepOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
