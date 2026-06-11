@@ -3993,18 +3993,20 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
       const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
+      const validPos = inviteOrgPositions.filter(p=>p.role||p.industry||p.position)
+      const rolesSummary = validPos.map(p=>[p.industry,p.role,p.position].filter(Boolean).join(' / ')).join('; ')
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, secret:inviteSecret })
+        body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, positions:rolesSummary, secret:inviteSecret })
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
       // Update org user count
       await supabase.from('organisations').update({admin_email:inviteEmail.trim(),admin_name:inviteName.trim()}).eq('id',showInvite.id)
       setOrgs(prev=>prev.map(o=>o.id===showInvite.id?{...o,admin_email:inviteEmail.trim(),admin_name:inviteName.trim()}:o))
-      alert('Invite sent to '+inviteEmail+'!')
-      setShowInvite(null); setInviteEmail(''); setInviteName('')
+      alert('Invite sent to '+inviteEmail+'!'+(rolesSummary?'\n\nAssignments: '+rolesSummary:''))
+      setShowInvite(null); setInviteEmail(''); setInviteName(''); setInviteOrgPositions([{industry:'',role:'',position:''}])
     } catch(e) {
       alert('Failed: '+e.message)
     }
