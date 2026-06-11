@@ -8713,6 +8713,8 @@ export default function App() {
                 {page==='notifications' && user.role==='super_admin' && <PlatformAnnouncementsView user={user}/>}
                 {page==='platform_industries' && user.role==='super_admin' && <PlatformIndustriesView user={user}/>}
                 {page==='roles_departments' && ['client_admin','super_admin'].includes(user.role) && <RolesPositionsView user={user}/>}
+                {page==='platform_settings' && user.role==='super_admin' && <PlatformSettingsView user={user} sessionTimeout={sessionTimeout} setSessionTimeout={setSessionTimeout}/>}
+                {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser}/>}
               </>
             )}
           </div>
