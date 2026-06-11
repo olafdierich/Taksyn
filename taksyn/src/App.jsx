@@ -8170,12 +8170,12 @@ function GettingStartedGuide({ user, setPage }) {
   const isSA = user.role === 'super_admin'
   const defaultRole = isSA ? 'client_admin' : (user.role === 'worker' ? 'worker' : (user.role || 'worker'))
   const [activeRole, setActiveRole] = useState(defaultRole)
-  const [collapsed, setCollapsed] = useState({})
+  const [openItem, setOpenItem] = useState(null)
 
   const guide = GUIDE_CONTENT[activeRole] || GUIDE_CONTENT.worker
   const roleName = ROLE_LABELS[activeRole] || activeRole
 
-  const toggleSection = (idx) => setCollapsed(prev => ({...prev, [activeRole+'_'+idx]: !prev[activeRole+'_'+idx]}))
+  const toggleItem = (key) => setOpenItem(prev => prev === key ? null : key)
 
   const handlePrint = () => {
     const prevTitle = document.title
@@ -8193,10 +8193,10 @@ function GettingStartedGuide({ user, setPage }) {
     {key:'worker', label:'Staff Member', color:'#3B82F6'},
   ]
 
+  const totalTopics = guide.chapters.reduce((a,c)=>a+c.subChapters.length,0)
+
   return (
     <div className="anim guide-print-wrapper">
-      <style>{`@media print{.guide-no-print{display:none!important}.guide-section-body{display:block!important}}`}</style>
-
       {/* Print header — only visible when printing */}
       <div style={{display:'none'}} className="guide-print-header">
         <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20,paddingBottom:16,borderBottom:'2px solid #00A87E'}}>
@@ -8213,8 +8213,8 @@ function GettingStartedGuide({ user, setPage }) {
             <div className="ph-sub">{guide.icon} {guide.title}</div>
           </div>
           <div style={{display:'flex',gap:8}}>
-            <button className="btn btn-secondary guide-no-print" onClick={handlePrint} title="Print guide">🖨 Print</button>
-            <button className="btn btn-primary guide-no-print" onClick={handlePrint} title="Download as PDF">⬇ Download PDF</button>
+            <button className="btn btn-secondary" onClick={handlePrint}>🖨 Print</button>
+            <button className="btn btn-primary" onClick={handlePrint}>⬇ Download PDF</button>
           </div>
         </div>
       </div>
@@ -8227,7 +8227,7 @@ function GettingStartedGuide({ user, setPage }) {
             {ROLE_TABS.map(t => (
               <button key={t.key} className={'guide-role-tab'+(activeRole===t.key?' active':'')}
                 style={activeRole===t.key?{background:t.color,borderColor:t.color,color:'#fff'}:{}}
-                onClick={()=>{setActiveRole(t.key);setCollapsed({})}}>
+                onClick={()=>{setActiveRole(t.key);setOpenItem(null)}}>
                 {t.label}
               </button>
             ))}
@@ -8241,7 +8241,7 @@ function GettingStartedGuide({ user, setPage }) {
         <div>
           <div style={{fontSize:11,fontWeight:700,color:guide.color,textTransform:'uppercase',letterSpacing:'.8px',marginBottom:4}}>Getting Started Guide</div>
           <div style={{fontSize:20,fontWeight:800,color:'var(--text)',lineHeight:1.2}}>{guide.title}</div>
-          <div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>{guide.sections.length} sections · {guide.sections.reduce((a,s)=>a+s.steps.length,0)} steps</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>{guide.chapters.length} chapters · {totalTopics} topics</div>
         </div>
         <div style={{marginLeft:'auto',display:'flex',flexDirection:'column',gap:6}} className="guide-no-print">
           <button className="btn btn-primary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>⬇ Download PDF</button>
@@ -8249,33 +8249,30 @@ function GettingStartedGuide({ user, setPage }) {
         </div>
       </div>
 
-      {/* Sections */}
-      {guide.sections.map((section, idx) => {
-        const isCollapsed = collapsed[activeRole+'_'+idx]
-        return (
-          <div key={idx} className="guide-section">
-            <div className="guide-section-hdr" onClick={()=>toggleSection(idx)}>
-              <div style={{width:32,height:32,borderRadius:8,background:guide.color+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{section.icon}</div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:11,fontWeight:700,color:guide.color,textTransform:'uppercase',letterSpacing:'.6px'}}>Section {section.num}</div>
-                <div style={{fontSize:14,fontWeight:700,color:'var(--text)'}}>{section.title}</div>
-              </div>
-              <div style={{fontSize:11,color:'var(--t3)',flexShrink:0,fontWeight:600}}>{section.steps.length} step{section.steps.length!==1?'s':''}</div>
-              <div style={{fontSize:16,color:'var(--t3)',marginLeft:8,flexShrink:0,transition:'transform .2s',transform:isCollapsed?'rotate(-90deg)':'rotate(0deg)'}}>▾</div>
-            </div>
-            {!isCollapsed && (
-              <div className="guide-section-body">
-                {section.steps.map((step, si) => (
-                  <div key={si} className="guide-step">
-                    <div className="guide-step-num" style={{background:guide.color+'20',color:guide.color}}>{si+1}</div>
-                    <div style={{fontSize:13,color:'var(--text)',lineHeight:1.55,paddingTop:2}}>{step}</div>
-                  </div>
-                ))}
-              </div>
-            )}
+      {/* Chapters */}
+      {guide.chapters.map((chapter) => (
+        <div key={chapter.num} className="guide-chapter">
+          <div className="guide-chapter-hdr">
+            <span style={{color:'var(--t3)',fontWeight:600,marginRight:8}}>Chapter {chapter.num}:</span>
+            {chapter.title}
           </div>
-        )
-      })}
+          {chapter.subChapters.map((sc) => {
+            const isOpen = openItem === sc.id
+            return (
+              <div key={sc.id} className="guide-accordion-item">
+                <div className="guide-accordion-row" onClick={()=>toggleItem(sc.id)}>
+                  <span className="guide-accordion-chevron" style={{transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+                  <span className="guide-accordion-num">{sc.id}</span>
+                  <span className="guide-accordion-title">{sc.title}</span>
+                </div>
+                <div className="guide-accordion-body" style={{display:isOpen?'block':'none'}}>
+                  {sc.body}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ))}
 
       {/* Footer */}
       <div style={{marginTop:20,padding:'14px 16px',background:'var(--s3)',borderRadius:10,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
