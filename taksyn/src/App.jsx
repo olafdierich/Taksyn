@@ -8464,7 +8464,7 @@ function GuidePrintDocument({ guide, roleName, user, orgLogo }) {
       {/* PAGE 1 — COVER */}
       <div className="cover-page" style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'2cm',position:'relative',fontFamily:'Arial,sans-serif'}}>
         <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center',width:'100%'}}>
-          <div style={{fontSize:60,fontWeight:900,color:'#00A87E',letterSpacing:'-2px',marginBottom:6}}>Taksyn</div>
+          <img src={orgLogo || '/logo.jpeg'} crossOrigin="anonymous" alt="Logo" style={{maxWidth:120,height:'auto',objectFit:'contain',marginBottom:16,display:'block'}}/>
           <div style={{fontSize:13,color:'#aaa',marginBottom:48,letterSpacing:'1px',textTransform:'uppercase'}}>Workforce Management Platform</div>
           <div style={{width:56,height:4,background:accentColor,marginBottom:40,borderRadius:2}}/>
           <div style={{fontSize:36,fontWeight:800,color:'#1A2033',marginBottom:14,lineHeight:1.2}}>Taksyn {roleName} Guide</div>
