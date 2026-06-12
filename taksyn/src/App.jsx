@@ -652,6 +652,47 @@ const TaskCard = ({ task, onClick }) => {
   )
 }
 
+const TERMS_CONTENT = [
+  { num:1, title:'Acceptance of Terms', body:'By accessing or using the Taksyn platform you agree to be bound by these Terms of Use. If you do not agree to these terms you must not use the platform. These terms apply to all users including super admins, client admins, managers, supervisors, and staff members.' },
+  { num:2, title:'About Taksyn', body:'Taksyn is a task compliance and workforce management platform designed for organisations in industries including but not limited to aged care, disability care, hospitality, construction, and allied health. Taksyn is operated by Taksyn Pty Ltd.' },
+  { num:3, title:'User Accounts', body:'You are responsible for maintaining the confidentiality of your password and for all activity that occurs under your account. You must notify your organisation administrator immediately if you become aware of any unauthorised use of your account. You must not share your login credentials with any other person.' },
+  { num:4, title:'Acceptable Use', body:'You agree to use Taksyn only for lawful purposes and in accordance with these Terms. You must not use the platform to upload false or misleading task completion records, impersonate another user, attempt to gain unauthorised access to any part of the platform, or interfere with the normal operation of the platform.' },
+  { num:5, title:'Data and Privacy', body:"Taksyn collects and stores data including task records, photo evidence, GPS location data, audit logs, and user profile information. This data is stored securely and retained according to your organisation's subscription plan. Taksyn will not sell your personal data to third parties. By using the platform you consent to the collection and use of this data as described in our Privacy Policy." },
+  { num:6, title:'Photo and GPS Evidence', body:'By submitting photo evidence and enabling GPS tracking you consent to this data being stored as part of the compliance record for your organisation. This data may be reviewed by your manager, supervisor, or organisation administrator for compliance and performance purposes.' },
+  { num:7, title:'Intellectual Property', body:'All content, features, and functionality of the Taksyn platform including but not limited to software, design, text, and graphics are owned by Taksyn Pty Ltd and are protected by applicable intellectual property laws.' },
+  { num:8, title:'Subscription and Billing', body:'Access to Taksyn is provided under a subscription plan selected by your organisation. Subscription fees are billed according to the selected plan. Taksyn reserves the right to suspend access for non-payment.' },
+  { num:9, title:'Data Retention', body:'Task records, audit logs, and compliance data are retained according to your organisation\'s subscription plan as follows: Personal 30 days, Starter 6 months, Growth 12 months, Professional 2 years, Enterprise 7 years. Data is not permanently deleted before the retention period expires.' },
+  { num:10, title:'Limitation of Liability', body:'Taksyn is provided on an as-is basis. To the maximum extent permitted by law, Taksyn Pty Ltd shall not be liable for any indirect, incidental, or consequential damages arising from your use of the platform.' },
+  { num:11, title:'Changes to Terms', body:'Taksyn reserves the right to update these Terms of Use at any time. Users will be notified of material changes via the platform. Continued use of the platform after changes constitutes acceptance of the updated terms.' },
+  { num:12, title:'Governing Law', body:'These Terms are governed by the laws of Queensland, Australia. Any disputes shall be subject to the exclusive jurisdiction of the courts of Queensland.' },
+  { num:13, title:'Contact', body:'For questions about these Terms please contact us through the Support section in the Taksyn platform.' },
+]
+
+function TermsOfUseView({ onBack, isModal }) {
+  return (
+    <div style={{background:'#fff',borderRadius:isModal?16:0,maxWidth:isModal?660:'100%',width:'100%',padding:isModal?'32px 40px':'24px 20px',boxSizing:'border-box',minHeight:isModal?'auto':'100vh',fontFamily:'"DM Sans",Arial,sans-serif',margin:isModal?'0 auto':'0'}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:24}}>
+        <button onClick={onBack} style={{background:'none',border:'1px solid #ddd',borderRadius:8,padding:'6px 16px',cursor:'pointer',fontSize:13,color:'#555',flexShrink:0}}>← Back</button>
+        <img src="/logo.jpeg" alt="Taksyn" style={{height:30,objectFit:'contain'}}/>
+      </div>
+      <div style={{marginBottom:4}}>
+        <div style={{fontSize:22,fontWeight:800,color:'#1A2033',marginBottom:4}}>Terms of Use</div>
+        <div style={{fontSize:13,color:'#999'}}>Last updated: June 2026</div>
+      </div>
+      <hr style={{border:'none',borderTop:'1px solid #eee',margin:'16px 0 20px'}}/>
+      {TERMS_CONTENT.map(s=>(
+        <div key={s.num} style={{marginBottom:22}}>
+          <div style={{fontSize:15,fontWeight:700,color:'#1A2033',marginBottom:6}}>{s.num}. {s.title}</div>
+          <div style={{fontSize:15,color:'#333',lineHeight:1.75}}>{s.body}</div>
+        </div>
+      ))}
+      <div style={{borderTop:'1px solid #eee',marginTop:24,paddingTop:20,textAlign:'center'}}>
+        <button onClick={onBack} style={{background:'#00A87E',color:'#fff',border:'none',borderRadius:8,padding:'11px 32px',fontSize:15,fontWeight:600,cursor:'pointer'}}>← Back</button>
+      </div>
+    </div>
+  )
+}
+
 function AuthView({ onAuth }) {
   // Parse URL params once synchronously so initial state is correct — avoids the login→register flash
   const _sp = new URLSearchParams(window.location.search)
