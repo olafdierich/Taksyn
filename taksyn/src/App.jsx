@@ -1000,7 +1000,9 @@ function AuthView({ onAuth }) {
               {/* Agree checkbox */}
               <label style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 12px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:14,fontSize:13,color:'var(--text)',lineHeight:1.45}}>
                 <input type="checkbox" checked={agreeChecked} onChange={e=>setAgreeChecked(e.target.checked)} style={{marginTop:2,flexShrink:0,accentColor:'var(--brand)',width:15,height:15}}/>
-                My details above are correct and I agree to the <span style={{color:'var(--brand)',marginLeft:3}}>Terms of Use</span>
+                <span>My details above are correct and I agree to the{' '}
+                  <span onClick={e=>{e.preventDefault();e.stopPropagation();setShowTerms(true)}} style={{color:'var(--brand)',textDecoration:'underline',cursor:'pointer'}}>Terms of Use</span>
+                </span>
               </label>
               <button className="auth-btn" disabled={!canSubmit} onClick={handleSubmit}>
                 {loading?'Creating account…':'Create My Account'}
