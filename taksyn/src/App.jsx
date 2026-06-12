@@ -728,7 +728,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
     role: _sp.get('role')||'worker',
     position: _sp.get('position')||'',
     linkId: _sp.get('link')||null,
-    name: _sp.get('name')||'',
+    firstname: _sp.get('firstname')||'',
+    lastname: _sp.get('lastname')||'',
+    name: [_sp.get('firstname'), _sp.get('lastname')].filter(Boolean).join(' ') || _sp.get('name') || '',
     email: _sp.get('email')||'',
     phone: _sp.get('phone')||'',
     industry: _sp.get('industry')||''
