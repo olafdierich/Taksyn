@@ -815,7 +815,13 @@ function AuthView({ onAuth }) {
             if (memberships && memberships.length > 1) {
               // Multiple orgs — show picker
               // Enrich memberships with resolved org names (org_members.org may store an ID)
-              const {data:orgRows} = await supabase.from('organisations').select('id,name').catch(()=>({data:[]}))
+              let orgRows = []
+              try {
+                const { data } = await supabase.from('organisations').select('id,name')
+                orgRows = data || []
+              } catch (err) {
+                console.error('Invite error:', err)
+              }
               const enriched = memberships.map(m => {
                 const orgRow = orgRows?.find(o=>o.id===m.org||o.name===m.org)
                 return {...m, orgName: orgRow?.name || m.org}
