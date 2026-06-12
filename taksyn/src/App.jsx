@@ -911,6 +911,11 @@ function AuthView({ onAuth }) {
     finally { setLoading(false) }
   }
 
+  const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent) || window.innerWidth < 768
+  if (showTerms && isMobile) return (
+    <div className="auth-bg"><style>{CSS}</style><TermsOfUseView onBack={()=>setShowTerms(false)}/></div>
+  )
+
   // ── Dedicated invite registration page ──
   if (inviteParams && mode === 'register') {
     const hasName = !!(inviteParams.name || name)
