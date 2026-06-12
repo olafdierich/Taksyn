@@ -3666,10 +3666,10 @@ function UsersView({ user, setAuditLog }) {
               <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                   <label className="form-label" style={{margin:0}}>Position Assignments</label>
-                  <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Role · Position</span>
+                  <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Position · Role</span>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 4px'}}>
-                  {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
+                  {['Industry','Position','Role',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
                 </div>
                 {invitePositions.map((row,i)=>{
                   const rolesForIndustry = row.industry ? orgCustomRoles.filter(r=>r.industry_name===row.industry).map(r=>r.role_name) : []
