@@ -8483,28 +8483,52 @@ function GettingStartedGuide({ user, setPage }) {
   }
 
   const exportGuideToPDF = async () => {
+    if (/iPhone|iPad|Android/i.test(navigator.userAgent)) {
+      alert('To save as PDF, tap Share then "Save to Files", or use the Print option and choose "Save as PDF".')
+      handlePrint()
+      return
+    }
     const element = document.getElementById('guide-export-container')
     element.style.display = 'block'
+    element.style.position = 'absolute'
+    element.style.left = '-9999px'
+    element.style.top = '0'
     try {
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false })
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      const pageWidth = pdf.internal.pageSize.getWidth()
-      const pageHeight = pdf.internal.pageSize.getHeight()
-      const imgData = canvas.toDataURL('image/png')
-      const imgWidth = pageWidth
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
-      let heightLeft = imgHeight - pageHeight
-      let pageOffset = pageHeight
-      while (heightLeft > 0) {
-        pdf.addPage()
-        pdf.addImage(imgData, 'PNG', 0, -pageOffset, imgWidth, imgHeight)
-        heightLeft -= pageHeight
-        pageOffset += pageHeight
+      await new Promise(resolve => setTimeout(resolve, 500))
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        windowWidth: 794,
+        width: 794
+      })
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pdfWidth = 210
+      const pdfHeight = 297
+      const imgWidth = pdfWidth
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width
+      let yOffset = 0
+      let page = 0
+      while (yOffset < imgHeight) {
+        if (page > 0) pdf.addPage()
+        const sourceY = (yOffset * canvas.width) / pdfWidth
+        const sourceHeight = Math.min((pdfHeight * canvas.width) / pdfWidth, canvas.height - sourceY)
+        const pageCanvas = document.createElement('canvas')
+        pageCanvas.width = canvas.width
+        pageCanvas.height = sourceHeight
+        pageCanvas.getContext('2d').drawImage(canvas, 0, sourceY, canvas.width, sourceHeight, 0, 0, canvas.width, sourceHeight)
+        const pageImgHeight = (sourceHeight * pdfWidth) / canvas.width
+        pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, imgWidth, pageImgHeight)
+        yOffset += pdfHeight
+        page++
       }
       pdf.save('Taksyn-' + roleName.replace(/\s+/g, '-') + '-Guide.pdf')
     } finally {
       element.style.display = ''
+      element.style.position = ''
+      element.style.left = ''
+      element.style.top = ''
     }
   }
 
