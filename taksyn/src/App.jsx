@@ -1346,30 +1346,35 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
 
   const [pendingInvites, setPendingInvites] = useState([])
   const [orgId, setOrgId] = useState(null)
+  const [inviteMsg, setInviteMsg] = useState('')
+
+  const fetchPendingInvites = (oid) => {
+    if (!oid || !isConfigured()) return
+    supabase.from('invite_links').select('*')
+      .eq('organisation_id', oid).is('used_at', null)
+      .eq('is_active', true).gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { if (data) setPendingInvites(data) })
+      .catch(() => {})
+  }
 
   useEffect(()=>{
     if (!(isCA||isMgr) || !isConfigured() || !user?.org) return
     supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
-      .then(({data})=>{
+      .then(({ data }) => {
         if (!data?.id) return
         setOrgId(data.id)
-        return supabase
-          .from('invite_links')
-          .select('*')
-          .eq('organisation_id', data.id)
-          .is('used_at', null)
-          .eq('is_active', true)
-          .gt('expires_at', new Date().toISOString())
-          .order('created_at', { ascending: false })
+        fetchPendingInvites(data.id)
       })
-      .then(result=>{ if (result?.data) setPendingInvites(result.data) })
       .catch(()=>{})
   }, [user?.org, user?.role])
 
   const cancelInvite = async (id) => {
-    if (!confirm('Cancel this pending invite?')) return
-    await supabase.from('invite_links').update({ is_active: false }).eq('id', id).catch(()=>{})
-    setPendingInvites(prev => prev.filter(i => i.id !== id))
+    const { error } = await supabase.from('invite_links').update({ is_active: false }).eq('id', id)
+    if (error) { alert('Failed to cancel: ' + error.message); return }
+    setInviteMsg('Invitation cancelled')
+    setTimeout(() => setInviteMsg(''), 3000)
+    fetchPendingInvites(orgId)
   }
 
   const resendInvite = async (invite) => {
@@ -1490,6 +1495,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
             📨 Pending Invitations
             {pendingInvites.length>0&&<span style={{background:'#F59E0B',color:'#fff',borderRadius:10,fontSize:11,fontWeight:700,padding:'2px 7px'}}>{pendingInvites.length}</span>}
           </div>
+          {inviteMsg&&<div style={{fontSize:12,color:'#059669',padding:'4px 0',fontWeight:600}}>{inviteMsg}</div>}
           {pendingInvites.length===0
             ? <div style={{fontSize:13,color:'var(--t2)',padding:'4px 0'}}>No pending invitations</div>
             : pendingInvites.map(inv=>{
