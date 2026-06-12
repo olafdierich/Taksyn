@@ -3753,7 +3753,7 @@ function UsersView({ user, setAuditLog }) {
           const orgName = orgsById[m.org]
           if (!orgName) continue
           if (!map[m.user_id]) map[m.user_id] = []
-          map[m.user_id].push({ orgName, role: m.role, industry: m.industry||'', position: m.position||'' })
+          map[m.user_id].push({ orgId: m.org, orgName, role: m.role, industry: m.industry||'', position: m.position||'' })
         }
         setAllOrgMemberships(map)
       })().catch(()=>{})
@@ -3828,10 +3828,14 @@ function UsersView({ user, setAuditLog }) {
       notes: editForm.notes||'',
       email: editForm.email||''
     }
-    const orgId = editingOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org
+    let orgId = editingOrgId || orgsList.find(o=>o.name===user.org)?.id
+    if (!orgId && isConfigured()) {
+      const { data: orgData } = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+      orgId = orgData?.id
+    }
     if (isConfigured()) {
       await supabase.from('profiles').update(profileUpdates).eq('id', id)
-      await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }, { onConflict: 'user_id,org' })
+      if (orgId) await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }, { onConflict: 'user_id,org' })
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
     setOrgAssignments(prev=>({...prev, [id]: [{role:editForm.role, industry:editForm.industry||'', position:editForm.position||''}]}))
@@ -3860,7 +3864,12 @@ function UsersView({ user, setAuditLog }) {
     const { data:profiles } = await supabase.from('profiles').select('*')
     const profile = profiles?.find(p=>p.email===email||p.id===email)
     if (!profile) { alert('No user found with that email. They need to sign up to Taksyn first.'); return }
-    const userOrgId = orgsList.find(o=>o.name===user.org)?.id || user.org
+    let userOrgId = orgsList.find(o=>o.name===user.org)?.id
+    if (!userOrgId) {
+      const { data: orgData } = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+      userOrgId = orgData?.id
+    }
+    if (!userOrgId) { alert('Could not find your organisation ID. Please refresh and try again.'); return }
     const { data:existing } = await supabase.from('org_members').select('*').eq('user_id',profile.id).eq('org',userOrgId)
     if (existing?.length) { alert('This user is already in your organisation.'); return }
     await supabase.from('org_members').insert({ user_id:profile.id, org:userOrgId, role, tier:user.tier||'Growth' })
@@ -4188,7 +4197,7 @@ function UsersView({ user, setAuditLog }) {
                   <RolePill role={user.role==='super_admin'?(allOrgMemberships[u.id]?.find(m=>m.orgName===orgCtx)?.role||u.role):(orgAssignments[u.id]?.[0]?.role||u.role)}/>
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{
                     const orgName = orgCtx || user.org
-                    const orgId = orgsList.find(o=>o.name===orgName)?.id || orgName
+                    const orgId = (user.role==='super_admin' ? allOrgMemberships[u.id]?.find(m=>m.orgName===orgName)?.orgId : null) || orgsList.find(o=>o.name===orgName)?.id
                     const a = user.role==='super_admin'
                       ? allOrgMemberships[u.id]?.find(m=>m.orgName===orgName) || {}
                       : orgAssignments[u.id]?.[0] || {}
@@ -4580,7 +4589,8 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoading(true)
     try {
       const oldOrgId = viewingMember.orgId || orgs.find(o=>o.name===viewingMember.org)?.id || viewingMember.org
-      const newOrgId = orgs.find(o=>o.name===newOrgName)?.id || newOrgName
+      const newOrgId = orgs.find(o=>o.name===newOrgName)?.id
+      if (!newOrgId) throw new Error('Could not find organisation ID for ' + newOrgName)
       await supabase.from('org_members').delete().eq('user_id', viewingMember.id).eq('org', oldOrgId)
       await supabase.from('org_members').insert({ user_id: viewingMember.id, org: newOrgId, role: viewingMember.role })
       await supabase.from('profiles').update({ org: newOrgName }).eq('id', viewingMember.id)
