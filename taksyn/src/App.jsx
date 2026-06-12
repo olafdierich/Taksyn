@@ -706,7 +706,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   const [signupType, setSignupType] = useState(_isInvite ? 'staff' : 'organisation')
   const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(_isInvite && _sp.get('secret')!=='taksyn-secret-2024' ? 'Invalid invite link — please ask your admin for a new one' : '')
+  const [error, setError] = useState(_isInvite && _sp.get('secret')!=='taksyn-secret-2024' ? 'Invalid invite link — please ask your admin for a new one' : (deactivatedMsg||''))
+  useEffect(()=>{ if(deactivatedMsg){setError(deactivatedMsg);onClearDeactivated?.()} },[]) // eslint-disable-line
   const [success, setSuccess] = useState('')
   const [orgChoices, setOrgChoices] = useState(null)
   const [showPw, setShowPw] = useState(false)
