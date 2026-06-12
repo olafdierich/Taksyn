@@ -3481,7 +3481,7 @@ function UsersView({ user, setAuditLog }) {
     const roleOrder = ['client_admin','manager','supervisor','worker']
     const systemRole = validRows.length ? validRows.reduce((best,p)=>{ const r=positionToSystemRole(p.position); return roleOrder.indexOf(r)<roleOrder.indexOf(best)?r:best }, 'worker') : 'worker'
     const firstIndustry = validRows.find(p=>p.industry)?.industry || ''
-    const rolesSummary = validRows.map(p=>[p.industry,p.role,p.position].filter(Boolean).join(' / ')).join('; ')
+    const rolesSummary = validRows.map(p=>[p.industry,p.position,p.role].filter(Boolean).join(' / ')).join('; ')
     const positionsSummary = rolesSummary ? '\n\nAssignments: '+rolesSummary : ''
 
     const buildInviteUrl = async (orgId) => {
