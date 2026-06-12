@@ -1342,6 +1342,81 @@ function computeAwards(tasks) {
 }
 
 function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgSLA=DEFAULT_SLA }) {
+  const isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor', isWkr=user.role==='worker'
+
+  const [pendingInvites, setPendingInvites] = useState([])
+  const [orgId, setOrgId] = useState(null)
+
+  useEffect(()=>{
+    if (!(isCA||isMgr) || !isConfigured() || !user?.org) return
+    supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+      .then(({data})=>{
+        if (!data?.id) return
+        setOrgId(data.id)
+        return supabase
+          .from('invite_links')
+          .select('*')
+          .eq('organisation_id', data.id)
+          .is('used_at', null)
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+      })
+      .then(result=>{ if (result?.data) setPendingInvites(result.data) })
+      .catch(()=>{})
+  }, [user?.org, user?.role])
+
+  const cancelInvite = async (id) => {
+    if (!confirm('Cancel this pending invite?')) return
+    await supabase.from('invite_links').update({ is_active: false }).eq('id', id).catch(()=>{})
+    setPendingInvites(prev => prev.filter(i => i.id !== id))
+  }
+
+  const resendInvite = async (invite) => {
+    if (!orgId) return
+    const newSecret = 'IL' + Date.now() + Math.random().toString(36).slice(2, 5)
+    await supabase.from('invite_links').update({ is_active: false }).eq('id', invite.id).catch(()=>{})
+    await supabase.from('invite_links').insert({
+      organisation_id: orgId,
+      team_id: invite.team_id || null,
+      role: invite.role,
+      position: invite.position || null,
+      secret: newSecret,
+      created_by: user.id,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      is_active: true,
+      invited_first_name: invite.invited_first_name || null,
+      invited_last_name: invite.invited_last_name || null,
+      invited_email: invite.invited_email || null,
+      invited_phone: invite.invited_phone || null,
+      invited_industry: invite.invited_industry || null
+    }).catch(()=>{})
+    const base = window.location.origin + window.location.pathname
+    const firstName = invite.invited_first_name || ''
+    const lastName = invite.invited_last_name || ''
+    const params = new URLSearchParams(Object.fromEntries(Object.entries({
+      invite: 'true', org: orgId,
+      ...(invite.team_id ? { team: invite.team_id } : {}),
+      firstname: firstName, lastname: lastName,
+      email: invite.invited_email || '',
+      phone: invite.invited_phone || '',
+      role: invite.role || 'worker',
+      position: invite.position || '',
+      industry: invite.invited_industry || '',
+      secret: 'taksyn-secret-2024',
+      link: newSecret
+    }).filter(([,v]) => v !== '')))
+    const inviteUrl = base + '?' + params.toString()
+    if (invite.invited_phone) {
+      const msg = encodeURIComponent(`Hi ${firstName}, here is your updated invite link to join ${user.org} on Taksyn: ${inviteUrl}`)
+      window.open('https://wa.me/?text=' + msg, '_blank')
+    } else {
+      navigator.clipboard.writeText(inviteUrl).then(()=>alert('New invite link copied!' + (invite.invited_email ? ' Send it to ' + invite.invited_email : ''))).catch(()=>{})
+    }
+    setPendingInvites(prev => prev.filter(i => i.id !== invite.id))
+  }
+
   if (user.role==='super_admin') return <SuperAdminDashboard user={user} setPage={setPage} tickets={tickets}/>
   // Filter tasks by org
   const visibleAll = visibleTasks(tasks, user)
@@ -1356,7 +1431,6 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   const review = visible.filter(t=>t.status==='awaiting_review').length
   const rejected = visible.filter(t=>t.status==='rejected').length
   const awards = computeAwards(tasks)
-  const isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor', isWkr=user.role==='worker'
   return (
     <div className="anim">
       <div className="ph">
@@ -1364,7 +1438,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         <div className="ph-sub">{isWkr?'Hello '+user.name.split(' ')[0]+' — your tasks for today':user.org+' · '+visible.length+' tasks'}</div>
       </div>
       <div className="stat-grid">
-        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋"/><Stat label="Completion" val={rate+"%"} sub={done+" done"} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><Stat label="Escalations" val={esc} sub={esc>0?'Active':'Clear'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.1)" icon="🚨"/></>}
+        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋"/><Stat label="Completion" val={rate+"%"} sub={done+" done"} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨"/></>}
         {isSup&&<><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍"/><Stat label="Approved" val={done} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Escalated" val={esc} sub={esc>0?'Active':'None'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.1)" icon="⚠️"/><Stat label="Overdue" val={overdue} sub="Needs attention" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/></>}
         {isWkr&&<><Stat label="My Tasks" val={visible.filter(t=>!['awaiting_review','approved','completed'].includes(t.status)||isRecurring(t)).length} sub="remaining to do" icon="📋"/><Stat label="Submitted" val={visible.filter(t=>['awaiting_review','approved','completed'].includes(t.status)).length} sub="done or in review" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Overdue" val={overdue} sub={overdue>0?'Complete soon':'All good'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><Stat label="Rejected" val={rejected} sub={rejected>0?'Action needed':'All good'} color={rejected>0?'#EF4444':'#6B7280'} bg={rejected>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)'} icon="✗"/></>}
       </div>
@@ -1405,6 +1479,37 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')}/>)}
         {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
       </div>
+      {(isCA||isMgr)&&(
+        <div className="section" style={{marginTop:16}}>
+          <div className="section-title" style={{display:'flex',alignItems:'center',gap:8}}>
+            📨 Pending Invitations
+            {pendingInvites.length>0&&<span style={{background:'#F59E0B',color:'#fff',borderRadius:10,fontSize:11,fontWeight:700,padding:'2px 7px'}}>{pendingInvites.length}</span>}
+          </div>
+          {pendingInvites.length===0
+            ? <div style={{fontSize:13,color:'var(--t2)',padding:'4px 0'}}>No pending invitations</div>
+            : pendingInvites.map(inv=>{
+                const fullName = [inv.invited_first_name, inv.invited_last_name].filter(Boolean).join(' ')
+                const detail = [inv.invited_industry, inv.position, ROLE_LABELS[inv.role]||inv.role].filter(Boolean).join(' · ')
+                const sentDate = inv.created_at ? new Date(inv.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : '—'
+                const expiryDate = inv.expires_at ? new Date(inv.expires_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : '—'
+                return (
+                  <div key={inv.id} style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:600,fontSize:13,color:'var(--text)'}}>{fullName||ROLE_LABELS[inv.role]||inv.role}</div>
+                      {inv.invited_email&&<div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{inv.invited_email}</div>}
+                      <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{detail}</div>
+                      <div style={{fontSize:11,color:'var(--t3)',marginTop:3}}>Invited {sentDate} · Expires {expiryDate}</div>
+                    </div>
+                    <div style={{display:'flex',gap:6,flexShrink:0,marginTop:2}}>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>resendInvite(inv)}>↩ Resend</button>
+                      <button className="btn btn-danger btn-sm" onClick={()=>cancelInvite(inv.id)}>✕ Cancel</button>
+                    </div>
+                  </div>
+                )
+              })
+          }
+        </div>
+      )}
     </div>
   )
 }
@@ -3727,7 +3832,12 @@ function UsersView({ user, setAuditLog }) {
           created_by: user.id,
           created_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          is_active: true
+          is_active: true,
+          invited_first_name: inviteFirstName.trim() || null,
+          invited_last_name: inviteLastName.trim() || null,
+          invited_email: inviteEmail.trim() || null,
+          invited_phone: invitePhone.trim() || null,
+          invited_industry: firstIndustry || null
         })
         if (error) throw error
       } catch (err) {
