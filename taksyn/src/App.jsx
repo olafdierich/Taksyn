@@ -9228,8 +9228,16 @@ export default function App() {
         }
         try {
           const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
-          if(data) setUser({...data,email:session.user.email})
-        } catch(e) {}
+          if (data) {
+            setUser({...data, email:session.user.email})
+          } else {
+            await supabase.auth.signOut()
+            setDeactivatedMsg('Your account has been deactivated. Please contact your administrator.')
+          }
+        } catch(e) {
+          await supabase.auth.signOut()
+          setDeactivatedMsg('Your account has been deactivated. Please contact your administrator.')
+        }
       }
     })
 
