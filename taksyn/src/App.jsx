@@ -716,6 +716,7 @@ function AuthView({ onAuth }) {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeChecked, setAgreeChecked] = useState(false)
+  const [showTerms, setShowTerms] = useState(false)
   const [orgs, setOrgs] = useState([])
   // Invite params: set immediately from URL, names resolved async
   const [inviteParams, setInviteParams] = useState(_isInvite ? {
