@@ -3649,6 +3649,8 @@ function UsersView({ user, setAuditLog }) {
   const [editOrgSearch, setEditOrgSearch] = useState('')
   const [userPositions, setUserPositions] = useState({})
   const [orgAssignments, setOrgAssignments] = useState({}) // user_id → [{role,position,industry}] from org_members
+  const [allOrgMemberships, setAllOrgMemberships] = useState({}) // super_admin: user_id → [{orgName, role, industry, position}]
+  const [editingOrgId, setEditingOrgId] = useState(null)
   const [editPositions, setEditPositions] = useState([])
   const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
 
@@ -3736,28 +3738,46 @@ function UsersView({ user, setAuditLog }) {
       setUserPositions(map)
     }
     if(user.role==='super_admin') {
-      supabase.from('profiles').select('*').then(({data})=>{ if(data) { setRealUsers(data); parsePositions(data) } }).catch(()=>{})
+      ;(async()=>{
+        const [profilesRes, membersRes, orgsRes] = await Promise.all([
+          supabase.from('profiles').select('*'),
+          supabase.from('org_members').select('user_id, org, role, industry, position'),
+          supabase.from('organisations').select('id, name')
+        ])
+        const profiles = profilesRes.data || []
+        setRealUsers(profiles)
+        parsePositions(profiles)
+        const orgsById = Object.fromEntries((orgsRes.data||[]).map(o=>[o.id, o.name]))
+        const map = {}
+        for (const m of membersRes.data||[]) {
+          if (!map[m.user_id]) map[m.user_id] = []
+          map[m.user_id].push({ orgName: orgsById[m.org]||m.org, role: m.role, industry: m.industry||'', position: m.position||'' })
+        }
+        setAllOrgMemberships(map)
+      })().catch(()=>{})
       return
     }
     ;(async()=>{
-      // Strict filter: only profiles whose org name exactly matches — no cross-checks that could leak other-org users
-      const {data:profileData} = await supabase.from('profiles').select('*').eq('org', user.org)
+      if (!user.org) return
+      // Use org_members as the authoritative source of membership for this org
+      const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+      const orgId = orgRow?.id
+      if (!orgId) return
+      const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
+      const memberIds = (assignments||[]).map(a=>a.user_id)
+      // Load profiles only for confirmed org members, then re-verify profiles.org matches
+      const {data:profileData} = memberIds.length
+        ? await supabase.from('profiles').select('*').in('id', memberIds).eq('org', user.org)
+        : {data:[]}
       const workforceMembers = profileData || []
       setRealUsers(workforceMembers)
       parsePositions(workforceMembers)
-
-      // Separately fetch org_members assignments so we can show per-org role/position tags
-      const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
-      const orgId = orgRow?.id
-      if (orgId) {
-        const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
-        const map = {}
-        for (const a of assignments||[]) {
-          if (!map[a.user_id]) map[a.user_id] = []
-          map[a.user_id].push(a)
-        }
-        setOrgAssignments(map)
+      const map = {}
+      for (const a of assignments||[]) {
+        if (!map[a.user_id]) map[a.user_id] = []
+        map[a.user_id].push(a)
       }
+      setOrgAssignments(map)
     })().catch(()=>{})
   },[user.org])
 
@@ -3800,45 +3820,35 @@ function UsersView({ user, setAuditLog }) {
   const saveEditUser = async () => {
     if (!editForm.name?.trim()) return
     const { id } = editingUser
-    const updates = {
+    const profileUpdates = {
       name: editForm.name.trim(),
-      role: editForm.role,
-      industry: editForm.industry||'',
       phone: editForm.phone||'',
       notes: editForm.notes||'',
       email: editForm.email||''
     }
+    const orgId = editingOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org
     if (isConfigured()) {
-      await supabase.from('profiles').update(updates).eq('id', id)
-      // Save multi-position assignments (requires profiles.positions jsonb column)
-      if (editPositions.length > 0) {
-        supabase.from('profiles').update({ positions: editPositions }).eq('id', id).catch(() => {})
-      }
-      const targetOrgName = editForm.org || user.org
-      const targetOrgId = orgsList.find(o=>o.name===targetOrgName)?.id || targetOrgName
-      await supabase.from('org_members').upsert({ user_id: id, org: targetOrgId, role: editForm.role }, { onConflict: 'user_id,org' })
+      await supabase.from('profiles').update(profileUpdates).eq('id', id)
+      await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }, { onConflict: 'user_id,org' })
     }
-    setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...updates, positions: editPositions.length>0?editPositions:u.positions}:u))
-    if (editPositions.length > 0) {
-      setUserPositions(prev=>({...prev, [id]: editPositions}))
-    }
+    setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
+    setOrgAssignments(prev=>({...prev, [id]: [{role:editForm.role, industry:editForm.industry||'', position:editForm.position||''}]}))
     if (setAuditLog) {
-      const oldUser = realUsers.find(u=>u.id===id)
-      const roleChanged = oldUser?.role && oldUser.role!==editForm.role
+      const oldRole = orgAssignments[id]?.[0]?.role || realUsers.find(u=>u.id===id)?.role
+      const roleChanged = oldRole && oldRole!==editForm.role
       const evType = roleChanged ? 'role_changed' : 'member_edited'
-      const ov = roleChanged ? (ROLE_LABELS[oldUser.role]||oldUser.role) : null
+      const ov = roleChanged ? (ROLE_LABELS[oldRole]||oldRole) : null
       const nv = roleChanged ? (ROLE_LABELS[editForm.role]||editForm.role) : null
-      const eEntry = mkAuditEntry(evType, user, user.org, { memberName:updates.name }, null, null, ov, nv)
+      const eEntry = mkAuditEntry(evType, user, user.org, { memberName:profileUpdates.name }, null, null, ov, nv)
       setAuditLog(prev=>[eEntry,...prev])
       if (isConfigured()) supabase.from('audit_log').insert(eEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
-      if (roleChanged) logAuditEvent(user, 'member.role_changed', 'member', id, updates.name, (ROLE_LABELS[oldUser?.role]||oldUser?.role||'?')+' → '+(ROLE_LABELS[editForm.role]||editForm.role))
-      else logAuditEvent(user, 'member.edited', 'member', id, updates.name, 'Profile updated')
+      if (roleChanged) logAuditEvent(user, 'member.role_changed', 'member', id, profileUpdates.name, (ROLE_LABELS[oldRole]||oldRole||'?')+' → '+(ROLE_LABELS[editForm.role]||editForm.role))
+      else logAuditEvent(user, 'member.edited', 'member', id, profileUpdates.name, 'Profile updated')
     }
-    // user_positions table removed — position edits not persisted
     setEditingUser(null)
+    setEditingOrgId(null)
     setEditForm({})
     setEditCustomDept('')
-    setEditOrgSearch('')
     setEditPositions([])
     setNewPosition({ dept:'', role:'worker', title:'' })
   }
@@ -3961,11 +3971,11 @@ function UsersView({ user, setAuditLog }) {
   return (
     <div className="anim">
       {editingUser&&(
-        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch(''); setEditPositions([]); setNewPosition({dept:'',role:'worker',title:''}) }}>
+        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">Edit Team Member</div>
-              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch(''); setEditPositions([]); setNewPosition({dept:'',role:'worker',title:''}) }}>×</button>
+              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>×</button>
             </div>
             <div className="modal-body">
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--s3)',borderRadius:8}}>
@@ -3973,7 +3983,7 @@ function UsersView({ user, setAuditLog }) {
                 <div>
                   <div style={{fontWeight:700,fontSize:14}}>{editingUser.name}</div>
                   <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{editingUser.email||'—'}</div>
-                  <div style={{marginTop:4}}><RolePill role={editingUser.role}/></div>
+                  <div style={{marginTop:4}}><RolePill role={editForm.role||editingUser.role}/></div>
                 </div>
               </div>
               <div className="two-col">
@@ -3991,69 +4001,32 @@ function UsersView({ user, setAuditLog }) {
                 <input className="form-input" type="email" value={editForm.email||''} onChange={e=>setEditForm({...editForm,email:e.target.value})} placeholder="email@example.com"/>
                 <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates the display email — user must change their own login email via Profile</div>
               </div>
-              <div className="form-field">
-                <label className="form-label">Role</label>
-                <select className="form-input" value={editForm.role||'worker'} onChange={e=>setEditForm({...editForm,role:e.target.value})}>
-                  {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                </select>
-              </div>
               <div className="two-col">
-                <div className="form-field" style={{gridColumn:'1/-1'}}>
+                <div className="form-field">
+                  <label className="form-label">Role</label>
+                  <select className="form-input" value={editForm.role||'worker'} onChange={e=>setEditForm({...editForm,role:e.target.value})}>
+                    {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </select>
+                </div>
+                <div className="form-field">
                   <label className="form-label">Industry</label>
                   <select className="form-input" value={editForm.industry||''} onChange={e=>setEditForm({...editForm,industry:e.target.value})}>
-                    <option value="">— Select industry —</option>
+                    <option value="">— Select —</option>
                     {[...PRESET_INDUSTRIES,...orgCustomDepts.filter(d=>!PRESET_INDUSTRIES.includes(d))].map(k=><option key={k} value={k}>{k}</option>)}
                   </select>
                 </div>
               </div>
               <div className="form-field">
+                <label className="form-label">Position</label>
+                <input className="form-input" value={editForm.position||''} onChange={e=>setEditForm({...editForm,position:e.target.value})} placeholder="e.g. Line Cook, Barista, Supervisor..."/>
+                <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Role, Industry and Position are saved per-organisation</div>
+              </div>
+              <div className="form-field">
                 <label className="form-label">Notes</label>
                 <textarea className="comment-box" style={{minHeight:60}} value={editForm.notes||''} onChange={e=>setEditForm({...editForm,notes:e.target.value})} placeholder="Any notes about this team member..."/>
               </div>
-              {orgsList.length>0&&<div className="form-field">
-                <label className="form-label">Organisation</label>
-                <input className="form-input" value={editOrgSearch} onChange={e=>setEditOrgSearch(e.target.value)} placeholder="Search organisations..." style={{marginBottom:4}}/>
-                <select className="form-input" value={editForm.org||''} onChange={e=>setEditForm({...editForm,org:e.target.value})}>
-                  <option value="">— No organisation —</option>
-                  {orgsList.filter(o=>o.name.toLowerCase().includes(editOrgSearch.toLowerCase())).map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
-                </select>
-              </div>}
-              <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                  <label className="form-label" style={{margin:0}}>Positions</label>
-                  <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setEditPositions(prev=>[...prev,{department:'',role:'worker',position_title:'',is_primary:prev.length===0}])}>+ Add</button>
-                </div>
-                {editPositions.length>0&&(
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 2px'}}>
-                    {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
-                  </div>
-                )}
-                {(()=>{
-                  const defaultPos = ['Staff Member','Supervisor','Manager']
-                  const allPos = [...defaultPos, ...orgCustomPositions.filter(p=>!defaultPos.includes(p))]
-                  return editPositions.map((pos,i)=>(
-                    <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
-                      <select className="form-select" style={{fontSize:11}} value={pos.department||''} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,department:e.target.value}:p))}>
-                        <option value="">— Industry —</option>
-                        {allIndustries.map(d=><option key={d} value={d}>{d}</option>)}
-                      </select>
-                      <select className="form-select" style={{fontSize:11}} value={pos.role||'worker'} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
-                        <option value="worker">Staff Member</option>
-                        <option value="supervisor">Supervisor</option>
-                        <option value="manager">Manager</option>
-                      </select>
-                      <select className="form-select" style={{fontSize:11}} value={pos.position_title||''} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,position_title:e.target.value}:p))}>
-                        <option value="">— Position —</option>
-                        {allPos.map(p=><option key={p} value={p}>{p}</option>)}
-                      </select>
-                      <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:16,padding:'0 4px',lineHeight:1,fontFamily:'inherit'}} onClick={()=>setEditPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
-                    </div>
-                  ))
-                })()}
-                {editPositions.length===0&&<div style={{fontSize:12,color:'var(--t2)',padding:'4px 0'}}>No positions assigned.</div>}
-              </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
-                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch(''); setEditPositions([]); setNewPosition({dept:'',role:'worker',title:''}) }}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>Cancel</button>
                 <button className="btn btn-primary" disabled={!editForm.name?.trim()} onClick={saveEditUser}>Save Changes</button>
               </div>
             </div>
@@ -4184,6 +4157,59 @@ function UsersView({ user, setAuditLog }) {
               const filtered = [...realUsers]
                 .filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())||u.role?.toLowerCase().includes(userSearch.toLowerCase()))
                 .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+              const userCard = (u,i,orgCtx) => (
+                <div key={i} className="user-row" style={{flexWrap:'wrap',gap:8}}>
+                  <Avatar name={u.name} role={u.role} size={34} avatarUrl={u.avatar_url}/>
+                  <div className="user-info" style={{flex:1}}>
+                    <div className="user-name">{u.name}</div>
+                    <div className="user-email">{u.email||'—'}</div>
+                    {user.role==='super_admin' && allOrgMemberships[u.id]?.length > 0 ? (
+                      <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
+                        {allOrgMemberships[u.id].map((m,mi)=>(
+                          <span key={mi} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>{m.orgName} · {ROLE_LABELS[m.role]||m.role}{m.industry ? ' · '+m.industry : ''}{m.position ? ' · '+m.position : ''}</span>
+                        ))}
+                      </div>
+                    ) : orgAssignments[u.id]?.length > 0 ? (
+                      <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
+                        {orgAssignments[u.id].map((a,ai)=>{
+                          const label = [a.industry, a.position || ROLE_LABELS[a.role] || a.role].filter(Boolean).join(' · ')
+                          return <span key={ai} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:'var(--s3)',border:'1px solid var(--border)',color:'var(--t2)',whiteSpace:'nowrap'}}>{label}</span>
+                        })}
+                      </div>
+                    ) : userPositions[u.id]?.length > 0 ? (
+                      <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
+                        {userPositions[u.id].map((pos,pi)=><PositionChip key={pi} pos={pos}/>)}
+                      </div>
+                    ) : (u.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {u.industry}</div>)}
+                  </div>
+                  <RolePill role={(user.role!=='super_admin'&&orgAssignments[u.id]?.[0]?.role)||u.role}/>
+                  {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{
+                    const orgName = orgCtx || user.org
+                    const orgId = orgsList.find(o=>o.name===orgName)?.id || orgName
+                    const a = user.role==='super_admin'
+                      ? allOrgMemberships[u.id]?.find(m=>m.orgName===orgName) || {}
+                      : orgAssignments[u.id]?.[0] || {}
+                    setEditingUser(u)
+                    setEditingOrgId(orgId)
+                    setEditForm({name:u.name, role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
+                  }}>✏️ Edit</button>}
+                  {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
+                </div>
+              )
+              if (user.role==='super_admin') {
+                // Group by profiles.org — each organisation's users are clearly separated
+                const orgGroups = {}
+                filtered.forEach(u=>{ const o=u.org||'(No Organisation)'; if(!orgGroups[o]) orgGroups[o]=[]; orgGroups[o].push(u) })
+                return Object.keys(orgGroups).sort().map(orgName=>(
+                  <div key={orgName} style={{marginBottom:12}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setCollapsedRoles(prev=>({...prev,['__org__'+orgName]:!prev['__org__'+orgName]}))}>
+                      <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>{orgName} ({orgGroups[orgName].length})</span>
+                      <span style={{fontSize:12,color:'var(--t2)'}}>{collapsedRoles['__org__'+orgName]?'▶':'▼'}</span>
+                    </div>
+                    {!collapsedRoles['__org__'+orgName]&&orgGroups[orgName].map((u,i)=>userCard(u,i,orgName))}
+                  </div>
+                ))
+              }
               const groups = {}
               filtered.forEach(u=>{ const r=u.role||'worker'; if(!groups[r]) groups[r]=[]; groups[r].push(u) })
               const roleOrder = ['client_admin','manager','supervisor','worker']
@@ -4193,33 +4219,10 @@ function UsersView({ user, setAuditLog }) {
                     <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>{ROLE_LABELS[role]} ({groups[role].length})</span>
                     <span style={{fontSize:12,color:'var(--t2)'}}>{collapsedRoles[role]?'▶':'▼'}</span>
                   </div>
-                  {!collapsedRoles[role]&&groups[role].map((u,i)=>(
-            <div key={i} className="user-row" style={{flexWrap:'wrap',gap:8}}>
-              <Avatar name={u.name} role={u.role} size={34} avatarUrl={u.avatar_url}/>
-              <div className="user-info" style={{flex:1}}>
-                <div className="user-name">{u.name}</div>
-                <div className="user-email">{u.email||'—'}</div>
-                {orgAssignments[u.id]?.length > 0 ? (
-                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
-                    {orgAssignments[u.id].map((a,ai)=>{
-                      const label = [a.industry, a.position || ROLE_LABELS[a.role] || a.role].filter(Boolean).join(' · ')
-                      return <span key={ai} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:'var(--s3)',border:'1px solid var(--border)',color:'var(--t2)',whiteSpace:'nowrap'}}>{label}</span>
-                    })}
-                  </div>
-                ) : userPositions[u.id]?.length > 0 ? (
-                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
-                    {userPositions[u.id].map((pos,pi)=><PositionChip key={pi} pos={pos}/>)}
-                  </div>
-                ) : (u.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {u.industry}</div>)}
-              </div>
-              <RolePill role={u.role}/>
-              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setEditingUser(u); setEditForm({name:u.name,role:u.role,department:u.department||'',industry:u.industry||'',phone:u.phone||'',notes:u.notes||'',email:u.email||'',org:u.org||''}); setEditPositions(userPositions[u.id]?.map(p=>({...p}))||[]) }}>✏️ Edit</button>}
-              {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
-            </div>
-          ))}
-        </div>
-      ))
-    })()
+                  {!collapsedRoles[role]&&groups[role].map(userCard)}
+                </div>
+              ))
+            })()
         }
       </div>
       {['client_admin','super_admin'].includes(user.role)&&<div className="section">
@@ -4453,11 +4456,11 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   const loadOrgMembers = async (orgId, orgName) => {
     setLoadingMembers(true)
-    const { data: members } = await supabase.from('org_members').select('user_id, role, org, tier').eq('org', orgId)
+    const { data: members } = await supabase.from('org_members').select('user_id, role, org, tier, industry, position').eq('org', orgId)
     if (members?.length) {
       const ids = members.map(m=>m.user_id)
       const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids)
-      const merged = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:p.org||orgName,orgId:m.org,tier:m.tier,email:p.email||''} })
+      const merged = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:p.org||orgName,orgId:m.org,tier:m.tier,email:p.email||'',industry:m.industry||'',position:m.position||''} })
       setOrgMembers(merged)
     } else {
       // Fallback: query profiles directly by org name (handles legacy rows still using names)
@@ -4469,26 +4472,13 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   const saveMemberEdit = async () => {
     if (!memberEditForm.name?.trim()) return
-    const newOrgName = memberEditForm.org || editingMember.org
-    const orgChanged = newOrgName !== editingMember.org
-    const updates = { name:memberEditForm.name.trim(), role:memberEditForm.role, department:memberEditForm.department||'', industry:memberEditForm.industry||'', phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'', org:newOrgName }
+    const profileUpdates = { name:memberEditForm.name.trim(), phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'' }
+    const orgId = editingMember.orgId || orgs.find(o=>o.name===editingMember.org)?.id || editingMember.org
     if (isConfigured()) {
-      await supabase.from('profiles').update(updates).eq('id', editingMember.id)
-      const oldOrgId = editingMember.orgId || orgs.find(o=>o.name===editingMember.org)?.id || editingMember.org
-      if (orgChanged) {
-        const newOrgId = orgs.find(o=>o.name===newOrgName)?.id || newOrgName
-        await supabase.from('org_members').delete().eq('user_id', editingMember.id).eq('org', oldOrgId)
-        await supabase.from('org_members').insert({ user_id: editingMember.id, org: newOrgId, role: memberEditForm.role })
-      } else {
-        await supabase.from('org_members').update({ role: memberEditForm.role }).eq('user_id', editingMember.id).eq('org', oldOrgId)
-      }
-      // user_positions table removed — position edits not persisted
+      await supabase.from('profiles').update(profileUpdates).eq('id', editingMember.id)
+      await supabase.from('org_members').update({ role:memberEditForm.role, industry:memberEditForm.industry||'', position:memberEditForm.position||'' }).eq('user_id', editingMember.id).eq('org', orgId)
     }
-    if (orgChanged) {
-      setOrgMembers(prev=>prev.filter(m=>m.id!==editingMember.id))
-    } else {
-      setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...updates}:m))
-    }
+    setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...profileUpdates,role:memberEditForm.role,industry:memberEditForm.industry||'',position:memberEditForm.position||''}:m))
     setViewingMember(null)
     setEditingMember(null); setMemberEditForm({}); setOrgChangeSearch('')
     setEditMemberPositions([]); setEditOrgIndustries([]); setEditOrgCustomRoles([]); setEditOrgCustomPositions([])
@@ -4503,7 +4493,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   const openEditMember = async (member) => {
     setEditingMember(member)
-    setMemberEditForm({name:member.name,role:member.role,department:member.department||'',industry:member.industry||'',phone:member.phone||'',notes:member.notes||'',email:member.email||'',org:member.org||''})
+    setMemberEditForm({name:member.name,role:member.role,industry:member.industry||'',position:member.position||'',phone:member.phone||'',notes:member.notes||'',email:member.email||''})
     setEditMemberPositions([])
     setEditMemberNewPos({industry:'',role:'',position:''})
     setEditOrgIndustries([])
@@ -4755,7 +4745,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                         {m.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {m.industry}</div>}
                       </div>
                       <RolePill role={m.role}/>
-                      <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,department:m.department||'',industry:m.industry||'',phone:m.phone||'',notes:m.notes||'',email:m.email||'',org:m.org||''})}}>✏️ Edit</button>
+                      <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,industry:m.industry||'',position:m.position||'',phone:m.phone||'',notes:m.notes||'',email:m.email||''})}}>✏️ Edit</button>
                       <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();removeMemberFromOrg(m)}}>Remove</button>
                     </div>
                   ))}
@@ -4846,70 +4836,18 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                     {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                 </div>
-                <div className="form-field"><label className="form-label">Industry</label>
-                  <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value})}>
-                    <option value="">— Select —</option>
-                    {industryList.map(k=><option key={k} value={k}>{k}</option>)}
-                  </select>
-                </div>
-                <div className="form-field"><label className="form-label">Organisation</label>
-                  <input className="form-input" placeholder="Filter organisations..." value={orgChangeSearch} onChange={e=>setOrgChangeSearch(e.target.value)} style={{fontSize:13,marginBottom:4}}/>
-                  <select className="form-input" value={memberEditForm.org||editingMember?.org||''} onChange={e=>setMemberEditForm({...memberEditForm,org:e.target.value})} size={4} style={{fontSize:13,height:'auto'}}>
-                    {[...orgs].sort((a,b)=>a.name.localeCompare(b.name)).filter(o=>!orgChangeSearch||o.name.toLowerCase().includes(orgChangeSearch.toLowerCase())).map(o=><option key={o.id} value={o.name}>{o.name}</option>)}
-                  </select>
-                  {memberEditForm.org&&memberEditForm.org!==editingMember?.org&&(
-                    <div style={{fontSize:11,color:'#F59E0B',marginTop:3}}>⚠️ Moving from <strong>{editingMember?.org}</strong> to <strong>{memberEditForm.org}</strong></div>
-                  )}
-                </div>
-                <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                    <label className="form-label" style={{margin:0}}>Positions</label>
-                    <span style={{fontSize:10,color:'var(--t2)'}}>Multiple roles across industries</span>
+                <div className="two-col">
+                  <div className="form-field"><label className="form-label">Industry</label>
+                    <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value})}>
+                      <option value="">— Select —</option>
+                      {industryList.map(k=><option key={k} value={k}>{k}</option>)}
+                    </select>
                   </div>
-                  {editMemberPositions.map((pos,i)=>{
-                    const posRoles = rolesForInd(pos.department||pos.industry||'')
-                    return (
-                      <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
-                        <select className="form-select" style={{fontSize:12}} value={pos.department||pos.industry||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,department:e.target.value,industry:e.target.value,role:'worker'}:p))}>
-                          <option value="">— Industry —</option>
-                          {industryList.map(d=><option key={d} value={d}>{d}</option>)}
-                        </select>
-                        <select className="form-select" style={{fontSize:12}} value={pos.role||'worker'} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
-                          {allPositions.map(p=><option key={p} value={p==='Manager'?'manager':p==='Supervisor'?'supervisor':'worker'}>{p}</option>)}
-                        </select>
-                        {posRoles.length>0
-                          ? <select className="form-select" style={{fontSize:12}} value={pos.position_title||pos.role_name||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,position_title:e.target.value}:p))}>
-                              <option value="">— Role —</option>
-                              {posRoles.map(r=><option key={r} value={r}>{r}</option>)}
-                            </select>
-                          : <input className="form-input" style={{fontSize:12}} placeholder="Role…" value={pos.position_title||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,position_title:e.target.value}:p))}/>
-                        }
-                        <button style={{padding:'4px 8px',borderRadius:6,border:'1px solid var(--border)',background:'transparent',color:'var(--red)',cursor:'pointer',fontSize:13,lineHeight:1}} onClick={()=>setEditMemberPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
-                      </div>
-                    )
-                  })}
-                  <div style={{background:'var(--s3)',borderRadius:8,padding:10,marginTop:6}}>
-                    <div style={{fontSize:11,fontWeight:600,color:'var(--t2)',marginBottom:8}}>Add Position</div>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,alignItems:'center'}}>
-                      <select className="form-select" style={{fontSize:12}} value={editMemberNewPos.industry} onChange={e=>setEditMemberNewPos(p=>({...p,industry:e.target.value,role:''}))}>
-                        <option value="">— Industry —</option>
-                        {industryList.map(d=><option key={d} value={d}>{d}</option>)}
-                      </select>
-                      <select className="form-select" style={{fontSize:12}} value={editMemberNewPos.position} onChange={e=>setEditMemberNewPos(p=>({...p,position:e.target.value}))}>
-                        <option value="">— Position —</option>
-                        {allPositions.map(p=><option key={p} value={p==='Manager'?'manager':p==='Supervisor'?'supervisor':'worker'}>{p}</option>)}
-                      </select>
-                      {rolesForInd(editMemberNewPos.industry).length>0
-                        ? <select className="form-select" style={{fontSize:12}} value={editMemberNewPos.role} onChange={e=>setEditMemberNewPos(p=>({...p,role:e.target.value}))}>
-                            <option value="">— Role —</option>
-                            {rolesForInd(editMemberNewPos.industry).map(r=><option key={r} value={r}>{r}</option>)}
-                          </select>
-                        : <input className="form-input" style={{fontSize:12}} placeholder="Role…" value={editMemberNewPos.role} onChange={e=>setEditMemberNewPos(p=>({...p,role:e.target.value}))}/>
-                      }
-                      <button className="btn btn-secondary btn-sm" disabled={!editMemberNewPos.industry} onClick={()=>{ if(!editMemberNewPos.industry) return; setEditMemberPositions(prev=>[...prev,{department:editMemberNewPos.industry,industry:editMemberNewPos.industry,role:editMemberNewPos.position||'worker',position_title:editMemberNewPos.role,is_primary:prev.length===0}]); setEditMemberNewPos({industry:'',role:'',position:''}) }}>+ Add</button>
-                    </div>
+                  <div className="form-field"><label className="form-label">Position</label>
+                    <input className="form-input" value={memberEditForm.position||''} onChange={e=>setMemberEditForm({...memberEditForm,position:e.target.value})} placeholder="e.g. Line Cook, Supervisor..."/>
                   </div>
                 </div>
+                <div style={{fontSize:10,color:'var(--t2)',marginBottom:10}}>Role, Industry and Position are saved for <strong>{editingMember?.org}</strong> only</div>
                 <div className="form-field"><label className="form-label">Notes</label>
                   <textarea className="comment-box" style={{minHeight:60}} value={memberEditForm.notes||''} onChange={e=>setMemberEditForm({...memberEditForm,notes:e.target.value})} placeholder="Notes about this member..."/>
                 </div>
