@@ -876,7 +876,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           }
           try {
             const { error: orgMemberError } = await supabase.from('org_members').upsert(
-              { user_id:uid, org: orgName, role:assignedRole, tier:inviteParams?._tier || 'Starter', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
+              { user_id:uid, org: orgName, role:assignedRole, tier:inviteOrgTier || 'Starter', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
               { onConflict: 'user_id,org' }
             )
             if (orgMemberError) {
