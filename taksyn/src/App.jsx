@@ -3590,7 +3590,7 @@ function UsersView({ user, setAuditLog }) {
   const sendInvite = async () => {
     const targetOrg = user.role==='super_admin' ? inviteOrg.trim() : user.org
     if (user.role==='super_admin' && !targetOrg) { alert('Please enter the organisation name'); return }
-    if (!inviteEmail.trim() || !inviteName.trim()) { alert('Please enter name and email'); return }
+    if (!inviteEmail.trim() || !inviteFirstName.trim() || !inviteLastName.trim()) { alert('Please enter first name, last name and email'); return }
 
     const validRows = invitePositions.filter(p=>p.role||p.industry||p.position)
     const roleOrder = ['client_admin','manager','supervisor','worker']
