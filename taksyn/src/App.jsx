@@ -850,25 +850,30 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           const _firstName = inviteParams?.firstname || name.trim().split(/\s+/)[0] || ''
           const _lastName = inviteParams?.lastname || name.trim().split(/\s+/).slice(1).join(' ') || ''
           try {
-            const { error: profileError } = await supabase.from('profiles').insert({
-              id: uid,
-              name: name.trim(),
-              first_name: _firstName,
-              last_name: _lastName,
-              email: inviteParams ? inviteParams.email || email : email,
-              phone: inviteParams?.phone || null,
-              role: assignedRole,
-              org: orgName,
-              industry: inviteParams?.industry || '',
-              tier: inviteOrgTier || 'Starter',
-              created_at: new Date().toISOString(),
-              ...(inviteParams?.position ? { position: inviteParams.position } : {})
-            })
-            if (profileError) {
-              console.error('PROFILE INSERT FAILED:', profileError)
-              alert('Profile creation failed: ' + profileError.message)
+            const { data: existingProfile } = await supabase.from('profiles').select('id').eq('id', uid).maybeSingle()
+            if (!existingProfile) {
+              const { error: profileError } = await supabase.from('profiles').upsert({
+                id: uid,
+                name: name.trim(),
+                first_name: _firstName,
+                last_name: _lastName,
+                email: inviteParams ? inviteParams.email || email : email,
+                phone: inviteParams?.phone || null,
+                role: assignedRole,
+                org: orgName,
+                industry: inviteParams?.industry || '',
+                tier: inviteOrgTier || 'Starter',
+                created_at: new Date().toISOString(),
+                ...(inviteParams?.position ? { position: inviteParams.position } : {})
+              }, { onConflict: 'id' })
+              if (profileError) {
+                console.error('PROFILE INSERT FAILED:', profileError)
+                alert('Profile creation failed: ' + profileError.message)
+              } else {
+                console.log('Profile created successfully for uid:', uid)
+              }
             } else {
-              console.log('Profile created successfully for uid:', uid)
+              console.log('Profile already exists for uid:', uid)
             }
           } catch (profileErr) {
             console.error('Profile insert exception:', profileErr)
