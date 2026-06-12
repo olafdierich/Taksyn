@@ -7170,16 +7170,21 @@ function TeamsView({ user }) {
     const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
     // Record the invite in invite_links so we can mark it used on registration
     if (isConfigured()) {
-      await supabase.from('invite_links').insert({
-        id: linkId,
-        org_id: orgId,
-        team_id: team.id,
-        role: inviteLinkRole,
-        position: inviteLinkPosition || null,
-        created_by: user.name,
-        org: user.org,
-        created_at: new Date().toISOString()
-      }).catch(()=>{})
+      try {
+        const { error } = await supabase.from('invite_links').insert({
+          id: linkId,
+          org_id: orgId,
+          team_id: team.id,
+          role: inviteLinkRole,
+          position: inviteLinkPosition || null,
+          created_by: user.name,
+          org: user.org,
+          created_at: new Date().toISOString()
+        })
+        if (error) throw error
+      } catch (err) {
+        console.error('Invite error:', err)
+      }
     }
     const base = window.location.origin + window.location.pathname
     const params = new URLSearchParams({
