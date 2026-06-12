@@ -4464,6 +4464,10 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                         <option value="">— Industry —</option>
                         {industryList.map(d=><option key={d} value={d}>{d}</option>)}
                       </select>
+                      <select className="form-select" style={{fontSize:12}} value={editMemberNewPos.position} onChange={e=>setEditMemberNewPos(p=>({...p,position:e.target.value}))}>
+                        <option value="">— Position —</option>
+                        {allPositions.map(p=><option key={p} value={p==='Manager'?'manager':p==='Supervisor'?'supervisor':'worker'}>{p}</option>)}
+                      </select>
                       {rolesForInd(editMemberNewPos.industry).length>0
                         ? <select className="form-select" style={{fontSize:12}} value={editMemberNewPos.role} onChange={e=>setEditMemberNewPos(p=>({...p,role:e.target.value}))}>
                             <option value="">— Role —</option>
@@ -4471,10 +4475,6 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                           </select>
                         : <input className="form-input" style={{fontSize:12}} placeholder="Role…" value={editMemberNewPos.role} onChange={e=>setEditMemberNewPos(p=>({...p,role:e.target.value}))}/>
                       }
-                      <select className="form-select" style={{fontSize:12}} value={editMemberNewPos.position} onChange={e=>setEditMemberNewPos(p=>({...p,position:e.target.value}))}>
-                        <option value="">— Position —</option>
-                        {allPositions.map(p=><option key={p} value={p==='Manager'?'manager':p==='Supervisor'?'supervisor':'worker'}>{p}</option>)}
-                      </select>
                       <button className="btn btn-secondary btn-sm" disabled={!editMemberNewPos.industry} onClick={()=>{ if(!editMemberNewPos.industry) return; setEditMemberPositions(prev=>[...prev,{department:editMemberNewPos.industry,industry:editMemberNewPos.industry,role:editMemberNewPos.position||'worker',position_title:editMemberNewPos.role,is_primary:prev.length===0}]); setEditMemberNewPos({industry:'',role:'',position:''}) }}>+ Add</button>
                     </div>
                   </div>
