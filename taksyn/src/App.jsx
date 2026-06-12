@@ -859,13 +859,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               if (!signInErr && signInData?.user) {
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).single()
                 if (profile) {
-                  const { data: memberships } = await supabase.from('org_members').select('*').eq('user_id', signInData.user.id)
-                  if (memberships && memberships.length >= 1) {
-                    const m = memberships[0]
-                    onAuth({...profile, email: signInData.user.email, role: m.role, org: profile.org || m.org, tier: m.tier || 'Growth'})
-                  } else {
-                    onAuth({...profile, email: signInData.user.email})
-                  }
+                  onAuth({...profile, email: signInData.user.email})
                   return
                 }
               }
