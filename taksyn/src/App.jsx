@@ -831,7 +831,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           const inviteTeamId   = inviteUrlRef.current.teamId
           console.log('Invite params from ref:', { inviteOrgId, firstName, lastName, inviteEmail, invitePhone, inviteRole, inviteIndustry, invitePosition, inviteLinkId, inviteTeamId })
 
-          assignedRole = inviteRole
+          assignedRole = inviteRole || 'worker'
 
           // Validate invite link (non-blocking)
           if (inviteLinkId) {
@@ -984,6 +984,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         setSuccess('Account created! Check your email to confirm, then sign in as your org admin.')
         setMode('login'); setLoading(false)
       } else {
+        // Suppress onAuthStateChange SIGNED_IN while we do the org-picker check
+        window.__taksyn_org_selection_pending = true
         // Race login against 10s timeout using the main persistent client
         const loginResult = await Promise.race([
           supabase.auth.signInWithPassword({ email, password }),
@@ -996,32 +998,39 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           if (profile) {
             // Check org_members for multiple org memberships
             const { data:memberships } = await supabase.from('org_members').select('*').eq('user_id',data.user.id)
-            if (memberships && memberships.length > 1) {
+            // Deduplicate org_members by org key before checking count
+            const _seenOrgs = new Set()
+            const uniqueMemberships = (memberships||[]).filter(m => {
+              if (_seenOrgs.has(m.org)) return false
+              _seenOrgs.add(m.org)
+              return true
+            })
+            if (uniqueMemberships.length > 1) {
               // Multiple orgs — show picker
-              // Enrich memberships with resolved org names (org_members.org may store an ID)
               let orgRows = []
               try {
-                const { data } = await supabase.from('organisations').select('id,name')
-                orgRows = data || []
+                const { data: od } = await supabase.from('organisations').select('id,name,industry')
+                orgRows = od || []
               } catch (err) {
-                console.error('Invite error:', err)
+                console.error('Org fetch error:', err)
               }
-              const enriched = memberships.map(m => {
-                const orgRow = orgRows?.find(o=>o.id===m.org||o.name===m.org)
-                return {...m, orgName: orgRow?.name || m.org}
+              const enriched = uniqueMemberships.map(m => {
+                const orgRow = orgRows.find(o=>o.id===m.org||o.name===m.org)
+                return {...m, orgName: orgRow?.name || m.org, industry: orgRow?.industry || ''}
               })
               setPendingAuthUser({...profile, email:data.user.email})
               setOrgChoices(enriched)
               setLoading(false)
               return
-            } else if (memberships && memberships.length === 1) {
+            } else if (uniqueMemberships.length === 1) {
               // Single org from org_members — use that role/org
-              // Prefer profile.org (always a name) over m.org (may be an ID)
-              const m = memberships[0]
+              window.__taksyn_org_selection_pending = false
+              const m = uniqueMemberships[0]
               const userData = {...profile, email:data.user.email, role:m.role, org:profile.org||m.org, tier:m.tier||'Growth'}
               onAuth(userData)
             } else {
               // No org_members entry — use profile directly (legacy/super_admin)
+              window.__taksyn_org_selection_pending = false
               const userData = {...profile, email:data.user.email}
               onAuth(userData)
             }
@@ -1033,6 +1042,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         }
       }
     } catch(e) {
+      window.__taksyn_org_selection_pending = false
       window.__taksyn_registering = false
       setError(e.message||'Sign in failed. Please try again.')
       setLoading(false)
@@ -1225,9 +1235,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           <div className="auth-title">Select Organisation</div>
           <div className="auth-sub">You are a member of multiple organisations. Choose which one to sign in to.</div>
           <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16,maxHeight:'50vh',overflowY:'auto',paddingRight:4}}>
-            {[...orgChoices].sort((a,b)=>(a.orgName||a.org).localeCompare(b.orgName||b.org)||(a.role.localeCompare(b.role))).map((m,i)=>(
+            {[...orgChoices].sort((a,b)=>(a.orgName||a.org).localeCompare(b.orgName||b.org)).map((m,i)=>(
               <button key={i} onClick={()=>{
-                // Prefer resolved org name; fall back to m.org which may be an ID
+                window.__taksyn_org_selection_pending = false
                 const userData = {...pendingAuthUser, role:m.role, org:m.orgName||pendingAuthUser.org||m.org, tier:m.tier||'Growth'}
                 onAuth(userData)
               }} style={{padding:'14px 16px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',textAlign:'left',transition:'all .15s'}}
@@ -1235,11 +1245,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               onMouseOut={e=>e.currentTarget.style.borderColor='var(--border)'}>
                 <div style={{fontWeight:700,fontSize:14}}>{m.orgName||m.org}</div>
                 <div style={{fontSize:12,color:'var(--t2)',marginTop:3}}>{ROLE_LABELS[m.role]||m.role}</div>
+                {m.industry&&<div style={{fontSize:11,color:'var(--t3)',marginTop:2}}>🏭 {m.industry}</div>}
               </button>
             ))}
           </div>
           <div style={{textAlign:'center',marginTop:16}}>
-            <a style={{fontSize:12,color:'var(--t2)',cursor:'pointer'}} onClick={()=>{setOrgChoices(null);setPendingAuthUser(null)}}>← Back to sign in</a>
+            <a style={{fontSize:12,color:'var(--t2)',cursor:'pointer'}} onClick={()=>{window.__taksyn_org_selection_pending=false;setOrgChoices(null);setPendingAuthUser(null)}}>← Back to sign in</a>
           </div>
         </div>
       </div>
@@ -3712,12 +3723,21 @@ function UsersView({ user, setAuditLog }) {
 
   useEffect(()=>{
     if(!isConfigured()||!user.id) return
+    const parsePositions = (members) => {
+      const map = {}
+      for (const u of members) {
+        let pos = null
+        try { pos = Array.isArray(u.positions) ? u.positions : (u.positions ? JSON.parse(u.positions) : null) } catch(e) {}
+        if (pos?.length) map[u.id] = pos
+      }
+      setUserPositions(map)
+    }
     if(user.role==='super_admin') {
-      supabase.from('profiles').select('*').then(({data})=>{ if(data) setRealUsers(data) }).catch(()=>{})
+      supabase.from('profiles').select('*').then(({data})=>{ if(data) { setRealUsers(data); parsePositions(data) } }).catch(()=>{})
       return
     }
     supabase.from('profiles').select('*').eq('org', user.org)
-      .then(({data:workforceMembers})=>{ setRealUsers(workforceMembers||[]) })
+      .then(({data:workforceMembers})=>{ setRealUsers(workforceMembers||[]); parsePositions(workforceMembers||[]) })
       .catch(()=>{})
   },[user.org])
 
@@ -3769,10 +3789,17 @@ function UsersView({ user, setAuditLog }) {
     }
     if (isConfigured()) {
       await supabase.from('profiles').update(updates).eq('id', id)
+      // Save multi-position assignments (requires profiles.positions jsonb column)
+      if (editPositions.length > 0) {
+        supabase.from('profiles').update({ positions: editPositions }).eq('id', id).catch(() => {})
+      }
       const targetOrg = editForm.org || user.org
       await supabase.from('org_members').upsert({ user_id: id, org: targetOrg, role: editForm.role }, { onConflict: 'user_id,org' })
     }
-    setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...updates}:u))
+    setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...updates, positions: editPositions.length>0?editPositions:u.positions}:u))
+    if (editPositions.length > 0) {
+      setUserPositions(prev=>({...prev, [id]: editPositions}))
+    }
     if (setAuditLog) {
       const oldUser = realUsers.find(u=>u.id===id)
       const roleChanged = oldUser?.role && oldUser.role!==editForm.role
@@ -3971,36 +3998,36 @@ function UsersView({ user, setAuditLog }) {
               <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:4}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                   <label className="form-label" style={{margin:0}}>Positions</label>
-                  <span style={{fontSize:10,color:'var(--t2)'}}>Multiple roles across industries</span>
+                  <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setEditPositions(prev=>[...prev,{department:'',role:'worker',position_title:'',is_primary:prev.length===0}])}>+ Add</button>
                 </div>
-                {editPositions.map((pos,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,background:'var(--s3)',borderRadius:8,padding:'8px 10px'}}>
-                    <div style={{flex:1,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                      <PositionChip pos={pos}/>
-                      {pos.is_primary&&<span style={{fontSize:10,color:'#F59E0B',fontWeight:600}}>PRIMARY</span>}
-                    </div>
-                    <div style={{display:'flex',gap:4,flexShrink:0}}>
-                      {!pos.is_primary&&<button className="btn btn-secondary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={()=>setEditPositions(prev=>prev.map((p,j)=>({...p,is_primary:j===i})))}>★ Primary</button>}
-                      <button className="btn btn-danger btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={()=>setEditPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
-                    </div>
+                {editPositions.length>0&&(
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 2px'}}>
+                    {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
                   </div>
-                ))}
-                <div style={{background:'var(--s3)',borderRadius:8,padding:10,marginTop:6}}>
-                  <div style={{fontSize:11,fontWeight:600,color:'var(--t2)',marginBottom:8}}>Add Position</div>
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                    <select className="form-select" value={newPosition.dept} onChange={e=>setNewPosition(p=>({...p,dept:e.target.value}))} style={{flex:1,minWidth:130,fontSize:12}}>
-                      <option value="">— Industry —</option>
-                      {allIndustries.map(d=><option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <select className="form-select" value={newPosition.role} onChange={e=>setNewPosition(p=>({...p,role:e.target.value}))} style={{width:130,fontSize:12}}>
-                      <option value="worker">Staff Member</option>
-                      <option value="supervisor">Supervisor</option>
-                      <option value="manager">Manager</option>
-                    </select>
-                    <input className="form-input" placeholder="Position e.g. Nurse" value={newPosition.title} onChange={e=>setNewPosition(p=>({...p,title:e.target.value}))} style={{flex:1,minWidth:110,fontSize:12}}/>
-                    <button className="btn btn-secondary btn-sm" disabled={!newPosition.dept} onClick={()=>{ if(!newPosition.dept) return; setEditPositions(prev=>[...prev,{department:newPosition.dept,role:newPosition.role,position_title:newPosition.title,is_primary:prev.length===0}]); setNewPosition({dept:'',role:'worker',title:''}) }}>+ Add</button>
-                  </div>
-                </div>
+                )}
+                {(()=>{
+                  const defaultPos = ['Staff Member','Supervisor','Manager']
+                  const allPos = [...defaultPos, ...orgCustomPositions.filter(p=>!defaultPos.includes(p))]
+                  return editPositions.map((pos,i)=>(
+                    <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
+                      <select className="form-select" style={{fontSize:11}} value={pos.department||''} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,department:e.target.value}:p))}>
+                        <option value="">— Industry —</option>
+                        {allIndustries.map(d=><option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <select className="form-select" style={{fontSize:11}} value={pos.role||'worker'} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
+                        <option value="worker">Staff Member</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="manager">Manager</option>
+                      </select>
+                      <select className="form-select" style={{fontSize:11}} value={pos.position_title||''} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,position_title:e.target.value}:p))}>
+                        <option value="">— Position —</option>
+                        {allPos.map(p=><option key={p} value={p}>{p}</option>)}
+                      </select>
+                      <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:16,padding:'0 4px',lineHeight:1,fontFamily:'inherit'}} onClick={()=>setEditPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
+                    </div>
+                  ))
+                })()}
+                {editPositions.length===0&&<div style={{fontSize:12,color:'var(--t2)',padding:'4px 0'}}>No positions assigned.</div>}
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
                 <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditForm({}); setEditOrgSearch(''); setEditPositions([]); setNewPosition({dept:'',role:'worker',title:''}) }}>Cancel</button>
@@ -4039,33 +4066,30 @@ function UsersView({ user, setAuditLog }) {
               <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                   <label className="form-label" style={{margin:0}}>Position Assignments</label>
-                  <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Position · Role</span>
+                  <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Role · Position</span>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 4px'}}>
-                  {['Industry','Position','Role',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
+                  {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
                 </div>
                 {invitePositions.map((row,i)=>{
-                  const rolesForIndustry = row.industry ? orgCustomRoles.filter(r=>r.industry_name===row.industry).map(r=>r.role_name) : []
                   const defaultPositions = ['Staff Member','Supervisor','Manager',...(['super_admin','client_admin'].includes(user.role)?['Client Admin']:[])]
                   const allPositions = [...defaultPositions, ...orgCustomPositions.filter(p=>!defaultPositions.includes(p))]
                   return (
                     <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
-                      <select className="form-select" style={{fontSize:11}} value={row.industry} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value,role:''}:p))}>
+                      <select className="form-select" style={{fontSize:11}} value={row.industry} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value}:p))}>
                         <option value="">— Industry —</option>
                         {allIndustries.map(k=><option key={k} value={k}>{k}</option>)}
+                      </select>
+                      <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
+                        <option value="">— Role —</option>
+                        <option value="worker">Staff Member</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="manager">Manager</option>
                       </select>
                       <select className="form-select" style={{fontSize:11}} value={row.position} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
                         <option value="">— Position —</option>
                         {allPositions.map(p=><option key={p} value={p}>{p}</option>)}
                       </select>
-                      {rolesForIndustry.length>0 ? (
-                        <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
-                          <option value="">— Role —</option>
-                          {rolesForIndustry.map(r=><option key={r} value={r}>{r}</option>)}
-                        </select>
-                      ) : (
-                        <input className="form-input" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))} placeholder="Role / title"/>
-                      )}
                       <button style={{background:'none',border:'none',cursor:invitePositions.length>1?'pointer':'default',opacity:invitePositions.length>1?1:.3,color:'var(--red)',fontSize:16,padding:'0 4px',lineHeight:1}} onClick={()=>invitePositions.length>1&&setInvitePositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
                     </div>
                   )
@@ -9588,6 +9612,8 @@ export default function App() {
         }
         // Suppress during our custom invite registration — handleSubmit manages everything
         if (window.__taksyn_registering) return
+        // Suppress while handleSubmit is running the org-picker check
+        if (window.__taksyn_org_selection_pending) return
         // Only show password setup for Supabase native email invite (hash token in URL)
         if(window.__taksyn_invite_flow) {
           window.__taksyn_invite_flow = false
@@ -9648,7 +9674,34 @@ export default function App() {
     }
   },[user])
 
-  const handleAuth = (userData) => { setUser(userData); setPage('dashboard') }
+  const [showOrgSwitch, setShowOrgSwitch] = useState(false)
+  const [orgSwitchChoices, setOrgSwitchChoices] = useState([])
+
+  const handleAuth = (userData) => {
+    setUser(userData)
+    setPage('dashboard')
+    const positions = userData.positions
+    if (Array.isArray(positions) && positions.length > 1) {
+      setUserPositionsList(positions)
+      setShowRoleSelector(true)
+    }
+  }
+
+  const handleSwitchOrg = async () => {
+    if (!isConfigured() || !user?.id) return
+    const { data: memberships } = await supabase.from('org_members').select('*').eq('user_id', user.id).catch(() => ({data:[]}))
+    const _seen = new Set()
+    const unique = (memberships||[]).filter(m => { if(_seen.has(m.org)) return false; _seen.add(m.org); return true })
+    if (unique.length <= 1) { alert('You only belong to one organisation.'); return }
+    const { data: orgRows } = await supabase.from('organisations').select('id,name,industry').catch(() => ({data:[]}))
+    const enriched = unique.map(m => {
+      const o = (orgRows||[]).find(r=>r.id===m.org||r.name===m.org)
+      return {...m, orgName: o?.name||m.org, industry: o?.industry||''}
+    })
+    setOrgSwitchChoices(enriched)
+    setShowOrgSwitch(true)
+    setShowProfile(false)
+  }
 
   const logout = async () => {
     if (user && isConfigured()) {
@@ -9942,6 +9995,7 @@ export default function App() {
                   </div>
                 </div>
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16,display:'flex',flexDirection:'column',gap:8}}>
+                  <button className="btn btn-secondary" style={{width:'100%'}} onClick={()=>handleSwitchOrg()}>🏢 Switch Organisation</button>
                   <button className="btn btn-secondary" style={{width:'100%'}} onClick={()=>{setShowProfile(false);clearAuthCache();location.reload()}}>🔄 Clear Cache & Reload</button>
                   <button className="btn btn-danger" style={{width:'100%'}} onClick={()=>{setShowProfile(false);logout()}}>Sign Out</button>
                 </div>
@@ -9974,6 +10028,40 @@ export default function App() {
                   </div>
                 ))}
                 <button className="btn btn-secondary" style={{width:'100%',marginTop:4}} onClick={()=>setShowRoleSelector(false)}>Skip — show all tasks</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Switch Organisation modal */}
+        {showOrgSwitch&&(
+          <div className="modal-overlay" style={{zIndex:600}} onClick={()=>setShowOrgSwitch(false)}>
+            <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:440}}>
+              <div className="modal-hdr">
+                <div className="modal-title">Switch Organisation</div>
+                <button className="modal-close" onClick={()=>setShowOrgSwitch(false)}>×</button>
+              </div>
+              <div className="modal-body">
+                <div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>Select the organisation you want to work in.</div>
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {orgSwitchChoices.sort((a,b)=>(a.orgName||a.org).localeCompare(b.orgName||b.org)).map((m,i)=>(
+                    <div key={i} onClick={()=>{
+                      const userData = {...user, role:m.role, org:m.orgName||m.org, tier:m.tier||user.tier}
+                      setUser(userData)
+                      setPage('dashboard')
+                      setShowOrgSwitch(false)
+                    }} style={{padding:'14px 16px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',transition:'all .15s'+(m.orgName===user.org?' border-color:var(--brand);':'')}}
+                    onMouseOver={e=>e.currentTarget.style.borderColor='var(--brand)'}
+                    onMouseOut={e=>e.currentTarget.style.borderColor=m.orgName===user.org?'var(--brand)':'var(--border)'}>
+                      <div style={{fontWeight:700,fontSize:14,display:'flex',alignItems:'center',gap:6}}>
+                        {m.orgName||m.org}
+                        {(m.orgName||m.org)===user.org&&<span style={{fontSize:10,color:'var(--brand)',fontWeight:700}}>✓ current</span>}
+                      </div>
+                      <div style={{fontSize:12,color:'var(--t2)',marginTop:3}}>{ROLE_LABELS[m.role]||m.role}</div>
+                      {m.industry&&<div style={{fontSize:11,color:'var(--t3)',marginTop:2}}>🏭 {m.industry}</div>}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
