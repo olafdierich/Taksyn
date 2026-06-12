@@ -3656,7 +3656,7 @@ function UsersView({ user, setAuditLog }) {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
       alert('Invite sent to '+inviteEmail+'!'+(rolesSummary?'\n\nAssignments: '+rolesSummary:''))
-      logAuditEvent(user, 'member.invited', 'member', null, inviteName.trim(), ROLE_LABELS[systemRole]+' · '+inviteEmail.trim())
+      logAuditEvent(user, 'member.invited', 'member', null, (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), ROLE_LABELS[systemRole]+' · '+inviteEmail.trim())
       setShowInvite(false); resetInviteForm()
     } catch(e) {
       alert('Failed to send invite: '+e.message)
