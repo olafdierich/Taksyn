@@ -829,16 +829,22 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             { user_id:uid, org: inviteParams ? (inviteParams.orgId || orgName) : orgName, role:assignedRole, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
             { onConflict: 'user_id,org' }
           )
-          if (inviteParams?.teamId) {
+          if (inviteParams) {
             try {
-              const { error } = await supabase.from('team_members').insert({
-                id: 'TM'+Date.now(), team_id:inviteParams.teamId, user_id:uid,
-                user_name:name.trim(), role:assignedRole, org:orgName,
-                added_by:'invite_link', added_at:new Date().toISOString()
-              })
-              if (error) throw error
+              let teamId = inviteParams.teamId || null
+              if (!teamId && inviteParams.orgId) {
+                const { data: teamRow } = await supabase.from('teams').select('id').eq('org', inviteParams.orgId).limit(1).maybeSingle()
+                teamId = teamRow?.id || null
+              }
+              if (teamId) {
+                await supabase.from('team_members').insert({
+                  id: 'TM'+Date.now(), team_id:teamId, user_id:uid,
+                  user_name:name.trim(), role:assignedRole, org:orgName,
+                  added_by:'invite_link', added_at:new Date().toISOString()
+                })
+              }
             } catch (err) {
-              console.error('Invite error:', err)
+              console.error('team_members insert error:', err)
             }
           }
           if (inviteParams?.linkId) {
