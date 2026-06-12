@@ -693,7 +693,7 @@ function TermsOfUseView({ onBack, isModal }) {
   )
 }
 
-function AuthView({ onAuth }) {
+function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   // Parse URL params once synchronously so initial state is correct — avoids the login→register flash
   const _sp = new URLSearchParams(window.location.search)
   const _isInvite = _sp.get('invite')==='true' && _sp.get('secret')==='taksyn-secret-2024'
