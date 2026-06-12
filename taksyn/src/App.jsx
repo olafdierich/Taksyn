@@ -701,7 +701,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   const [mode, setMode] = useState(_isInvite ? 'register' : 'login')
   const [email, setEmail] = useState(_isInvite && _sp.get('email') ? _sp.get('email') : '')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState(_isInvite && _sp.get('name') ? _sp.get('name') : '')
+  const [name, setName] = useState(_isInvite ? ([_sp.get('firstname'), _sp.get('lastname')].filter(Boolean).join(' ') || _sp.get('name') || '') : '')
   const [org, setOrg] = useState('')
   const [signupType, setSignupType] = useState(_isInvite ? 'staff' : 'organisation')
   const [inviteCode, setInviteCode] = useState('')
