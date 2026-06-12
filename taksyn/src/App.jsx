@@ -5696,6 +5696,104 @@ function CompanySettingsView({ user }) {
   const [tmEditGlobal, setTmEditGlobal] = useState(null)
   const [tmLoaded, setTmLoaded] = useState(false)
 
+  // Logo drag-and-drop state
+  const [logoDragOver, setLogoDragOver] = useState(false)
+  const [logoFileName, setLogoFileName] = useState('')
+  const [logoFileSize, setLogoFileSize] = useState('')
+  const [logoError, setLogoError] = useState('')
+  const logoInputRef = useRef(null)
+
+  const LOGO_MAX_BYTES = 2 * 1024 * 1024
+  const LOGO_ACCEPTED = ['image/png','image/jpeg','image/jpg','image/svg+xml','image/webp']
+  const LOGO_ACCEPT_ATTR = '.png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/jpg,image/svg+xml,image/webp'
+
+  const processLogoFile = (file) => {
+    if (!file) return
+    setLogoError('')
+    if (!LOGO_ACCEPTED.includes(file.type)) {
+      setLogoError('Invalid format — please use PNG, JPG, or SVG')
+      return
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      setLogoError('File too large — maximum size is 2MB')
+      return
+    }
+    const kb = file.size < 1024 ? file.size + ' B' : file.size < 1024*1024 ? (file.size/1024).toFixed(1)+' KB' : (file.size/1024/1024).toFixed(1)+' MB'
+    setLogoFileName(file.name)
+    setLogoFileSize(kb)
+    const r = new FileReader()
+    r.onload = ev => setForm(p => ({...p, logo: ev.target.result}))
+    r.readAsDataURL(file)
+  }
+
+  const LogoDropZone = () => {
+    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent) || window.innerWidth < 768
+    const zoneStyle = {
+      border: `2px dashed ${logoDragOver ? '#3B82F6' : 'var(--border)'}`,
+      borderRadius: 10,
+      background: logoDragOver ? 'rgba(59,130,246,.07)' : 'var(--s3)',
+      padding: form.logo ? '10px' : '28px 16px',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'pointer',
+      transition: 'border-color .15s, background .15s',
+      minHeight: form.logo ? 0 : 130,
+      position: 'relative',
+      userSelect: 'none',
+    }
+    return (
+      <div>
+        <div
+          style={zoneStyle}
+          onClick={() => logoInputRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); setLogoDragOver(true) }}
+          onDragEnter={e => { e.preventDefault(); setLogoDragOver(true) }}
+          onDragLeave={() => setLogoDragOver(false)}
+          onDrop={e => {
+            e.preventDefault()
+            setLogoDragOver(false)
+            processLogoFile(e.dataTransfer.files[0])
+          }}
+        >
+          {form.logo ? (
+            <img src={form.logo} alt="logo preview" style={{maxHeight:100,maxWidth:'100%',objectFit:'contain',borderRadius:6,display:'block'}}/>
+          ) : (
+            <>
+              <div style={{fontSize:28,marginBottom:8,opacity:.5}}>🖼</div>
+              {isMobile
+                ? <div style={{fontSize:13,fontWeight:600,color:'var(--t2)',textAlign:'center'}}>Tap to upload your logo</div>
+                : <div style={{fontSize:13,fontWeight:600,color:'var(--t2)',textAlign:'center'}}>Drag and drop your logo here, or <span style={{color:'var(--brand)',textDecoration:'underline'}}>click to browse</span></div>
+              }
+              <div style={{fontSize:11,color:'var(--t3)',marginTop:4,textAlign:'center'}}>PNG, JPG, SVG, WEBP · max 2 MB</div>
+            </>
+          )}
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept={LOGO_ACCEPT_ATTR}
+            capture={isMobile ? 'environment' : undefined}
+            style={{display:'none'}}
+            onChange={e => { processLogoFile(e.target.files[0]); e.target.value='' }}
+          />
+        </div>
+        {form.logo && (logoFileName || logoFileSize) && (
+          <div style={{fontSize:11,color:'var(--t2)',marginTop:4,textAlign:'center'}}>
+            {logoFileName}{logoFileName && logoFileSize && ' · '}{logoFileSize}
+          </div>
+        )}
+        {logoError && <div style={{fontSize:12,color:'var(--red)',marginTop:4,textAlign:'center'}}>{logoError}</div>}
+        {form.logo && (
+          <div style={{display:'flex',gap:6,marginTop:6,justifyContent:'center'}}>
+            <button className="btn btn-secondary btn-sm" onClick={() => logoInputRef.current?.click()}>Replace</button>
+            <button className="btn btn-danger btn-sm" onClick={() => { setForm(p=>({...p,logo:''})); setLogoFileName(''); setLogoFileSize(''); setLogoError('') }}>Remove Logo</button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   useEffect(() => {
     if (!isConfigured()) { setLoading(false); return }
     supabase.from('organisations').select('*').eq('name', user.org).maybeSingle().then(({ data }) => {
@@ -6014,12 +6112,8 @@ function CompanySettingsView({ user }) {
         <div className="section" style={{marginBottom:14}}>
           <div className="section-title">Company Identity</div>
           <div style={{display:'flex',gap:16,alignItems:'flex-start',flexWrap:'wrap'}}>
-            <div style={{flexShrink:0}}>
-              <div style={{width:84,height:84,borderRadius:10,border:'2px dashed var(--border)',background:'var(--s3)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',marginBottom:6}}>
-                {form.logo?<img src={form.logo} alt="logo" style={{width:'100%',height:'100%',objectFit:'contain'}}/>:<span style={{fontSize:30}}>🏢</span>}
-              </div>
-              <label className="btn btn-secondary btn-sm" style={{cursor:'pointer',display:'block',textAlign:'center',marginBottom:4}}>{form.logo?'Change Logo':'Upload Logo'}<input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const fl=e.target.files[0]; if(!fl) return; const r=new FileReader(); r.onload=ev=>setForm(p=>({...p,logo:ev.target.result})); r.readAsDataURL(fl); e.target.value='' }}/></label>
-              {form.logo&&<button className="btn btn-danger btn-sm" style={{width:'100%'}} onClick={()=>setForm(p=>({...p,logo:''}))}>Remove</button>}
+            <div style={{flexShrink:0,width:220}}>
+              <LogoDropZone/>
             </div>
             <div style={{flex:1,minWidth:220}}>
               <div className="two-col">
@@ -6197,18 +6291,8 @@ function CompanySettingsView({ user }) {
       {activeTab==='branding'&&<>
         <div className="section" style={{marginBottom:14}}>
           <div className="section-title">Logo</div>
-          <div style={{display:'flex',alignItems:'center',gap:14}}>
-            <div style={{width:80,height:80,borderRadius:10,border:'2px dashed var(--border)',background:'var(--s3)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0}}>
-              {form.logo?<img src={form.logo} alt="logo" style={{width:'100%',height:'100%',objectFit:'contain'}}/>:<span style={{fontSize:28}}>🏢</span>}
-            </div>
-            <div>
-              <div style={{display:'flex',gap:6,marginBottom:4}}>
-                <label className="btn btn-secondary btn-sm" style={{cursor:'pointer'}}>{form.logo?'Change':'Upload Logo'}<input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const fl=e.target.files[0]; if(!fl) return; const r=new FileReader(); r.onload=ev=>setForm(p=>({...p,logo:ev.target.result})); r.readAsDataURL(fl); e.target.value='' }}/></label>
-                {form.logo&&<button className="btn btn-danger btn-sm" onClick={()=>setForm(p=>({...p,logo:''}))}>Remove</button>}
-              </div>
-              <div style={{fontSize:11,color:'var(--t2)'}}>Appears in reports and emails. Recommended: 400×200px.</div>
-            </div>
-          </div>
+          <LogoDropZone/>
+          <div style={{fontSize:11,color:'var(--t2)',marginTop:6}}>Appears in reports and emails. Recommended: 400×200px.</div>
         </div>
         <div className="section" style={{marginBottom:14}}>
           <div className="section-title">Brand Colour</div>
