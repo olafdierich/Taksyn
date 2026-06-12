@@ -795,10 +795,19 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         if (inviteParams) {
           if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
           if (inviteParams.linkId) {
-            const {data:linkCheck} = await supabase.from('invite_links').select('is_active,used_at').eq('id', inviteParams.linkId).maybeSingle()
-            if (linkCheck && (linkCheck.is_active === false || linkCheck.used_at)) {
-              setError('This invite link has already been used or expired. Please ask your admin for a new link.')
-              setLoading(false); return
+            try {
+              const { data: linkCheck } = await supabase
+                .from('invite_links')
+                .select('id, is_active, expires_at, used_at')
+                .eq('secret', inviteParams.linkId)
+                .single()
+              if (linkCheck && (linkCheck.is_active === false || linkCheck.used_at)) {
+                setError('This invite link has already been used or expired. Please ask your admin for a new link.')
+                setLoading(false); return
+              }
+            } catch (linkErr) {
+              // Non-blocking — if the validation query fails, proceed with registration
+              console.warn('invite_links validation query failed, proceeding:', linkErr.message)
             }
           }
           // Always look up org name fresh from DB using the org ID in the invite URL
