@@ -809,11 +809,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           orgName = org.trim()
           assignedRole = 'client_admin'
         }
+        window.__taksyn_registering = true
         const { data:signUpData, error:e } = await supabase.auth.signUp({
           email, password,
           options:{ data:{ name:name.trim(), role:assignedRole, org:orgName } }
         })
-        if (e) throw e
+        if (e) { window.__taksyn_registering = false; throw e }
         if (signUpData?.user) {
           const uid = signUpData.user.id
           const _firstName = inviteParams?.firstname || name.trim().split(/\s+/)[0] || ''
