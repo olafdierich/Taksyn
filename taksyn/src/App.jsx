@@ -4396,6 +4396,9 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
   const [editMemberPositions, setEditMemberPositions] = useState([])
   const [editMemberNewPos, setEditMemberNewPos] = useState({industry:'',role:'',position:''})
   const [inviteOrgPositions, setInviteOrgPositions] = useState([{industry:'',role:'',position:''}])
+  const [archiveSearch, setArchiveSearch] = useState('')
+  const [archiveExpanded, setArchiveExpanded] = useState(false)
+  const [toastMsg, setToastMsg] = useState('')
 
   const INDUSTRIES = PRESET_INDUSTRIES
 
@@ -4456,16 +4459,19 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   const loadOrgMembers = async (orgId, orgName) => {
     setLoadingMembers(true)
-    const { data: members } = await supabase.from('org_members').select('user_id, role, org, tier, industry, position').eq('org', orgId)
+    // Query by ID and by name so legacy rows (org = name) are included alongside current rows (org = ID)
+    const { data: members } = await supabase.from('org_members')
+      .select('user_id, role, org, tier, industry, position')
+      .in('org', [orgId, orgName].filter(Boolean))
     if (members?.length) {
-      const ids = members.map(m=>m.user_id)
+      const ids = [...new Set(members.map(m=>m.user_id))]
       const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids)
-      const merged = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:p.org||orgName,orgId:m.org,tier:m.tier,email:p.email||'',industry:m.industry||'',position:m.position||''} })
-      setOrgMembers(merged)
+      const raw = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:p.org||orgName,orgId:m.org,tier:m.tier,email:p.email||'',industry:m.industry||'',position:m.position||''} })
+      // Deduplicate in case a user has both a legacy-name row and an ID row
+      const seen = new Set()
+      setOrgMembers(raw.filter(m=>{ if(seen.has(m.id)) return false; seen.add(m.id); return true }))
     } else {
-      // Fallback: query profiles directly by org name (handles legacy rows still using names)
-      const { data: fallback } = await supabase.from('profiles').select('*').eq('org', orgName)
-      setOrgMembers(fallback?.length ? fallback.map(m=>({...m,orgId})) : [])
+      setOrgMembers([])
     }
     setLoadingMembers(false)
   }
@@ -4579,11 +4585,19 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setOrgMembers(prev => prev.filter(mem => mem.id !== m.id))
   }
 
-  const toggleStatus = async (org) => {
-    const newStatus = org.status==='active' ? 'inactive' : 'active'
-    if (!confirm((newStatus==='inactive'?'Deactivate':'Reactivate')+' '+org.name+'?')) return
-    await supabase.from('organisations').update({status:newStatus}).eq('id',org.id)
-    setOrgs(prev=>prev.map(o=>o.id===org.id?{...o,status:newStatus}:o))
+  const showToast = (msg) => { setToastMsg(msg); setTimeout(()=>setToastMsg(''), 3000) }
+
+  const archiveOrg = async (org) => {
+    if (!confirm('Archive '+org.name+'? This will hide it from the active list but preserve all data.')) return
+    const archivedAt = new Date().toISOString()
+    await supabase.from('organisations').update({status:'inactive', archived_at: archivedAt}).eq('id',org.id)
+    setOrgs(prev=>prev.map(o=>o.id===org.id?{...o,status:'inactive',archived_at:archivedAt}:o))
+  }
+
+  const reactivateOrg = async (org) => {
+    await supabase.from('organisations').update({status:'active', archived_at: null}).eq('id',org.id)
+    setOrgs(prev=>prev.map(o=>o.id===org.id?{...o,status:'active',archived_at:null}:o))
+    showToast(org.name+' reactivated')
   }
 
   const uploadOrgLogo = async (orgId, file) => {
@@ -4642,7 +4656,10 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoading(false)
   }
 
-  const filtered = orgs.filter(o=>!search||o.name.toLowerCase().includes(search.toLowerCase())||o.industry?.toLowerCase().includes(search.toLowerCase()))
+  const activeOrgs = orgs.filter(o=>o.status?.toLowerCase()!=='inactive')
+  const archivedOrgs = orgs.filter(o=>o.status?.toLowerCase()==='inactive')
+  const filtered = activeOrgs.filter(o=>!search||o.name.toLowerCase().includes(search.toLowerCase())||o.industry?.toLowerCase().includes(search.toLowerCase()))
+  const filteredArchive = archivedOrgs.filter(o=>!archiveSearch||o.name.toLowerCase().includes(archiveSearch.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name))
 
   if (selectedOrgView) {
     const contextUser = {...user, org: selectedOrgView.name}
@@ -4869,7 +4886,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       <div className="ph" style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
         <div>
           <div className="ph-title">Organisations</div>
-          <div className="ph-sub">{orgs.length} organisations · {orgs.filter(o=>o.status==='active').length} active</div>
+          <div className="ph-sub">{activeOrgs.length} active · {archivedOrgs.length} archived</div>
         </div>
         <button className="btn btn-primary" style={{flexShrink:0}} onClick={()=>setShowCreate(true)}>+ New Organisation</button>
       </div>
@@ -4887,12 +4904,12 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       ) : (
         <div className="org-grid">
           {filtered.map(org=>(
-            <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',borderLeft:'4px solid '+(org.status==='active'?'var(--green)':'var(--border)')}}>
+            <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',borderLeft:'4px solid var(--green)'}}>
               {/* Name + chips row */}
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:5}}>
                 {org.logo&&<img src={org.logo} alt={org.name} style={{height:28,width:'auto',maxWidth:80,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>}
                 <span style={{fontWeight:700,fontSize:14,cursor:'pointer',color:'var(--brand)',textDecoration:'underline',flex:'1 1 120px',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} onClick={()=>enterOrgContext(org)}>{org.name}</span>
-                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:600,flexShrink:0,background:org.status==='active'?'rgba(16,185,129,.12)':'var(--s3)',color:org.status==='active'?'var(--green)':'var(--t2)'}}>{org.status?.toUpperCase()}</span>
+                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:600,flexShrink:0,background:'rgba(16,185,129,.12)',color:'var(--green)'}}>ACTIVE</span>
                 <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[org.tier]?.color||'var(--t2)',fontWeight:600,flexShrink:0}}>{org.tier}</span>
               </div>
               {/* Metadata row */}
@@ -4914,12 +4931,60 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                   🖼 {org.logo?'Update Logo':'Add Logo'}
                   <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(f) uploadOrgLogo(org.id,f); e.target.value='' }}/>
                 </label>
-                <button className="btn btn-secondary btn-sm" style={{color:org.status==='active'?'var(--red)':'var(--green)'}} onClick={()=>toggleStatus(org)}>
-                  {org.status==='active'?'Deactivate':'Reactivate'}
-                </button>
+                <button className="btn btn-secondary btn-sm" style={{color:'var(--red)'}} onClick={()=>archiveOrg(org)}>Archive</button>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Archived Organisations */}
+      {archivedOrgs.length>0&&(
+        <div style={{marginTop:24}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:archiveExpanded?8:0,userSelect:'none'}} onClick={()=>setArchiveExpanded(p=>!p)}>
+            <span style={{fontWeight:700,fontSize:13,flex:1,color:'var(--t2)'}}>Archived Organisations</span>
+            <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:'var(--s2)',border:'1px solid var(--border)',color:'var(--t2)',fontWeight:600}}>{archivedOrgs.length}</span>
+            <span style={{fontSize:12,color:'var(--t2)',marginLeft:4}}>{archiveExpanded?'▼':'▶'}</span>
+          </div>
+          {archiveExpanded&&(
+            <>
+              <div style={{marginBottom:8}}>
+                <input className="form-input" placeholder="Search archived..." value={archiveSearch} onChange={e=>setArchiveSearch(e.target.value)} style={{fontSize:13}}/>
+              </div>
+              {filteredArchive.length===0?(
+                <div style={{fontSize:13,color:'var(--t2)',padding:'8px 4px'}}>No archived organisations match your search.</div>
+              ):(
+                <div className="org-grid">
+                  {filteredArchive.map(org=>(
+                    <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',opacity:0.75}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:5}}>
+                        {org.logo&&<img src={org.logo} alt={org.name} style={{height:28,width:'auto',maxWidth:80,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0,filter:'grayscale(1)'}}/>}
+                        <span style={{fontWeight:700,fontSize:14,flex:'1 1 120px',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--t2)'}}>{org.name}</span>
+                        <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>ARCHIVED</span>
+                        {org.tier&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[org.tier]?.color||'var(--t2)',fontWeight:600}}>{org.tier}</span>}
+                      </div>
+                      <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}}>
+                        {org.industry&&<span>🏭 {org.industry}</span>}
+                        {org.tier&&<span>📋 {org.tier}</span>}
+                        {org.archived_at&&<span>🗄 Archived {new Date(org.archived_at).toLocaleDateString('en-AU')}</span>}
+                      </div>
+                      {org.notes&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,fontStyle:'italic'}}>{org.notes}</div>}
+                      <div className="org-actions">
+                        <button className="btn btn-primary btn-sm" onClick={()=>reactivateOrg(org)}>Reactivate</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Toast */}
+      {toastMsg&&(
+        <div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',background:'#1A2033',color:'#fff',borderRadius:10,padding:'10px 20px',fontSize:13,fontWeight:500,zIndex:500,boxShadow:'0 8px 32px rgba(0,0,0,.25)',whiteSpace:'nowrap',pointerEvents:'none'}}>
+          {toastMsg}
         </div>
       )}
 
