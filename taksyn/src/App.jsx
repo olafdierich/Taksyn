@@ -8569,17 +8569,52 @@ function GettingStartedGuide({ user, setPage }) {
   }
 
   const exportGuideToPDF = async () => {
-    if (/iPhone|iPad|Android/i.test(navigator.userAgent)) {
-      alert('To save as PDF, tap Share then "Save to Files", or use the Print option and choose "Save as PDF".')
-      handlePrint()
+    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
+
+    if (isMobile) {
+      const logoSrc = orgLogo || '/logo.jpeg'
+      const accentColor = guide.color || '#00A87E'
+      const dateStr = new Date().toLocaleDateString('en-AU', { day:'numeric', month:'long', year:'numeric' })
+      const chaptersHtml = guide.chapters.map(chapter =>
+        `<div class="chapter"><h2>${chapter.num}. ${chapter.title}</h2>${
+          chapter.subChapters.map(sc =>
+            `<div class="subchapter"><h3>${sc.id} — ${sc.title}</h3>${
+              sc.steps.map((step, si) =>
+                `<div class="step"><div class="step-title">Step ${si+1}: ${step.summary}</div><div class="step-detail">${step.detail}</div><div class="step-loc">Where to find it: ${step.foundIn}</div>${step.tip ? `<div class="step-tip"><strong>Tip:</strong> ${step.tip}</div>` : ''}</div>`
+              ).join('')
+            }</div>`
+          ).join('')
+        }</div>`
+      ).join('')
+      const mobileHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Taksyn ${roleName} Guide</title><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:24px;color:#000;font-size:14px;line-height:1.7}.banner{background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:14px 16px;margin-bottom:24px;font-size:13px;color:#1b5e20}.cover{text-align:center;padding:40px 0 32px;border-bottom:2px solid ${accentColor};margin-bottom:32px}.cover img{max-width:120px;height:auto;display:block;margin:0 auto 16px}.cover h1{font-size:26px;font-weight:800;color:#1A2033;margin:0 0 8px}.cover p{color:#666;margin:4px 0;font-size:14px}h2{font-size:18px;color:#1A2033;border-bottom:2px solid ${accentColor};padding-bottom:8px;margin-top:32px;font-weight:800}h3{font-size:14px;color:#1A2033;border-left:4px solid ${accentColor};padding-left:10px;margin-top:20px;font-weight:700}.step{background:#f9fafb;border-radius:6px;padding:12px;margin-bottom:12px}.step-title{font-weight:700;font-size:13px;color:#1A2033;margin-bottom:6px}.step-detail{font-size:13px;color:#333;margin-bottom:6px}.step-loc{font-size:12px;color:#5A6478;font-style:italic;margin-bottom:4px}.step-tip{font-size:12px;background:#fffbe6;border-left:3px solid #F59E0B;padding:6px 10px;border-radius:0 4px 4px 0;margin-top:6px}.footer{margin-top:32px;padding-top:14px;border-top:1px solid #e8ebf0;font-size:11px;color:#9aa3b2;text-align:center}@media print{.banner{display:none}body{padding:16px}h2{page-break-before:always;break-before:always}.chapter:first-child h2{page-break-before:avoid;break-before:avoid}}</style></head><body><div class="banner">To save as PDF: tap the <strong>Share</strong> button then select <strong>Print</strong>, then pinch to zoom out and tap <strong>Save as PDF</strong></div><div class="cover"><img src="${logoSrc}" alt="Logo" crossorigin="anonymous"/><h1>Taksyn ${roleName} Guide</h1><p>Getting Started Guide</p>${user.org ? `<p><strong>${user.org}</strong></p>` : ''}<p style="color:#aaa;font-size:12px">Generated ${dateStr}</p></div>${chaptersHtml}<div class="footer">Taksyn — Workforce Management Platform · taksyn.com</div></body></html>`
+      const blob = new Blob([mobileHtml], { type: 'text/html;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
       return
     }
+
     const element = document.getElementById('guide-export-container')
     element.style.display = 'block'
     element.style.position = 'absolute'
     element.style.left = '-9999px'
     element.style.top = '0'
     try {
+      if (orgLogo) {
+        await new Promise(resolve => {
+          const img = new Image()
+          img.crossOrigin = 'anonymous'
+          img.onload = resolve
+          img.onerror = resolve
+          img.src = orgLogo
+        })
+      }
       await new Promise(resolve => setTimeout(resolve, 500))
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -8592,6 +8627,9 @@ function GettingStartedGuide({ user, setPage }) {
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       const pdfWidth = 210
       const pdfHeight = 297
+      const topMargin = 15
+      const bottomMargin = 15
+      const usableHeight = pdfHeight - topMargin - bottomMargin
       const imgWidth = pdfWidth
       const imgHeight = (canvas.height * pdfWidth) / canvas.width
       let yOffset = 0
@@ -8599,14 +8637,14 @@ function GettingStartedGuide({ user, setPage }) {
       while (yOffset < imgHeight) {
         if (page > 0) pdf.addPage()
         const sourceY = (yOffset * canvas.width) / pdfWidth
-        const sourceHeight = Math.min((pdfHeight * canvas.width) / pdfWidth, canvas.height - sourceY)
+        const sourceHeight = Math.min((usableHeight * canvas.width) / pdfWidth, canvas.height - sourceY)
         const pageCanvas = document.createElement('canvas')
         pageCanvas.width = canvas.width
         pageCanvas.height = sourceHeight
         pageCanvas.getContext('2d').drawImage(canvas, 0, sourceY, canvas.width, sourceHeight, 0, 0, canvas.width, sourceHeight)
         const pageImgHeight = (sourceHeight * pdfWidth) / canvas.width
-        pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, imgWidth, pageImgHeight)
-        yOffset += pdfHeight
+        pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, topMargin, imgWidth, pageImgHeight)
+        yOffset += usableHeight
         page++
       }
       pdf.save('Taksyn-' + roleName.replace(/\s+/g, '-') + '-Guide.pdf')
