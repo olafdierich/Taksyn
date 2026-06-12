@@ -9418,9 +9418,11 @@ export default function App() {
           if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
       } else if(event==='SIGNED_IN') {
-        // If URL still has invite params and we're not mid-registration, sign out — invite always wins
+        // If we're in the invite registration flow and not actively registering, sign out —
+        // the invite page must never restore a previous session
         const _isp = new URLSearchParams(window.location.search)
-        if (_isp.get('invite')==='true' && _isp.get('secret')==='taksyn-secret-2024' && !window.__taksyn_registering) {
+        const _isInviteContext = (_isp.get('invite')==='true' && _isp.get('secret')==='taksyn-secret-2024') || window.__taksyn_invite_registration
+        if (_isInviteContext && !window.__taksyn_registering) {
           await supabase.auth.signOut()
           return
         }
