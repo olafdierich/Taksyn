@@ -3472,12 +3472,24 @@ function UsersView({ user, setAuditLog }) {
       try {
         await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
       } catch(err) { console.error('Remove member org_members error:', err) }
+      try {
+        await supabase.from('team_members').delete().eq('user_id',id)
+      } catch(err) { console.error('Remove member team_members error:', err) }
+      try {
+        await supabase.from('profiles').delete().eq('id',id)
+      } catch(err) { console.error('Remove member profiles error:', err) }
       // user_positions table removed
       try {
         await supabase.from('tasks').update({ assigned_user_id: null })
           .eq('assigned_user_id', id).eq('org', user.org)
           .not('status', 'in', '("completed","approved")')
       } catch(err) { console.error('Remove member tasks error:', err) }
+      if (supabaseAdmin) {
+        try {
+          const { error } = await supabaseAdmin.auth.admin.deleteUser(id)
+          if (error) throw error
+        } catch(err) { console.error('Remove member auth delete error:', err) }
+      }
     }
     setRealUsers(prev=>prev.filter(u=>u.id!==id))
     setUserPositions(prev=>{ const n={...prev}; delete n[id]; return n })
