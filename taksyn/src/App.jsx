@@ -3738,9 +3738,24 @@ function UsersView({ user, setAuditLog }) {
       supabase.from('profiles').select('*').then(({data})=>{ if(data) { setRealUsers(data); parsePositions(data) } }).catch(()=>{})
       return
     }
-    supabase.from('profiles').select('*').eq('org', user.org)
-      .then(({data:workforceMembers})=>{ setRealUsers(workforceMembers||[]); parsePositions(workforceMembers||[]) })
-      .catch(()=>{})
+    ;(async()=>{
+      const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+      const orgId = orgRow?.id
+      const [profilesRes, membersRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('org', user.org),
+        orgId ? supabase.from('org_members').select('user_id').eq('org', orgId) : Promise.resolve({data:null})
+      ])
+      const profiles = profilesRes.data || []
+      let workforceMembers
+      if (orgId && membersRes.data) {
+        const memberIds = new Set(membersRes.data.map(m => m.user_id))
+        workforceMembers = profiles.filter(p => memberIds.has(p.id))
+      } else {
+        workforceMembers = profiles
+      }
+      setRealUsers(workforceMembers)
+      parsePositions(workforceMembers)
+    })().catch(()=>{})
   },[user.org])
 
   const deleteUser = async (id) => {
