@@ -750,6 +750,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
 
     // Resolve org/team names for the invite card, then clear the URL
     if (_isInvite && isConfigured()) {
+      // Set flag BEFORE clearing the URL so async handlers (getSession, onAuthStateChange)
+      // can detect the invite context even after replaceState wipes the search params
+      window.__taksyn_invite_registration = true
       const orgId  = _sp.get('org')||''
       const teamId = _sp.get('team')||''
       const linkId = _sp.get('link')||''
