@@ -7354,14 +7354,15 @@ function TeamsView({ user }) {
     if (isConfigured()) {
       try {
         const { error } = await supabase.from('invite_links').insert({
-          id: linkId,
-          org_id: orgId,
+          organisation_id: orgId,
           team_id: team.id,
           role: inviteLinkRole,
           position: inviteLinkPosition || null,
-          created_by: user.name,
-          org: user.org,
-          created_at: new Date().toISOString()
+          secret: linkId,
+          created_by: user.id,
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          is_active: true
         })
         if (error) throw error
       } catch (err) {
