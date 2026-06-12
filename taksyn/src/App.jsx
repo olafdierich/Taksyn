@@ -831,21 +831,39 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               first_name: _firstName,
               last_name: _lastName,
               email: inviteParams?.email || email,
-              phone: inviteParams?.phone || '',
+              phone: inviteParams?.phone || null,
               role: assignedRole,
               org: orgName,
               industry: inviteParams?.industry || '',
               tier: 'Growth',
+              created_at: new Date().toISOString(),
               ...(inviteParams?.position ? { position: inviteParams.position } : {})
             })
-            if (profileError) console.error('Profile insert error:', profileError)
+            if (profileError) {
+              console.error('PROFILE INSERT FAILED:', profileError)
+              alert('Profile creation failed: ' + profileError.message)
+            } else {
+              console.log('Profile created successfully for uid:', uid)
+            }
           } catch (profileErr) {
             console.error('Profile insert exception:', profileErr)
+            alert('Profile creation error: ' + profileErr.message)
           }
-          await supabase.from('org_members').upsert(
-            { user_id:uid, org: orgName, role:assignedRole, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
-            { onConflict: 'user_id,org' }
-          )
+          try {
+            const { error: orgMemberError } = await supabase.from('org_members').upsert(
+              { user_id:uid, org: orgName, role:assignedRole, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
+              { onConflict: 'user_id,org' }
+            )
+            if (orgMemberError) {
+              console.error('ORG_MEMBERS INSERT FAILED:', orgMemberError)
+              alert('Org member creation failed: ' + orgMemberError.message)
+            } else {
+              console.log('org_members created successfully for uid:', uid)
+            }
+          } catch (orgMemberErr) {
+            console.error('org_members insert exception:', orgMemberErr)
+            alert('Org member creation error: ' + orgMemberErr.message)
+          }
           if (inviteParams) {
             try {
               let teamId = inviteParams.teamId || null
