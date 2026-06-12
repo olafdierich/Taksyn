@@ -755,7 +755,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       const linkId = _sp.get('link')||''
       // Validate invite link hasn't already been used
       if (linkId) {
-        supabase.from('invite_links').select('is_active,used_at,org').eq('id', linkId).maybeSingle()
+        supabase.from('invite_links').select('id, is_active, expires_at, used_at').eq('secret', linkId).single()
           .then(({data:link})=>{
             if (link && (link.is_active === false || link.used_at)) {
               setError('This invite link has already been used or has expired. Please ask your admin for a new link.')
