@@ -9319,6 +9319,8 @@ export default function App() {
           if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
       } else if(event==='SIGNED_IN') {
+        // Suppress during our custom invite registration — handleSubmit manages everything
+        if (window.__taksyn_registering) return
         // Check if this is an invite or recovery — block auto sign-in and show password setup
         const isInvite = session.user.app_metadata?.provider==='email' &&
           (session.user.last_sign_in_at === null ||
