@@ -773,16 +773,22 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       const linkId = _sp.get('link')||''
       // Validate invite link hasn't already been used
       if (linkId) {
+        const inviteEmailForCheck = inviteUrlRef.current?.email || ''
         supabase.from('invite_links').select('id, is_active, expires_at, used_at').eq('secret', linkId).maybeSingle()
-          .then(({data:link})=>{
+          .then(async ({data:link})=>{
             if (link) {
               if (link.is_active === false) {
+                if (inviteEmailForCheck) {
+                  try {
+                    const { data: existingProf } = await supabase.from('profiles').select('id').eq('email', inviteEmailForCheck).maybeSingle()
+                    if (existingProf) { setError('You already have an account. Please sign in.'); return }
+                  } catch (_) {}
+                }
                 setError('This invite link has already been used. Please ask your admin for a new link.')
               } else if (link.expires_at && new Date(link.expires_at) < new Date()) {
                 setError('This invite link has expired. Please ask your admin for a new link.')
               }
             }
-            // No record found — proceed normally, registration will use URL parameters
           }).catch(()=>{})
       }
       Promise.all([
@@ -833,7 +839,17 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
 
           assignedRole = inviteRole || 'worker'
 
-          // Validate invite link (non-blocking)
+          // Single-use per email: check if this email already has an account
+          try {
+            const { data: existingAccount } = await supabase
+              .from('profiles').select('id').eq('email', inviteEmail).maybeSingle()
+            if (existingAccount) {
+              setError('You already have an account. Please sign in.')
+              setLoading(false); return
+            }
+          } catch (_) {}
+
+          // Validate invite link
           if (inviteLinkId) {
             try {
               const { data: linkCheck } = await supabase
@@ -862,6 +878,13 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             options: { data: { name: (firstName + ' ' + lastName).trim(), role: assignedRole } }
           })
           if (signUpError) { window.__taksyn_registering = false; throw signUpError }
+
+          // Supabase returns a user with empty identities when the email is already registered
+          if (signUpData?.user?.identities?.length === 0) {
+            window.__taksyn_registering = false
+            setError('You already have an account. Please sign in.')
+            setLoading(false); return
+          }
 
           if (signUpData?.user) {
             const newUserId = signUpData.user.id
@@ -944,7 +967,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               await new Promise(resolve => setTimeout(resolve, 500))
               const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
               if (!signInErr && signInData?.user) {
-                const { data: profile } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).single()
+                const { data: profile } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id', signInData.user.id).single()
                 if (profile) {
                   window.__taksyn_invite_registration = false
                   onAuth({...profile, email: signInData.user.email})
@@ -975,7 +998,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         await new Promise(resolve => setTimeout(resolve, 500))
         const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
         if (!signInErr && signInData?.user) {
-          const { data: profile } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).single()
+          const { data: profile } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id', signInData.user.id).single()
           if (profile) {
             onAuth({...profile, email: signInData.user.email})
             return
@@ -994,7 +1017,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         const { data, error:e } = loginResult
         if (e) throw e
         if (data?.user) {
-          const { data:profile } = await supabase.from('profiles').select('*').eq('id',data.user.id).single()
+          const { data:profile } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id',data.user.id).single()
           if (profile) {
             // Check org_members for multiple org memberships
             const { data:memberships } = await supabase.from('org_members').select('*').eq('user_id',data.user.id)
@@ -1204,7 +1227,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               // Get profile and sign in
               const { data: { user } } = await supabase.auth.getUser()
               if (user) {
-                const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+                const { data: profile } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id', user.id).single()
                 if (profile) {
                   const userData = {...profile, email: user.email}
                   onAuth(userData)
@@ -1772,7 +1795,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   useEffect(()=>{
     if(!isConfigured()) return
     if(user.role==='super_admin') {
-      supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(data) })
+      supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').then(({data})=>{ if(data) setTeamUsers(data) })
     } else if(user.org) {
       ;(async()=>{
         const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
@@ -1780,7 +1803,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
         if(!members?.length) return
         const ids = members.map(m=>m.user_id)
-        const {data:profiles} = await supabase.from('profiles').select('*').in('id',ids)
+        const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id',ids)
         if(profiles) setTeamUsers(profiles.map(p=>({
           ...p,
           role:members.find(m=>m.user_id===p.id)?.role||p.role,
@@ -3740,7 +3763,7 @@ function UsersView({ user, setAuditLog }) {
     if(user.role==='super_admin') {
       ;(async()=>{
         const [profilesRes, membersRes, orgsRes] = await Promise.all([
-          supabase.from('profiles').select('*').order('name'),
+          supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').order('name'),
           supabase.from('org_members').select('user_id, org, role, industry, position'),
           supabase.from('organisations').select('id, name').eq('status','active').order('name')
         ])
@@ -3766,7 +3789,7 @@ function UsersView({ user, setAuditLog }) {
       const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
       if (assignments?.length) {
         const memberIds = assignments.map(a=>a.user_id)
-        const {data:profileData} = await supabase.from('profiles').select('*').in('id', memberIds)
+        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id', memberIds)
         const workforceMembers = (profileData || []).filter(p=>p.role!=='super_admin')
         setRealUsers(workforceMembers)
         parsePositions(workforceMembers)
@@ -3778,7 +3801,7 @@ function UsersView({ user, setAuditLog }) {
         setOrgAssignments(map)
       } else {
         // Fallback: query profiles directly by org name (same as PerformanceView)
-        const {data:fallback} = await supabase.from('profiles').select('*').eq('org', user.org)
+        const {data:fallback} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('org', user.org)
         if (fallback?.length) { const fb=fallback.filter(p=>p.role!=='super_admin'); setRealUsers(fb); parsePositions(fb) }
       }
     })().catch(()=>{})
@@ -3862,7 +3885,7 @@ function UsersView({ user, setAuditLog }) {
 
   const addExistingUserToOrg = async (email, role) => {
     if (!isConfigured()) { alert('Supabase not configured'); return }
-    const { data:profiles } = await supabase.from('profiles').select('*')
+    const { data:profiles } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone')
     const profile = profiles?.find(p=>p.email===email||p.id===email)
     if (!profile) { alert('No user found with that email. They need to sign up to Taksyn first.'); return }
     let userOrgId = orgsList.find(o=>o.name===user.org)?.id
@@ -3969,7 +3992,7 @@ function UsersView({ user, setAuditLog }) {
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl })
+        body: JSON.stringify({ email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, orgId: linkOrgId, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl })
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
@@ -4486,7 +4509,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       .eq('org', orgId)
     if (members?.length) {
       const ids = [...new Set(members.map(m=>m.user_id))]
-      const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids)
+      const { data: profiles } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id', ids)
       const seen = new Set()
       setOrgMembers(
         members
@@ -4647,7 +4670,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, positions:rolesSummary, secret:inviteSecret })
+        body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, orgId:showInvite.id, positions:rolesSummary, secret:inviteSecret })
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
@@ -4668,7 +4691,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoading(true)
     setExistingUserMsg('')
     try {
-      const { data: profile, error } = await supabase.from('profiles').select('*').eq('email', existingUserSearch.trim().toLowerCase()).single()
+      const { data: profile, error } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('email', existingUserSearch.trim().toLowerCase()).single()
       if (error || !profile) { setExistingUserMsg('No user found with that email address'); setLoading(false); return }
       const { error: memberError } = await supabase.from('org_members').upsert({ user_id: profile.id, org: showInvite.id, role: existingUserRole }, { onConflict: 'user_id,org' })
       if (memberError) throw new Error(memberError.message)
@@ -7693,7 +7716,7 @@ function TeamsView({ user }) {
           .from('org_members').select('user_id,role,org,tier')
           .eq('org', user.org)
         if(!members?.length) return
-        const { data: profiles } = await supabase.from('profiles').select('*').in('id', members.map(m=>m.user_id))
+        const { data: profiles } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id', members.map(m=>m.user_id))
         if(profiles) setOrgUsers(profiles.map(p=>({...p, role:members.find(m=>m.user_id===p.id)?.role||p.role})))
       }).catch(()=>{})
   },[user.org])
@@ -7741,7 +7764,7 @@ function TeamsView({ user }) {
     const {data} = await supabase.from('team_members').select('*').eq('team_id',teamId).eq('org',user.org)
     if(data) {
       const ids = data.map(m=>m.user_id)
-      const {data:profiles} = await supabase.from('profiles').select('*').in('id',ids)
+      const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id',ids)
       return data.map(m=>({...m, profile:profiles?.find(p=>p.id===m.user_id)||{}, positions:[]}))
     }
     return []
@@ -9736,7 +9759,7 @@ export default function App() {
         return
       }
       if(session?.user) {
-        supabase.from('profiles').select('*').eq('id',session.user.id).single().then(async({data})=>{
+        supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id',session.user.id).single().then(async({data})=>{
           if(data) {
             const savedOrgName = sessionStorage.getItem('currentOrgName')
             const savedRole = sessionStorage.getItem('currentRole')
@@ -9755,7 +9778,7 @@ export default function App() {
       } else if(event==='USER_UPDATED') {
         // Password was just set — log them in properly
         try {
-          const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
+          const {data} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id',session.user.id).single()
           if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
       } else if(event==='SIGNED_IN') {
@@ -9778,7 +9801,7 @@ export default function App() {
           return
         }
         try {
-          const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).maybeSingle()
+          const {data} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id',session.user.id).maybeSingle()
           if (data) {
             const savedOrgName = sessionStorage.getItem('currentOrgName')
             const savedRole = sessionStorage.getItem('currentRole')
