@@ -924,6 +924,11 @@ function AuthView({ onAuth }) {
     return (
       <div className="auth-bg">
         <style>{CSS}</style>
+        {showTerms&&!isMobile&&(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:9999,overflowY:'auto',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px 16px'}} onClick={()=>setShowTerms(false)}>
+            <div onClick={e=>e.stopPropagation()}><TermsOfUseView onBack={()=>setShowTerms(false)} isModal/></div>
+          </div>
+        )}
         <div className="auth-card" style={{maxWidth:480}}>
           <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:44,objectFit:'contain'}} /></div>
           <div style={{textAlign:'center',marginBottom:20}}>
