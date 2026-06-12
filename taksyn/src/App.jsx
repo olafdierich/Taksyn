@@ -8446,7 +8446,7 @@ const GUIDE_CONTENT = {
   },
 }
 
-function GuidePrintDocument({ guide, roleName, user }) {
+function GuidePrintDocument({ guide, roleName, user, orgLogo }) {
   const pages = {}
   let pg = 3
   guide.chapters.forEach(chapter => {
