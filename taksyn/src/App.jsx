@@ -852,12 +852,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               name: name.trim(),
               first_name: _firstName,
               last_name: _lastName,
-              email: inviteParams?.email || email,
+              email: inviteParams ? inviteParams.email || email : email,
               phone: inviteParams?.phone || null,
               role: assignedRole,
               org: orgName,
               industry: inviteParams?.industry || '',
-              tier: 'Growth',
+              tier: inviteParams?._tier || 'Starter',
               created_at: new Date().toISOString(),
               ...(inviteParams?.position ? { position: inviteParams.position } : {})
             })
