@@ -1,28 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
-
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseKey || 'placeholder',
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-    global: {
-      fetch: (url, options) => {
-        return fetch(url, { ...options, signal: AbortSignal.timeout(8000) })
-      }
-    }
-  }
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
 )
 
-export const supabaseAdmin = supabaseServiceKey && supabaseUrl
-  ? createClient(supabaseUrl, supabaseServiceKey, {
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+
+export const supabaseAdmin = supabaseServiceKey && import.meta.env.VITE_SUPABASE_URL
+  ? createClient(import.meta.env.VITE_SUPABASE_URL, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
   : null
