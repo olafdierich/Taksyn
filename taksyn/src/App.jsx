@@ -4181,7 +4181,7 @@ function UsersView({ user, setAuditLog }) {
                       </div>
                     ) : (u.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {u.industry}</div>)}
                   </div>
-                  <RolePill role={(user.role!=='super_admin'&&orgAssignments[u.id]?.[0]?.role)||u.role}/>
+                  <RolePill role={user.role==='super_admin'?(allOrgMemberships[u.id]?.find(m=>m.orgName===orgCtx)?.role||u.role):(orgAssignments[u.id]?.[0]?.role||u.role)}/>
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{
                     const orgName = orgCtx || user.org
                     const orgId = orgsList.find(o=>o.name===orgName)?.id || orgName
@@ -4196,9 +4196,28 @@ function UsersView({ user, setAuditLog }) {
                 </div>
               )
               if (user.role==='super_admin') {
-                // Group by profiles.org — each organisation's users are clearly separated
+                // Group by org_members: each user appears under every org they belong to
+                const profilesById = Object.fromEntries(realUsers.map(u=>[u.id,u]))
                 const orgGroups = {}
-                filtered.forEach(u=>{ const o=u.org||'(No Organisation)'; if(!orgGroups[o]) orgGroups[o]=[]; orgGroups[o].push(u) })
+                for (const [userId, memberships] of Object.entries(allOrgMemberships)) {
+                  const profile = profilesById[userId]
+                  if (!profile) continue
+                  if (userSearch && !profile.name?.toLowerCase().includes(userSearch.toLowerCase()) && !profile.email?.toLowerCase().includes(userSearch.toLowerCase())) continue
+                  for (const m of memberships) {
+                    const orgName = m.orgName || '(No Organisation)'
+                    if (!orgGroups[orgName]) orgGroups[orgName] = []
+                    orgGroups[orgName].push(profile)
+                  }
+                }
+                // Users with no org_members records
+                realUsers.forEach(u => {
+                  if (!allOrgMemberships[u.id]?.length) {
+                    if (userSearch && !u.name?.toLowerCase().includes(userSearch.toLowerCase()) && !u.email?.toLowerCase().includes(userSearch.toLowerCase())) return
+                    const key = '(No Organisation)'
+                    if (!orgGroups[key]) orgGroups[key] = []
+                    orgGroups[key].push(u)
+                  }
+                })
                 return Object.keys(orgGroups).sort().map(orgName=>(
                   <div key={orgName} style={{marginBottom:12}}>
                     <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setCollapsedRoles(prev=>({...prev,['__org__'+orgName]:!prev['__org__'+orgName]}))}>
