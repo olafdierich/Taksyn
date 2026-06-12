@@ -842,25 +842,30 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           }
           // Auto sign-in immediately after registration
           if (inviteParams) {
-            const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
-            if (!signInErr && signInData?.user) {
-              const { data: profile } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).single()
-              if (profile) {
-                const { data: memberships } = await supabase.from('org_members').select('*').eq('user_id', signInData.user.id)
-                if (memberships && memberships.length >= 1) {
-                  const m = memberships[0]
-                  onAuth({...profile, email: signInData.user.email, role: m.role, org: profile.org || m.org, tier: m.tier || 'Growth'})
-                } else {
-                  onAuth({...profile, email: signInData.user.email})
+            try {
+              await new Promise(resolve => setTimeout(resolve, 500))
+              const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
+              if (!signInErr && signInData?.user) {
+                const { data: profile } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).single()
+                if (profile) {
+                  const { data: memberships } = await supabase.from('org_members').select('*').eq('user_id', signInData.user.id)
+                  if (memberships && memberships.length >= 1) {
+                    const m = memberships[0]
+                    onAuth({...profile, email: signInData.user.email, role: m.role, org: profile.org || m.org, tier: m.tier || 'Growth'})
+                  } else {
+                    onAuth({...profile, email: signInData.user.email})
+                  }
+                  return
                 }
-                return
               }
+              // signInWithPassword failed — redirect to login with clear message
+              setSuccess('Account created. Please sign in with your new password.')
+              setLoading(false)
+              setTimeout(()=>{ setInviteParams(null); setMode('login'); setSuccess(''); setPassword(''); setConfirmPassword(''); setAgreeChecked(false) }, 2500)
+              return
+            } finally {
+              window.__taksyn_registering = false
             }
-            // Fallback: sign-in failed (e.g. email confirmation required)
-            setSuccess('Account created successfully!')
-            setLoading(false)
-            setTimeout(()=>{ setInviteParams(null); setMode('login'); setSuccess(''); setPassword(''); setConfirmPassword(''); setAgreeChecked(false) }, 2500)
-            return
           }
         }
         // Org admin registration — try auto sign-in, fall back to email confirmation message
