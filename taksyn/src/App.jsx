@@ -3648,6 +3648,7 @@ function UsersView({ user, setAuditLog }) {
   const [orgsList, setOrgsList] = useState([])
   const [editOrgSearch, setEditOrgSearch] = useState('')
   const [userPositions, setUserPositions] = useState({})
+  const [orgAssignments, setOrgAssignments] = useState({}) // user_id → [{role,position,industry}] from org_members
   const [editPositions, setEditPositions] = useState([])
   const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
 
@@ -3739,22 +3740,24 @@ function UsersView({ user, setAuditLog }) {
       return
     }
     ;(async()=>{
-      const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
-      const orgId = orgRow?.id
-      const [profilesRes, membersRes] = await Promise.all([
-        supabase.from('profiles').select('*').eq('org', user.org),
-        orgId ? supabase.from('org_members').select('user_id').eq('org', orgId) : Promise.resolve({data:null})
-      ])
-      const profiles = profilesRes.data || []
-      let workforceMembers
-      if (orgId && membersRes.data) {
-        const memberIds = new Set(membersRes.data.map(m => m.user_id))
-        workforceMembers = profiles.filter(p => memberIds.has(p.id))
-      } else {
-        workforceMembers = profiles
-      }
+      // Strict filter: only profiles whose org name exactly matches — no cross-checks that could leak other-org users
+      const {data:profileData} = await supabase.from('profiles').select('*').eq('org', user.org)
+      const workforceMembers = profileData || []
       setRealUsers(workforceMembers)
       parsePositions(workforceMembers)
+
+      // Separately fetch org_members assignments so we can show per-org role/position tags
+      const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+      const orgId = orgRow?.id
+      if (orgId) {
+        const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
+        const map = {}
+        for (const a of assignments||[]) {
+          if (!map[a.user_id]) map[a.user_id] = []
+          map[a.user_id].push(a)
+        }
+        setOrgAssignments(map)
+      }
     })().catch(()=>{})
   },[user.org])
 
@@ -4196,7 +4199,14 @@ function UsersView({ user, setAuditLog }) {
               <div className="user-info" style={{flex:1}}>
                 <div className="user-name">{u.name}</div>
                 <div className="user-email">{u.email||'—'}</div>
-                {(userPositions[u.id]?.length>0) ? (
+                {orgAssignments[u.id]?.length > 0 ? (
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
+                    {orgAssignments[u.id].map((a,ai)=>{
+                      const label = [a.industry, a.position || ROLE_LABELS[a.role] || a.role].filter(Boolean).join(' · ')
+                      return <span key={ai} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:'var(--s3)',border:'1px solid var(--border)',color:'var(--t2)',whiteSpace:'nowrap'}}>{label}</span>
+                    })}
+                  </div>
+                ) : userPositions[u.id]?.length > 0 ? (
                   <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
                     {userPositions[u.id].map((pos,pi)=><PositionChip key={pi} pos={pos}/>)}
                   </div>
