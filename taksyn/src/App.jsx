@@ -9440,16 +9440,16 @@ export default function App() {
           return
         }
         try {
-          const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
+          const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).maybeSingle()
           if (data) {
             setUser({...data, email:session.user.email})
-          } else {
-            await supabase.auth.signOut()
-            setDeactivatedMsg('Your account has been deactivated. Please contact your administrator.')
           }
+          // No profile found — could be a race condition during registration or a DB trigger delay.
+          // Do NOT sign out here; the registration flow's onAuth() will set the user correctly.
+          // Only explicit logout or session expiry should clear the session.
         } catch(e) {
-          await supabase.auth.signOut()
-          setDeactivatedMsg('Your account has been deactivated. Please contact your administrator.')
+          // Ignore errors — do not sign out on a failed profile fetch
+          console.warn('onAuthStateChange profile fetch error (ignored):', e.message)
         }
       }
     })
