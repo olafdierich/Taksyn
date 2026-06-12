@@ -919,6 +919,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               if (!signInErr && signInData?.user) {
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).single()
                 if (profile) {
+                  window.__taksyn_invite_registration = false
                   onAuth({...profile, email: signInData.user.email})
                   return
                 }
