@@ -3615,7 +3615,8 @@ function UsersView({ user, setAuditLog }) {
       const params = new URLSearchParams({
         invite: 'true',
         org: orgId,
-        name: inviteName.trim(),
+        firstname: inviteFirstName.trim(),
+        lastname: inviteLastName.trim(),
         email: inviteEmail.trim(),
         phone: invitePhone.trim(),
         role: systemRole,
