@@ -1136,6 +1136,9 @@ function AuthView({ onAuth }) {
         <div style={{textAlign:'center',marginTop:16}}>
           <span style={{fontSize:11,color:'var(--t3)',cursor:'pointer'}} onClick={()=>{clearAuthCache();location.reload()}}>Having trouble signing in? Tap here to reset</span>
         </div>
+        <div style={{textAlign:'center',marginTop:10}}>
+          <span style={{fontSize:12,color:'var(--t2)',cursor:'pointer',textDecoration:'underline'}} onClick={()=>setShowTerms(true)}>Terms of Use</span>
+        </div>
       </div>
     </div>
   )
