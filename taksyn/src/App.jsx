@@ -3742,7 +3742,7 @@ function UsersView({ user, setAuditLog }) {
         const [profilesRes, membersRes, orgsRes] = await Promise.all([
           supabase.from('profiles').select('*').order('name'),
           supabase.from('org_members').select('user_id, org, role, industry, position'),
-          supabase.from('organisations').select('id, name').order('name')
+          supabase.from('organisations').select('id, name').eq('status','active').order('name')
         ])
         const profiles = profilesRes.data || []
         setRealUsers(profiles)
@@ -4212,15 +4212,6 @@ function UsersView({ user, setAuditLog }) {
                     orgGroups[m.orgName].push(profile)
                   }
                 }
-                // Users with no org_members records
-                realUsers.forEach(u => {
-                  if (!allOrgMemberships[u.id]?.length) {
-                    if (userSearch && !u.name?.toLowerCase().includes(userSearch.toLowerCase()) && !u.email?.toLowerCase().includes(userSearch.toLowerCase())) return
-                    const key = '(No Organisation)'
-                    if (!orgGroups[key]) orgGroups[key] = []
-                    orgGroups[key].push(u)
-                  }
-                })
                 return Object.keys(orgGroups).sort().map(orgName=>(
                   <div key={orgName} style={{marginBottom:12}}>
                     <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setCollapsedRoles(prev=>({...prev,['__org__'+orgName]:!prev['__org__'+orgName]}))}>
