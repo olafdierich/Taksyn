@@ -4620,10 +4620,10 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
                 <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px'}}>Position Assignments</div>
-                <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Role · Position</span>
+                <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Position · Role</span>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 2px'}}>
-                {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
+                {['Industry','Position','Role',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
               </div>
               {inviteOrgPositions.map((row,i)=>{
                 const rolesForInd = row.industry ? editOrgCustomRoles.filter(r=>r.industry_name===row.industry).map(r=>r.role_name) : []
