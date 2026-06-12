@@ -3772,19 +3772,22 @@ function UsersView({ user, setAuditLog }) {
             <div className="modal-hdr"><div className="modal-title">Invite to Workforce</div><button className="modal-close" onClick={()=>setShowInvite(false)}>×</button></div>
             <div className="modal-body">
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Full Name</label><input className="form-input" value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Emma Wilson"/></div>
-                <div className="form-field">
-                  <label className="form-label">Email Address</label>
-                  <input className="form-input" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="emma@yourorg.com"
-                    onBlur={()=>{
-                      const existing = realUsers.find(u=>u.email?.toLowerCase()===inviteEmail.trim().toLowerCase())
-                      if(existing) {
-                        if(window.confirm(existing.name+' ('+existing.email+') is already a member of this organisation.\n\nWould you like to add a new role assignment to their existing account instead?')) {
-                          setInviteName(existing.name)
-                        }
+                <div className="form-field"><label className="form-label">First Name</label><input className="form-input" value={inviteFirstName} onChange={e=>setInviteFirstName(e.target.value)} placeholder="First name"/></div>
+                <div className="form-field"><label className="form-label">Last Name</label><input className="form-input" value={inviteLastName} onChange={e=>setInviteLastName(e.target.value)} placeholder="Last name"/></div>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Email Address</label>
+                <input className="form-input" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="emma@yourorg.com"
+                  onBlur={()=>{
+                    const existing = realUsers.find(u=>u.email?.toLowerCase()===inviteEmail.trim().toLowerCase())
+                    if(existing) {
+                      if(window.confirm(existing.name+' ('+existing.email+') is already a member of this organisation.\n\nWould you like to add a new role assignment to their existing account instead?')) {
+                        const parts = (existing.name||'').trim().split(/\s+/)
+                        setInviteFirstName(parts[0]||'')
+                        setInviteLastName(parts.slice(1).join(' ')||'')
                       }
-                    }}/>
-                </div>
+                    }
+                  }}/>
               </div>
               <div className="form-field"><label className="form-label">Phone Number <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>(optional)</span></label><input className="form-input" type="tel" value={invitePhone} onChange={e=>setInvitePhone(e.target.value)} placeholder="+61 400 000 000"/></div>
               {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
