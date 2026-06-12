@@ -3739,17 +3739,21 @@ function UsersView({ user, setAuditLog }) {
     }
     if(user.role==='super_admin') {
       ;(async()=>{
-        const [profilesRes, membersRes] = await Promise.all([
+        const [profilesRes, membersRes, orgsRes] = await Promise.all([
           supabase.from('profiles').select('*').order('name'),
-          supabase.from('org_members').select('user_id, org, role, industry, position, organisations(name)')
+          supabase.from('org_members').select('user_id, org, role, industry, position'),
+          supabase.from('organisations').select('id, name').order('name')
         ])
         const profiles = profilesRes.data || []
         setRealUsers(profiles)
         parsePositions(profiles)
+        const orgsById = Object.fromEntries((orgsRes.data||[]).map(o=>[o.id, o.name]))
         const map = {}
         for (const m of membersRes.data||[]) {
+          const orgName = orgsById[m.org]
+          if (!orgName) continue
           if (!map[m.user_id]) map[m.user_id] = []
-          map[m.user_id].push({ orgName: m.organisations?.name||m.org, role: m.role, industry: m.industry||'', position: m.position||'' })
+          map[m.user_id].push({ orgName, role: m.role, industry: m.industry||'', position: m.position||'' })
         }
         setAllOrgMemberships(map)
       })().catch(()=>{})
@@ -4181,7 +4185,7 @@ function UsersView({ user, setAuditLog }) {
                       </div>
                     ) : (u.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {u.industry}</div>)}
                   </div>
-                  <RolePill role={(user.role!=='super_admin'&&orgAssignments[u.id]?.[0]?.role)||u.role}/>
+                  <RolePill role={user.role==='super_admin'?(allOrgMemberships[u.id]?.find(m=>m.orgName===orgCtx)?.role||u.role):(orgAssignments[u.id]?.[0]?.role||u.role)}/>
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{
                     const orgName = orgCtx || user.org
                     const orgId = orgsList.find(o=>o.name===orgName)?.id || orgName
@@ -4196,8 +4200,36 @@ function UsersView({ user, setAuditLog }) {
                 </div>
               )
               if (user.role==='super_admin') {
-                // Flat alphabetical list — org memberships shown as badges on each card
-                return filtered.map((u,i)=>userCard(u,i,null))
+                // Group by org_members: each user appears under every org they belong to
+                const profilesById = Object.fromEntries(realUsers.map(u=>[u.id,u]))
+                const orgGroups = {}
+                for (const [userId, memberships] of Object.entries(allOrgMemberships)) {
+                  const profile = profilesById[userId]
+                  if (!profile) continue
+                  if (userSearch && !profile.name?.toLowerCase().includes(userSearch.toLowerCase()) && !profile.email?.toLowerCase().includes(userSearch.toLowerCase())) continue
+                  for (const m of memberships) {
+                    if (!orgGroups[m.orgName]) orgGroups[m.orgName] = []
+                    orgGroups[m.orgName].push(profile)
+                  }
+                }
+                // Users with no org_members records
+                realUsers.forEach(u => {
+                  if (!allOrgMemberships[u.id]?.length) {
+                    if (userSearch && !u.name?.toLowerCase().includes(userSearch.toLowerCase()) && !u.email?.toLowerCase().includes(userSearch.toLowerCase())) return
+                    const key = '(No Organisation)'
+                    if (!orgGroups[key]) orgGroups[key] = []
+                    orgGroups[key].push(u)
+                  }
+                })
+                return Object.keys(orgGroups).sort().map(orgName=>(
+                  <div key={orgName} style={{marginBottom:12}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setCollapsedRoles(prev=>({...prev,['__org__'+orgName]:!prev['__org__'+orgName]}))}>
+                      <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>{orgName} ({orgGroups[orgName].length})</span>
+                      <span style={{fontSize:12,color:'var(--t2)'}}>{collapsedRoles['__org__'+orgName]?'▶':'▼'}</span>
+                    </div>
+                    {!collapsedRoles['__org__'+orgName]&&orgGroups[orgName].map((u,i)=>userCard(u,i,orgName))}
+                  </div>
+                ))
               }
               const groups = {}
               filtered.forEach(u=>{ const r=u.role||'worker'; if(!groups[r]) groups[r]=[]; groups[r].push(u) })
