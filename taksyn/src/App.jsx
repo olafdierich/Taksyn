@@ -794,15 +794,20 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         let orgName, assignedRole
         if (inviteParams) {
           if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
-          if (!inviteParams.orgName) { setError('Invite data is still loading — please wait a moment and try again'); setLoading(false); return }
-          if (isConfigured() && inviteParams.linkId) {
-            const {data:linkCheck} = await supabase.from('invite_links').select('is_active,used_at,org').eq('id', inviteParams.linkId).maybeSingle()
+          if (inviteParams.linkId) {
+            const {data:linkCheck} = await supabase.from('invite_links').select('is_active,used_at').eq('id', inviteParams.linkId).maybeSingle()
             if (linkCheck && (linkCheck.is_active === false || linkCheck.used_at)) {
-              setError(`This invite link for ${inviteParams.orgName} has already been used. Please ask your admin for a new link.`)
+              setError('This invite link has already been used or expired. Please ask your admin for a new link.')
               setLoading(false); return
             }
           }
-          orgName = inviteParams.orgName
+          // Ensure org name is resolved — look up fresh from DB if not yet available
+          if (inviteParams.orgName) {
+            orgName = inviteParams.orgName
+          } else {
+            const { data: orgRow } = await supabase.from('organisations').select('name').eq('id', inviteParams.orgId).single()
+            orgName = orgRow?.name || inviteParams.orgId
+          }
           assignedRole = inviteParams.role
         } else {
           if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
