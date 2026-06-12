@@ -799,15 +799,32 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       }
       if (mode==='register') {
         if (!name.trim()) { setError('Please enter your full name'); setLoading(false); return }
-        let orgName, assignedRole, inviteOrgTier
+        let assignedRole
         if (inviteParams) {
           if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
-          if (inviteParams.linkId) {
+
+          // Extract and log all invite URL parameters before doing anything
+          const inviteOrgId    = inviteParams.orgId    || ''
+          const firstName      = inviteParams.firstname || name.trim().split(/\s+/)[0] || ''
+          const lastName       = inviteParams.lastname  || name.trim().split(/\s+/).slice(1).join(' ') || ''
+          const inviteEmail    = inviteParams.email     || email
+          const invitePhone    = inviteParams.phone     || null
+          const inviteRole     = inviteParams.role      || 'worker'
+          const inviteIndustry = inviteParams.industry  || null
+          const invitePosition = inviteParams.position  || null
+          const inviteLinkId   = inviteParams.linkId    || null
+          const inviteTeamId   = inviteParams.teamId    || null
+          console.log('Invite params:', { inviteOrgId, firstName, lastName, inviteEmail, invitePhone, inviteRole, inviteIndustry, invitePosition, inviteLinkId, inviteTeamId })
+
+          assignedRole = inviteRole
+
+          // Validate invite link (non-blocking)
+          if (inviteLinkId) {
             try {
               const { data: linkCheck } = await supabase
                 .from('invite_links')
                 .select('id, is_active, expires_at, used_at')
-                .eq('secret', inviteParams.linkId)
+                .eq('secret', inviteLinkId)
                 .maybeSingle()
               if (linkCheck) {
                 if (linkCheck.is_active === false) {
@@ -819,105 +836,95 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                   setLoading(false); return
                 }
               }
-              // No record found — proceed with registration using URL parameters
             } catch (linkErr) {
-              // Non-blocking — if the validation query fails, proceed with registration
               console.warn('invite_links validation query failed, proceeding:', linkErr.message)
             }
           }
-          // Always look up org name and plan fresh from DB using the org ID in the invite URL
-          const { data: orgRow } = await supabase.from('organisations').select('name, plan').eq('id', inviteParams.orgId).single()
-          orgName = orgRow?.name || null
-          if (!orgName) {
-            setError('Could not find your organisation. Please contact your admin.')
-            setLoading(false); return
-          }
-          inviteOrgTier = orgRow?.plan || 'Starter'
-          assignedRole = inviteParams.role
-        } else {
-          if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
-          orgName = org.trim()
-          assignedRole = 'client_admin'
-        }
-        window.__taksyn_registering = true
-        const { data:signUpData, error:e } = await supabase.auth.signUp({
-          email, password,
-          options:{ data:{ name:name.trim(), role:assignedRole, org:orgName } }
-        })
-        if (e) { window.__taksyn_registering = false; throw e }
-        if (signUpData?.user) {
-          const uid = signUpData.user.id
-          const _firstName = inviteParams?.firstname || name.trim().split(/\s+/)[0] || ''
-          const _lastName = inviteParams?.lastname || name.trim().split(/\s+/).slice(1).join(' ') || ''
-          try {
-            const { data: existingProfile } = await supabase.from('profiles').select('id').eq('id', uid).maybeSingle()
-            if (!existingProfile) {
-              const { error: profileError } = await supabase.from('profiles').upsert({
-                id: uid,
-                name: name.trim(),
-                first_name: _firstName,
-                last_name: _lastName,
-                email: inviteParams ? inviteParams.email || email : email,
-                phone: inviteParams?.phone || null,
-                role: assignedRole,
+
+          window.__taksyn_registering = true
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email, password,
+            options: { data: { name: (firstName + ' ' + lastName).trim(), role: assignedRole } }
+          })
+          if (signUpError) { window.__taksyn_registering = false; throw signUpError }
+
+          if (signUpData?.user) {
+            const newUserId = signUpData.user.id
+            console.log('signUp succeeded, newUserId:', newUserId)
+
+            // Look up org name and plan
+            const { data: orgData, error: orgError } = await supabase
+              .from('organisations')
+              .select('name, plan')
+              .eq('id', inviteOrgId)
+              .single()
+            console.log('Org lookup result:', orgData, orgError)
+
+            const orgName = orgData?.name || null
+            if (!orgName) {
+              setError('Could not find your organisation. Please contact your admin.')
+              window.__taksyn_registering = false; setLoading(false); return
+            }
+            const tier = orgData?.plan || 'Starter'
+            console.log('About to insert profile with:', { id: newUserId, org: orgName, tier, role: assignedRole })
+
+            const { data: profileData, error: profileError } = await supabase
+              .from('profiles')
+              .upsert({
+                id: newUserId,
+                name: (firstName + ' ' + lastName).trim(),
+                first_name: firstName,
+                last_name: lastName,
+                email: inviteEmail,
+                phone: invitePhone,
                 org: orgName,
-                industry: inviteParams?.industry || '',
-                tier: inviteOrgTier || 'Starter',
-                created_at: new Date().toISOString(),
-                ...(inviteParams?.position ? { position: inviteParams.position } : {})
+                role: assignedRole,
+                tier: tier,
+                industry: inviteIndustry || '',
+                position: invitePosition || '',
+                created_at: new Date().toISOString()
               }, { onConflict: 'id' })
-              if (profileError) {
-                console.error('PROFILE INSERT FAILED:', profileError)
-                alert('Profile creation failed: ' + profileError.message)
-              } else {
-                console.log('Profile created successfully for uid:', uid)
-              }
-            } else {
-              console.log('Profile already exists for uid:', uid)
+            console.log('Profile upsert result:', profileData, profileError)
+            if (profileError) {
+              alert('Profile save failed: ' + profileError.message)
+              window.__taksyn_registering = false; setLoading(false); return
             }
-          } catch (profileErr) {
-            console.error('Profile insert exception:', profileErr)
-            alert('Profile creation error: ' + profileErr.message)
-          }
-          try {
-            const { error: orgMemberError } = await supabase.from('org_members').upsert(
-              { user_id:uid, org: orgName, role:assignedRole, tier:inviteOrgTier || 'Starter', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
-              { onConflict: 'user_id,org' }
-            )
-            if (orgMemberError) {
-              console.error('ORG_MEMBERS INSERT FAILED:', orgMemberError)
-              alert('Org member creation failed: ' + orgMemberError.message)
-            } else {
-              console.log('org_members created successfully for uid:', uid)
-            }
-          } catch (orgMemberErr) {
-            console.error('org_members insert exception:', orgMemberErr)
-            alert('Org member creation error: ' + orgMemberErr.message)
-          }
-          if (inviteParams) {
+
             try {
-              let teamId = inviteParams.teamId || null
-              if (!teamId && inviteParams.orgId) {
-                const { data: teamRow } = await supabase.from('teams').select('id').eq('org', inviteParams.orgId).limit(1).maybeSingle()
-                teamId = teamRow?.id || null
+              const { error: orgMemberError } = await supabase.from('org_members').upsert(
+                { user_id: newUserId, org: orgName, role: assignedRole, tier, ...(invitePosition ? { position: invitePosition } : {}) },
+                { onConflict: 'user_id,org' }
+              )
+              if (orgMemberError) console.error('ORG_MEMBERS upsert error:', orgMemberError)
+              else console.log('org_members upsert succeeded')
+            } catch (orgMemberErr) {
+              console.error('org_members upsert exception:', orgMemberErr)
+            }
+            // team_members
+            try {
+              let resolvedTeamId = inviteTeamId
+              if (!resolvedTeamId && inviteOrgId) {
+                const { data: teamRow } = await supabase.from('teams').select('id').eq('org', inviteOrgId).limit(1).maybeSingle()
+                resolvedTeamId = teamRow?.id || null
               }
-              if (teamId) {
+              if (resolvedTeamId) {
                 await supabase.from('team_members').insert({
-                  id: 'TM'+Date.now(), team_id:teamId, user_id:uid,
-                  user_name:name.trim(), role:assignedRole, org:orgName,
-                  added_by:'invite_link', added_at:new Date().toISOString()
+                  id: 'TM'+Date.now(), team_id: resolvedTeamId, user_id: newUserId,
+                  user_name: (firstName + ' ' + lastName).trim(), role: assignedRole, org: orgName,
+                  added_by: 'invite_link', added_at: new Date().toISOString()
                 })
               }
             } catch (err) {
               console.error('team_members insert error:', err)
             }
-          }
-          if (inviteParams?.linkId) {
-            supabase.from('invite_links').update({ used_at:new Date().toISOString(), used_by:uid, is_active:false })
-              .eq('secret', inviteParams.linkId).then(()=>{}).catch(()=>{})
-          }
-          // Auto sign-in immediately after registration
-          if (inviteParams) {
+
+            // Mark invite link used
+            if (inviteLinkId) {
+              supabase.from('invite_links').update({ used_at: new Date().toISOString(), used_by: newUserId, is_active: false })
+                .eq('secret', inviteLinkId).then(()=>{}).catch(()=>{})
+            }
+
+            // Auto sign-in
             try {
               await new Promise(resolve => setTimeout(resolve, 500))
               const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
@@ -929,7 +936,6 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                   return
                 }
               }
-              // signInWithPassword failed — redirect to login with clear message
               setSuccess('Account created. Please sign in with your new password.')
               setLoading(false)
               setTimeout(()=>{ setInviteParams(null); setMode('login'); setSuccess(''); setPassword(''); setConfirmPassword(''); setAgreeChecked(false) }, 2500)
@@ -938,6 +944,16 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               window.__taksyn_registering = false
             }
           }
+        } else {
+          if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
+          const orgName = org.trim()
+          assignedRole = 'client_admin'
+          window.__taksyn_registering = true
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email, password,
+            options: { data: { name: name.trim(), role: assignedRole, org: orgName } }
+          })
+          if (signUpError) { window.__taksyn_registering = false; throw signUpError }
         }
         // Org admin registration — try auto sign-in, fall back to email confirmation message
         window.__taksyn_registering = false
