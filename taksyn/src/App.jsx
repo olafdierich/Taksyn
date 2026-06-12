@@ -4635,6 +4635,10 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                       <option value="">— Industry —</option>
                       {(editOrgIndustries.length?editOrgIndustries:PRESET_INDUSTRIES).map(k=><option key={k} value={k}>{k}</option>)}
                     </select>
+                    <select className="form-select" style={{fontSize:11}} value={row.position} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
+                      <option value="">— Position —</option>
+                      {allPos.map(p=><option key={p} value={p}>{p}</option>)}
+                    </select>
                     {rolesForInd.length>0 ? (
                       <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
                         <option value="">— Role —</option>
@@ -4643,10 +4647,6 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                     ) : (
                       <input className="form-input" style={{fontSize:11}} value={row.role} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))} placeholder="Role / title"/>
                     )}
-                    <select className="form-select" style={{fontSize:11}} value={row.position} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
-                      <option value="">— Position —</option>
-                      {allPos.map(p=><option key={p} value={p}>{p}</option>)}
-                    </select>
                     <button style={{background:'none',border:'none',cursor:inviteOrgPositions.length>1?'pointer':'default',opacity:inviteOrgPositions.length>1?1:.3,color:'var(--red)',fontSize:16,padding:'0 4px',lineHeight:1}} onClick={()=>inviteOrgPositions.length>1&&setInviteOrgPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
                   </div>
                 )
