@@ -9305,6 +9305,12 @@ export default function App() {
     if(!isConfigured()) return
 
     supabase.auth.getSession().then(({data:{session}})=>{
+      // If URL has a valid invite link, always sign out any existing session first
+      const _isp = new URLSearchParams(window.location.search)
+      if (_isp.get('invite')==='true' && _isp.get('secret')==='taksyn-secret-2024' && session?.user) {
+        supabase.auth.signOut().catch(()=>{})
+        return
+      }
       if(session?.user) {
         supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
           if(data) setUser({...data,email:session.user.email})
@@ -9324,6 +9330,12 @@ export default function App() {
           if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
       } else if(event==='SIGNED_IN') {
+        // If URL still has invite params and we're not mid-registration, sign out — invite always wins
+        const _isp = new URLSearchParams(window.location.search)
+        if (_isp.get('invite')==='true' && _isp.get('secret')==='taksyn-secret-2024' && !window.__taksyn_registering) {
+          await supabase.auth.signOut()
+          return
+        }
         // Suppress during our custom invite registration — handleSubmit manages everything
         if (window.__taksyn_registering) return
         // Only show password setup for Supabase native email invite (hash token in URL)
