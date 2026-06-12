@@ -822,13 +822,14 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               console.warn('invite_links validation query failed, proceeding:', linkErr.message)
             }
           }
-          // Always look up org name fresh from DB using the org ID in the invite URL
-          const { data: orgRow } = await supabase.from('organisations').select('name').eq('id', inviteParams.orgId).single()
+          // Always look up org name and plan fresh from DB using the org ID in the invite URL
+          const { data: orgRow } = await supabase.from('organisations').select('name, plan').eq('id', inviteParams.orgId).single()
           orgName = orgRow?.name || null
           if (!orgName) {
             setError('Could not find your organisation. Please contact your admin.')
             setLoading(false); return
           }
+          inviteParams._tier = orgRow?.plan || 'Starter'
           assignedRole = inviteParams.role
         } else {
           if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
