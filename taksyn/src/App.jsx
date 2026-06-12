@@ -3518,12 +3518,16 @@ function UsersView({ user, setAuditLog }) {
     }
 
     if (inviteMethod==='whatsapp') {
-      const orgEntry = orgsList.find(o=>o.name===targetOrg)
-      const linkOrgId = orgEntry?.id || ''
-      const inviteUrl = await buildInviteUrl(linkOrgId)
-      const msg = encodeURIComponent(`Hi ${inviteName.trim()}, ${targetOrg} has invited you to join Taksyn. Tap the link to set up your account: ${inviteUrl}`)
-      window.open('https://wa.me/?text='+msg, '_blank')
-      setShowInvite(false); resetInviteForm()
+      try {
+        const orgEntry = orgsList.find(o=>o.name===targetOrg)
+        const linkOrgId = orgEntry?.id || ''
+        const inviteUrl = await buildInviteUrl(linkOrgId)
+        const msg = encodeURIComponent(`Hi ${inviteName.trim()}, ${targetOrg} has invited you to join Taksyn. Tap the link to set up your account: ${inviteUrl}`)
+        window.open('https://wa.me/?text='+msg, '_blank')
+        setShowInvite(false); resetInviteForm()
+      } catch(e) {
+        alert('Failed to send invite: '+e.message)
+      }
       return
     }
 
