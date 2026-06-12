@@ -816,7 +816,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         if (e) throw e
         if (signUpData?.user) {
           const uid = signUpData.user.id
-          await supabase.from('profiles').upsert({ id:uid, name:name.trim(), role:assignedRole, org:orgName, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}), ...(inviteParams?.phone ? {phone:inviteParams.phone} : {}) })
+          const _firstName = inviteParams?.firstname || name.trim().split(/\s+/)[0] || ''
+          const _lastName = inviteParams?.lastname || name.trim().split(/\s+/).slice(1).join(' ') || ''
+          await supabase.from('profiles').upsert({ id:uid, name:name.trim(), first_name:_firstName, last_name:_lastName, role:assignedRole, org:orgName, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}), ...(inviteParams?.phone ? {phone:inviteParams.phone} : {}) })
           await supabase.from('org_members').upsert(
             { user_id:uid, org:orgName, role:assignedRole, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
             { onConflict: 'user_id,org' }
