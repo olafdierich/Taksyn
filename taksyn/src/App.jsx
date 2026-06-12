@@ -860,7 +860,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               role: assignedRole,
               org: orgName,
               industry: inviteParams?.industry || '',
-              tier: inviteParams?._tier || 'Starter',
+              tier: inviteOrgTier || 'Starter',
               created_at: new Date().toISOString(),
               ...(inviteParams?.position ? { position: inviteParams.position } : {})
             })
