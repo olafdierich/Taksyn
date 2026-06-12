@@ -3487,11 +3487,16 @@ function UsersView({ user, setAuditLog }) {
     const buildInviteUrl = async (orgId) => {
       if (!orgId || !isConfigured()) return window.location.origin + window.location.pathname
       const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
-      await supabase.from('invite_links').insert({
-        id: linkId, org_id: orgId, role: systemRole,
-        position: validRows.find(p=>p.position)?.position || null,
-        created_by: user.name, org: targetOrg, created_at: new Date().toISOString()
-      }).catch(()=>{})
+      try {
+        const { error } = await supabase.from('invite_links').insert({
+          id: linkId, org_id: orgId, role: systemRole,
+          position: validRows.find(p=>p.position)?.position || null,
+          created_by: user.name, org: targetOrg, created_at: new Date().toISOString()
+        })
+        if (error) throw error
+      } catch (err) {
+        console.error('Invite link insert error:', err)
+      }
       const params = new URLSearchParams({
         invite: 'true',
         org: orgId,
