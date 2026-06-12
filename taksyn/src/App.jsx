@@ -3827,10 +3827,10 @@ function UsersView({ user, setAuditLog }) {
                 })}
                 <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setInvitePositions(prev=>[...prev,{industry:'',role:'',position:''}])}>+ Add another position</button>
               </div>
-              {inviteName.trim()&&invitePositions.some(p=>p.role||p.position)&&(
+              {(inviteFirstName.trim()||inviteLastName.trim())&&invitePositions.some(p=>p.role||p.position)&&(
                 <div style={{background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--text)',lineHeight:1.5}}>
                   <div style={{fontSize:10,fontWeight:700,color:'var(--brand)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.8px'}}>Invite Summary</div>
-                  <strong>{inviteName.trim()}</strong> will be invited to <strong>{user.role==='super_admin'?inviteOrg||'(org required)':user.org}</strong>
+                  <strong>{(inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim()}</strong> will be invited to <strong>{user.role==='super_admin'?inviteOrg||'(org required)':user.org}</strong>
                   {invitePositions.filter(p=>p.role||p.position).map((p,i)=>(
                     <div key={i} style={{marginTop:3,color:'var(--t2)'}}>{[p.industry,p.position,p.role].filter(Boolean).join(' · ')}</div>
                   ))}
