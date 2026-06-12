@@ -8982,6 +8982,7 @@ function SupportView({ user, tickets=[], setTickets }) {
 
 export default function App() {
   const [user, setUser] = useState(null)
+  const [deactivatedMsg, setDeactivatedMsg] = useState('')
   // Persist the active page in sessionStorage so it survives iOS tab eviction + WhatsApp return.
   const [page, setPage] = useState(()=>sessionStorage.getItem('taksyn-page')||'dashboard')
   const [tasks, setTasks] = useState(DEMO_TASKS)
