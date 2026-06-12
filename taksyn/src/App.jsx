@@ -4183,7 +4183,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
       const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
       const validPos = inviteOrgPositions.filter(p=>p.role||p.industry||p.position)
-      const rolesSummary = validPos.map(p=>[p.industry,p.role,p.position].filter(Boolean).join(' / ')).join('; ')
+      const rolesSummary = validPos.map(p=>[p.industry,p.position,p.role].filter(Boolean).join(' / ')).join('; ')
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
