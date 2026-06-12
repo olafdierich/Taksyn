@@ -4233,7 +4233,7 @@ function UsersView({ user, setAuditLog }) {
                 ))
               }
               const groups = {}
-              filtered.forEach(u=>{ const r=u.role||'worker'; if(!groups[r]) groups[r]=[]; groups[r].push(u) })
+              filtered.forEach(u=>{ const r=orgAssignments[u.id]?.[0]?.role||u.role||'worker'; if(!groups[r]) groups[r]=[]; groups[r].push(u) })
               const roleOrder = ['client_admin','manager','supervisor','worker']
               return roleOrder.filter(r=>groups[r]?.length).map(role=>(
                 <div key={role} style={{marginBottom:12}}>
