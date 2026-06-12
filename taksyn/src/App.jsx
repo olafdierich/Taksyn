@@ -8528,7 +8528,7 @@ function GettingStartedGuide({ user, setPage }) {
             <div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>{guide.chapters.length} chapters · {totalTopics} topics · {totalSteps} steps</div>
           </div>
           <div style={{marginLeft:'auto',display:'flex',flexDirection:'column',gap:6}}>
-            <button className="btn btn-primary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>⬇ Download PDF</button>
+            <button className="btn btn-primary" onClick={exportGuideToPDF} style={{fontSize:12,whiteSpace:'nowrap'}}>⬇ Download PDF</button>
             <button className="btn btn-secondary" onClick={handlePrint} style={{fontSize:12,whiteSpace:'nowrap'}}>🖨 Print</button>
           </div>
         </div>
