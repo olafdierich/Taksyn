@@ -4459,17 +4459,18 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   const loadOrgMembers = async (orgId, orgName) => {
     setLoadingMembers(true)
-    // Query by ID and by name so legacy rows (org = name) are included alongside current rows (org = ID)
     const { data: members } = await supabase.from('org_members')
-      .select('user_id, role, org, tier, industry, position')
-      .in('org', [orgId, orgName].filter(Boolean))
+      .select('user_id, role, position, industry, tier')
+      .eq('org', orgId)
     if (members?.length) {
       const ids = [...new Set(members.map(m=>m.user_id))]
       const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids)
-      const raw = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:p.org||orgName,orgId:m.org,tier:m.tier,email:p.email||'',industry:m.industry||'',position:m.position||''} })
-      // Deduplicate in case a user has both a legacy-name row and an ID row
       const seen = new Set()
-      setOrgMembers(raw.filter(m=>{ if(seen.has(m.id)) return false; seen.add(m.id); return true }))
+      setOrgMembers(
+        members
+          .filter(m=>{ if(seen.has(m.user_id)) return false; seen.add(m.user_id); return true })
+          .map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:p.org||orgName,orgId,tier:m.tier,email:p.email||'',industry:m.industry||'',position:m.position||''} })
+      )
     } else {
       setOrgMembers([])
     }
@@ -4589,15 +4590,16 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   const archiveOrg = async (org) => {
     if (!confirm('Archive '+org.name+'? This will hide it from the active list but preserve all data.')) return
-    const archivedAt = new Date().toISOString()
-    await supabase.from('organisations').update({status:'inactive', archived_at: archivedAt}).eq('id',org.id)
-    setOrgs(prev=>prev.map(o=>o.id===org.id?{...o,status:'inactive',archived_at:archivedAt}:o))
+    const { error } = await supabase.from('organisations').update({ status: 'inactive' }).eq('id', org.id)
+    if (!error) setOrgs(prev=>prev.map(o=>o.id===org.id?{...o,status:'inactive'}:o))
   }
 
   const reactivateOrg = async (org) => {
-    await supabase.from('organisations').update({status:'active', archived_at: null}).eq('id',org.id)
-    setOrgs(prev=>prev.map(o=>o.id===org.id?{...o,status:'active',archived_at:null}:o))
-    showToast(org.name+' reactivated')
+    const { error } = await supabase.from('organisations').update({ status: 'active' }).eq('id', org.id)
+    if (!error) {
+      setOrgs(prev=>prev.map(o=>o.id===org.id?{...o,status:'active'}:o))
+      showToast(org.name+' reactivated')
+    }
   }
 
   const uploadOrgLogo = async (orgId, file) => {
