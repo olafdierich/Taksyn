@@ -835,11 +835,35 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             supabase.from('invite_links').update({ used_at:new Date().toISOString(), used_by:uid, is_active:false })
               .eq('id', inviteParams.linkId).then(()=>{}).catch(()=>{})
           }
-          // Invite flow: show success then redirect to sign-in with email pre-filled
+          // Auto sign-in immediately after registration
           if (inviteParams) {
+            const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
+            if (!signInErr && signInData?.user) {
+              const { data: profile } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).single()
+              if (profile) {
+                const { data: memberships } = await supabase.from('org_members').select('*').eq('user_id', signInData.user.id)
+                if (memberships && memberships.length >= 1) {
+                  const m = memberships[0]
+                  onAuth({...profile, email: signInData.user.email, role: m.role, org: profile.org || m.org, tier: m.tier || 'Growth'})
+                } else {
+                  onAuth({...profile, email: signInData.user.email})
+                }
+                return
+              }
+            }
+            // Fallback: sign-in failed (e.g. email confirmation required)
             setSuccess('Account created successfully!')
             setLoading(false)
             setTimeout(()=>{ setInviteParams(null); setMode('login'); setSuccess(''); setPassword(''); setConfirmPassword(''); setAgreeChecked(false) }, 2500)
+            return
+          }
+        }
+        // Org admin registration — try auto sign-in, fall back to email confirmation message
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
+        if (!signInErr && signInData?.user) {
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).single()
+          if (profile) {
+            onAuth({...profile, email: signInData.user.email})
             return
           }
         }
