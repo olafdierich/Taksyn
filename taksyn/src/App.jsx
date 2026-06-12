@@ -8771,7 +8771,7 @@ function GettingStartedGuide({ user, setPage }) {
       </div>
 
       {/* ── Print document — always in DOM, visible only during print or printMode ── */}
-      <GuidePrintDocument guide={guide} roleName={roleName} user={user} />
+      <GuidePrintDocument guide={guide} roleName={roleName} user={user} orgLogo={orgLogo} />
     </div>
   )
 }
