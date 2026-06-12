@@ -3576,7 +3576,7 @@ function UsersView({ user, setAuditLog }) {
   }
 
   const resetInviteForm = () => {
-    setInviteEmail(''); setInviteName(''); setInviteOrg(''); setInvitePhone('')
+    setInviteEmail(''); setInviteFirstName(''); setInviteLastName(''); setInviteOrg(''); setInvitePhone('')
     setInvitePositions([{industry:'',role:'',position:''}])
   }
 
