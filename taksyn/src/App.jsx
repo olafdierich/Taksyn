@@ -4443,6 +4443,9 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                           <option value="">— Industry —</option>
                           {industryList.map(d=><option key={d} value={d}>{d}</option>)}
                         </select>
+                        <select className="form-select" style={{fontSize:12}} value={pos.role||'worker'} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
+                          {allPositions.map(p=><option key={p} value={p==='Manager'?'manager':p==='Supervisor'?'supervisor':'worker'}>{p}</option>)}
+                        </select>
                         {posRoles.length>0
                           ? <select className="form-select" style={{fontSize:12}} value={pos.position_title||pos.role_name||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,position_title:e.target.value}:p))}>
                               <option value="">— Role —</option>
@@ -4450,9 +4453,6 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                             </select>
                           : <input className="form-input" style={{fontSize:12}} placeholder="Role…" value={pos.position_title||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,position_title:e.target.value}:p))}/>
                         }
-                        <select className="form-select" style={{fontSize:12}} value={pos.role||'worker'} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
-                          {allPositions.map(p=><option key={p} value={p==='Manager'?'manager':p==='Supervisor'?'supervisor':'worker'}>{p}</option>)}
-                        </select>
                         <button style={{padding:'4px 8px',borderRadius:6,border:'1px solid var(--border)',background:'transparent',color:'var(--red)',cursor:'pointer',fontSize:13,lineHeight:1}} onClick={()=>setEditMemberPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
                       </div>
                     )
