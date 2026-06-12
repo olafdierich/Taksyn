@@ -3767,7 +3767,7 @@ function UsersView({ user, setAuditLog }) {
       if (assignments?.length) {
         const memberIds = assignments.map(a=>a.user_id)
         const {data:profileData} = await supabase.from('profiles').select('*').in('id', memberIds)
-        const workforceMembers = profileData || []
+        const workforceMembers = (profileData || []).filter(p=>p.role!=='super_admin')
         setRealUsers(workforceMembers)
         parsePositions(workforceMembers)
         const map = {}
@@ -3779,7 +3779,7 @@ function UsersView({ user, setAuditLog }) {
       } else {
         // Fallback: query profiles directly by org name (same as PerformanceView)
         const {data:fallback} = await supabase.from('profiles').select('*').eq('org', user.org)
-        if (fallback?.length) { setRealUsers(fallback); parsePositions(fallback) }
+        if (fallback?.length) { const fb=fallback.filter(p=>p.role!=='super_admin'); setRealUsers(fb); parsePositions(fb) }
       }
     })().catch(()=>{})
   },[user.org])
