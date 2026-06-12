@@ -9321,13 +9321,8 @@ export default function App() {
       } else if(event==='SIGNED_IN') {
         // Suppress during our custom invite registration — handleSubmit manages everything
         if (window.__taksyn_registering) return
-        // Check if this is an invite or recovery — block auto sign-in and show password setup
-        const isInvite = session.user.app_metadata?.provider==='email' &&
-          (session.user.last_sign_in_at === null ||
-           session.user.last_sign_in_at === session.user.created_at ||
-           !session.user.confirmed_at ||
-           window.__taksyn_invite_flow)
-        if(isInvite) {
+        // Only show password setup for Supabase native email invite (hash token in URL)
+        if(window.__taksyn_invite_flow) {
           window.__taksyn_invite_flow = false
           setNeedsPasswordSetup(true)
           return
