@@ -774,11 +774,16 @@ function AuthView({ onAuth }) {
             { onConflict: 'user_id,org' }
           )
           if (inviteParams?.teamId) {
-            await supabase.from('team_members').insert({
-              id: 'TM'+Date.now(), team_id:inviteParams.teamId, user_id:uid,
-              user_name:name.trim(), role:assignedRole, org:orgName,
-              added_by:'invite_link', added_at:new Date().toISOString()
-            }).catch(()=>{})
+            try {
+              const { error } = await supabase.from('team_members').insert({
+                id: 'TM'+Date.now(), team_id:inviteParams.teamId, user_id:uid,
+                user_name:name.trim(), role:assignedRole, org:orgName,
+                added_by:'invite_link', added_at:new Date().toISOString()
+              })
+              if (error) throw error
+            } catch (err) {
+              console.error('Invite error:', err)
+            }
           }
           if (inviteParams?.linkId) {
             supabase.from('invite_links').update({ used_at:new Date().toISOString(), used_by:uid, is_active:false })
