@@ -3761,25 +3761,26 @@ function UsersView({ user, setAuditLog }) {
     }
     ;(async()=>{
       if (!user.org) return
-      // Use org_members as the authoritative source of membership for this org
       const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
-      const orgId = orgRow?.id
-      if (!orgId) return
+      const orgId = orgRow?.id || user.org
       const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
-      const memberIds = (assignments||[]).map(a=>a.user_id)
-      // Load profiles only for confirmed org members, then re-verify profiles.org matches
-      const {data:profileData} = memberIds.length
-        ? await supabase.from('profiles').select('*').in('id', memberIds).eq('org', user.org)
-        : {data:[]}
-      const workforceMembers = profileData || []
-      setRealUsers(workforceMembers)
-      parsePositions(workforceMembers)
-      const map = {}
-      for (const a of assignments||[]) {
-        if (!map[a.user_id]) map[a.user_id] = []
-        map[a.user_id].push(a)
+      if (assignments?.length) {
+        const memberIds = assignments.map(a=>a.user_id)
+        const {data:profileData} = await supabase.from('profiles').select('*').in('id', memberIds)
+        const workforceMembers = profileData || []
+        setRealUsers(workforceMembers)
+        parsePositions(workforceMembers)
+        const map = {}
+        for (const a of assignments) {
+          if (!map[a.user_id]) map[a.user_id] = []
+          map[a.user_id].push(a)
+        }
+        setOrgAssignments(map)
+      } else {
+        // Fallback: query profiles directly by org name (same as PerformanceView)
+        const {data:fallback} = await supabase.from('profiles').select('*').eq('org', user.org)
+        if (fallback?.length) { setRealUsers(fallback); parsePositions(fallback) }
       }
-      setOrgAssignments(map)
     })().catch(()=>{})
   },[user.org])
 
