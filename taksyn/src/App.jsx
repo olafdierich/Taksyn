@@ -799,7 +799,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       }
       if (mode==='register') {
         if (!name.trim()) { setError('Please enter your full name'); setLoading(false); return }
-        let orgName, assignedRole
+        let orgName, assignedRole, inviteOrgTier
         if (inviteParams) {
           if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
           if (inviteParams.linkId) {
