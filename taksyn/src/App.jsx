@@ -931,6 +931,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         }
       }
     } catch(e) {
+      window.__taksyn_registering = false
       setError(e.message||'Sign in failed. Please try again.')
       setLoading(false)
     }
