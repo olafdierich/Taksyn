@@ -3704,7 +3704,7 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{fontSize:10,fontWeight:700,color:'var(--brand)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.8px'}}>Invite Summary</div>
                   <strong>{inviteName.trim()}</strong> will be invited to <strong>{user.role==='super_admin'?inviteOrg||'(org required)':user.org}</strong>
                   {invitePositions.filter(p=>p.role||p.position).map((p,i)=>(
-                    <div key={i} style={{marginTop:3,color:'var(--t2)'}}>{[p.industry,p.role,p.position].filter(Boolean).join(' · ')}</div>
+                    <div key={i} style={{marginTop:3,color:'var(--t2)'}}>{[p.industry,p.position,p.role].filter(Boolean).join(' · ')}</div>
                   ))}
                 </div>
               )}
