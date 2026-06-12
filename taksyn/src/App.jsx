@@ -1386,15 +1386,20 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
       created_at: new Date().toISOString(),
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       is_active: true,
+      invited_name: invite.invited_name || [invite.invited_first_name, invite.invited_last_name].filter(Boolean).join(' ') || null,
       invited_first_name: invite.invited_first_name || null,
       invited_last_name: invite.invited_last_name || null,
       invited_email: invite.invited_email || null,
       invited_phone: invite.invited_phone || null,
+      invited_role: invite.invited_role || invite.role || null,
+      invited_position: invite.invited_position || invite.position || null,
       invited_industry: invite.invited_industry || null
     }).catch(()=>{})
     const base = window.location.origin + window.location.pathname
-    const firstName = invite.invited_first_name || ''
-    const lastName = invite.invited_last_name || ''
+    const displayName = invite.invited_name || [invite.invited_first_name, invite.invited_last_name].filter(Boolean).join(' ') || ''
+    const nameParts = displayName.split(' ')
+    const firstName = nameParts[0] || ''
+    const lastName = nameParts.slice(1).join(' ') || ''
     const params = new URLSearchParams(Object.fromEntries(Object.entries({
       invite: 'true', org: orgId,
       ...(invite.team_id ? { team: invite.team_id } : {}),
@@ -1409,7 +1414,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
     }).filter(([,v]) => v !== '')))
     const inviteUrl = base + '?' + params.toString()
     if (invite.invited_phone) {
-      const msg = encodeURIComponent(`Hi ${firstName}, here is your updated invite link to join ${user.org} on Taksyn: ${inviteUrl}`)
+      const msg = encodeURIComponent(`Hi ${displayName||firstName}, here is your updated invite link to join ${user.org} on Taksyn: ${inviteUrl}`)
       window.open('https://wa.me/?text=' + msg, '_blank')
     } else {
       navigator.clipboard.writeText(inviteUrl).then(()=>alert('New invite link copied!' + (invite.invited_email ? ' Send it to ' + invite.invited_email : ''))).catch(()=>{})
@@ -1488,14 +1493,14 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
           {pendingInvites.length===0
             ? <div style={{fontSize:13,color:'var(--t2)',padding:'4px 0'}}>No pending invitations</div>
             : pendingInvites.map(inv=>{
-                const fullName = [inv.invited_first_name, inv.invited_last_name].filter(Boolean).join(' ')
-                const detail = [inv.invited_industry, inv.position, ROLE_LABELS[inv.role]||inv.role].filter(Boolean).join(' · ')
+                const fullName = inv.invited_name || [inv.invited_first_name, inv.invited_last_name].filter(Boolean).join(' ')
+                const detail = [inv.invited_industry, inv.invited_position||inv.position, ROLE_LABELS[inv.invited_role||inv.role]||(inv.invited_role||inv.role)].filter(Boolean).join(' · ')
                 const sentDate = inv.created_at ? new Date(inv.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : '—'
                 const expiryDate = inv.expires_at ? new Date(inv.expires_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : '—'
                 return (
                   <div key={inv.id} style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontWeight:600,fontSize:13,color:'var(--text)'}}>{fullName||ROLE_LABELS[inv.role]||inv.role}</div>
+                      <div style={{fontWeight:600,fontSize:13,color:'var(--text)'}}>{fullName||ROLE_LABELS[inv.invited_role||inv.role]||(inv.invited_role||inv.role)}</div>
                       {inv.invited_email&&<div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{inv.invited_email}</div>}
                       <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{detail}</div>
                       <div style={{fontSize:11,color:'var(--t3)',marginTop:3}}>Invited {sentDate} · Expires {expiryDate}</div>
@@ -3833,10 +3838,13 @@ function UsersView({ user, setAuditLog }) {
           created_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           is_active: true,
+          invited_name: [inviteFirstName.trim(), inviteLastName.trim()].filter(Boolean).join(' ') || null,
           invited_first_name: inviteFirstName.trim() || null,
           invited_last_name: inviteLastName.trim() || null,
           invited_email: inviteEmail.trim() || null,
           invited_phone: invitePhone.trim() || null,
+          invited_role: systemRole || null,
+          invited_position: validRows.find(p=>p.position)?.position || null,
           invited_industry: firstIndustry || null
         })
         if (error) throw error
