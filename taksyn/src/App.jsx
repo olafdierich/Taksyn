@@ -801,12 +801,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               setLoading(false); return
             }
           }
-          // Ensure org name is resolved — look up fresh from DB if not yet available
-          if (inviteParams.orgName) {
-            orgName = inviteParams.orgName
-          } else {
-            const { data: orgRow } = await supabase.from('organisations').select('name').eq('id', inviteParams.orgId).single()
-            orgName = orgRow?.name || inviteParams.orgId
+          // Always look up org name fresh from DB using the org ID in the invite URL
+          const { data: orgRow } = await supabase.from('organisations').select('name').eq('id', inviteParams.orgId).single()
+          orgName = orgRow?.name || null
+          if (!orgName) {
+            setError('Could not find your organisation. Please contact your admin.')
+            setLoading(false); return
           }
           assignedRole = inviteParams.role
         } else {
@@ -824,7 +824,24 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           const uid = signUpData.user.id
           const _firstName = inviteParams?.firstname || name.trim().split(/\s+/)[0] || ''
           const _lastName = inviteParams?.lastname || name.trim().split(/\s+/).slice(1).join(' ') || ''
-          await supabase.from('profiles').upsert({ id:uid, name:name.trim(), first_name:_firstName, last_name:_lastName, email:inviteParams?.email||email, phone:inviteParams?.phone||'', role:assignedRole, org:orgName, industry:inviteParams?.industry||'', tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) })
+          try {
+            const { error: profileError } = await supabase.from('profiles').insert({
+              id: uid,
+              name: name.trim(),
+              first_name: _firstName,
+              last_name: _lastName,
+              email: inviteParams?.email || email,
+              phone: inviteParams?.phone || '',
+              role: assignedRole,
+              org: orgName,
+              industry: inviteParams?.industry || '',
+              tier: 'Growth',
+              ...(inviteParams?.position ? { position: inviteParams.position } : {})
+            })
+            if (profileError) console.error('Profile insert error:', profileError)
+          } catch (profileErr) {
+            console.error('Profile insert exception:', profileErr)
+          }
           await supabase.from('org_members').upsert(
             { user_id:uid, org: inviteParams ? (inviteParams.orgId || orgName) : orgName, role:assignedRole, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
             { onConflict: 'user_id,org' }
