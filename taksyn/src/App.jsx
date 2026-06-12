@@ -698,6 +698,21 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   const _sp = new URLSearchParams(window.location.search)
   const _isInvite = _sp.get('invite')==='true' && _sp.get('secret')==='taksyn-secret-2024'
 
+  // Capture all invite URL params in a ref on first render, before useEffect clears the URL.
+  // useRef persists across re-renders so handleSubmit always reads the original values.
+  const inviteUrlRef = useRef(_isInvite ? {
+    orgId:     _sp.get('org')       || '',
+    firstName: _sp.get('firstname') || '',
+    lastName:  _sp.get('lastname')  || '',
+    email:     _sp.get('email')     || '',
+    role:      _sp.get('role')      || 'worker',
+    position:  _sp.get('position')  || '',
+    industry:  _sp.get('industry')  || '',
+    phone:     _sp.get('phone')     || null,
+    linkId:    _sp.get('link')      || null,
+    teamId:    _sp.get('team')      || null,
+  } : null)
+
   const [mode, setMode] = useState(_isInvite ? 'register' : 'login')
   const [email, setEmail] = useState(_isInvite && _sp.get('email') ? _sp.get('email') : '')
   const [password, setPassword] = useState('')
@@ -800,21 +815,21 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       if (mode==='register') {
         if (!name.trim()) { setError('Please enter your full name'); setLoading(false); return }
         let assignedRole
-        if (inviteParams) {
+        if (inviteUrlRef.current) {
           if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
 
-          // Extract and log all invite URL parameters before doing anything
-          const inviteOrgId    = inviteParams.orgId    || ''
-          const firstName      = inviteParams.firstname || name.trim().split(/\s+/)[0] || ''
-          const lastName       = inviteParams.lastname  || name.trim().split(/\s+/).slice(1).join(' ') || ''
-          const inviteEmail    = inviteParams.email     || email
-          const invitePhone    = inviteParams.phone     || null
-          const inviteRole     = inviteParams.role      || 'worker'
-          const inviteIndustry = inviteParams.industry  || null
-          const invitePosition = inviteParams.position  || null
-          const inviteLinkId   = inviteParams.linkId    || null
-          const inviteTeamId   = inviteParams.teamId    || null
-          console.log('Invite params:', { inviteOrgId, firstName, lastName, inviteEmail, invitePhone, inviteRole, inviteIndustry, invitePosition, inviteLinkId, inviteTeamId })
+          // Read directly from the ref — these are the original URL params captured at page load
+          const inviteOrgId    = inviteUrlRef.current.orgId
+          const firstName      = inviteUrlRef.current.firstName
+          const lastName       = inviteUrlRef.current.lastName
+          const inviteEmail    = inviteUrlRef.current.email    || email
+          const invitePhone    = inviteUrlRef.current.phone
+          const inviteRole     = inviteUrlRef.current.role
+          const inviteIndustry = inviteUrlRef.current.industry
+          const invitePosition = inviteUrlRef.current.position
+          const inviteLinkId   = inviteUrlRef.current.linkId
+          const inviteTeamId   = inviteUrlRef.current.teamId
+          console.log('Invite params from ref:', { inviteOrgId, firstName, lastName, inviteEmail, invitePhone, inviteRole, inviteIndustry, invitePosition, inviteLinkId, inviteTeamId })
 
           assignedRole = inviteRole
 
