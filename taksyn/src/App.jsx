@@ -3681,6 +3681,10 @@ function UsersView({ user, setAuditLog }) {
                         <option value="">— Industry —</option>
                         {allIndustries.map(k=><option key={k} value={k}>{k}</option>)}
                       </select>
+                      <select className="form-select" style={{fontSize:11}} value={row.position} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
+                        <option value="">— Position —</option>
+                        {allPositions.map(p=><option key={p} value={p}>{p}</option>)}
+                      </select>
                       {rolesForIndustry.length>0 ? (
                         <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
                           <option value="">— Role —</option>
@@ -3689,10 +3693,6 @@ function UsersView({ user, setAuditLog }) {
                       ) : (
                         <input className="form-input" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))} placeholder="Role / title"/>
                       )}
-                      <select className="form-select" style={{fontSize:11}} value={row.position} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
-                        <option value="">— Position —</option>
-                        {allPositions.map(p=><option key={p} value={p}>{p}</option>)}
-                      </select>
                       <button style={{background:'none',border:'none',cursor:invitePositions.length>1?'pointer':'default',opacity:invitePositions.length>1?1:.3,color:'var(--red)',fontSize:16,padding:'0 4px',lineHeight:1}} onClick={()=>invitePositions.length>1&&setInvitePositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
                     </div>
                   )
