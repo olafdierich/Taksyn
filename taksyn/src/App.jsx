@@ -843,7 +843,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             console.error('Profile insert exception:', profileErr)
           }
           await supabase.from('org_members').upsert(
-            { user_id:uid, org: inviteParams ? (inviteParams.orgId || orgName) : orgName, role:assignedRole, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
+            { user_id:uid, org: orgName, role:assignedRole, tier:'Growth', ...(inviteParams?.position ? {position:inviteParams.position} : {}) },
             { onConflict: 'user_id,org' }
           )
           if (inviteParams) {
