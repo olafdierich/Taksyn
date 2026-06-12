@@ -3739,19 +3739,17 @@ function UsersView({ user, setAuditLog }) {
     }
     if(user.role==='super_admin') {
       ;(async()=>{
-        const [profilesRes, membersRes, orgsRes] = await Promise.all([
-          supabase.from('profiles').select('*'),
-          supabase.from('org_members').select('user_id, org, role, industry, position'),
-          supabase.from('organisations').select('id, name')
+        const [profilesRes, membersRes] = await Promise.all([
+          supabase.from('profiles').select('*').order('name'),
+          supabase.from('org_members').select('user_id, org, role, industry, position, organisations(name)')
         ])
         const profiles = profilesRes.data || []
         setRealUsers(profiles)
         parsePositions(profiles)
-        const orgsById = Object.fromEntries((orgsRes.data||[]).map(o=>[o.id, o.name]))
         const map = {}
         for (const m of membersRes.data||[]) {
           if (!map[m.user_id]) map[m.user_id] = []
-          map[m.user_id].push({ orgName: orgsById[m.org]||m.org, role: m.role, industry: m.industry||'', position: m.position||'' })
+          map[m.user_id].push({ orgName: m.organisations?.name||m.org, role: m.role, industry: m.industry||'', position: m.position||'' })
         }
         setAllOrgMemberships(map)
       })().catch(()=>{})
@@ -3862,6 +3860,7 @@ function UsersView({ user, setAuditLog }) {
     const { data:existing } = await supabase.from('org_members').select('*').eq('user_id',profile.id).eq('org',userOrgId)
     if (existing?.length) { alert('This user is already in your organisation.'); return }
     await supabase.from('org_members').insert({ user_id:profile.id, org:userOrgId, role, tier:user.tier||'Growth' })
+    await supabase.from('profiles').update({ org: user.org, role }).eq('id', profile.id)
     setRealUsers(prev=>[...prev,{...profile,role,org:user.org}])
     alert(profile.name+' added to your organisation as '+ROLE_LABELS[role])
   }
