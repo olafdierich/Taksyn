@@ -528,20 +528,23 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 }
 .screen-only{display:block}.print-only{display:none}
 @media print{
+  html,body{height:auto!important;overflow:visible!important;margin:0;padding:0;font-family:Arial,sans-serif;font-size:12pt;color:#000}
+  .app{position:static!important;height:auto!important;overflow:visible!important;display:block!important;padding-top:0!important}
+  .main{overflow:visible!important;display:block!important;height:auto!important}
+  .content{overflow:visible!important;display:block!important;height:auto!important}
   .screen-only{display:none!important}
   .print-only{display:block!important}
-  body{margin:0;padding:0;font-family:Arial,sans-serif;font-size:12pt;color:#000}
-  .cover-page{page-break-after:always;text-align:center}
-  .index-page{page-break-after:always}
-  .gp-chapter{page-break-before:always}
-  .gp-chapter:first-of-type{page-break-before:avoid}
+  #guide-export-container{width:auto!important;padding:0!important;position:static!important;left:auto!important;top:auto!important;font-size:12pt!important;line-height:1.7!important}
+  .cover-page{page-break-after:always;break-after:always;text-align:center;min-height:auto!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;height:100vh}
+  .index-page{page-break-after:always;break-after:always}
+  .gp-chapter{page-break-before:always;break-before:always}
+  .gp-chapter:first-of-type{page-break-before:avoid;break-before:avoid}
   .gp-subchapter{margin-bottom:24pt}
   .gp-step{margin-bottom:16pt;padding-left:16pt;border-left:2pt solid #ccc;break-inside:avoid;page-break-inside:avoid}
   .gp-step-title{font-weight:bold;margin-bottom:4pt;font-size:12pt}
   .gp-step-location{font-style:italic;color:#555;margin-top:4pt;font-size:10pt}
   .gp-step-tip{background:#f5f5f5;padding:6pt;margin-top:4pt;font-size:10pt}
   @page{margin:2cm}
-  @page :first{margin-top:0}
   *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
 `
