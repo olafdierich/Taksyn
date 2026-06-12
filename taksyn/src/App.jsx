@@ -8498,7 +8498,7 @@ function GettingStartedGuide({ user, setPage }) {
             </div>
             <div style={{display:'flex',gap:8}}>
               <button className="btn btn-secondary" onClick={handlePrint}>🖨 Print</button>
-              <button className="btn btn-primary" onClick={handlePrint}>⬇ Download PDF</button>
+              <button className="btn btn-primary" onClick={exportGuideToPDF}>⬇ Download PDF</button>
             </div>
           </div>
         </div>
