@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase.js'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 
 const ROLES = ['super_admin','client_admin','manager','supervisor','worker']
 const ROLE_LABELS = { super_admin:'Super Admin', client_admin:'Client Admin', manager:'Manager', supervisor:'Supervisor', worker:'Staff Member' }
