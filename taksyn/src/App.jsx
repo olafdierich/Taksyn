@@ -893,7 +893,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           }
           if (inviteParams?.linkId) {
             supabase.from('invite_links').update({ used_at:new Date().toISOString(), used_by:uid, is_active:false })
-              .eq('id', inviteParams.linkId).then(()=>{}).catch(()=>{})
+              .eq('secret', inviteParams.linkId).then(()=>{}).catch(()=>{})
           }
           // Auto sign-in immediately after registration
           if (inviteParams) {
