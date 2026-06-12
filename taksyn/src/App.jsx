@@ -8535,9 +8535,19 @@ function GettingStartedGuide({ user, setPage }) {
   const [openSubChapters, setOpenSubChapters] = useState({})
   const [openSteps, setOpenSteps] = useState({})
   const [printMode, setPrintMode] = useState(false)
+  const [orgLogo, setOrgLogo] = useState(null)
 
   const guide = GUIDE_CONTENT[activeRole] || GUIDE_CONTENT.worker
   const roleName = ROLE_LABELS[activeRole] || activeRole
+
+  useEffect(() => {
+    setOrgLogo(null)
+    if (isConfigured() && user.org && user.role !== 'super_admin') {
+      supabase.from('organisations').select('logo').eq('name', user.org).maybeSingle()
+        .then(({ data }) => { if (data?.logo) setOrgLogo(data.logo) })
+        .catch(() => {})
+    }
+  }, [user.org])
 
   const toggleSubChapter = (id) => setOpenSubChapters(prev => ({...prev, [id]: !prev[id]}))
   const toggleStep = (key) => setOpenSteps(prev => ({...prev, [key]: !prev[key]}))
