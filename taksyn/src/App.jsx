@@ -9386,10 +9386,16 @@ export default function App() {
   useEffect(()=>{
     if(!isConfigured()) return
 
+    // Capture invite-URL state SYNCHRONOUSLY before getSession() resolves —
+    // AuthView's useEffect clears the URL before the async callback runs
+    const _inviteInUrl = (()=>{
+      const p = new URLSearchParams(window.location.search)
+      return p.get('invite')==='true' && p.get('secret')==='taksyn-secret-2024'
+    })()
+
     supabase.auth.getSession().then(({data:{session}})=>{
-      // If URL has a valid invite link, always sign out any existing session first
-      const _isp = new URLSearchParams(window.location.search)
-      if (_isp.get('invite')==='true' && _isp.get('secret')==='taksyn-secret-2024' && session?.user) {
+      // If we loaded with an invite URL (or the flag is set), always sign out any existing session
+      if ((_inviteInUrl || window.__taksyn_invite_registration) && session?.user) {
         supabase.auth.signOut().catch(()=>{})
         return
       }
