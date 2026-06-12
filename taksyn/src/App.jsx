@@ -3666,9 +3666,15 @@ function UsersView({ user, setAuditLog }) {
       const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
       try {
         const { error } = await supabase.from('invite_links').insert({
-          id: linkId, org_id: orgId, role: systemRole,
+          organisation_id: orgId,
+          team_id: null,
+          role: systemRole,
           position: validRows.find(p=>p.position)?.position || null,
-          created_by: user.name, org: targetOrg, created_at: new Date().toISOString()
+          secret: linkId,
+          created_by: user.id,
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          is_active: true
         })
         if (error) throw error
       } catch (err) {
