@@ -805,11 +805,18 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 .from('invite_links')
                 .select('id, is_active, expires_at, used_at')
                 .eq('secret', inviteParams.linkId)
-                .single()
-              if (linkCheck && (linkCheck.is_active === false || linkCheck.used_at)) {
-                setError('This invite link has already been used or expired. Please ask your admin for a new link.')
-                setLoading(false); return
+                .maybeSingle()
+              if (linkCheck) {
+                if (linkCheck.is_active === false) {
+                  setError('This invite link has already been used. Please ask your admin for a new link.')
+                  setLoading(false); return
+                }
+                if (linkCheck.expires_at && new Date(linkCheck.expires_at) < new Date()) {
+                  setError('This invite link has expired. Please ask your admin for a new link.')
+                  setLoading(false); return
+                }
               }
+              // No record found — proceed with registration using URL parameters
             } catch (linkErr) {
               // Non-blocking — if the validation query fails, proceed with registration
               console.warn('invite_links validation query failed, proceeding:', linkErr.message)
