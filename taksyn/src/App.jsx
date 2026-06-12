@@ -8541,12 +8541,13 @@ function GettingStartedGuide({ user, setPage }) {
   const roleName = ROLE_LABELS[activeRole] || activeRole
 
   useEffect(() => {
-    setOrgLogo(null)
-    if (isConfigured() && user.org && user.role !== 'super_admin') {
-      supabase.from('organisations').select('logo').eq('name', user.org).maybeSingle()
-        .then(({ data }) => { if (data?.logo) setOrgLogo(data.logo) })
-        .catch(() => {})
-    }
+    if (!isConfigured() || !user.org || user.role === 'super_admin') return
+    ;(async () => {
+      try {
+        const { data: orgData } = await supabase.from('organisations').select('logo').eq('name', user.org).single()
+        setOrgLogo(orgData?.logo || null)
+      } catch (e) {}
+    })()
   }, [user.org])
 
   const toggleSubChapter = (id) => setOpenSubChapters(prev => ({...prev, [id]: !prev[id]}))
