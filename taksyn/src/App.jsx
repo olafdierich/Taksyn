@@ -9735,8 +9735,18 @@ export default function App() {
         return
       }
       if(session?.user) {
-        supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>{
-          if(data) setUser({...data,email:session.user.email})
+        supabase.from('profiles').select('*').eq('id',session.user.id).single().then(async({data})=>{
+          if(data) {
+            const savedOrgId = sessionStorage.getItem('selectedOrg')
+            const savedRole = sessionStorage.getItem('selectedRole')
+            if (savedOrgId && savedRole) {
+              try {
+                const { data: orgRow } = await supabase.from('organisations').select('name').eq('id', savedOrgId).maybeSingle()
+                if (orgRow?.name) { setUser({...data, email:session.user.email, org:orgRow.name, role:savedRole}); return }
+              } catch(e) {}
+            }
+            setUser({...data, email:session.user.email})
+          }
         }).catch(()=>{})
       } else {
         setUser(null)
@@ -9774,6 +9784,14 @@ export default function App() {
         try {
           const {data} = await supabase.from('profiles').select('*').eq('id',session.user.id).maybeSingle()
           if (data) {
+            const savedOrgId = sessionStorage.getItem('selectedOrg')
+            const savedRole = sessionStorage.getItem('selectedRole')
+            if (savedOrgId && savedRole) {
+              try {
+                const { data: orgRow } = await supabase.from('organisations').select('name').eq('id', savedOrgId).maybeSingle()
+                if (orgRow?.name) { setUser({...data, email:session.user.email, org:orgRow.name, role:savedRole}); return }
+              } catch(e) {}
+            }
             setUser({...data, email:session.user.email})
           }
           // No profile found — could be a race condition during registration or a DB trigger delay.
@@ -9829,6 +9847,8 @@ export default function App() {
   const [orgSwitchChoices, setOrgSwitchChoices] = useState([])
 
   const handleAuth = (userData) => {
+    sessionStorage.removeItem('selectedOrg')
+    sessionStorage.removeItem('selectedRole')
     setUser(userData)
     setPage('dashboard')
     const positions = userData.positions
@@ -10197,7 +10217,10 @@ export default function App() {
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
                   {orgSwitchChoices.sort((a,b)=>(a.orgName||a.org).localeCompare(b.orgName||b.org)).map((m,i)=>(
                     <div key={i} onClick={()=>{
-                      const userData = {...user, role:m.role, org:m.orgName||m.org, tier:m.tier||user.tier}
+                      const orgName = m.orgName||m.org
+                      const userData = {...user, role:m.role, org:orgName, tier:m.tier||user.tier}
+                      sessionStorage.setItem('selectedOrg', m.org)
+                      sessionStorage.setItem('selectedRole', m.role)
                       setUser(userData)
                       setPage('dashboard')
                       setShowOrgSwitch(false)
