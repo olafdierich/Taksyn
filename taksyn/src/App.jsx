@@ -887,8 +887,9 @@ function AuthView({ onAuth }) {
               onAuth(userData)
             }
           } else {
-            const userData = { id:data.user.id, email:data.user.email, name:data.user.email.split('@')[0], role:'worker', tier:'Growth', org:'My Organisation' }
-            onAuth(userData)
+            await supabase.auth.signOut()
+            setError('Your account has been deactivated. Please contact your administrator.')
+            setLoading(false)
           }
         }
       }
