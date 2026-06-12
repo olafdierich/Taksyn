@@ -907,7 +907,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
 
             try {
               const { error: orgMemberError } = await supabase.from('org_members').upsert(
-                { user_id: newUserId, org: orgName, role: assignedRole, tier, ...(invitePosition ? { position: invitePosition } : {}) },
+                { user_id: newUserId, org: inviteOrgId, role: assignedRole, tier, ...(invitePosition ? { position: invitePosition } : {}) },
                 { onConflict: 'user_id,org' }
               )
               if (orgMemberError) console.error('ORG_MEMBERS upsert error:', orgMemberError)
@@ -1774,17 +1774,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     if(user.role==='super_admin') {
       supabase.from('profiles').select('*').then(({data})=>{ if(data) setTeamUsers(data) })
     } else if(user.org) {
-      supabase.from('org_members').select('user_id,role').eq('org',user.org)
-        .then(async({data:members})=>{
-          if(!members?.length) return
-          const ids = members.map(m=>m.user_id)
-          const {data:profiles} = await supabase.from('profiles').select('*').in('id',ids)
-          if(profiles) setTeamUsers(profiles.map(p=>({
-            ...p,
-            role:members.find(m=>m.user_id===p.id)?.role||p.role,
-            positions:[]
-          })))
-        }).catch(()=>{})
+      ;(async()=>{
+        const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+        const orgId = orgRow?.id || user.org
+        const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
+        if(!members?.length) return
+        const ids = members.map(m=>m.user_id)
+        const {data:profiles} = await supabase.from('profiles').select('*').in('id',ids)
+        if(profiles) setTeamUsers(profiles.map(p=>({
+          ...p,
+          role:members.find(m=>m.user_id===p.id)?.role||p.role,
+          positions:[]
+        })))
+      })().catch(()=>{})
     }
   },[user.org])
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
@@ -3746,7 +3748,8 @@ function UsersView({ user, setAuditLog }) {
     const target = realUsers.find(u=>u.id===id)
     if(isConfigured()) {
       try {
-        await supabase.from('org_members').delete().eq('user_id',id).eq('org',user.org)
+        const userOrgId = orgsList.find(o=>o.name===user.org)?.id || user.org
+        await supabase.from('org_members').delete().eq('user_id',id).eq('org',userOrgId)
       } catch(err) { console.error('Remove member org_members error:', err) }
       try {
         await supabase.from('team_members').delete().eq('user_id',id)
@@ -3793,8 +3796,9 @@ function UsersView({ user, setAuditLog }) {
       if (editPositions.length > 0) {
         supabase.from('profiles').update({ positions: editPositions }).eq('id', id).catch(() => {})
       }
-      const targetOrg = editForm.org || user.org
-      await supabase.from('org_members').upsert({ user_id: id, org: targetOrg, role: editForm.role }, { onConflict: 'user_id,org' })
+      const targetOrgName = editForm.org || user.org
+      const targetOrgId = orgsList.find(o=>o.name===targetOrgName)?.id || targetOrgName
+      await supabase.from('org_members').upsert({ user_id: id, org: targetOrgId, role: editForm.role }, { onConflict: 'user_id,org' })
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...updates, positions: editPositions.length>0?editPositions:u.positions}:u))
     if (editPositions.length > 0) {
@@ -3826,9 +3830,10 @@ function UsersView({ user, setAuditLog }) {
     const { data:profiles } = await supabase.from('profiles').select('*')
     const profile = profiles?.find(p=>p.email===email||p.id===email)
     if (!profile) { alert('No user found with that email. They need to sign up to Taksyn first.'); return }
-    const { data:existing } = await supabase.from('org_members').select('*').eq('user_id',profile.id).eq('org',user.org)
+    const userOrgId = orgsList.find(o=>o.name===user.org)?.id || user.org
+    const { data:existing } = await supabase.from('org_members').select('*').eq('user_id',profile.id).eq('org',userOrgId)
     if (existing?.length) { alert('This user is already in your organisation.'); return }
-    await supabase.from('org_members').insert({ user_id:profile.id, org:user.org, role, tier:user.tier||'Growth' })
+    await supabase.from('org_members').insert({ user_id:profile.id, org:userOrgId, role, tier:user.tier||'Growth' })
     setRealUsers(prev=>[...prev,{...profile,role,org:user.org}])
     alert(profile.name+' added to your organisation as '+ROLE_LABELS[role])
   }
@@ -4421,34 +4426,36 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoading(false)
   }
 
-  const loadOrgMembers = async (orgName) => {
+  const loadOrgMembers = async (orgId, orgName) => {
     setLoadingMembers(true)
-    const { data: members } = await supabase.from('org_members').select('user_id, role, org, tier').eq('org', orgName)
+    const { data: members } = await supabase.from('org_members').select('user_id, role, org, tier').eq('org', orgId)
     if (members?.length) {
       const ids = members.map(m=>m.user_id)
       const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids)
-      const merged = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:m.org,tier:m.tier,email:p.email||''} })
+      const merged = members.map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:p.org||orgName,orgId:m.org,tier:m.tier,email:p.email||''} })
       setOrgMembers(merged)
     } else {
-      // Fallback: query profiles directly by org name (handles name-mismatch in org_members)
+      // Fallback: query profiles directly by org name (handles legacy rows still using names)
       const { data: fallback } = await supabase.from('profiles').select('*').eq('org', orgName)
-      setOrgMembers(fallback?.length ? fallback : [])
+      setOrgMembers(fallback?.length ? fallback.map(m=>({...m,orgId})) : [])
     }
     setLoadingMembers(false)
   }
 
   const saveMemberEdit = async () => {
     if (!memberEditForm.name?.trim()) return
-    const newOrg = memberEditForm.org || editingMember.org
-    const orgChanged = newOrg !== editingMember.org
-    const updates = { name:memberEditForm.name.trim(), role:memberEditForm.role, department:memberEditForm.department||'', industry:memberEditForm.industry||'', phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'', org:newOrg }
+    const newOrgName = memberEditForm.org || editingMember.org
+    const orgChanged = newOrgName !== editingMember.org
+    const updates = { name:memberEditForm.name.trim(), role:memberEditForm.role, department:memberEditForm.department||'', industry:memberEditForm.industry||'', phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'', org:newOrgName }
     if (isConfigured()) {
       await supabase.from('profiles').update(updates).eq('id', editingMember.id)
+      const oldOrgId = editingMember.orgId || orgs.find(o=>o.name===editingMember.org)?.id || editingMember.org
       if (orgChanged) {
-        await supabase.from('org_members').delete().eq('user_id', editingMember.id).eq('org', editingMember.org)
-        await supabase.from('org_members').insert({ user_id: editingMember.id, org: newOrg, role: memberEditForm.role })
+        const newOrgId = orgs.find(o=>o.name===newOrgName)?.id || newOrgName
+        await supabase.from('org_members').delete().eq('user_id', editingMember.id).eq('org', oldOrgId)
+        await supabase.from('org_members').insert({ user_id: editingMember.id, org: newOrgId, role: memberEditForm.role })
       } else {
-        await supabase.from('org_members').update({ role: memberEditForm.role }).eq('user_id', editingMember.id).eq('org', editingMember.org)
+        await supabase.from('org_members').update({ role: memberEditForm.role }).eq('user_id', editingMember.id).eq('org', oldOrgId)
       }
       // user_positions table removed — position edits not persisted
     }
@@ -4505,7 +4512,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setOrgContextSLA(null); setOrgContextTickets([]); setOrgContextAudit([])
     setViewingMember(null); setEditingMember(null); setShowAddMember(false)
     setAddMemberSearch(''); setAddMemberSelectedId(null); setAddMemberMsg('')
-    loadOrgMembers(org.name)
+    loadOrgMembers(org.id, org.name)
     if (!isConfigured()) return
     supabase.from('organisations').select('sla_settings').eq('name', org.name).maybeSingle()
       .then(({data}) => { if(data?.sla_settings) try { setOrgContextSLA(JSON.parse(data.sla_settings)) } catch(e) {} }).catch(()=>{})
@@ -4521,7 +4528,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoading(true); setAddMemberMsg('')
     try {
       const { error } = await supabase.from('org_members').upsert(
-        { user_id: addMemberSelectedId, org: selectedOrgView.name, role: addMemberRole },
+        { user_id: addMemberSelectedId, org: selectedOrgView.id, role: addMemberRole },
         { onConflict: 'user_id,org' }
       )
       if (error) throw new Error(error.message)
@@ -4538,8 +4545,10 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     if (!viewingMember || newOrgName === viewingMember.org) return
     setLoading(true)
     try {
-      await supabase.from('org_members').delete().eq('user_id', viewingMember.id).eq('org', viewingMember.org)
-      await supabase.from('org_members').insert({ user_id: viewingMember.id, org: newOrgName, role: viewingMember.role })
+      const oldOrgId = viewingMember.orgId || orgs.find(o=>o.name===viewingMember.org)?.id || viewingMember.org
+      const newOrgId = orgs.find(o=>o.name===newOrgName)?.id || newOrgName
+      await supabase.from('org_members').delete().eq('user_id', viewingMember.id).eq('org', oldOrgId)
+      await supabase.from('org_members').insert({ user_id: viewingMember.id, org: newOrgId, role: viewingMember.role })
       await supabase.from('profiles').update({ org: newOrgName }).eq('id', viewingMember.id)
       setOrgMembers(prev => prev.filter(m => m.id !== viewingMember.id))
       setViewingMember(null); setShowMemberOrgChange(false); setMemberOrgSearch('')
@@ -4607,7 +4616,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     try {
       const { data: profile, error } = await supabase.from('profiles').select('*').eq('email', existingUserSearch.trim().toLowerCase()).single()
       if (error || !profile) { setExistingUserMsg('No user found with that email address'); setLoading(false); return }
-      const { error: memberError } = await supabase.from('org_members').upsert({ user_id: profile.id, org: showInvite.name, role: existingUserRole }, { onConflict: 'user_id,org' })
+      const { error: memberError } = await supabase.from('org_members').upsert({ user_id: profile.id, org: showInvite.id, role: existingUserRole }, { onConflict: 'user_id,org' })
       if (memberError) throw new Error(memberError.message)
       await supabase.from('profiles').update({ org: showInvite.name, role: existingUserRole }).eq('id', profile.id)
       setExistingUserMsg('✅ ' + (profile.name || existingUserSearch) + ' added to ' + showInvite.name)
@@ -7062,21 +7071,23 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
-    supabase.from('org_members').select('user_id,role').eq('org',user.org)
-      .then(async({data:members})=>{
-        if(members?.length) {
-          const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
-          if(profiles) setOrgMembers(profiles.map(p=>({
-            id: p.id,
-            name: p.name||'',
-            role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker'
-          })))
-        } else {
-          // Fallback: org may be stored as name in profiles but as ID in org_members
-          const {data:fallback} = await supabase.from('profiles').select('id,name,role').eq('org',user.org)
-          if(fallback?.length) setOrgMembers(fallback.map(p=>({id:p.id,name:p.name||'',role:p.role||'worker'})))
-        }
-      }).catch(()=>{})
+    ;(async()=>{
+      const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+      const orgId = orgRow?.id || user.org
+      const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
+      if(members?.length) {
+        const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
+        if(profiles) setOrgMembers(profiles.map(p=>({
+          id: p.id,
+          name: p.name||'',
+          role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker'
+        })))
+      } else {
+        // Fallback: query profiles directly by org name
+        const {data:fallback} = await supabase.from('profiles').select('id,name,role').eq('org',user.org)
+        if(fallback?.length) setOrgMembers(fallback.map(p=>({id:p.id,name:p.name||'',role:p.role||'worker'})))
+      }
+    })().catch(()=>{})
   },[user.org])
 
   const getRange = () => {
@@ -7297,12 +7308,14 @@ function LeaveView({ user, tasks, setAuditLog }) {
 
   useEffect(()=>{
     if(isConfigured()&&user.org) {
-      supabase.from('org_members').select('user_id,role').eq('org',user.org)
-        .then(async({data:members})=>{
-          if(!members?.length) return
-          const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
-          if(profiles) setOrgUsers(profiles.map(p=>({...p,role:members.find(m=>m.user_id===p.id)?.role||p.role})))
-        }).catch(()=>{})
+      ;(async()=>{
+        const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+        const orgId = orgRow?.id || user.org
+        const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
+        if(!members?.length) return
+        const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
+        if(profiles) setOrgUsers(profiles.map(p=>({...p,role:members.find(m=>m.user_id===p.id)?.role||p.role})))
+      })().catch(()=>{})
     }
   },[user.org])
 
@@ -8405,7 +8418,9 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
     const now = new Date()
     const monthName = now.toLocaleString('en-AU',{month:'long',year:'numeric'})
     // Get all managers and supervisors in org
-    const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',user.org).in('role',['manager','supervisor'])
+    const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+    const orgId = orgRow?.id || user.org
+    const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId).in('role',['manager','supervisor'])
     if(members?.length) {
       const ids = members.map(m=>m.user_id)
       const {data:profiles} = await supabase.from('profiles').select('id,name').in('id',ids)
