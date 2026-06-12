@@ -832,7 +832,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             setError('Could not find your organisation. Please contact your admin.')
             setLoading(false); return
           }
-          inviteParams._tier = orgRow?.plan || 'Starter'
+          inviteOrgTier = orgRow?.plan || 'Starter'
           assignedRole = inviteParams.role
         } else {
           if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
