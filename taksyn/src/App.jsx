@@ -8449,6 +8449,32 @@ function GettingStartedGuide({ user, setPage }) {
     }, 300)
   }
 
+  const exportGuideToPDF = async () => {
+    const element = document.getElementById('guide-export-container')
+    element.style.display = 'block'
+    try {
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false })
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const imgData = canvas.toDataURL('image/png')
+      const imgWidth = pageWidth
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
+      let heightLeft = imgHeight - pageHeight
+      let pageOffset = pageHeight
+      while (heightLeft > 0) {
+        pdf.addPage()
+        pdf.addImage(imgData, 'PNG', 0, -pageOffset, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+        pageOffset += pageHeight
+      }
+      pdf.save('Taksyn-' + roleName.replace(/\s+/g, '-') + '-Guide.pdf')
+    } finally {
+      element.style.display = ''
+    }
+  }
+
   const ROLE_TABS = [
     {key:'client_admin', label:'Client Admin', color:'#00A87E'},
     {key:'manager', label:'Manager', color:'#8B5CF6'},
