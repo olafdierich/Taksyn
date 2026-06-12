@@ -869,6 +869,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           }
         }
         // Org admin registration — try auto sign-in, fall back to email confirmation message
+        window.__taksyn_registering = false
+        await new Promise(resolve => setTimeout(resolve, 500))
         const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
         if (!signInErr && signInData?.user) {
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).single()
