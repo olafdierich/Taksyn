@@ -8383,7 +8383,7 @@ function GuidePrintDocument({ guide, roleName, user }) {
   const accentColor = guide.color || '#00A87E'
 
   return (
-    <div id="guide-export-container" className="print-only">
+    <div id="guide-export-container" className="print-only" style={{width:794,padding:60,boxSizing:'border-box',background:'white',fontFamily:'Arial,sans-serif',fontSize:13,lineHeight:1.8,color:'#000'}}>
 
       {/* PAGE 1 — COVER */}
       <div className="cover-page" style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'2cm',position:'relative',fontFamily:'Arial,sans-serif'}}>
