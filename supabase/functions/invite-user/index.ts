@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: inviteUrl || undefined,
-      data: { name, role, org },
+      data: { name, role, org, orgId, industry },
     })
 
     if (inviteError) {
@@ -65,7 +65,8 @@ Deno.serve(async (req) => {
           user_id: userId,
           org: orgId,
           role: role || 'member',
-        }, { onConflict: 'user_id,org_id' })
+          industry: industry || null,
+        }, { onConflict: 'user_id,org' })
       }
     }
 

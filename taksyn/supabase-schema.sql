@@ -18,19 +18,40 @@ CREATE TABLE public.profiles (
 -- Auto-create profile on user signup
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_org_id TEXT;
+  v_industry TEXT;
+  v_role TEXT;
 BEGIN
+  v_org_id   := NEW.raw_user_meta_data->>'orgId';
+  v_industry := NEW.raw_user_meta_data->>'industry';
+  v_role     := COALESCE(NEW.raw_user_meta_data->>'role', 'worker');
+
   BEGIN
     INSERT INTO public.profiles (id, name, role, tier, org)
     VALUES (
       NEW.id,
       COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email,'@',1)),
-      COALESCE(NEW.raw_user_meta_data->>'role', 'worker'),
+      v_role,
       'Growth',
       'My Organisation'
     );
   EXCEPTION WHEN OTHERS THEN
-    RAISE LOG 'handle_new_user error for user %: %', NEW.id, SQLERRM;
+    RAISE LOG 'handle_new_user profiles insert error for user %: %', NEW.id, SQLERRM;
   END;
+
+  IF v_org_id IS NOT NULL THEN
+    BEGIN
+      INSERT INTO public.org_members (user_id, org, role, industry)
+      VALUES (NEW.id, v_org_id, v_role, v_industry)
+      ON CONFLICT (user_id, org) DO UPDATE
+        SET industry = EXCLUDED.industry,
+            role     = EXCLUDED.role;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE LOG 'handle_new_user org_members insert error for user %: %', NEW.id, SQLERRM;
+    END;
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
