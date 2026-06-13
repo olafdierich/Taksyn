@@ -3885,8 +3885,7 @@ function UsersView({ user, setAuditLog }) {
 
   const addExistingUserToOrg = async (email, role) => {
     if (!isConfigured()) { alert('Supabase not configured'); return }
-    const { data:profiles } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone')
-    const profile = profiles?.find(p=>p.email===email||p.id===email)
+    const { data:profile } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('email', email.toLowerCase()).maybeSingle()
     if (!profile) { alert('No user found with that email. They need to sign up to Taksyn first.'); return }
     let userOrgId = orgsList.find(o=>o.name===user.org)?.id
     if (!userOrgId) {
@@ -4541,7 +4540,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
   const loadAllProfiles = async () => {
     setLoadingProfiles(true)
-    const { data } = await supabase.from('profiles').select('id,name,email,role,org').order('name')
+    const { data } = await supabase.from('profiles').select('id,name,email,role,org').eq('org', user.org).order('name').limit(200)
     if (data) setAllProfiles(data)
     setLoadingProfiles(false)
   }
