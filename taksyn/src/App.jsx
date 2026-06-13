@@ -3856,9 +3856,16 @@ function UsersView({ user, setAuditLog }) {
     if (isConfigured()) {
       await supabase.from('profiles').update(profileUpdates).eq('id', id)
       if (orgId) await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }, { onConflict: 'user_id,org' })
+      if (orgId && editPositions.length > 0) {
+        for (const pos of editPositions) {
+          if (!pos.role && !pos.industry && !pos.position) continue
+          await supabase.from('org_members').insert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' })
+        }
+      }
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
-    setOrgAssignments(prev=>({...prev, [id]: [{role:editForm.role, industry:editForm.industry||'', position:editForm.position||''}]}))
+    const addedPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
+    setOrgAssignments(prev=>({...prev, [id]: [{role:editForm.role, industry:editForm.industry||'', position:editForm.position||''}, ...(prev[id]||[]).slice(1), ...addedPositions]}))
     if (setAuditLog) {
       const oldRole = orgAssignments[id]?.[0]?.role || realUsers.find(u=>u.id===id)?.role
       const roleChanged = oldRole && oldRole!==editForm.role
@@ -3874,7 +3881,6 @@ function UsersView({ user, setAuditLog }) {
     setEditingUser(null)
     setEditingOrgId(null)
     setEditForm({})
-    setEditCustomDept('')
     setEditPositions([])
     setNewPosition({ dept:'', role:'worker', title:'' })
   }
@@ -4038,9 +4044,18 @@ function UsersView({ user, setAuditLog }) {
             <div className="modal-body">
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--s3)',borderRadius:8}}>
                 <Avatar name={editingUser.name} role={editingUser.role} size={44} avatarUrl={editingUser.avatar_url}/>
-                <div>
+                <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:14}}>{editingUser.name}</div>
-                  <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{ROLE_LABELS[editForm.role||editingUser.role]||editForm.role||editingUser.role} · {editingUser.org}</div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{editingUser.org}</div>
+                  {(orgAssignments[editingUser.id]||[]).length>0&&(
+                    <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:5}}>
+                      {(orgAssignments[editingUser.id]||[]).map((a,ai)=>(
+                        <span key={ai} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>
+                          {[a.industry,a.position||ROLE_LABELS[a.role]||a.role].filter(Boolean).join(' · ')}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="two-col">
@@ -4083,6 +4098,30 @@ function UsersView({ user, setAuditLog }) {
                 <label className="form-label">Position</label>
                 <input className="form-input" value={editForm.position||''} onChange={e=>setEditForm({...editForm,position:e.target.value})} placeholder="e.g. Line Cook, Barista, Supervisor..."/>
                 <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Role, Industry and Position are saved per-organisation</div>
+              </div>
+              {editPositions.length>0&&(
+                <div style={{borderTop:'1px solid var(--border)',paddingTop:10,marginBottom:6}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Additional Positions</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 2px'}}>
+                    {['Industry','Role','Position',''].map((h,hi)=><div key={hi} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
+                  </div>
+                  {editPositions.map((pos,i)=>(
+                    <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
+                      <select className="form-select" style={{fontSize:11}} value={pos.industry} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value}:p))}>
+                        <option value="">— Industry —</option>
+                        {[...PRESET_INDUSTRIES,...orgCustomDepts.filter(d=>!PRESET_INDUSTRIES.includes(d))].map(k=><option key={k} value={k}>{k}</option>)}
+                      </select>
+                      <select className="form-select" style={{fontSize:11}} value={pos.role} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
+                        {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                      </select>
+                      <input className="form-input" style={{fontSize:11}} value={pos.position} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))} placeholder="Position title"/>
+                      <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:18,padding:'0 4px',lineHeight:1}} onClick={()=>setEditPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{marginBottom:12}}>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setEditPositions(prev=>[...prev,{industry:'',role:'worker',position:''}])}>+ Add Position</button>
               </div>
               <div className="form-field">
                 <label className="form-label">Notes</label>
