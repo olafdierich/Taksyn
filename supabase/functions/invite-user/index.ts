@@ -13,6 +13,8 @@ Deno.serve(async (req) => {
   try {
     const { email, name, role, org, orgId, industry, positions, secret, inviteUrl } = await req.json()
 
+    console.log('[invite-user] received fields:', { email, name, role, org, orgId, secret })
+
     const inviteSecret = Deno.env.get('INVITE_SECRET')
     if (!inviteSecret || secret !== inviteSecret) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
