@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SERVICE_ROLE_KEY') ?? ''
     )
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
       if (orgId) {
         await supabaseAdmin.from('org_members').upsert({
           user_id: userId,
-          org_id: orgId,
+          org: orgId,
           role: role || 'member',
         }, { onConflict: 'user_id,org_id' })
       }
