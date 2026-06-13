@@ -553,6 +553,7 @@ const IC = ({ n, s=16 }) => {
   const paths = {
     home:'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
     tasks:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+    user:'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
     users:'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
     alert:'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
     chart:'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
@@ -3657,6 +3658,9 @@ function UsersView({ user, setAuditLog }) {
   const [editingOrgId, setEditingOrgId] = useState(null)
   const [editPositions, setEditPositions] = useState([])
   const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
+  const [pendingInvites, setPendingInvites] = useState([])
+  const [workforceOrgId, setWorkforceOrgId] = useState(null)
+  const [pendingMsg, setPendingMsg] = useState('')
 
   const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
   const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
@@ -3785,6 +3789,12 @@ function UsersView({ user, setAuditLog }) {
         const {data:fallback} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('org', user.org)
         if (fallback?.length) { const fb=fallback.filter(p=>p.role!=='super_admin'); setRealUsers(fb); parsePositions(fb) }
       }
+      setWorkforceOrgId(orgId)
+      supabase.from('invite_links')
+        .select('id,invited_name,invited_first_name,invited_last_name,invited_email,invited_role,invited_industry,created_at,expires_at')
+        .eq('organisation_id', orgId).is('used_at', null).eq('is_active', true)
+        .gt('expires_at', new Date().toISOString())
+        .then(({data})=>{ if(data) setPendingInvites(data) }).catch(()=>{})
     })().catch(()=>{})
   },[user.org])
 
@@ -3992,6 +4002,30 @@ function UsersView({ user, setAuditLog }) {
     }
   }
 
+  const resendPendingInvite = async (invite) => {
+    if (!invite?.invited_email) { alert('No email address for this invite.'); return }
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
+    try {
+      const res = await fetch(supabaseUrl + '/functions/v1/invite-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey) },
+        body: JSON.stringify({ action: 'resend', email: invite.invited_email, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl: window.location.origin + window.location.pathname })
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Resend failed')
+      setPendingMsg('Invite resent to ' + invite.invited_email)
+      setTimeout(() => setPendingMsg(''), 4000)
+    } catch (e) {
+      alert('Failed to resend: ' + e.message)
+    }
+  }
+
+  const pendingEmailSet = new Set(pendingInvites.map(i => i.invited_email?.toLowerCase()).filter(Boolean))
+  const unregisteredPending = pendingInvites.filter(i => {
+    const em = i.invited_email?.toLowerCase()
+    return !em || !realUsers.some(u => u.email?.toLowerCase() === em)
+  })
+
   return (
     <div className="anim">
       {editingUser&&(
@@ -4178,6 +4212,7 @@ function UsersView({ user, setAuditLog }) {
       <div className="section">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div className="section-title" style={{margin:0}}>Workforce ({realUsers.length})</div>
+          {pendingMsg&&<div style={{fontSize:12,color:'#059669',padding:'4px 0',fontWeight:600}}>{pendingMsg}</div>}
           <input className="form-input" placeholder="Search by name or role..." value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{fontSize:12,padding:'5px 10px',maxWidth:220}}/>
         </div>
         {realUsers.length===0
@@ -4186,11 +4221,15 @@ function UsersView({ user, setAuditLog }) {
               const filtered = [...realUsers]
                 .filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())||u.role?.toLowerCase().includes(userSearch.toLowerCase()))
                 .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+              const isUserPending = (u) => pendingEmailSet.has(u.email?.toLowerCase())
               const userCard = (u,i,orgCtx) => (
                 <div key={i} className="user-row" style={{flexWrap:'wrap',gap:8}}>
                   <Avatar name={u.name} role={u.role} size={34} avatarUrl={u.avatar_url}/>
                   <div className="user-info" style={{flex:1}}>
-                    <div className="user-name">{u.name}</div>
+                    <div className="user-name" style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                      {u.name}
+                      {isUserPending(u)&&<span style={{background:'rgba(245,158,11,.15)',color:'#D97706',border:'1px solid rgba(245,158,11,.3)',borderRadius:10,fontSize:10,fontWeight:700,padding:'2px 7px',letterSpacing:.2}}>Pending</span>}
+                    </div>
                     <div className="user-email">{u.email||'—'}</div>
                     {user.role==='super_admin' && allOrgMemberships[u.id]?.length > 0 ? (
                       <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
@@ -4212,6 +4251,7 @@ function UsersView({ user, setAuditLog }) {
                     ) : (u.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {u.industry}</div>)}
                   </div>
                   <RolePill role={user.role==='super_admin'?(allOrgMemberships[u.id]?.find(m=>m.orgName===orgCtx)?.role||u.role):(orgAssignments[u.id]?.[0]?.role||u.role)}/>
+                  {['client_admin','super_admin'].includes(user.role)&&isUserPending(u)&&<button className="btn btn-secondary btn-sm" onClick={()=>resendPendingInvite(pendingInvites.find(i=>i.invited_email?.toLowerCase()===u.email?.toLowerCase()))}>↩ Resend</button>}
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{
                     const orgName = orgCtx || user.org
                     const orgId = (user.role==='super_admin' ? allOrgMemberships[u.id]?.find(m=>m.orgName===orgName)?.orgId : null) || orgsList.find(o=>o.name===orgName)?.id
@@ -4251,15 +4291,42 @@ function UsersView({ user, setAuditLog }) {
               const groups = {}
               filtered.forEach(u=>{ const r=orgAssignments[u.id]?.[0]?.role||u.role||'worker'; if(!groups[r]) groups[r]=[]; groups[r].push(u) })
               const roleOrder = ['client_admin','manager','supervisor','worker']
-              return roleOrder.filter(r=>groups[r]?.length).map(role=>(
-                <div key={role} style={{marginBottom:12}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setCollapsedRoles(prev=>({...prev,[role]:!prev[role]}))}>
-                    <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>{ROLE_LABELS[role]} ({groups[role].length})</span>
-                    <span style={{fontSize:12,color:'var(--t2)'}}>{collapsedRoles[role]?'▶':'▼'}</span>
+              return (<>
+                {roleOrder.filter(r=>groups[r]?.length).map(role=>(
+                  <div key={role} style={{marginBottom:12}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:6}} onClick={()=>setCollapsedRoles(prev=>({...prev,[role]:!prev[role]}))}>
+                      <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>{ROLE_LABELS[role]} ({groups[role].length})</span>
+                      <span style={{fontSize:12,color:'var(--t2)'}}>{collapsedRoles[role]?'▶':'▼'}</span>
+                    </div>
+                    {!collapsedRoles[role]&&groups[role].map(userCard)}
                   </div>
-                  {!collapsedRoles[role]&&groups[role].map(userCard)}
-                </div>
-              ))
+                ))}
+                {unregisteredPending.length>0&&(
+                  <div style={{marginBottom:12}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:8,marginBottom:6,border:'1px solid rgba(245,158,11,.2)'}}>
+                      <span style={{fontSize:11,fontWeight:700,color:'#D97706',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>Pending Invitations ({unregisteredPending.length})</span>
+                    </div>
+                    {unregisteredPending.map(inv=>{
+                      const nm = inv.invited_name || [inv.invited_first_name, inv.invited_last_name].filter(Boolean).join(' ') || inv.invited_email || '—'
+                      return (
+                        <div key={inv.id} className="user-row" style={{flexWrap:'wrap',gap:8,opacity:.85}}>
+                          <Avatar name={nm} role={inv.invited_role||'worker'} size={34}/>
+                          <div className="user-info" style={{flex:1}}>
+                            <div className="user-name" style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                              {nm}
+                              <span style={{background:'rgba(245,158,11,.15)',color:'#D97706',border:'1px solid rgba(245,158,11,.3)',borderRadius:10,fontSize:10,fontWeight:700,padding:'2px 7px'}}>Pending</span>
+                            </div>
+                            {inv.invited_email&&<div className="user-email">{inv.invited_email}</div>}
+                            {inv.invited_industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {inv.invited_industry}</div>}
+                          </div>
+                          <RolePill role={inv.invited_role||'worker'}/>
+                          {inv.invited_email&&['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>resendPendingInvite(inv)}>↩ Resend</button>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </>)
             })()
         }
       </div>
@@ -4338,7 +4405,7 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','users'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','settings'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','settings'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
