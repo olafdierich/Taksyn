@@ -1795,7 +1795,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   useEffect(()=>{
     if(!isConfigured()) return
     if(user.role==='super_admin') {
-      supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').then(({data})=>{ if(data) setTeamUsers(data) })
+      supabase.from('profiles').select('id,name,email,org,role,position,phone').then(({data})=>{ if(data) setTeamUsers(data) })
     } else if(user.org) {
       ;(async()=>{
         const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
@@ -1803,7 +1803,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
         if(!members?.length) return
         const ids = members.map(m=>m.user_id)
-        const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id',ids)
+        const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id',ids)
         if(profiles) setTeamUsers(profiles.map(p=>({
           ...p,
           role:members.find(m=>m.user_id===p.id)?.role||p.role,
@@ -3763,7 +3763,7 @@ function UsersView({ user, setAuditLog }) {
     if(user.role==='super_admin') {
       ;(async()=>{
         const [profilesRes, membersRes, orgsRes] = await Promise.all([
-          supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').order('name'),
+          supabase.from('profiles').select('id,name,email,org,role,position,phone').order('name'),
           supabase.from('org_members').select('user_id, org, role, industry, position'),
           supabase.from('organisations').select('id, name').eq('status','active').order('name')
         ])
@@ -3789,7 +3789,7 @@ function UsersView({ user, setAuditLog }) {
       const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
       if (assignments?.length) {
         const memberIds = assignments.map(a=>a.user_id)
-        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id', memberIds)
+        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', memberIds)
         const workforceMembers = (profileData || []).filter(p=>p.role!=='super_admin')
         setRealUsers(workforceMembers)
         parsePositions(workforceMembers)
@@ -3801,7 +3801,7 @@ function UsersView({ user, setAuditLog }) {
         setOrgAssignments(map)
       } else {
         // Fallback: query profiles directly by org name (same as PerformanceView)
-        const {data:fallback} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('org', user.org)
+        const {data:fallback} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('org', user.org)
         if (fallback?.length) { const fb=fallback.filter(p=>p.role!=='super_admin'); setRealUsers(fb); parsePositions(fb) }
       }
     })().catch(()=>{})
@@ -3890,7 +3890,7 @@ function UsersView({ user, setAuditLog }) {
 
   const addExistingUserToOrg = async (email, role) => {
     if (!isConfigured()) { alert('Supabase not configured'); return }
-    const { data:profile } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('email', email.toLowerCase()).maybeSingle()
+    const { data:profile } = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('email', email.toLowerCase()).maybeSingle()
     if (!profile) { alert('No user found with that email. They need to sign up to Taksyn first.'); return }
     let userOrgId = orgsList.find(o=>o.name===user.org)?.id
     if (!userOrgId) {
@@ -4521,7 +4521,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       .eq('org', orgId)
     if (members?.length) {
       const ids = [...new Set(members.map(m=>m.user_id))]
-      const { data: profiles } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id', ids)
+      const { data: profiles } = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', ids)
       const seen = new Set()
       setOrgMembers(
         members
@@ -4710,7 +4710,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoading(true)
     setExistingUserMsg('')
     try {
-      const { data: profile, error } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('email', existingUserSearch.trim().toLowerCase()).single()
+      const { data: profile, error } = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('email', existingUserSearch.trim().toLowerCase()).single()
       if (error || !profile) { setExistingUserMsg('No user found with that email address'); setLoading(false); return }
       const { error: memberError } = await supabase.from('org_members').upsert({ user_id: profile.id, org: showInvite.id, role: existingUserRole }, { onConflict: 'user_id,org' })
       if (memberError) throw new Error(memberError.message)
@@ -7739,7 +7739,7 @@ function TeamsView({ user }) {
           .from('org_members').select('user_id,role,org,tier')
           .eq('org', user.org)
         if(!members?.length) return
-        const { data: profiles } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id', members.map(m=>m.user_id))
+        const { data: profiles } = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', members.map(m=>m.user_id))
         if(profiles) setOrgUsers(profiles.map(p=>({...p, role:members.find(m=>m.user_id===p.id)?.role||p.role})))
       }).catch(()=>{})
   },[user.org])
@@ -7787,7 +7787,7 @@ function TeamsView({ user }) {
     const {data} = await supabase.from('team_members').select('*').eq('team_id',teamId).eq('org',user.org)
     if(data) {
       const ids = data.map(m=>m.user_id)
-      const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').in('id',ids)
+      const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id',ids)
       return data.map(m=>({...m, profile:profiles?.find(p=>p.id===m.user_id)||{}, positions:[]}))
     }
     return []
