@@ -3989,10 +3989,12 @@ function UsersView({ user, setAuditLog }) {
       const linkOrgId = orgEntry?.id || ''
       const inviteUrl = await buildInviteUrl(linkOrgId)
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
+      const invitePayload = { email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, orgId: linkOrgId, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl }
+      console.log('[invite-user] payload:', invitePayload)
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey) },
-        body: JSON.stringify({ email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, orgId: linkOrgId, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl })
+        body: JSON.stringify(invitePayload)
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
@@ -4667,10 +4669,12 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
       const validPos = inviteOrgPositions.filter(p=>p.role||p.industry||p.position)
       const rolesSummary = validPos.map(p=>[p.industry,p.position,p.role].filter(Boolean).join(' / ')).join('; ')
+      const invitePayload = { email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, orgId:showInvite.id, positions:rolesSummary, secret:inviteSecret }
+      console.log('[invite-user] payload:', invitePayload)
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey) },
-        body: JSON.stringify({ email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, orgId:showInvite.id, positions:rolesSummary, secret:inviteSecret })
+        body: JSON.stringify(invitePayload)
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
