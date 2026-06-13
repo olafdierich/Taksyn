@@ -1413,52 +1413,33 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
 
   const resendInvite = async (invite) => {
     if (!orgId) return
-    const newSecret = 'IL' + Date.now() + Math.random().toString(36).slice(2, 5)
-    await supabase.from('invite_links').update({ is_active: false }).eq('id', invite.id).catch(()=>{})
-    await supabase.from('invite_links').insert({
-      organisation_id: orgId,
-      team_id: invite.team_id || null,
-      role: invite.role,
-      position: invite.position || null,
-      secret: newSecret,
-      created_by: user.id,
-      created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      is_active: true,
-      invited_name: invite.invited_name || [invite.invited_first_name, invite.invited_last_name].filter(Boolean).join(' ') || null,
-      invited_first_name: invite.invited_first_name || null,
-      invited_last_name: invite.invited_last_name || null,
-      invited_email: invite.invited_email || null,
-      invited_phone: invite.invited_phone || null,
-      invited_role: invite.invited_role || invite.role || null,
-      invited_position: invite.invited_position || invite.position || null,
-      invited_industry: invite.invited_industry || null
-    }).catch(()=>{})
-    const base = window.location.origin + window.location.pathname
-    const displayName = invite.invited_name || [invite.invited_first_name, invite.invited_last_name].filter(Boolean).join(' ') || ''
-    const nameParts = displayName.split(' ')
-    const firstName = nameParts[0] || ''
-    const lastName = nameParts.slice(1).join(' ') || ''
-    const params = new URLSearchParams(Object.fromEntries(Object.entries({
-      invite: 'true', org: orgId,
-      ...(invite.team_id ? { team: invite.team_id } : {}),
-      firstname: firstName, lastname: lastName,
-      email: invite.invited_email || '',
-      phone: invite.invited_phone || '',
-      role: invite.role || 'worker',
-      position: invite.position || '',
-      industry: invite.invited_industry || '',
-      secret: 'taksyn-secret-2024',
-      link: newSecret
-    }).filter(([,v]) => v !== '')))
-    const inviteUrl = base + '?' + params.toString()
-    if (invite.invited_phone) {
-      const msg = encodeURIComponent(`Hi ${displayName||firstName}, here is your updated invite link to join ${user.org} on Taksyn: ${inviteUrl}`)
-      window.open('https://wa.me/?text=' + msg, '_blank')
-    } else {
-      navigator.clipboard.writeText(inviteUrl).then(()=>alert('New invite link copied!' + (invite.invited_email ? ' Send it to ' + invite.invited_email : ''))).catch(()=>{})
+    if (!invite.invited_email) {
+      alert('No email address on file for this invite — resend is not available.')
+      return
     }
-    setPendingInvites(prev => prev.filter(i => i.id !== invite.id))
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
+    const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
+    try {
+      const res = await fetch(supabaseUrl + '/functions/v1/invite-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey)
+        },
+        body: JSON.stringify({
+          action: 'resend',
+          email: invite.invited_email,
+          secret: inviteSecret,
+          inviteUrl: window.location.origin + window.location.pathname
+        })
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Resend failed')
+      setInviteMsg('Invite email resent to ' + invite.invited_email)
+      setTimeout(() => setInviteMsg(''), 4000)
+    } catch (e) {
+      alert('Failed to resend: ' + e.message)
+    }
   }
 
   if (user.role==='super_admin') return <SuperAdminDashboard user={user} setPage={setPage} tickets={tickets}/>

@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, name, role, org, orgId, industry, positions, secret, inviteUrl } = await req.json()
+    const { action, email, name, role, org, orgId, industry, positions, secret, inviteUrl } = await req.json()
 
     console.log('[invite-user] received fields:', { email, name, role, org, orgId, secret })
 
@@ -34,6 +34,24 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SERVICE_ROLE_KEY') ?? ''
     )
+
+    if (action === 'resend') {
+      const { error: genError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'invite',
+        email,
+        options: { redirectTo: inviteUrl || undefined },
+      })
+      if (genError) {
+        return new Response(JSON.stringify({ error: genError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: inviteUrl || undefined,
