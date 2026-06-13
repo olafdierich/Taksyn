@@ -19,14 +19,18 @@ CREATE TABLE public.profiles (
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, name, role, tier, org)
-  VALUES (
-    NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email,'@',1)),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'worker'),
-    'Growth',
-    'My Organisation'
-  );
+  BEGIN
+    INSERT INTO public.profiles (id, name, role, tier, org)
+    VALUES (
+      NEW.id,
+      COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email,'@',1)),
+      COALESCE(NEW.raw_user_meta_data->>'role', 'worker'),
+      'Growth',
+      'My Organisation'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE LOG 'handle_new_user error for user %: %', NEW.id, SQLERRM;
+  END;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
