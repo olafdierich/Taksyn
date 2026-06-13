@@ -1,6 +1,6 @@
-# Taksyn – Setup Guide 
+# Taksyn – Setup Guide
 ## Get your team trialling in ~20 minutes
- 
+
 ---
 
 ## STEP 1 — Get the code on GitHub (5 min)
