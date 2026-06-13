@@ -3844,10 +3844,15 @@ function UsersView({ user, setAuditLog }) {
   }
 
   const saveEditUser = async () => {
-    if (!editForm.name?.trim()) return
+    if (!editForm.first_name?.trim()) return
     const { id } = editingUser
+    const firstName = editForm.first_name.trim()
+    const lastName = editForm.last_name?.trim() || ''
+    const fullName = [firstName, lastName].filter(Boolean).join(' ')
     const profileUpdates = {
-      name: editForm.name.trim(),
+      name: fullName,
+      first_name: firstName,
+      last_name: lastName,
       phone: editForm.phone||'',
       notes: editForm.notes||'',
       email: editForm.email||''
@@ -4020,15 +4025,20 @@ function UsersView({ user, setAuditLog }) {
                 <Avatar name={editingUser.name} role={editingUser.role} size={44} avatarUrl={editingUser.avatar_url}/>
                 <div>
                   <div style={{fontWeight:700,fontSize:14}}>{editingUser.name}</div>
-                  <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{editingUser.email||'—'}</div>
-                  <div style={{marginTop:4}}><RolePill role={editForm.role||editingUser.role}/></div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{ROLE_LABELS[editForm.role||editingUser.role]||editForm.role||editingUser.role} · {editingUser.org}</div>
                 </div>
               </div>
               <div className="two-col">
                 <div className="form-field">
-                  <label className="form-label">Full Name</label>
-                  <input className="form-input" value={editForm.name||''} onChange={e=>setEditForm({...editForm,name:e.target.value})}/>
+                  <label className="form-label">First Name</label>
+                  <input className="form-input" value={editForm.first_name||''} onChange={e=>setEditForm({...editForm,first_name:e.target.value})}/>
                 </div>
+                <div className="form-field">
+                  <label className="form-label">Last Name</label>
+                  <input className="form-input" value={editForm.last_name||''} onChange={e=>setEditForm({...editForm,last_name:e.target.value})}/>
+                </div>
+              </div>
+              <div className="two-col">
                 <div className="form-field">
                   <label className="form-label">Phone</label>
                   <input className="form-input" value={editForm.phone||''} onChange={e=>setEditForm({...editForm,phone:e.target.value})} placeholder="e.g. +61 400 000 000"/>
@@ -4065,7 +4075,7 @@ function UsersView({ user, setAuditLog }) {
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
                 <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>Cancel</button>
-                <button className="btn btn-primary" disabled={!editForm.name?.trim()} onClick={saveEditUser}>Save Changes</button>
+                <button className="btn btn-primary" disabled={!editForm.first_name?.trim()} onClick={saveEditUser}>Save Changes</button>
               </div>
             </div>
           </div>
@@ -4229,7 +4239,7 @@ function UsersView({ user, setAuditLog }) {
                       : orgAssignments[u.id]?.[0] || {}
                     setEditingUser(u)
                     setEditingOrgId(orgId)
-                    setEditForm({name:u.name, role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
+                    setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
                   }}>✏️ Edit</button>}
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
                 </div>
