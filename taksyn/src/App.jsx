@@ -9782,7 +9782,7 @@ export default function App() {
         return
       }
       if(session?.user) {
-        supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id',session.user.id).single().then(async({data})=>{
+        supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('id',session.user.id).single().then(async({data})=>{
           if(data) {
             const savedOrgName = sessionStorage.getItem('currentOrgName')
             const savedRole = sessionStorage.getItem('currentRole')
@@ -9801,7 +9801,7 @@ export default function App() {
       } else if(event==='USER_UPDATED') {
         // Password was just set — log them in properly
         try {
-          const {data} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id',session.user.id).single()
+          const {data} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('id',session.user.id).single()
           if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
       } else if(event==='SIGNED_IN') {
@@ -9824,7 +9824,7 @@ export default function App() {
           return
         }
         try {
-          const {data} = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id',session.user.id).maybeSingle()
+          const {data} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('id',session.user.id).maybeSingle()
           if (data) {
             const savedOrgName = sessionStorage.getItem('currentOrgName')
             const savedRole = sessionStorage.getItem('currentRole')
