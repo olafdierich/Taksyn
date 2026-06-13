@@ -9298,7 +9298,7 @@ function HelpView({ user }) {
   const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
   const [showNotifPanel, setShowNotifPanel] = useState(false)
-  const appVersion = '1.0.0'
+  const appVersion = '1.1.0'
 
   useEffect(()=>{
     // Detect device
