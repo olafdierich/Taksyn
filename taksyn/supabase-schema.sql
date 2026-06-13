@@ -24,8 +24,17 @@ DECLARE
   v_role TEXT;
 BEGIN
   v_org_id   := NEW.raw_user_meta_data->>'orgId';
-  v_industry := NEW.raw_user_meta_data->>'industry';
   v_role     := COALESCE(NEW.raw_user_meta_data->>'role', 'worker');
+
+  -- Prefer industry from invite metadata; fall back to invite_links record for this org
+  v_industry := NEW.raw_user_meta_data->>'industry';
+  IF (v_industry IS NULL OR v_industry = '') AND v_org_id IS NOT NULL THEN
+    SELECT invited_industry INTO v_industry
+    FROM public.invite_links
+    WHERE organisation_id = v_org_id AND used_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 1;
+  END IF;
 
   BEGIN
     INSERT INTO public.profiles (id, name, role, tier, org)
@@ -182,16 +191,27 @@ CREATE INDEX IF NOT EXISTS audit_logs_entity   ON public.audit_logs (entity_id);
 -- 3c. INVITE LINKS (tracks WhatsApp invite links sent from Teams section)
 -- Created when an admin clicks "Send via WhatsApp"; marked used on registration.
 CREATE TABLE IF NOT EXISTS public.invite_links (
-  id          TEXT PRIMARY KEY,             -- 'IL' + timestamp + random (set by app)
-  org_id      TEXT NOT NULL,                -- UUID id from organisations table
-  org         TEXT NOT NULL,                -- org name (denormalised for display)
-  team_id     TEXT NOT NULL,                -- team id from teams table
-  role        TEXT NOT NULL DEFAULT 'worker',
-  position    TEXT,                         -- optional position title
-  created_by  TEXT NOT NULL,
-  created_at  TIMESTAMPTZ DEFAULT NOW(),
-  used_at     TIMESTAMPTZ,
-  used_by     TEXT
+  id                TEXT PRIMARY KEY,             -- 'IL' + timestamp + random (set by app)
+  organisation_id   TEXT NOT NULL,                -- ORG... id from organisations table
+  org               TEXT,                         -- org name (denormalised for display)
+  team_id           TEXT,
+  role              TEXT NOT NULL DEFAULT 'worker',
+  position          TEXT,
+  secret            TEXT,
+  created_by        TEXT NOT NULL,
+  created_at        TIMESTAMPTZ DEFAULT NOW(),
+  expires_at        TIMESTAMPTZ,
+  is_active         BOOLEAN DEFAULT TRUE,
+  used_at           TIMESTAMPTZ,
+  used_by           TEXT,
+  invited_name      TEXT,
+  invited_first_name TEXT,
+  invited_last_name  TEXT,
+  invited_email     TEXT,
+  invited_phone     TEXT,
+  invited_role      TEXT,
+  invited_position  TEXT,
+  invited_industry  TEXT
 );
 
 ALTER TABLE public.invite_links ENABLE ROW LEVEL SECURITY;

@@ -4670,7 +4670,8 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
       const validPos = inviteOrgPositions.filter(p=>p.role||p.industry||p.position)
       const rolesSummary = validPos.map(p=>[p.industry,p.position,p.role].filter(Boolean).join(' / ')).join('; ')
-      const invitePayload = { email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, orgId:showInvite.id, positions:rolesSummary, secret:inviteSecret }
+      const firstIndustry = validPos.find(p=>p.industry)?.industry || ''
+      const invitePayload = { email:inviteEmail.trim(), name:inviteName.trim(), role:'client_admin', org:showInvite.name, orgId:showInvite.id, industry:firstIndustry, positions:rolesSummary, secret:inviteSecret }
       console.log('[invite-user] payload:', invitePayload)
       console.log('[invite-user] secret:', inviteSecret)
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
