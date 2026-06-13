@@ -41,6 +41,23 @@ Deno.serve(async (req) => {
     })
 
     if (inviteError) {
+      const msg = inviteError.message.toLowerCase()
+      if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('already been registered')) {
+        // User already exists — only add org_members, do NOT touch profiles
+        const { data: profileData } = await supabaseAdmin.from('profiles').select('id').eq('email', email).single()
+        if (profileData?.id && orgId) {
+          await supabaseAdmin.from('org_members').upsert({
+            user_id: profileData.id,
+            org: orgId,
+            role: role || 'member',
+            industry: industry || null,
+          }, { onConflict: 'user_id,org' })
+        }
+        return new Response(JSON.stringify({ success: true, alreadyExisted: true, userId: profileData?.id || null }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
       return new Response(JSON.stringify({ error: inviteError.message }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

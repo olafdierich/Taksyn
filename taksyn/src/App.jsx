@@ -4430,6 +4430,7 @@ function OrganisationsView({ user }) {
 const [existingUserSearch, setExistingUserSearch] = useState('')
 const [existingUserRole, setExistingUserRole] = useState('client_admin')
 const [existingUserMsg, setExistingUserMsg] = useState('')
+const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   const [selectedOrgView, setSelectedOrgView] = useState(null) // org being viewed in context
   const [orgContextTab, setOrgContextTab] = useState('members')
   const [orgContextSLA, setOrgContextSLA] = useState(null)
@@ -4682,7 +4683,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
     setLoading(true)
     const fullName = (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim()
     const resetInviteState = () => {
-      setShowInvite(null); setInviteEmail(''); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}])
+      setShowInvite(null); setInviteEmail(''); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}]); setInviteEmailExistsMsg('')
     }
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
@@ -4723,7 +4724,11 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
       await supabase.from('organisations').update({admin_email:inviteEmail.trim(),admin_name:fullName}).eq('id',showInvite.id)
       setOrgs(prev=>prev.map(o=>o.id===showInvite.id?{...o,admin_email:inviteEmail.trim(),admin_name:fullName}:o))
-      alert('Invite sent to '+inviteEmail+'!'+(rolesSummary?'\n\nAssignments: '+rolesSummary:''))
+      if (result.alreadyExisted) {
+        alert('This user already exists — they have been added to ' + showInvite.name + ' as Client Admin')
+      } else {
+        alert('Invite sent to ' + inviteEmail + '!')
+      }
       resetInviteState()
     } catch(e) {
       alert('Failed: '+e.message)
@@ -5129,11 +5134,11 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
 
       {/* Invite Admin Modal */}
       {showInvite&&(
-  <div className="modal-overlay" onClick={()=>{ setShowInvite(null); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}]) }}>
+  <div className="modal-overlay" onClick={()=>{ setShowInvite(null); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}]); setInviteEmailExistsMsg('') }}>
     <div className="modal" onClick={e=>e.stopPropagation()}>
       <div className="modal-hdr">
         <div className="modal-title">Add to Organisation</div>
-        <button className="modal-close" onClick={()=>{ setShowInvite(null); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}]) }}>×</button>
+        <button className="modal-close" onClick={()=>{ setShowInvite(null); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}]); setInviteEmailExistsMsg('') }}>×</button>
       </div>
       <div className="modal-body">
         <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:13}}>
@@ -5151,43 +5156,18 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
               <input className="form-input" placeholder="First Name *" value={inviteFirstName} onChange={e=>setInviteFirstName(e.target.value)} style={{fontSize:13}}/>
               <input className="form-input" placeholder="Last Name *" value={inviteLastName} onChange={e=>setInviteLastName(e.target.value)} style={{fontSize:13}}/>
             </div>
-            <input className="form-input" type="email" placeholder="Email Address *" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} style={{fontSize:13}}/>
+            <input className="form-input" type="email" placeholder="Email Address *" value={inviteEmail}
+              onChange={e=>{setInviteEmail(e.target.value); setInviteEmailExistsMsg('')}}
+              onBlur={async()=>{ if(!inviteEmail.trim()||!showInvite){setInviteEmailExistsMsg('');return} const{data}=await supabase.from('profiles').select('id').eq('email',inviteEmail.trim().toLowerCase()).maybeSingle(); setInviteEmailExistsMsg(data?'ℹ️ This user already exists — they will be added to '+showInvite.name+' as Client Admin':'') }}
+              style={{fontSize:13}}/>
+            {inviteEmailExistsMsg&&<div style={{fontSize:13,padding:'8px 12px',borderRadius:6,background:'rgba(99,102,241,.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,.3)'}}>{inviteEmailExistsMsg}</div>}
             <input className="form-input" type="tel" placeholder="Phone (for WhatsApp invite)" value={invitePhone} onChange={e=>setInvitePhone(e.target.value)} style={{fontSize:13}}/>
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px'}}>Position Assignments</div>
-                <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Position · Role</span>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 2px'}}>
-                {['Industry','Position','Role',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
-              </div>
-              {inviteOrgPositions.map((row,i)=>{
-                const rolesForInd = row.industry ? editOrgCustomRoles.filter(r=>r.industry_name===row.industry).map(r=>r.role_name) : []
-                const defaultPos = ['Staff Member','Supervisor','Manager','Client Admin']
-                const allPos = [...defaultPos,...editOrgCustomPositions.filter(p=>!defaultPos.includes(p))]
-                return (
-                  <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
-                    <select className="form-select" style={{fontSize:11}} value={row.industry} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value,role:''}:p))}>
-                      <option value="">— Industry —</option>
-                      {(editOrgIndustries.length?editOrgIndustries:PRESET_INDUSTRIES).map(k=><option key={k} value={k}>{k}</option>)}
-                    </select>
-                    <select className="form-select" style={{fontSize:11}} value={row.position} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
-                      <option value="">— Position —</option>
-                      {allPos.map(p=><option key={p} value={p}>{p}</option>)}
-                    </select>
-                    {rolesForInd.length>0 ? (
-                      <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
-                        <option value="">— Role —</option>
-                        {rolesForInd.map(r=><option key={r} value={r}>{r}</option>)}
-                      </select>
-                    ) : (
-                      <input className="form-input" style={{fontSize:11}} value={row.role} onChange={e=>setInviteOrgPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))} placeholder="Role / title"/>
-                    )}
-                    <button style={{background:'none',border:'none',cursor:inviteOrgPositions.length>1?'pointer':'default',opacity:inviteOrgPositions.length>1?1:.3,color:'var(--red)',fontSize:16,padding:'0 4px',lineHeight:1}} onClick={()=>inviteOrgPositions.length>1&&setInviteOrgPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
-                  </div>
-                )
-              })}
-              <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setInviteOrgPositions(prev=>[...prev,{industry:'',role:'',position:''}])}>+ Add another position</button>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Industry <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0}}>— optional</span></div>
+              <select className="form-select" style={{fontSize:13}} value={inviteOrgPositions[0]?.industry||''} onChange={e=>setInviteOrgPositions([{industry:e.target.value,role:'client_admin',position:''}])}>
+                <option value="">— Select Industry —</option>
+                {(editOrgIndustries.length?editOrgIndustries:PRESET_INDUSTRIES).map(k=><option key={k} value={k}>{k}</option>)}
+              </select>
             </div>
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Send Via</div>
@@ -5196,7 +5176,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
                 <button className={"btn btn-sm "+(inviteMethod==='whatsapp'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('whatsapp')}>💬 WhatsApp</button>
               </div>
               <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
-                <button className="btn btn-ghost" onClick={()=>{ setShowInvite(null); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}]) }}>Cancel</button>
+                <button className="btn btn-ghost" onClick={()=>{ setShowInvite(null); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}]); setInviteEmailExistsMsg('') }}>Cancel</button>
                 <button className="btn btn-primary" onClick={sendInviteToOrg} disabled={loading}>{loading?'Sending...':inviteMethod==='whatsapp'?'💬 Send via WhatsApp':'📧 Send Invite'}</button>
               </div>
             </div>
