@@ -4895,7 +4895,7 @@ const [existingUserMsg, setExistingUserMsg] = useState('')
               <div className="modal-body">
                 <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--s3)',borderRadius:8,marginBottom:14}}>
                   <Avatar name={editingMember.name||'?'} role={editingMember.role} size={36} avatarUrl={editingMember.avatar_url}/>
-                  <div><div style={{fontWeight:700}}>{editingMember.name}</div><div style={{fontSize:11,color:'var(--t2)'}}>{editingMember.email||'—'} · {editingMember.org}</div></div>
+                  <div><div style={{fontWeight:700}}>{editingMember.name}</div><div style={{fontSize:11,color:'var(--t2)'}}>{ROLE_LABELS[editingMember.role]||editingMember.role} · {editingMember.org}</div></div>
                 </div>
                 <div className="two-col">
                   <div className="form-field"><label className="form-label">First Name</label><input className="form-input" value={memberEditForm.first_name||''} onChange={e=>setMemberEditForm({...memberEditForm,first_name:e.target.value})}/></div>
