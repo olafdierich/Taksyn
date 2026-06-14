@@ -5670,8 +5670,8 @@ function RolesPositionsView({ user }) {
   }
 
   const TABS = isSuper
-    ? [['global_industries','Global Industries'],['roles','Positions per Industry'],['positions','Roles']]
-    : [['roles','Positions per Industry'],['positions','Roles']]
+    ? [['global_industries','Global Industries'],['roles','Positions'],['positions','Roles']]
+    : [['roles','Positions'],['positions','Roles']]
 
   const ROW = {display:'flex',alignItems:'center',gap:6,padding:'8px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)',marginBottom:4}
   const BADGE = (label, color='#6B7280') => <span style={{fontSize:9,fontWeight:700,color,background:color+'18',border:'1px solid '+color+'30',borderRadius:4,padding:'1px 6px',letterSpacing:'.4px',flexShrink:0}}>{label}</span>
