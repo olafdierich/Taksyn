@@ -1761,6 +1761,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [clNoteText, setClNoteText] = useState('')
   const [mandatoryWarn, setMandatoryWarn] = useState(null)
   const [photoWarn, setPhotoWarn] = useState(false)
+  const [evidenceExpandedIds, setEvidenceExpandedIds] = useState(new Set())
   // Multi-completion checklist state
   const [clCompletions, setClCompletions] = useState({}) // {taskId: {itemId: [rows]}}
   const [clExpanded, setClExpanded] = useState(new Set()) // keys 'taskId::itemId'
@@ -2126,6 +2127,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     : user.role==='supervisor' ? ['worker']
     : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
+  const evidenceOpen = sel ? (sel.compliance || evidenceExpandedIds.has(sel.id) || parseSafe(sel.evidence).length > 0) : false
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
@@ -2454,21 +2456,23 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             )
           })()}
           <div className="section">
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,gap:8,flexWrap:'wrap'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:evidenceOpen?8:0,gap:8,flexWrap:'wrap'}}>
               <div className="section-title" style={{marginBottom:0}}>
                 Evidence {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}
               </div>
               {sel.compliance
                 ? <span style={{fontSize:11,fontWeight:700,color:'#8B5CF6',background:'rgba(139,92,246,.1)',border:'1px solid rgba(139,92,246,.25)',borderRadius:4,padding:'2px 8px'}}>🔒 Required for compliance</span>
-                : <span style={{fontSize:11,color:'var(--t2)'}}>Optional</span>
+                : evidenceOpen
+                  ? <button onClick={()=>setEvidenceExpandedIds(prev=>{const n=new Set(prev);n.delete(sel.id);return n})} style={{fontSize:11,color:'var(--t2)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:'2px 4px'}}>Hide ↑</button>
+                  : <button onClick={()=>setEvidenceExpandedIds(prev=>new Set([...prev,sel.id]))} style={{fontSize:11,fontWeight:600,color:'var(--brand)',background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.25)',borderRadius:5,cursor:'pointer',fontFamily:'inherit',padding:'3px 10px'}}>+ Add Photo</button>
               }
             </div>
-            {sel.compliance&&parseSafe(sel.evidence).length===0&&user.role==='worker'&&(
+            {evidenceOpen&&sel.compliance&&parseSafe(sel.evidence).length===0&&user.role==='worker'&&(
               <div style={{background:'rgba(139,92,246,.06)',border:'1px solid rgba(139,92,246,.2)',borderRadius:8,padding:'10px 12px',marginBottom:10,fontSize:12,color:'#7C3AED'}}>
                 📷 This is a compliance task — at least 1 photo is required before you can submit for review.
               </div>
             )}
-            {photoWarn&&parseSafe(sel.evidence).length===0&&(
+            {evidenceOpen&&photoWarn&&parseSafe(sel.evidence).length===0&&(
               <div className="cl-warn" style={{marginBottom:10}}>
                 ⚠️ <strong>Cannot submit — photo evidence is required for compliance tasks.</strong> Add at least one photo below.
                 <button className="cl-action-btn" style={{marginLeft:8}} onClick={()=>setPhotoWarn(false)}>Dismiss</button>
@@ -2488,7 +2492,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 )
               })}
             </div>}
-            {user.role==='worker'&&parseSafe(sel.evidence).length<5&&(
+            {evidenceOpen&&user.role==='worker'&&parseSafe(sel.evidence).length<5&&(
               <div>
                 <div style={{display:'flex',gap:8,marginBottom:10}}>
                   <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('cam-inp').click()}>📷 Take Photo</button>
@@ -2504,10 +2508,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 )}
               </div>
             )}
-            {user.role!=='worker'&&!parseSafe(sel.evidence).length&&(
-              sel.compliance
-                ? <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--red)'}}>⚠️ No photos attached — this is a compliance task and evidence should be required.</div>
-                : <div style={{fontSize:13,color:'var(--t2)'}}>No evidence uploaded yet</div>
+            {evidenceOpen&&user.role!=='worker'&&!parseSafe(sel.evidence).length&&sel.compliance&&(
+              <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--red)'}}>⚠️ No photos attached — this is a compliance task and evidence should be required.</div>
             )}
           </div>
           <div className="section">
