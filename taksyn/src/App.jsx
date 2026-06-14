@@ -5779,41 +5779,78 @@ function RolesPositionsView({ user }) {
               {selectedIndustry&&<span style={{fontSize:12,color:'var(--brand)',fontWeight:400,marginLeft:8}}>— {selectedIndustry}</span>}
             </div>
             {!selectedIndustry ? (
-              <div style={{fontSize:13,color:'var(--t2)',padding:'20px 0',textAlign:'center'}}>← Select an industry to manage its job titles</div>
-            ) : !orgId ? (
-              <div style={{fontSize:13,color:'var(--t2)'}}>Loading organisation…</div>
-            ) : (
-              <>
-                {roles.length===0 && <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>{isSuper ? 'No job titles defined yet — click Add Job Title to get started.' : 'No positions defined yet — contact your Taksyn administrator to add positions for this industry.'}</div>}
-                <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
-                  {roles.map((role,idx)=>(
-                    <div key={role.id} style={ROW}>
-                      {isSuper&&editRoleId===role.id ? (
-                        <>
-                          <input className="form-input" style={{flex:1,fontSize:12}} value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveRoleEdit();if(e.key==='Escape'){setEditRoleId(null);setEditRoleName('')}}} autoFocus/>
-                          <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving||!editRoleName.trim()}>Save</button>
-                          <button className="btn btn-secondary btn-sm" onClick={()=>{setEditRoleId(null);setEditRoleName('')}}>×</button>
-                        </>
-                      ) : (
-                        <>
-                          <span style={{flex:1,fontSize:12,fontWeight:500}}>{role.role_name}</span>
-                          {isSuper&&<div style={{display:'flex',gap:3}}>
-                            <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,-1)} disabled={idx===0}>↑</button>
-                            <button style={{background:'none',border:'none',cursor:idx<roles.length-1?'pointer':'default',opacity:idx<roles.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,1)} disabled={idx===roles.length-1}>↓</button>
-                            <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditRoleId(role.id);setEditRoleName(role.role_name)}}>Edit</button>
-                            <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deleteRole(role.id)}>Delete</button>
-                          </div>}
-                        </>
-                      )}
+              <div style={{fontSize:13,color:'var(--t2)',padding:'20px 0',textAlign:'center'}}>← Select an industry to view its positions</div>
+            ) : (()=>{
+              const builtIn = INDUSTRY_POSITIONS[selectedIndustry]
+              const hasBuiltIn = builtIn && (builtIn.worker?.length||builtIn.supervisor?.length||builtIn.manager?.length)
+              const orgSpecific = roles.filter(r=>!(builtIn&&[...(builtIn.worker||[]),...(builtIn.supervisor||[]),...(builtIn.manager||[])].includes(r.role_name)))
+              return (
+                <>
+                  {/* Built-in default positions from INDUSTRY_POSITIONS */}
+                  {hasBuiltIn ? (
+                    [['Staff Member','worker'],['Supervisor','supervisor'],['Manager','manager']].map(([label,key])=>{
+                      const items = builtIn[key]||[]; if(!items.length) return null
+                      return (
+                        <div key={key} style={{marginBottom:14}}>
+                          <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
+                            {label}
+                          </div>
+                          <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                            {items.map(p=>(
+                              <div key={p} style={ROW}>
+                                <span style={{flex:1,fontSize:12,fontWeight:500}}>{p}</span>
+                                {BADGE('Default','#6B7280')}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    !orgId
+                      ? <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>Loading…</div>
+                      : roles.length===0
+                        ? <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>{isSuper ? 'No job titles defined yet — click Add Job Title to get started.' : 'No positions defined yet — contact your Taksyn administrator to add positions for this industry.'}</div>
+                        : null
+                  )}
+
+                  {/* Org-specific custom roles (Super Admin editable) */}
+                  {orgSpecific.length>0&&(
+                    <div style={{marginTop:hasBuiltIn?8:0}}>
+                      {hasBuiltIn&&<div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Custom (This Organisation)</div>}
+                      <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
+                        {orgSpecific.map((role,idx)=>(
+                          <div key={role.id} style={ROW}>
+                            {isSuper&&editRoleId===role.id ? (
+                              <>
+                                <input className="form-input" style={{flex:1,fontSize:12}} value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveRoleEdit();if(e.key==='Escape'){setEditRoleId(null);setEditRoleName('')}}} autoFocus/>
+                                <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving||!editRoleName.trim()}>Save</button>
+                                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditRoleId(null);setEditRoleName('')}}>×</button>
+                              </>
+                            ) : (
+                              <>
+                                <span style={{flex:1,fontSize:12,fontWeight:500}}>{role.role_name}</span>
+                                {isSuper&&<div style={{display:'flex',gap:3}}>
+                                  <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,-1)} disabled={idx===0}>↑</button>
+                                  <button style={{background:'none',border:'none',cursor:idx<orgSpecific.length-1?'pointer':'default',opacity:idx<orgSpecific.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,1)} disabled={idx===orgSpecific.length-1}>↓</button>
+                                  <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditRoleId(role.id);setEditRoleName(role.role_name)}}>Edit</button>
+                                  <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deleteRole(role.id)}>Delete</button>
+                                </div>}
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                </div>
-                {isSuper&&<div style={{display:'flex',gap:6}}>
-                  <input className="form-input" style={{flex:1,fontSize:12}} placeholder="New job title…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
-                  <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add Job Title</button>
-                </div>}
-              </>
-            )}
+                  )}
+
+                  {isSuper&&<div style={{display:'flex',gap:6,marginTop:8}}>
+                    <input className="form-input" style={{flex:1,fontSize:12}} placeholder="Add custom job title…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
+                    <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add</button>
+                  </div>}
+                </>
+              )
+            })()}
           </div>
         </div>
       )}
