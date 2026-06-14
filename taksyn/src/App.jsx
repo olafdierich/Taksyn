@@ -43,33 +43,41 @@ const LEAVE_COLORS = { sick_leave:'#EF4444', annual_leave:'#10B981', personal_le
 
 const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','monthly','quarterly','annually']
 const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' }
-const PRESET_INDUSTRIES = ['Aged Care','Disability Care','Allied Health','Clinical','Community Services','Hospitality','Food & Beverage','Housekeeping','Mining & Resources','Oil & Gas','Construction','Engineering','Transport & Logistics','Administration','Compliance & Quality','IT & Technology','Security','Retail','Manufacturing','Project Management']
+const PRESET_INDUSTRIES = ['Aged Care','Disability Care','NDIS','Allied Health','Clinical','Community Services','Hospitality','Food & Beverage','Housekeeping','Mining & Resources','Oil & Gas','Construction','Engineering','Transport & Logistics','Administration','Compliance & Quality','IT & Technology','Security','Retail','Manufacturing','Project Management']
+const CLIENT_ADMIN_POSITIONS = ['Director','Regional Manager','National Manager','General Manager','CEO','Managing Director','Owner']
 const INDUSTRY_POSITIONS = {
-  'Hospitality':            ['Housekeeper','Bar Staff','Kitchen Hand','Receptionist','Maintenance','Food & Beverage Attendant','Concierge','Porter','Chef','Barista'],
-  'Food & Beverage':        ['Chef','Cook','Barista','Bar Staff','Kitchen Hand','Waiter','Food & Beverage Attendant','Dishwasher'],
-  'Housekeeping':           ['Housekeeper','Room Attendant','Cleaner','Laundry Attendant','Linen Attendant','Maintenance'],
-  'Aged Care':              ['Support Worker','Carer','Nurse','Cleaner','Gardener','Cook','Activities Officer','Driver','Administration'],
-  'Disability Care':        ['Support Worker','Carer','Community Access Worker','Life Skills Worker','Cleaner','Driver','Administration'],
-  'Allied Health':          ['Physiotherapist','Occupational Therapist','Speech Therapist','Nurse','Receptionist','Administration','Cleaner'],
-  'Clinical':               ['Doctor','Nurse','Medical Assistant','Receptionist','Administration','Cleaner'],
-  'Community Services':     ['Support Worker','Case Worker','Counsellor','Outreach Worker','Administration','Cleaner'],
-  'Mining & Resources':     ['Operator','Tradesperson','Safety Officer','Driller','Blaster','Administration'],
-  'Oil & Gas':              ['Operator','Technician','Safety Officer','Rigger','Administration'],
-  'Construction':           ['Labourer','Tradesperson','Foreman','Site Manager','Safety Officer','Scaffolder'],
-  'Engineering':            ['Engineer','Technician','Drafter','Inspector','Safety Officer','Administration'],
-  'Transport & Logistics':  ['Driver','Loader','Logistics Coordinator','Warehouse Worker','Dispatcher','Forklift Operator'],
-  'Administration':         ['Receptionist','Administration','Executive Assistant','Office Manager','Data Entry Clerk'],
-  'Compliance & Quality':   ['Quality Officer','Compliance Officer','Auditor','Inspector','Administration'],
-  'IT & Technology':        ['IT Support','Developer','Systems Administrator','Network Engineer','Analyst','Helpdesk'],
-  'Security':               ['Security Guard','Patrol Officer','CCTV Operator','Concierge','Site Supervisor'],
-  'Retail':                 ['Sales Assistant','Cashier','Stock Handler','Visual Merchandiser','Supervisor'],
-  'Manufacturing':          ['Machine Operator','Line Worker','Quality Inspector','Maintenance','Forklift Operator'],
-  'Project Management':     ['Project Coordinator','Project Manager','Scheduler','Planner','Administration'],
+  'Administration':        { worker:['Administration Assistant','Data Entry Clerk','Receptionist','Office Assistant','Filing Clerk'],                                                         supervisor:['Administration Supervisor','Office Supervisor','Team Leader'],                        manager:['Office Manager','Administration Manager','Operations Manager'] },
+  'Aged Care':             { worker:['Personal Carer','Support Worker','Cleaner','Laundry Assistant','Kitchen Assistant','Driver','Activity Assistant'],                                      supervisor:['Care Supervisor','Shift Supervisor','Team Leader'],                                    manager:['Care Manager','Facility Manager','Operations Manager'] },
+  'Allied Health':         { worker:['Allied Health Assistant','Therapy Assistant','Receptionist','Cleaner'],                                                                                supervisor:['Allied Health Supervisor','Team Leader'],                                              manager:['Practice Manager','Allied Health Manager','Operations Manager'] },
+  'Clinical':              { worker:['Clinic Assistant','Receptionist','Sterilisation Technician','Cleaner','Administration Assistant'],                                                      supervisor:['Clinic Supervisor','Administration Supervisor','Team Leader'],                        manager:['Practice Manager','Clinic Manager','Operations Manager'] },
+  'Community Services':    { worker:['Community Worker','Support Worker','Driver','Cleaner','Administration Assistant'],                                                                     supervisor:['Community Supervisor','Team Leader','Shift Supervisor'],                              manager:['Program Manager','Community Services Manager','Operations Manager'] },
+  'Compliance & Quality':  { worker:['Compliance Assistant','Quality Assistant','Administration Assistant','Auditor Assistant'],                                                              supervisor:['Compliance Supervisor','Quality Supervisor','Team Leader'],                           manager:['Compliance Manager','Quality Manager','Risk Manager'] },
+  'Construction':          { worker:['Labourer','Trades Assistant','Cleaner','Site Hand','Scaffolder'],                                                                                      supervisor:['Site Supervisor','Foreperson','Team Leader'],                                         manager:['Site Manager','Project Manager','Construction Manager'] },
+  'Disability Care':       { worker:['Support Worker','Personal Carer','Driver','Cleaner','Activity Assistant'],                                                                             supervisor:['Support Supervisor','Team Leader','Shift Supervisor'],                                manager:['Service Manager','Disability Care Manager','Operations Manager'] },
+  'Engineering':           { worker:['Engineering Assistant','Technician','Maintenance Officer','Trades Assistant'],                                                                         supervisor:['Engineering Supervisor','Maintenance Supervisor','Team Leader'],                      manager:['Engineering Manager','Maintenance Manager','Operations Manager'] },
+  'Food & Beverage':       { worker:['Kitchen Hand','Waiter','Barista','Bar Staff','Chef','Cook','Dishwasher','Food Runner'],                                                                supervisor:['F&B Supervisor','Kitchen Supervisor','Floor Supervisor'],                             manager:['F&B Manager','Restaurant Manager','Kitchen Manager'] },
+  'Hospitality':           { worker:['Cleaner','Kitchen Aid','Waiter','Bar Tender','Chef','Reception','Plumber','Electrician','Driver','Finance','Housekeeper','Room Attendant','Laundry Staff','Barista'], supervisor:['Housekeeping Supervisor','F&B Supervisor','Front Desk Supervisor','Kitchen Supervisor'], manager:['Operations Manager','F&B Manager','Housekeeping Manager','Front Office Manager','General Manager'] },
+  'Housekeeping':          { worker:['Housekeeper','Room Attendant','Laundry Staff','Cleaner','Linen Assistant'],                                                                            supervisor:['Housekeeping Supervisor','Laundry Supervisor','Team Leader'],                         manager:['Housekeeping Manager','Operations Manager'] },
+  'IT & Technology':       { worker:['IT Support Officer','Help Desk Officer','Data Entry Clerk','Systems Assistant'],                                                                       supervisor:['IT Supervisor','Help Desk Supervisor','Team Leader'],                                  manager:['IT Manager','Systems Manager','Operations Manager'] },
+  'Manufacturing':         { worker:['Production Worker','Machine Operator','Quality Inspector','Packer','Forklift Operator','Cleaner'],                                                     supervisor:['Production Supervisor','Quality Supervisor','Shift Supervisor'],                      manager:['Production Manager','Plant Manager','Operations Manager'] },
+  'Mining & Resources':    { worker:['Mining Labourer','Driller Offsider','Trades Assistant','Safety Officer','Cleaner'],                                                                    supervisor:['Mine Supervisor','Shift Supervisor','Team Leader'],                                    manager:['Mine Manager','Site Manager','Operations Manager'] },
+  'NDIS':                  { worker:['Support Worker','Personal Carer','Gardener','Cleaner','Driver','Activity Assistant','Community Access Worker'],                                        supervisor:['Support Supervisor','Team Leader','Shift Supervisor'],                                manager:['Service Manager','NDIS Manager','Operations Manager'] },
+  'Oil & Gas':             { worker:['Field Technician','Trades Assistant','Safety Officer','Cleaner','Labourer'],                                                                           supervisor:['Field Supervisor','Site Supervisor','Team Leader'],                                    manager:['Field Manager','Site Manager','Operations Manager'] },
+  'Project Management':    { worker:['Project Assistant','Administration Assistant','Site Assistant','Document Controller'],                                                                  supervisor:['Project Supervisor','Team Leader','Site Supervisor'],                                  manager:['Project Manager','Senior Project Manager','Operations Manager'] },
+  'Retail':                { worker:['Sales Assistant','Cashier','Stock Room Assistant','Cleaner','Customer Service Officer'],                                                                supervisor:['Retail Supervisor','Floor Supervisor','Team Leader'],                                  manager:['Store Manager','Retail Manager','Operations Manager'] },
+  'Security':              { worker:['Security Officer','Control Room Operator','Concierge','Patrol Officer'],                                                                               supervisor:['Security Supervisor','Shift Supervisor','Team Leader'],                                manager:['Security Manager','Operations Manager','Site Manager'] },
+  'Transport & Logistics': { worker:['Driver','Forklift Operator','Warehouse Assistant','Picker Packer','Delivery Officer','Cleaner'],                                                       supervisor:['Transport Supervisor','Warehouse Supervisor','Shift Supervisor'],                     manager:['Transport Manager','Logistics Manager','Warehouse Manager'] },
 }
-const getPositionsForIndustry = (industry, customPositions=[], customRoles=[]) => {
-  const preset = INDUSTRY_POSITIONS[industry] || ['Receptionist','Cleaner','Administration','Security','Maintenance']
+const getPositionsForIndustry = (industry, role, customPositions=[], customRoles=[]) => {
+  const rk = (role==='super_admin'||role==='manager') ? 'manager' : (role==='supervisor' ? 'supervisor' : (role==='client_admin' ? 'client_admin' : 'worker'))
+  if (rk==='client_admin') {
+    const base = customPositions.length>0 ? [...customPositions,...CLIENT_ADMIN_POSITIONS] : CLIENT_ADMIN_POSITIONS
+    return [...new Set(base)]
+  }
+  const preset = INDUSTRY_POSITIONS[industry]?.[rk] || INDUSTRY_POSITIONS[industry]?.worker || ['Receptionist','Cleaner','Administration','Security','Maintenance']
   const orgRoles = customRoles.filter(r=>r.industry_name===industry).map(r=>r.role_name)
-  return [...new Set([...preset, ...orgRoles, ...customPositions])]
+  const base = customPositions.length>0 ? [...customPositions,...preset] : preset
+  return [...new Set([...base,...orgRoles])]
 }
 const INVITE_ROLE_HIERARCHY = ['client_admin','manager','supervisor','worker']
 const getInvitableRoles = (inviterRole) => {
@@ -4140,7 +4148,7 @@ function UsersView({ user, setAuditLog }) {
                 <label className="form-label">Position</label>
                 <select className="form-input" value={editForm.position||''} onChange={e=>setEditForm({...editForm,position:e.target.value})}>
                   <option value="">— Select Position —</option>
-                  {getPositionsForIndustry(editForm.industry||'', orgCustomPositions, orgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
+                  {getPositionsForIndustry(editForm.industry||'', editForm.role||'worker', orgCustomPositions, orgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
                 <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Role, Industry and Position are saved per-organisation</div>
               </div>
@@ -4162,7 +4170,7 @@ function UsersView({ user, setAuditLog }) {
                       </select>
                       <select className="form-select" style={{fontSize:11}} value={pos.position} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
                         <option value="">— Position —</option>
-                        {getPositionsForIndustry(pos.industry||'', orgCustomPositions, orgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
+                        {getPositionsForIndustry(pos.industry||'', pos.role||'worker', orgCustomPositions, orgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
                       </select>
                       <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:18,padding:'0 4px',lineHeight:1}} onClick={()=>setEditPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
                     </div>
@@ -4219,7 +4227,7 @@ function UsersView({ user, setAuditLog }) {
                   {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
                 </div>
                 {invitePositions.map((row,i)=>{
-                  const positions = getPositionsForIndustry(row.industry, orgCustomPositions, orgCustomRoles)
+                  const positions = getPositionsForIndustry(row.industry, row.role, orgCustomPositions, orgCustomRoles)
                   const invitableRoles = getInvitableRoles(user.role)
                   return (
                     <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
@@ -5086,19 +5094,22 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                   <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates display email — user changes login email via their own Profile</div>
                 </div>
                 <div className="form-field"><label className="form-label">System Role</label>
-                  <select className="form-input" value={memberEditForm.role||'worker'} onChange={e=>setMemberEditForm({...memberEditForm,role:e.target.value})}>
-                    {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  <select className="form-input" value={memberEditForm.role||'worker'} onChange={e=>setMemberEditForm({...memberEditForm,role:e.target.value,position:''})}>
+                    {getInvitableRoles('super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                 </div>
                 <div className="two-col">
                   <div className="form-field"><label className="form-label">Industry</label>
-                    <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value})}>
+                    <select className="form-input" value={memberEditForm.industry||''} onChange={e=>setMemberEditForm({...memberEditForm,industry:e.target.value,position:''})}>
                       <option value="">— Select —</option>
                       {industryList.map(k=><option key={k} value={k}>{k}</option>)}
                     </select>
                   </div>
                   <div className="form-field"><label className="form-label">Position</label>
-                    <input className="form-input" value={memberEditForm.position||''} onChange={e=>setMemberEditForm({...memberEditForm,position:e.target.value})} placeholder="e.g. Line Cook, Supervisor..."/>
+                    <select className="form-input" value={memberEditForm.position||''} onChange={e=>setMemberEditForm({...memberEditForm,position:e.target.value})}>
+                      <option value="">— Select Position —</option>
+                      {getPositionsForIndustry(memberEditForm.industry||'', memberEditForm.role||'worker', editOrgCustomPositions, editOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
+                    </select>
                   </div>
                 </div>
                 <div style={{fontSize:10,color:'var(--t2)',marginBottom:10}}>Role, Industry and Position are saved for <strong>{editingMember?.org}</strong> only</div>
@@ -5302,6 +5313,13 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                 <option value="">— Select Industry —</option>
                 {(editOrgIndustries.length?editOrgIndustries:PRESET_INDUSTRIES).map(k=><option key={k} value={k}>{k}</option>)}
               </select>
+              <div style={{marginTop:8}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Position <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0}}>— optional</span></div>
+                <select className="form-select" style={{fontSize:13}} value={inviteOrgPositions[0]?.position||''} onChange={e=>setInviteOrgPositions([{...inviteOrgPositions[0],position:e.target.value}])}>
+                  <option value="">— Select Position —</option>
+                  {getPositionsForIndustry(inviteOrgPositions[0]?.industry||'', 'client_admin', [], []).map(p=><option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
             </div>
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Send Via</div>
@@ -7873,7 +7891,10 @@ function TeamsView({ user }) {
   const [orgId, setOrgId] = useState('')
   const [showInviteLink, setShowInviteLink] = useState(false)
   const [inviteLinkRole, setInviteLinkRole] = useState('worker')
+  const [inviteLinkIndustry, setInviteLinkIndustry] = useState('')
   const [inviteLinkPosition, setInviteLinkPosition] = useState('')
+  const [teamOrgCustomPositions, setTeamOrgCustomPositions] = useState([])
+  const [teamOrgCustomRoles, setTeamOrgCustomRoles] = useState([])
   const isCA = ['client_admin','super_admin'].includes(user.role)
 
   useEffect(()=>{
@@ -7886,7 +7907,13 @@ function TeamsView({ user }) {
       .then(async ({data}) => {
         if(!data) return
         if(data.team_types) setTeamTypes(JSON.parse(data.team_types||'[]'))
-        if(data.id) setOrgId(data.id)
+        if(data.id) {
+          setOrgId(data.id)
+          supabase.from('org_custom_positions').select('position_name').eq('organisation_id',data.id)
+            .then(({data:p})=>{ if(p) setTeamOrgCustomPositions(p.map(x=>x.position_name)) }).catch(()=>{})
+          supabase.from('org_custom_roles').select('role_name,industry_name').eq('organisation_id',data.id)
+            .then(({data:r})=>{ if(r) setTeamOrgCustomRoles(r) }).catch(()=>{})
+        }
         // Fetch org members filtered by both org name and organisation_id for client_admin compatibility
         const { data: members } = await supabase
           .from('org_members').select('user_id,role,org,tier')
@@ -8135,20 +8162,30 @@ function TeamsView({ user }) {
               {showInviteLink&&(
                 <div style={{background:'rgba(16,185,129,.06)',border:'1px solid rgba(16,185,129,.2)',borderRadius:10,padding:14,marginBottom:14}}>
                   <div style={{fontSize:11,fontWeight:700,color:'#10B981',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:10}}>💬 WhatsApp Invite Link</div>
-                  <div className="two-col">
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
                     <div className="form-field">
                       <label className="form-label">Role</label>
-                      <select className="form-select" value={inviteLinkRole} onChange={e=>setInviteLinkRole(e.target.value)}>
-                        {ROLES.filter(r=>r!=='super_admin'&&r!=='client_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                      <select className="form-select" value={inviteLinkRole} onChange={e=>{setInviteLinkRole(e.target.value);setInviteLinkPosition('')}}>
+                        {getInvitableRoles(user.role).map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                       </select>
                     </div>
                     <div className="form-field">
-                      <label className="form-label">Position Title <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
-                      <input className="form-input" value={inviteLinkPosition} onChange={e=>setInviteLinkPosition(e.target.value)} placeholder="e.g. Registered Nurse"/>
+                      <label className="form-label">Industry <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
+                      <select className="form-select" value={inviteLinkIndustry} onChange={e=>{setInviteLinkIndustry(e.target.value);setInviteLinkPosition('')}}>
+                        <option value="">— Industry —</option>
+                        {PRESET_INDUSTRIES.map(k=><option key={k} value={k}>{k}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-field">
+                      <label className="form-label">Position <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
+                      <select className="form-select" value={inviteLinkPosition} onChange={e=>setInviteLinkPosition(e.target.value)}>
+                        <option value="">— Position —</option>
+                        {getPositionsForIndustry(inviteLinkIndustry, inviteLinkRole, teamOrgCustomPositions, teamOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
+                      </select>
                     </div>
                   </div>
                   <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>
-                    Link will pre-fill: <strong>{selectedTeam.name}</strong> · <strong>{ROLE_LABELS[inviteLinkRole]}</strong>{inviteLinkPosition&&<> · <strong>{inviteLinkPosition}</strong></>}
+                    Link will pre-fill: <strong>{selectedTeam.name}</strong> · <strong>{ROLE_LABELS[inviteLinkRole]}</strong>{inviteLinkIndustry&&<> · <strong>{inviteLinkIndustry}</strong></>}{inviteLinkPosition&&<> · <strong>{inviteLinkPosition}</strong></>}
                   </div>
                   <div style={{display:'flex',gap:8}}>
                     <button className="btn btn-primary btn-sm" onClick={()=>shareInviteLink(selectedTeam)}>💬 Send via WhatsApp</button>
