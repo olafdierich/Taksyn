@@ -226,6 +226,16 @@ const generateNotifications = (tasks, user, prevTasks=[]) => {
   return notifs
 }
 
+const getEdgeFunctionAuthHeader = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey
+    return 'Bearer ' + token
+  } catch {
+    return 'Bearer ' + (import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey)
+  }
+}
+
 const sendEmailNotif = async (toEmail, subject, body) => {
   if(!isConfigured()||!toEmail) return
   try {
@@ -1479,7 +1489,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + (import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey)
+          'Authorization': await getEdgeFunctionAuthHeader()
         },
         body: JSON.stringify({
           action: 'resend',
@@ -4045,7 +4055,7 @@ function UsersView({ user, setAuditLog }) {
       console.log('[invite-user] secret:', import.meta.env.VITE_INVITE_SECRET || '')
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey) },
+        headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
         body: JSON.stringify(invitePayload)
       })
       const result = await res.json()
@@ -4064,7 +4074,7 @@ function UsersView({ user, setAuditLog }) {
     try {
       const res = await fetch(supabaseUrl + '/functions/v1/invite-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey) },
+        headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
         body: JSON.stringify({ action: 'resend', email: invite.invited_email, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl: window.location.origin + window.location.pathname })
       })
       const result = await res.json()
@@ -4852,7 +4862,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       console.log('[invite-user] secret:', inviteSecret)
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey) },
+        headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
         body: JSON.stringify(invitePayload)
       })
       const result = await res.json()
