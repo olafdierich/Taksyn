@@ -4302,7 +4302,7 @@ function UsersView({ user, setAuditLog }) {
           </div>
         </div>
       )}
-      <div className="ph"><div className="ph-top"><div><div className="ph-title">Workforce</div><div className="ph-sub">Manage your organisation's workforce</div></div><div style={{display:'flex',gap:8}}>{['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary" onClick={()=>setShowManageIndustries(true)}>🏭 Industries</button>}</div></div></div>
+      <div className="ph"><div className="ph-top"><div><div className="ph-title">Workforce</div><div className="ph-sub">Manage your organisation's workforce</div></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{['client_admin','super_admin'].includes(user.role)&&<><button className="btn btn-secondary" onClick={()=>setShowManageIndustries(true)}>🏭 Industries</button><button className="btn btn-primary" onClick={()=>openInviteForm('email')}>📧 Invite via Email</button><button className="btn btn-green" onClick={()=>openInviteForm('whatsapp')}>💬 Invite via WhatsApp</button></>}</div></div></div>
       <div className="section">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div className="section-title" style={{margin:0}}>Workforce ({realUsers.length})</div>
@@ -4424,13 +4424,6 @@ function UsersView({ user, setAuditLog }) {
             })()
         }
       </div>
-      {['client_admin','super_admin'].includes(user.role)&&<div className="section">
-        <div className="section-title">Invite Options</div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button className="btn btn-primary" onClick={()=>openInviteForm('email')}>📧 Invite via Email</button>
-          <button className="btn btn-green" onClick={()=>openInviteForm('whatsapp')}>💬 Invite via WhatsApp</button>
-        </div>
-      </div>}
     </div>
   )
 }
