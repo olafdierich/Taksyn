@@ -4131,7 +4131,7 @@ function UsersView({ user, setAuditLog }) {
               </div>
               <div className="two-col">
                 <div className="form-field">
-                  <label className="form-label">Role</label>
+                  <label className="form-label">Permission Level</label>
                   <select className="form-input" value={editForm.role||'worker'} onChange={e=>setEditForm({...editForm,role:e.target.value})}>
                     {getInvitableRoles(user.role).map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
@@ -4145,18 +4145,18 @@ function UsersView({ user, setAuditLog }) {
                 </div>
               </div>
               <div className="form-field">
-                <label className="form-label">Position</label>
+                <label className="form-label">Job Title</label>
                 <select className="form-input" value={editForm.position||''} onChange={e=>setEditForm({...editForm,position:e.target.value})}>
-                  <option value="">— Select Position —</option>
+                  <option value="">— Select Job Title —</option>
                   {getPositionsForIndustry(editForm.industry||'', editForm.role||'worker', orgCustomPositions, orgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
-                <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Role, Industry and Position are saved per-organisation</div>
+                <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Permission level, industry and job title are saved per-organisation</div>
               </div>
               {editPositions.length>0&&(
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:10,marginBottom:6}}>
                   <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Additional Positions</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 2px'}}>
-                    {['Industry','Role','Position',''].map((h,hi)=><div key={hi} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
+                    {['Industry','Permission Level','Job Title',''].map((h,hi)=><div key={hi} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
                   </div>
                   {editPositions.map((pos,i)=>(
                     <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
@@ -4220,11 +4220,11 @@ function UsersView({ user, setAuditLog }) {
               {user.role==='super_admin'&&<div className="form-field"><label className="form-label">Organisation <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={inviteOrg} onChange={e=>setInviteOrg(e.target.value)} placeholder="Exact organisation name"/></div>}
               <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                  <label className="form-label" style={{margin:0}}>Position Assignments</label>
-                  <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Role · Position</span>
+                  <label className="form-label" style={{margin:0}}>Role Assignments</label>
+                  <span style={{fontSize:10,color:'var(--t2)'}}>Industry · Permission Level · Job Title</span>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 4px'}}>
-                  {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
+                  {['Industry','Permission Level','Job Title',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
                 </div>
                 {invitePositions.map((row,i)=>{
                   const positions = getPositionsForIndustry(row.industry, row.role, orgCustomPositions, orgCustomRoles)
@@ -5093,7 +5093,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                   <input className="form-input" type="email" value={memberEditForm.email||''} onChange={e=>setMemberEditForm({...memberEditForm,email:e.target.value})} placeholder="email@example.com"/>
                   <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates display email — user changes login email via their own Profile</div>
                 </div>
-                <div className="form-field"><label className="form-label">System Role</label>
+                <div className="form-field"><label className="form-label">Permission Level</label>
                   <select className="form-input" value={memberEditForm.role||'worker'} onChange={e=>setMemberEditForm({...memberEditForm,role:e.target.value,position:''})}>
                     {getInvitableRoles('super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
@@ -5105,14 +5105,14 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                       {industryList.map(k=><option key={k} value={k}>{k}</option>)}
                     </select>
                   </div>
-                  <div className="form-field"><label className="form-label">Position</label>
+                  <div className="form-field"><label className="form-label">Job Title</label>
                     <select className="form-input" value={memberEditForm.position||''} onChange={e=>setMemberEditForm({...memberEditForm,position:e.target.value})}>
-                      <option value="">— Select Position —</option>
+                      <option value="">— Select Job Title —</option>
                       {getPositionsForIndustry(memberEditForm.industry||'', memberEditForm.role||'worker', editOrgCustomPositions, editOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
                 </div>
-                <div style={{fontSize:10,color:'var(--t2)',marginBottom:10}}>Role, Industry and Position are saved for <strong>{editingMember?.org}</strong> only</div>
+                <div style={{fontSize:10,color:'var(--t2)',marginBottom:10}}>Permission level, industry and job title are saved for <strong>{editingMember?.org}</strong> only</div>
                 <div className="form-field"><label className="form-label">Notes</label>
                   <textarea className="comment-box" style={{minHeight:60}} value={memberEditForm.notes||''} onChange={e=>setMemberEditForm({...memberEditForm,notes:e.target.value})} placeholder="Notes about this member..."/>
                 </div>
@@ -5670,8 +5670,8 @@ function RolesPositionsView({ user }) {
   }
 
   const TABS = isSuper
-    ? [['global_industries','Global Industries'],['roles','Roles per Industry'],['positions','Positions']]
-    : [['roles','Roles per Industry'],['positions','Positions']]
+    ? [['global_industries','Global Industries'],['roles','Positions per Industry'],['positions','Permission Levels']]
+    : [['roles','Positions per Industry'],['positions','Permission Levels']]
 
   const ROW = {display:'flex',alignItems:'center',gap:6,padding:'8px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)',marginBottom:4}
   const BADGE = (label, color='#6B7280') => <span style={{fontSize:9,fontWeight:700,color,background:color+'18',border:'1px solid '+color+'30',borderRadius:4,padding:'1px 6px',letterSpacing:'.4px',flexShrink:0}}>{label}</span>
@@ -5680,7 +5680,7 @@ function RolesPositionsView({ user }) {
     <div className="anim">
       <div className="ph">
         <div className="ph-title">Roles &amp; Positions</div>
-        <div className="ph-sub">{isSuper ? 'Manage roles and position labels for your organisation' : 'View roles and position labels for your organisation (read-only)'}</div>
+        <div className="ph-sub">{isSuper ? 'Manage job titles per industry and permission levels for your organisation' : 'View job titles and permission levels for your organisation (read-only)'}</div>
       </div>
       {!isSuper&&<div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',borderRadius:8,padding:'8px 14px',fontSize:12,color:'var(--amber)',marginBottom:12}}>🔒 Roles and positions are managed by Super Admin. Contact your platform administrator to add or modify entries.</div>}
 
@@ -5772,19 +5772,19 @@ function RolesPositionsView({ user }) {
             )}
           </div>
 
-          {/* Right: roles for selected industry */}
+          {/* Right: job titles for selected industry */}
           <div className="section">
             <div className="section-title" style={{marginBottom:10}}>
-              Roles
+              Job Titles
               {selectedIndustry&&<span style={{fontSize:12,color:'var(--brand)',fontWeight:400,marginLeft:8}}>— {selectedIndustry}</span>}
             </div>
             {!selectedIndustry ? (
-              <div style={{fontSize:13,color:'var(--t2)',padding:'20px 0',textAlign:'center'}}>← Select an industry to manage its roles</div>
+              <div style={{fontSize:13,color:'var(--t2)',padding:'20px 0',textAlign:'center'}}>← Select an industry to manage its job titles</div>
             ) : !orgId ? (
               <div style={{fontSize:13,color:'var(--t2)'}}>Loading organisation…</div>
             ) : (
               <>
-                {roles.length===0 && <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>No roles defined yet — click Add Role to get started.</div>}
+                {roles.length===0 && <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>No job titles defined yet — click Add Job Title to get started.</div>}
                 <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
                   {roles.map((role,idx)=>(
                     <div key={role.id} style={ROW}>
@@ -5809,8 +5809,8 @@ function RolesPositionsView({ user }) {
                   ))}
                 </div>
                 {isSuper&&<div style={{display:'flex',gap:6}}>
-                  <input className="form-input" style={{flex:1,fontSize:12}} placeholder="New role name…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
-                  <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add Role</button>
+                  <input className="form-input" style={{flex:1,fontSize:12}} placeholder="New job title…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
+                  <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add Job Title</button>
                 </div>}
               </>
             )}
@@ -5818,54 +5818,60 @@ function RolesPositionsView({ user }) {
         </div>
       )}
 
-      {/* ── POSITIONS ── */}
+      {/* ── PERMISSION LEVELS ── */}
       {activeTab==='positions'&&(
         <div className="section">
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:8}}>Default Positions</div>
-            {DEFAULT_POSITIONS.map(p=>(
-              <div key={p} style={{...ROW,marginBottom:6}}>
-                <span style={{flex:1,fontSize:13,fontWeight:500}}>{p}</span>
-                <span style={{fontSize:11,color:'var(--t3)'}}>🔒 Default</span>
-              </div>
-            ))}
-            <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>Default positions cannot be deleted. They appear at the top of every position dropdown.</div>
+          <div style={{marginBottom:4,fontSize:12,color:'var(--t2)',lineHeight:1.5}}>
+            Permission levels control what each user can access in the app. These are system-defined access tiers — they are not job titles.
           </div>
 
-          <div>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:8}}>Custom Positions</div>
-            {!orgId ? <div style={{fontSize:13,color:'var(--t2)'}}>Loading…</div> : customPositions.length===0 ? (
-              <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>No custom positions yet.</div>
-            ) : (
-              <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
-                {customPositions.map((pos,idx)=>(
-                  <div key={pos.id} style={ROW}>
-                    {isSuper&&editPosId===pos.id ? (
-                      <>
-                        <input className="form-input" style={{flex:1,fontSize:12}} value={editPosName} onChange={e=>setEditPosName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')savePosEdit();if(e.key==='Escape'){setEditPosId(null);setEditPosName('')}}} autoFocus/>
-                        <button className="btn btn-primary btn-sm" onClick={savePosEdit} disabled={saving}>Save</button>
-                        <button className="btn btn-secondary btn-sm" onClick={()=>{setEditPosId(null);setEditPosName('')}}>×</button>
-                      </>
-                    ) : (
-                      <>
-                        <span style={{flex:1,fontSize:12,fontWeight:500}}>{pos.position_name}</span>
-                        {isSuper&&<div style={{display:'flex',gap:3}}>
-                          <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,-1)} disabled={idx===0}>↑</button>
-                          <button style={{background:'none',border:'none',cursor:idx<customPositions.length-1?'pointer':'default',opacity:idx<customPositions.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,1)} disabled={idx===customPositions.length-1}>↓</button>
-                          <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditPosId(pos.id);setEditPosName(pos.position_name)}}>Edit</button>
-                          <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deletePosition(pos.id)}>Delete</button>
-                        </div>}
-                      </>
-                    )}
-                  </div>
-                ))}
+          <div style={{marginBottom:16,marginTop:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:8}}>System Permission Levels</div>
+            {['Staff Member','Supervisor','Manager','Client Admin'].map(p=>(
+              <div key={p} style={{...ROW,marginBottom:6}}>
+                <span style={{flex:1,fontSize:13,fontWeight:500}}>{p}</span>
+                <span style={{fontSize:11,color:'var(--t3)'}}>🔒 System default</span>
               </div>
-            )}
-            {isSuper&&<div style={{display:'flex',gap:6}}>
-              <input className="form-input" style={{flex:1,fontSize:12}} placeholder="e.g. Duty Manager, Head Chef, Team Leader…" value={newPositionName} onChange={e=>setNewPositionName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addPosition()}/>
-              <button className="btn btn-primary btn-sm" onClick={addPosition} disabled={saving||!newPositionName.trim()}>Add Position</button>
-            </div>}
+            ))}
+            <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>System permission levels are locked and cannot be edited or deleted.</div>
           </div>
+
+          {isSuper&&(
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:8}}>Custom Permission Levels <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--t3)'}}>— Super Admin only</span></div>
+              {!orgId ? <div style={{fontSize:13,color:'var(--t2)'}}>Loading…</div> : customPositions.length===0 ? (
+                <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>No custom permission levels yet.</div>
+              ) : (
+                <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
+                  {customPositions.map((pos,idx)=>(
+                    <div key={pos.id} style={ROW}>
+                      {editPosId===pos.id ? (
+                        <>
+                          <input className="form-input" style={{flex:1,fontSize:12}} value={editPosName} onChange={e=>setEditPosName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')savePosEdit();if(e.key==='Escape'){setEditPosId(null);setEditPosName('')}}} autoFocus/>
+                          <button className="btn btn-primary btn-sm" onClick={savePosEdit} disabled={saving}>Save</button>
+                          <button className="btn btn-secondary btn-sm" onClick={()=>{setEditPosId(null);setEditPosName('')}}>×</button>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{flex:1,fontSize:12,fontWeight:500}}>{pos.position_name}</span>
+                          <div style={{display:'flex',gap:3}}>
+                            <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,-1)} disabled={idx===0}>↑</button>
+                            <button style={{background:'none',border:'none',cursor:idx<customPositions.length-1?'pointer':'default',opacity:idx<customPositions.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,1)} disabled={idx===customPositions.length-1}>↓</button>
+                            <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditPosId(pos.id);setEditPosName(pos.position_name)}}>Edit</button>
+                            <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deletePosition(pos.id)}>Delete</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{display:'flex',gap:6}}>
+                <input className="form-input" style={{flex:1,fontSize:12}} placeholder="e.g. Area Lead, Department Head…" value={newPositionName} onChange={e=>setNewPositionName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addPosition()}/>
+                <button className="btn btn-primary btn-sm" onClick={addPosition} disabled={saving||!newPositionName.trim()}>Add Level</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -8164,7 +8170,7 @@ function TeamsView({ user }) {
                   <div style={{fontSize:11,fontWeight:700,color:'#10B981',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:10}}>💬 WhatsApp Invite Link</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
                     <div className="form-field">
-                      <label className="form-label">Role</label>
+                      <label className="form-label">Permission Level</label>
                       <select className="form-select" value={inviteLinkRole} onChange={e=>{setInviteLinkRole(e.target.value);setInviteLinkPosition('')}}>
                         {getInvitableRoles(user.role).map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                       </select>
@@ -8177,9 +8183,9 @@ function TeamsView({ user }) {
                       </select>
                     </div>
                     <div className="form-field">
-                      <label className="form-label">Position <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
+                      <label className="form-label">Job Title <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
                       <select className="form-select" value={inviteLinkPosition} onChange={e=>setInviteLinkPosition(e.target.value)}>
-                        <option value="">— Position —</option>
+                        <option value="">— Job Title —</option>
                         {getPositionsForIndustry(inviteLinkIndustry, inviteLinkRole, teamOrgCustomPositions, teamOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
                       </select>
                     </div>
