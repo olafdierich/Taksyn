@@ -44,6 +44,39 @@ const LEAVE_COLORS = { sick_leave:'#EF4444', annual_leave:'#10B981', personal_le
 const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','monthly','quarterly','annually']
 const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' }
 const PRESET_INDUSTRIES = ['Aged Care','Disability Care','Allied Health','Clinical','Community Services','Hospitality','Food & Beverage','Housekeeping','Mining & Resources','Oil & Gas','Construction','Engineering','Transport & Logistics','Administration','Compliance & Quality','IT & Technology','Security','Retail','Manufacturing','Project Management']
+const INDUSTRY_POSITIONS = {
+  'Hospitality':            ['Housekeeper','Bar Staff','Kitchen Hand','Receptionist','Maintenance','Food & Beverage Attendant','Concierge','Porter','Chef','Barista'],
+  'Food & Beverage':        ['Chef','Cook','Barista','Bar Staff','Kitchen Hand','Waiter','Food & Beverage Attendant','Dishwasher'],
+  'Housekeeping':           ['Housekeeper','Room Attendant','Cleaner','Laundry Attendant','Linen Attendant','Maintenance'],
+  'Aged Care':              ['Support Worker','Carer','Nurse','Cleaner','Gardener','Cook','Activities Officer','Driver','Administration'],
+  'Disability Care':        ['Support Worker','Carer','Community Access Worker','Life Skills Worker','Cleaner','Driver','Administration'],
+  'Allied Health':          ['Physiotherapist','Occupational Therapist','Speech Therapist','Nurse','Receptionist','Administration','Cleaner'],
+  'Clinical':               ['Doctor','Nurse','Medical Assistant','Receptionist','Administration','Cleaner'],
+  'Community Services':     ['Support Worker','Case Worker','Counsellor','Outreach Worker','Administration','Cleaner'],
+  'Mining & Resources':     ['Operator','Tradesperson','Safety Officer','Driller','Blaster','Administration'],
+  'Oil & Gas':              ['Operator','Technician','Safety Officer','Rigger','Administration'],
+  'Construction':           ['Labourer','Tradesperson','Foreman','Site Manager','Safety Officer','Scaffolder'],
+  'Engineering':            ['Engineer','Technician','Drafter','Inspector','Safety Officer','Administration'],
+  'Transport & Logistics':  ['Driver','Loader','Logistics Coordinator','Warehouse Worker','Dispatcher','Forklift Operator'],
+  'Administration':         ['Receptionist','Administration','Executive Assistant','Office Manager','Data Entry Clerk'],
+  'Compliance & Quality':   ['Quality Officer','Compliance Officer','Auditor','Inspector','Administration'],
+  'IT & Technology':        ['IT Support','Developer','Systems Administrator','Network Engineer','Analyst','Helpdesk'],
+  'Security':               ['Security Guard','Patrol Officer','CCTV Operator','Concierge','Site Supervisor'],
+  'Retail':                 ['Sales Assistant','Cashier','Stock Handler','Visual Merchandiser','Supervisor'],
+  'Manufacturing':          ['Machine Operator','Line Worker','Quality Inspector','Maintenance','Forklift Operator'],
+  'Project Management':     ['Project Coordinator','Project Manager','Scheduler','Planner','Administration'],
+}
+const getPositionsForIndustry = (industry, customPositions=[], customRoles=[]) => {
+  const preset = INDUSTRY_POSITIONS[industry] || ['Receptionist','Cleaner','Administration','Security','Maintenance']
+  const orgRoles = customRoles.filter(r=>r.industry_name===industry).map(r=>r.role_name)
+  return [...new Set([...preset, ...orgRoles, ...customPositions])]
+}
+const INVITE_ROLE_HIERARCHY = ['client_admin','manager','supervisor','worker']
+const getInvitableRoles = (inviterRole) => {
+  if (inviterRole==='super_admin') return INVITE_ROLE_HIERARCHY
+  const idx = INVITE_ROLE_HIERARCHY.indexOf(inviterRole)
+  return idx >= 0 ? INVITE_ROLE_HIERARCHY.slice(idx + 1) : ['worker']
+}
 const DEMO_TASKS = []
 const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
 // Default SLA response times in minutes
@@ -3923,12 +3956,6 @@ function UsersView({ user, setAuditLog }) {
     setInvitePositions([{industry:'',role:'',position:''}])
   }
 
-  const positionToSystemRole = (pos) => {
-    if(pos==='Manager') return 'manager'
-    if(pos==='Supervisor') return 'supervisor'
-    if(pos==='Client Admin') return 'client_admin'
-    return 'worker'
-  }
 
   const sendInvite = async () => {
     const targetOrg = user.role==='super_admin' ? inviteOrg.trim() : user.org
@@ -3937,7 +3964,7 @@ function UsersView({ user, setAuditLog }) {
 
     const validRows = invitePositions.filter(p=>p.role||p.industry||p.position)
     const roleOrder = ['client_admin','manager','supervisor','worker']
-    const systemRole = validRows.length ? validRows.reduce((best,p)=>{ const r=positionToSystemRole(p.position); return roleOrder.indexOf(r)<roleOrder.indexOf(best)?r:best }, 'worker') : 'worker'
+    const systemRole = validRows.length ? validRows.reduce((best,p)=>{ const r=p.role||'worker'; return roleOrder.indexOf(r)<roleOrder.indexOf(best)?r:best }, 'worker') : 'worker'
     const firstIndustry = validRows.find(p=>p.industry)?.industry || ''
     const rolesSummary = validRows.map(p=>[p.industry,p.position,p.role].filter(Boolean).join(' / ')).join('; ')
     const positionsSummary = rolesSummary ? '\n\nAssignments: '+rolesSummary : ''
@@ -4098,12 +4125,12 @@ function UsersView({ user, setAuditLog }) {
                 <div className="form-field">
                   <label className="form-label">Role</label>
                   <select className="form-input" value={editForm.role||'worker'} onChange={e=>setEditForm({...editForm,role:e.target.value})}>
-                    {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                    {getInvitableRoles(user.role).map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                 </div>
                 <div className="form-field">
                   <label className="form-label">Industry</label>
-                  <select className="form-input" value={editForm.industry||''} onChange={e=>setEditForm({...editForm,industry:e.target.value})}>
+                  <select className="form-input" value={editForm.industry||''} onChange={e=>setEditForm({...editForm,industry:e.target.value,position:''})}>
                     <option value="">— Select —</option>
                     {[...PRESET_INDUSTRIES,...orgCustomDepts.filter(d=>!PRESET_INDUSTRIES.includes(d))].map(k=><option key={k} value={k}>{k}</option>)}
                   </select>
@@ -4111,7 +4138,10 @@ function UsersView({ user, setAuditLog }) {
               </div>
               <div className="form-field">
                 <label className="form-label">Position</label>
-                <input className="form-input" value={editForm.position||''} onChange={e=>setEditForm({...editForm,position:e.target.value})} placeholder="e.g. Line Cook, Barista, Supervisor..."/>
+                <select className="form-input" value={editForm.position||''} onChange={e=>setEditForm({...editForm,position:e.target.value})}>
+                  <option value="">— Select Position —</option>
+                  {getPositionsForIndustry(editForm.industry||'', orgCustomPositions, orgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
+                </select>
                 <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Role, Industry and Position are saved per-organisation</div>
               </div>
               {editPositions.length>0&&(
@@ -4122,14 +4152,18 @@ function UsersView({ user, setAuditLog }) {
                   </div>
                   {editPositions.map((pos,i)=>(
                     <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
-                      <select className="form-select" style={{fontSize:11}} value={pos.industry} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value}:p))}>
+                      <select className="form-select" style={{fontSize:11}} value={pos.industry} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value,position:''}:p))}>
                         <option value="">— Industry —</option>
                         {[...PRESET_INDUSTRIES,...orgCustomDepts.filter(d=>!PRESET_INDUSTRIES.includes(d))].map(k=><option key={k} value={k}>{k}</option>)}
                       </select>
                       <select className="form-select" style={{fontSize:11}} value={pos.role} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
-                        {ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                        <option value="">— Role —</option>
+                        {getInvitableRoles(user.role).map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                       </select>
-                      <input className="form-input" style={{fontSize:11}} value={pos.position} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))} placeholder="Position title"/>
+                      <select className="form-select" style={{fontSize:11}} value={pos.position} onChange={e=>setEditPositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
+                        <option value="">— Position —</option>
+                        {getPositionsForIndustry(pos.industry||'', orgCustomPositions, orgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
+                      </select>
                       <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:18,padding:'0 4px',lineHeight:1}} onClick={()=>setEditPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
                     </div>
                   ))}
@@ -4185,23 +4219,21 @@ function UsersView({ user, setAuditLog }) {
                   {['Industry','Role','Position',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
                 </div>
                 {invitePositions.map((row,i)=>{
-                  const defaultPositions = ['Staff Member','Supervisor','Manager',...(['super_admin','client_admin'].includes(user.role)?['Client Admin']:[])]
-                  const allPositions = [...defaultPositions, ...orgCustomPositions.filter(p=>!defaultPositions.includes(p))]
+                  const positions = getPositionsForIndustry(row.industry, orgCustomPositions, orgCustomRoles)
+                  const invitableRoles = getInvitableRoles(user.role)
                   return (
                     <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
-                      <select className="form-select" style={{fontSize:11}} value={row.industry} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value}:p))}>
+                      <select className="form-select" style={{fontSize:11}} value={row.industry} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value,position:''}:p))}>
                         <option value="">— Industry —</option>
                         {allIndustries.map(k=><option key={k} value={k}>{k}</option>)}
                       </select>
                       <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
                         <option value="">— Role —</option>
-                        <option value="worker">Staff Member</option>
-                        <option value="supervisor">Supervisor</option>
-                        <option value="manager">Manager</option>
+                        {invitableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                       </select>
                       <select className="form-select" style={{fontSize:11}} value={row.position} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
                         <option value="">— Position —</option>
-                        {allPositions.map(p=><option key={p} value={p}>{p}</option>)}
+                        {positions.map(p=><option key={p} value={p}>{p}</option>)}
                       </select>
                       <button style={{background:'none',border:'none',cursor:invitePositions.length>1?'pointer':'default',opacity:invitePositions.length>1?1:.3,color:'var(--red)',fontSize:16,padding:'0 4px',lineHeight:1}} onClick={()=>invitePositions.length>1&&setInvitePositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
                     </div>
