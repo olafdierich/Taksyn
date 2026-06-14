@@ -3759,6 +3759,7 @@ function UsersView({ user, setAuditLog }) {
   const [pendingInvites, setPendingInvites] = useState([])
   const [workforceOrgId, setWorkforceOrgId] = useState(null)
   const [pendingMsg, setPendingMsg] = useState('')
+  const [workforceOrgIndustry, setWorkforceOrgIndustry] = useState('')
 
   const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
   const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
@@ -3790,9 +3791,10 @@ function UsersView({ user, setAuditLog }) {
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
-    supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+    supabase.from('organisations').select('id,industry').eq('name', user.org).maybeSingle()
       .then(({data:orgRow})=>{
         if(!orgRow?.id) return
+        if(orgRow.industry) setWorkforceOrgIndustry(orgRow.industry)
         supabase.from('org_industries').select('name').eq('organisation_id', orgRow.id)
           .then(({data})=>{ if(data?.length) setOrgCustomDepts(data.map(d=>d.name)) }).catch(()=>{})
       }).catch(()=>{})
@@ -3823,6 +3825,7 @@ function UsersView({ user, setAuditLog }) {
 
   const openInviteForm = async (method) => {
     if(method) setInviteMethod(method)
+    setInvitePositions([{industry: workforceOrgIndustry, role:'', position:''}])
     setShowInvite(true)
     const targetOrg = user.role==='super_admin' ? inviteOrg.trim()||'' : user.org
     await loadInviteOrgData(targetOrg)
@@ -4279,14 +4282,11 @@ function UsersView({ user, setAuditLog }) {
                   {['Industry','Permission Level','Job Title',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
                 </div>
                 {invitePositions.map((row,i)=>{
-                  const positions = getPositionsForIndustry(row.industry, row.role, orgCustomPositions, orgCustomRoles)
+                  const positions = getPositionsForIndustry(workforceOrgIndustry, row.role, orgCustomPositions, orgCustomRoles)
                   const invitableRoles = getInvitableRoles(user.role)
                   return (
                     <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
-                      <select className="form-select" style={{fontSize:11}} value={row.industry} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value,position:''}:p))}>
-                        <option value="">— Industry —</option>
-                        {allIndustries.map(k=><option key={k} value={k}>{k}</option>)}
-                      </select>
+                      <input className="form-input" style={{fontSize:11,background:'var(--s3)',cursor:'default'}} value={workforceOrgIndustry||'—'} readOnly/>
                       <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
                         <option value="">— Role —</option>
                         {invitableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
@@ -4299,7 +4299,7 @@ function UsersView({ user, setAuditLog }) {
                     </div>
                   )
                 })}
-                <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setInvitePositions(prev=>[...prev,{industry:'',role:'',position:''}])}>+ Add another position</button>
+                <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setInvitePositions(prev=>[...prev,{industry:workforceOrgIndustry,role:'',position:''}])}>+ Add another position</button>
               </div>
               {(inviteFirstName.trim()||inviteLastName.trim())&&invitePositions.some(p=>p.role||p.position)&&(
                 <div style={{background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--text)',lineHeight:1.5}}>
@@ -4665,7 +4665,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   useEffect(()=>{
     if(!isConfigured()||!showInvite?.id) return
     const orgId = showInvite.id
-    setInviteOrgPositions([{industry:'',role:'',position:''}])
+    setInviteOrgPositions([{industry:showInvite?.industry||'',role:'client_admin',position:''}])
     setEditOrgCustomRoles([])
     setEditOrgCustomPositions([])
     setEditOrgIndustries([])
@@ -5360,11 +5360,8 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             {inviteEmailExistsMsg&&<div style={{fontSize:13,padding:'8px 12px',borderRadius:6,background:'rgba(99,102,241,.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,.3)'}}>{inviteEmailExistsMsg}</div>}
             <input className="form-input" type="tel" placeholder="Phone (for WhatsApp invite)" value={invitePhone} onChange={e=>setInvitePhone(e.target.value)} style={{fontSize:13}}/>
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Industry <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0}}>— optional</span></div>
-              <select className="form-select" style={{fontSize:13}} value={inviteOrgPositions[0]?.industry||''} onChange={e=>setInviteOrgPositions([{industry:e.target.value,role:'client_admin',position:''}])}>
-                <option value="">— Select Industry —</option>
-                {(editOrgIndustries.length?editOrgIndustries:PRESET_INDUSTRIES).map(k=><option key={k} value={k}>{k}</option>)}
-              </select>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Industry</div>
+              <input className="form-input" style={{fontSize:13,background:'var(--s3)',cursor:'default'}} value={showInvite?.industry||'—'} readOnly/>
               <div style={{marginTop:8}}>
                 <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Position <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0}}>— optional</span></div>
                 <select className="form-select" style={{fontSize:13}} value={inviteOrgPositions[0]?.position||''} onChange={e=>setInviteOrgPositions([{...inviteOrgPositions[0],position:e.target.value}])}>
@@ -8221,6 +8218,7 @@ function TeamsView({ user }) {
   const [inviteLinkPosition, setInviteLinkPosition] = useState('')
   const [teamOrgCustomPositions, setTeamOrgCustomPositions] = useState([])
   const [teamOrgCustomRoles, setTeamOrgCustomRoles] = useState([])
+  const [teamOrgIndustry, setTeamOrgIndustry] = useState('')
   const isCA = ['client_admin','super_admin'].includes(user.role)
 
   useEffect(()=>{
@@ -8229,10 +8227,11 @@ function TeamsView({ user }) {
     supabase.from('teams').select('*').eq('org',user.org).order('name')
       .then(({data})=>{ if(data) setTeams(data) }).catch(()=>{})
     // Load org id and team types first, then load members using both org name and id
-    supabase.from('organisations').select('id,team_types').eq('name',user.org).maybeSingle()
+    supabase.from('organisations').select('id,team_types,industry').eq('name',user.org).maybeSingle()
       .then(async ({data}) => {
         if(!data) return
         if(data.team_types) setTeamTypes(JSON.parse(data.team_types||'[]'))
+        if(data.industry) { setTeamOrgIndustry(data.industry); setInviteLinkIndustry(data.industry) }
         if(data.id) {
           setOrgId(data.id)
           supabase.from('org_custom_positions').select('position_name').eq('organisation_id',data.id)
@@ -8261,6 +8260,7 @@ function TeamsView({ user }) {
           team_id: team.id,
           role: inviteLinkRole,
           position: inviteLinkPosition || null,
+          invited_industry: teamOrgIndustry || null,
           secret: linkId,
           created_by: user.id,
           created_at: new Date().toISOString(),
@@ -8342,6 +8342,7 @@ function TeamsView({ user }) {
           team_id: team.id,
           role: inviteLinkRole,
           position: inviteLinkPosition || null,
+          invited_industry: teamOrgIndustry || null,
           secret: linkId,
           created_by: user.id,
           created_at: new Date().toISOString(),
@@ -8496,22 +8497,19 @@ function TeamsView({ user }) {
                       </select>
                     </div>
                     <div className="form-field">
-                      <label className="form-label">Industry <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
-                      <select className="form-select" value={inviteLinkIndustry} onChange={e=>{setInviteLinkIndustry(e.target.value);setInviteLinkPosition('')}}>
-                        <option value="">— Industry —</option>
-                        {PRESET_INDUSTRIES.map(k=><option key={k} value={k}>{k}</option>)}
-                      </select>
+                      <label className="form-label">Industry</label>
+                      <input className="form-input" value={teamOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/>
                     </div>
                     <div className="form-field">
                       <label className="form-label">Job Title <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
                       <select className="form-select" value={inviteLinkPosition} onChange={e=>setInviteLinkPosition(e.target.value)}>
                         <option value="">— Job Title —</option>
-                        {getPositionsForIndustry(inviteLinkIndustry, inviteLinkRole, teamOrgCustomPositions, teamOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
+                        {getPositionsForIndustry(teamOrgIndustry, inviteLinkRole, teamOrgCustomPositions, teamOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
                       </select>
                     </div>
                   </div>
                   <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>
-                    Link will pre-fill: <strong>{selectedTeam.name}</strong> · <strong>{ROLE_LABELS[inviteLinkRole]}</strong>{inviteLinkIndustry&&<> · <strong>{inviteLinkIndustry}</strong></>}{inviteLinkPosition&&<> · <strong>{inviteLinkPosition}</strong></>}
+                    Link will pre-fill: <strong>{selectedTeam.name}</strong> · <strong>{ROLE_LABELS[inviteLinkRole]}</strong>{teamOrgIndustry&&<> · <strong>{teamOrgIndustry}</strong></>}{inviteLinkPosition&&<> · <strong>{inviteLinkPosition}</strong></>}
                   </div>
                   <div style={{display:'flex',gap:8}}>
                     <button className="btn btn-primary btn-sm" onClick={()=>shareInviteLink(selectedTeam)}>💬 Send via WhatsApp</button>
