@@ -5670,8 +5670,8 @@ function RolesPositionsView({ user }) {
   }
 
   const TABS = isSuper
-    ? [['global_industries','Global Industries'],['roles','Positions per Industry'],['positions','Permission Levels']]
-    : [['roles','Positions per Industry'],['positions','Permission Levels']]
+    ? [['global_industries','Global Industries'],['roles','Positions per Industry'],['positions','Roles']]
+    : [['roles','Positions per Industry'],['positions','Roles']]
 
   const ROW = {display:'flex',alignItems:'center',gap:6,padding:'8px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)',marginBottom:4}
   const BADGE = (label, color='#6B7280') => <span style={{fontSize:9,fontWeight:700,color,background:color+'18',border:'1px solid '+color+'30',borderRadius:4,padding:'1px 6px',letterSpacing:'.4px',flexShrink:0}}>{label}</span>
@@ -5784,7 +5784,7 @@ function RolesPositionsView({ user }) {
               <div style={{fontSize:13,color:'var(--t2)'}}>Loading organisation…</div>
             ) : (
               <>
-                {roles.length===0 && <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>No job titles defined yet — click Add Job Title to get started.</div>}
+                {roles.length===0 && <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>{isSuper ? 'No job titles defined yet — click Add Job Title to get started.' : 'No positions defined yet — contact your Taksyn administrator to add positions for this industry.'}</div>}
                 <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
                   {roles.map((role,idx)=>(
                     <div key={role.id} style={ROW}>
