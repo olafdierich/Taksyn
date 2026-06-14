@@ -10297,22 +10297,19 @@ export default function App() {
           </div>
         )}
 
-        <div className="topbar" style={user.role==='super_admin'?{background:'#0F172A',borderBottom:'1px solid rgba(255,255,255,.06)'}:{}}>
-          <button className="tb-menu-btn" style={user.role==='super_admin'?{color:'rgba(255,255,255,.5)'}:{}} onClick={()=>{ if(window.innerWidth<=768) setSidebarOpen(!sidebarOpen); else setSidebarCollapsed(!sidebarCollapsed) }}><IC n="menu" s={18}/></button>
+        <div className="topbar">
+          <button className="tb-menu-btn" onClick={()=>{ if(window.innerWidth<=768) setSidebarOpen(!sidebarOpen); else setSidebarCollapsed(!sidebarCollapsed) }}><IC n="menu" s={18}/></button>
           <img src="/logo.jpeg" alt="Taksyn" className="tb-logo" onClick={()=>navigate('dashboard')}/>
-          {user.role==='super_admin'
-            ? <><div className="tb-sep" style={{background:'rgba(255,255,255,.1)'}}/><span style={{fontSize:12,fontWeight:700,color:'#F59E0B',letterSpacing:'.5px'}}>PLATFORM ADMIN</span></>
-            : <><div className="tb-sep"/><span className="tb-org">{user.org||'My Organisation'}</span></>
-          }
+          <div className="tb-sep"/><span className="tb-org">{user.role==='super_admin'?'Platform Admin':user.org||'My Organisation'}</span>
           <div className="tb-space"/>
           {user.role!=='super_admin'&&<div className="tb-search"><IC n="search" s={12}/><input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/></div>}
-          <button className="tb-icon-btn" style={user.role==='super_admin'?{color:'rgba(255,255,255,.5)'}:{}} onClick={()=>setShowNotifPanel(v=>!v)}>
+          <button className="tb-icon-btn" onClick={()=>setShowNotifPanel(v=>!v)}>
             <IC n="bell" s={16}/>
             {notifications.filter(n=>!n.read).length>0&&<div className="tb-badge">{notifications.filter(n=>!n.read).length}</div>}
           </button>
-          <div className="tb-user" style={user.role==='super_admin'?{color:'rgba(255,255,255,.8)'}:{}} onClick={()=>{ if(user.role==='super_admin') navigate('my_account'); else { setShowProfile(true);setProfileName(user.name);setProfileMsg('') } }}>
+          <div className="tb-user" onClick={()=>{ if(user.role==='super_admin') navigate('my_account'); else { setShowProfile(true);setProfileName(user.name);setProfileMsg('') } }}>
             <Avatar name={user.name} role={user.role} size={26} avatarUrl={user.avatar_url}/>
-            <div><div className="tb-user-name" style={user.role==='super_admin'?{color:'rgba(255,255,255,.9)'}:{}}>{user.name?.split(' ')[0]}</div><div className="tb-user-role" style={user.role==='super_admin'?{color:'#F59E0B'}:{}}>{ROLE_LABELS[user.role]}</div></div>
+            <div><div className="tb-user-name">{user.name?.split(' ')[0]}</div><div className="tb-user-role">{ROLE_LABELS[user.role]}</div></div>
           </div>
         </div>
 
@@ -10622,46 +10619,10 @@ export default function App() {
         <div className="main">
           <div className={"sidebar-overlay "+(sidebarOpen?'open':'')} onClick={()=>setSidebarOpen(false)}/>
 
-          {user.role==='super_admin' ? (
-            /* ── SUPER ADMIN SIDEBAR ── dark platform-admin theme */
-            <div className={"sidebar "+(sidebarCollapsed?'collapsed ':''+(sidebarOpen?'mobile-open':''))} style={{background:'#0F172A',borderRight:'1px solid rgba(255,255,255,.06)'}}>
-              <div style={{padding:'16px 12px 8px'}}>
-                {!sidebarCollapsed&&(
-                  <div style={{marginBottom:16,padding:'10px 10px',borderRadius:8,background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)'}}>
-                    <div style={{fontSize:9,fontWeight:800,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'1.2px',marginBottom:2}}>Platform Admin</div>
-                    <div style={{fontSize:11,color:'rgba(255,255,255,.5)',lineHeight:1.3}}>Taksyn Control Panel</div>
-                  </div>
-                )}
-                {navItems.map(([key,label,icon])=>{
-                  const active = page===key
-                  return (
-                    <button key={key} onClick={()=>navigate(key)} title={label} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',borderRadius:6,cursor:'pointer',width:'100%',textAlign:'left',fontFamily:'inherit',border:'none',marginBottom:2,fontSize:13,fontWeight:active?700:500,background:active?'rgba(245,158,11,.15)':'transparent',color:active?'#F59E0B':'rgba(255,255,255,.65)',transition:'all .15s',whiteSpace:'nowrap',overflow:'hidden'}}>
-                      <IC n={icon} s={15}/>
-                      <span className="nav-item-label">{label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-              <div style={{marginTop:'auto',padding:'10px 12px',borderTop:'1px solid rgba(255,255,255,.06)'}}>
-                <button onClick={()=>navigate('guide')} title="Getting Started Guide" style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:6,border:'1px solid rgba(255,255,255,.12)',background:page==='guide'?'rgba(245,158,11,.15)':'transparent',color:page==='guide'?'#F59E0B':'rgba(255,255,255,.5)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',width:'100%',textAlign:'left',marginBottom:6,overflow:'hidden'}}>
-                  <span style={{width:18,height:18,borderRadius:'50%',background:page==='guide'?'#F59E0B':'rgba(255,255,255,.15)',color:page==='guide'?'#0F172A':'rgba(255,255,255,.6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0}}>?</span>
-                  <span className="nav-item-label">Getting Started</span>
-                </button>
-                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:6,background:'rgba(255,255,255,.05)',marginBottom:6,overflow:'hidden'}}>
-                  <Avatar name={user.name} role={user.role} size={28} avatarUrl={user.avatar_url}/>
-                  <div className="sb-user-info">
-                    <div style={{fontSize:11,fontWeight:600,color:'rgba(255,255,255,.9)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.name}</div>
-                    <div style={{fontSize:9,color:'#F59E0B',fontWeight:700,letterSpacing:'.3px'}}>Super Admin</div>
-                  </div>
-                </div>
-                <button onClick={logout} style={{width:'100%',padding:'7px',background:'rgba(239,68,68,.12)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6,color:'#F87171',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Sign Out</button>
-              </div>
-            </div>
-          ) : (
-            /* ── STANDARD SIDEBAR ── */
+          {/* ── UNIFIED SIDEBAR (all roles) ── */}
             <div className={"sidebar "+(sidebarCollapsed?'collapsed ':''+(sidebarOpen?'mobile-open':''))}>
               <div className="sb-section">
-                <div className="sb-label">Navigation</div>
+                <div className="sb-label">{user.role==='super_admin'?'Platform Admin':'Navigation'}</div>
                 {navItems.map(([key,label,icon])=>(
                   <button key={key} className={"nav-item "+(page===key?'active':'')} onClick={()=>navigate(key)} title={label}>
                     <IC n={icon} s={15}/>
@@ -10697,7 +10658,6 @@ export default function App() {
                 <button className="sb-logout" onClick={logout}>Sign Out</button>
               </div>
             </div>
-          )}
 
           <div className="content">
             {PAGE_ACCESS[page]&&!hasAccess(user.role,PAGE_ACCESS[page]) ? (
