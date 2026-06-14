@@ -3857,7 +3857,7 @@ function UsersView({ user, setAuditLog }) {
       }
       setWorkforceOrgId(orgId)
       supabase.from('invite_links')
-        .select('id,invited_name,invited_first_name,invited_last_name,invited_email,invited_role,invited_industry,created_at,expires_at')
+        .select('id,invited_name,invited_email,invited_role,invited_position,invited_industry,created_at,expires_at')
         .eq('organisation_id', orgId).is('used_at', null).eq('is_active', true)
         .gt('expires_at', new Date().toISOString())
         .then(({data})=>{ if(data) setPendingInvites(data) }).catch(()=>{})
@@ -4067,7 +4067,7 @@ function UsersView({ user, setAuditLog }) {
       logAuditEvent(user, 'member.invited', 'member', null, (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), ROLE_LABELS[systemRole]+' · '+inviteEmail.trim())
       // Refresh pending invites so the Pending section updates immediately
       if (workforceOrgId) {
-        supabase.from('invite_links').select('id,invited_name,invited_first_name,invited_last_name,invited_email,invited_role,invited_industry,created_at,expires_at').eq('organisation_id', workforceOrgId).is('used_at', null).eq('is_active', true).gt('expires_at', new Date().toISOString()).then(({data})=>{ if(data) setPendingInvites(data) }).catch(()=>{})
+        supabase.from('invite_links').select('id,invited_name,invited_email,invited_role,invited_position,invited_industry,created_at,expires_at').eq('organisation_id', workforceOrgId).is('used_at', null).eq('is_active', true).gt('expires_at', new Date().toISOString()).then(({data})=>{ if(data) setPendingInvites(data) }).catch(()=>{})
       }
       setShowInvite(false); resetInviteForm()
     } catch(e) {
