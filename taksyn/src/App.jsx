@@ -1802,7 +1802,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'Hospitality', department:'', industry:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[] })
+  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[] })
   const [selectedTplId, setSelectedTplId] = useState('')
   const [taskGlobalIndustries, setTaskGlobalIndustries] = useState([])
   const [taskOrgIndustries, setTaskOrgIndustries] = useState([])
@@ -1819,15 +1819,25 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [clMarkOpen, setClMarkOpen] = useState(null) // {taskId, idx, itemId, label}
   const [clMarkNote, setClMarkNote] = useState('')
   const [clFlash, setClFlash] = useState(null) // 'taskId::itemId' — brief ✓ flash
+  const [taskOrgIndustry, setTaskOrgIndustry] = useState('')
+  const [taskOrgCustomPositions, setTaskOrgCustomPositions] = useState([])
+  const [taskOrgCustomRoles, setTaskOrgCustomRoles] = useState([])
+  const [checklistMode, setChecklistMode] = useState('scratch')
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
-    supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+    supabase.from('organisations').select('id,industry').eq('name',user.org).maybeSingle()
       .then(({data:orgRow})=>{
         const orgId = orgRow?.id; if(!orgId) return
+        if(orgRow?.industry) setTaskOrgIndustry(orgRow.industry)
         supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
           .then(({data})=>{ if(data) setTemplates(data.map(t=>({...t,items:parseSafe(t.items)}))) })
           .catch(()=>{})
+        supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name')
+          .then(({data})=>{ if(data) setTaskOrgCustomRoles(data) }).catch(()=>{})
+        supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name')
+          .then(({data})=>{ if(data) setTaskOrgCustomPositions(data.map(d=>d.position_name)) }).catch(()=>{})
       }).catch(()=>{})
   },[user.org])
 
@@ -1873,6 +1883,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         }).catch(()=>{})
     }
   },[user.org])
+
+  useEffect(()=>{
+    if(!pendingDelete) return
+    const timer = setTimeout(()=>setPendingDelete(null), 3000)
+    return ()=>clearTimeout(timer)
+  },[pendingDelete])
 
   const taskAllIndustries = [...(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES), ...taskOrgIndustries.filter(d=>!(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES).includes(d))]
 
@@ -2153,7 +2169,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     setShowCreate(false)
     setUserSearch('')
     setSelectedTplId('')
-    setNewTask({title:'',category:'Hospitality',department:'',industry:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[]})
+    setChecklistMode('scratch')
+    setPendingDelete(null)
+    setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[]})
     // Do the async work in background
     const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     setTasks(prev=>[...prev,t])
@@ -2288,15 +2306,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       )}
 
       {showCreate&&(
-        <div className="modal-overlay" onClick={()=>{ setShowCreate(false); setSelectedTplId('') }}>
+        <div className="modal-overlay" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null) }}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-hdr"><div className="modal-title">Create New Task</div><button className="modal-close" onClick={()=>{ setShowCreate(false); setSelectedTplId('') }}>×</button></div>
+            <div className="modal-hdr"><div className="modal-title">Create New Task</div><button className="modal-close" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null) }}>×</button></div>
             <div className="modal-body">
               <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/></div>
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={newTask.category} onChange={e=>setNewTask({...newTask,category:e.target.value,department:''})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
-                <div className="form-field"><label className="form-label">Department</label><select className="form-select" value={newTask.department||''} onChange={e=>setNewTask({...newTask,department:e.target.value})}><option value="">— Select —</option>{(DEPARTMENTS[newTask.category]||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
-                <div className="form-field"><label className="form-label">Industry <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label><select className="form-select" value={newTask.industry||''} onChange={e=>setNewTask({...newTask,industry:e.target.value})}><option value="">— Select —</option>{taskAllIndustries.map(k=><option key={k} value={k}>{k}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={taskOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
+                <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value,position:''})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Position</label><select className="form-select" value={newTask.position||''} onChange={e=>setNewTask({...newTask,position:e.target.value})}><option value="">— Select —</option>{getPositionsForIndustry(taskOrgIndustry||newTask.industry,newTask.assigned_role,taskOrgCustomPositions,taskOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
               <div className="two-col">
@@ -2309,7 +2327,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     <input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>
                     <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
                       <option value="">— Select a staff member —</option>
-                      {teamUsers.filter(u=>(assignableRoles.includes(u.role))&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {getUserDeptRole(u, newTask.department||newTask.category)}</option>)}
+                      {teamUsers.filter(u=>(assignableRoles.includes(u.role))&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {getUserDeptRole(u,newTask.position||newTask.category)}</option>)}
                     </select>
                     {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
                     {teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
@@ -2332,42 +2350,56 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 <label htmlFor="comp" style={{fontSize:13,cursor:'pointer'}}>Mark as compliance-critical</label>
               </div>
               <div className="form-field">
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                  <label className="form-label" style={{margin:0}}>Checklist Template <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
-                  {selectedTplId&&<span style={{fontSize:11,color:'var(--brand)',cursor:'pointer',fontWeight:500}} onClick={()=>{ setSelectedTplId(''); setNewTask({...newTask,subtasks:[]}) }}>✕ Clear</span>}
+                <div style={{display:'flex',alignItems:'center',marginBottom:10}}>
+                  <label className="form-label" style={{margin:0,flex:1}}>Checklist</label>
+                  <div style={{display:'flex',gap:4}}>
+                    <button type="button" className={'btn btn-sm '+(checklistMode==='scratch'?'btn-primary':'btn-secondary')} onClick={()=>setChecklistMode('scratch')}>New Task</button>
+                    <button type="button" className={'btn btn-sm '+(checklistMode==='template'?'btn-primary':'btn-secondary')} onClick={()=>setChecklistMode('template')}>From Template</button>
+                  </div>
                 </div>
-                <select className="form-select" value={selectedTplId} onChange={e=>{
-                  const tmpl=templates.find(t=>t.id===e.target.value)
-                  if(tmpl){
-                    setSelectedTplId(e.target.value)
-                    setNewTask({...newTask, priority:tmpl.priority||newTask.priority, subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))})
-                  } else { setSelectedTplId('') }
-                }}>
-                  <option value="">— None (build from scratch) —</option>
-                  {(()=>{ const grps={}; templates.forEach(t=>{ const g=t.position||'General'; if(!grps[g]) grps[g]=[]; grps[g].push(t) }); const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) }); return keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>) })()}
-                </select>
-                {selectedTplId&&templates.find(t=>t.id===selectedTplId)?.description&&(
-                  <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{templates.find(t=>t.id===selectedTplId).description}</div>
+                {checklistMode==='template'&&(
+                  <div style={{marginBottom:10}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                      <span style={{fontSize:11,color:'var(--t2)'}}>Select a checklist template</span>
+                      {selectedTplId&&<span style={{fontSize:11,color:'var(--brand)',cursor:'pointer',fontWeight:500}} onClick={()=>{ setSelectedTplId(''); setNewTask({...newTask,subtasks:[]}) }}>✕ Clear</span>}
+                    </div>
+                    <select className="form-select" value={selectedTplId} onChange={e=>{
+                      const tmpl=templates.find(t=>t.id===e.target.value)
+                      if(tmpl){
+                        setSelectedTplId(e.target.value)
+                        setNewTask({...newTask,priority:tmpl.priority||newTask.priority,subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))})
+                      } else { setSelectedTplId('') }
+                    }}>
+                      <option value="">— None —</option>
+                      {(()=>{ const grps={}; templates.forEach(t=>{ const g=t.position||'General'; if(!grps[g]) grps[g]=[]; grps[g].push(t) }); const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) }); return keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>) })()}
+                    </select>
+                    {selectedTplId&&templates.find(t=>t.id===selectedTplId)?.description&&(
+                      <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{templates.find(t=>t.id===selectedTplId).description}</div>
+                    )}
+                  </div>
                 )}
-              </div>
-              <div className="form-field">
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                  <label className="form-label" style={{margin:0}}>Checklist Items</label>
+                  <span style={{fontSize:12,color:'var(--t2)'}}>Checklist Items</span>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setNewTask({...newTask,subtasks:[...(newTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
                 </div>
+                {pendingDelete&&(
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6,padding:'6px 10px',marginBottom:6,fontSize:12}}>
+                    <span style={{color:'var(--t1)'}}>Item removed — <button type="button" style={{background:'none',border:'none',color:'var(--brand)',cursor:'pointer',fontWeight:600,padding:0,fontSize:12}} onClick={()=>{ setNewTask(prev=>{ const subs=[...(prev.subtasks||[])]; subs.splice(pendingDelete.idx,0,pendingDelete.item); return {...prev,subtasks:subs} }); setPendingDelete(null) }}>Undo</button></span>
+                  </div>
+                )}
                 {(newTask.subtasks||[]).map((s,i)=>(
                   <div key={s.id||i} className="cl-build-item">
                     <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
                     <button type="button" className="cl-flag-btn" title="Mandatory — blocks submit" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.08)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}><strong>*</strong></button>
                     <button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
-                    <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).filter((_,j)=>j!==i)})}>×</button>
+                    <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>{ const removed=(newTask.subtasks||[])[i]; setNewTask({...newTask,subtasks:(newTask.subtasks||[]).filter((_,j)=>j!==i)}); setPendingDelete({idx:i,item:removed}) }}>×</button>
                   </div>
                 ))}
-                {!(newTask.subtasks||[]).length&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
+                {!(newTask.subtasks||[]).length&&!pendingDelete&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                <button className="btn btn-secondary" onClick={()=>{ setShowCreate(false); setSelectedTplId('') }}>Cancel</button>
-                <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id)} onClick={createTask}>{creating?'Creating…':'Create Task'}</button>
+                <button className="btn btn-secondary" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null) }}>Cancel</button>
+                <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id)} onClick={createTask}>{creating?'Creating…':'Submit Task'}</button>
               </div>
             </div>
           </div>
