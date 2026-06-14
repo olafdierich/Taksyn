@@ -2344,7 +2344,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   } else { setSelectedTplId('') }
                 }}>
                   <option value="">— None (build from scratch) —</option>
-                  {templates.map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}
+                  {(()=>{ const grps={}; templates.forEach(t=>{ const g=t.position||'General'; if(!grps[g]) grps[g]=[]; grps[g].push(t) }); const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) }); return keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>) })()}
                 </select>
                 {selectedTplId&&templates.find(t=>t.id===selectedTplId)?.description&&(
                   <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{templates.find(t=>t.id===selectedTplId).description}</div>
@@ -5994,6 +5994,9 @@ function CompanySettingsView({ user }) {
   const [tplItems, setTplItems] = useState([{label:'',required:false}])
   const [tplSaving, setTplSaving] = useState(false)
   const [editingTpl, setEditingTpl] = useState(null)
+  const [tplIndustry, setTplIndustry] = useState('')
+  const [tplRole, setTplRole] = useState('')
+  const [tplPosition, setTplPosition] = useState('')
   const tplFormRef = useRef(null)
   // Team Management tab state
   const [tmGlobalInds, setTmGlobalInds] = useState([])
@@ -6174,13 +6177,16 @@ function CompanySettingsView({ user }) {
     }).catch(()=>{})
   },[orgId, tmLoaded])
 
-  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setEditingTpl(null) }
+  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setTplIndustry(''); setTplRole(''); setTplPosition(''); setEditingTpl(null) }
 
   const startEditTpl = (t) => {
     setEditingTpl(t)
     setTplName(t.name||'')
     setTplDescription(t.description||'')
     setTplPriority(t.priority||'medium')
+    setTplIndustry(t.industry||'')
+    setTplRole(t.role||'')
+    setTplPosition(t.position||'')
     setTplItems((t.items||[]).length ? t.items.map(it=>({label:it.label||it.text||'',required:!!(it.required||it.mandatory)})) : [{label:'',required:false}])
     setMsg('')
     setTimeout(()=>tplFormRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),30)
@@ -6192,7 +6198,7 @@ function CompanySettingsView({ user }) {
     setTplSaving(true); setMsg('')
     const items = validItems.map((it,idx)=>({ id:String(idx+1), label:it.label.trim(), required:!!it.required }))
     if (editingTpl) {
-      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, items:JSON.stringify(items) }
+      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, position:tplPosition||null, items:JSON.stringify(items) }
       if (isConfigured()) {
         const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id)
         if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
@@ -6200,7 +6206,7 @@ function CompanySettingsView({ user }) {
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, position:tplPosition||null, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) {
         const { error } = await supabase.from('checklist_templates').insert(entry)
         if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
@@ -6642,6 +6648,9 @@ function CompanySettingsView({ user }) {
                     <span style={{fontWeight:700,fontSize:13}}>{t.name}</span>
                     <PriBadge priority={t.priority||'medium'}/>
                     <span style={{fontSize:11,color:'var(--t2)'}}>{t.items?.length||0} items</span>
+                    {t.position&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{t.position}</span>}
+                    {t.industry&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{t.industry}</span>}
+                    {t.role&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{ROLE_LABELS[t.role]||t.role}</span>}
                   </div>
                   {t.description&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:6}}>{t.description}</div>}
                   <div style={{display:'flex',flexDirection:'column',gap:2}}>
@@ -6683,6 +6692,29 @@ function CompanySettingsView({ user }) {
           <div className="form-field">
             <label className="form-label">Description <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
             <input className="form-input" placeholder="Brief description of when to use this template" value={tplDescription} onChange={e=>setTplDescription(e.target.value)}/>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+            <div className="form-field">
+              <label className="form-label">Industry <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
+              <select className="form-select" value={tplIndustry} onChange={e=>{setTplIndustry(e.target.value);setTplPosition('')}}>
+                <option value="">All industries</option>
+                {[...new Set([...tmGlobalInds,...tmOrgInds].map(i=>i.name))].sort().map(n=><option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <div className="form-field">
+              <label className="form-label">Role <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
+              <select className="form-select" value={tplRole} onChange={e=>{setTplRole(e.target.value);setTplPosition('')}}>
+                <option value="">All roles</option>
+                {['worker','supervisor','manager','client_admin'].map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+            </div>
+            <div className="form-field">
+              <label className="form-label">Position <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
+              <select className="form-select" value={tplPosition} onChange={e=>setTplPosition(e.target.value)} disabled={!tplIndustry&&!tplRole}>
+                <option value="">{tplIndustry||tplRole?'All positions':'Select industry or role first'}</option>
+                {(tplIndustry||tplRole)?getPositionsForIndustry(tplIndustry,tplRole,tmCustomPos.map(p=>p.position_name),tmAllRoles).map(p=><option key={p} value={p}>{p}</option>):[]}
+              </select>
+            </div>
           </div>
           <div className="form-field">
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
@@ -6998,6 +7030,12 @@ function TemplatesView({ user }) {
   const [tplItems, setTplItems] = useState([{label:'',required:false}])
   const [tplSaving, setTplSaving] = useState(false)
   const [editingTpl, setEditingTpl] = useState(null)
+  const [tplIndustry, setTplIndustry] = useState('')
+  const [tplRole, setTplRole] = useState('')
+  const [tplPosition, setTplPosition] = useState('')
+  const [industryList, setIndustryList] = useState([])
+  const [tvCustomPositions, setTvCustomPositions] = useState([])
+  const [tvCustomRoles, setTvCustomRoles] = useState([])
   const [msg, setMsg] = useState('')
   const tplFormRef = useRef(null)
 
@@ -7013,15 +7051,29 @@ function TemplatesView({ user }) {
     supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
       .then(({data})=>{ if(data) setTplList(data.map(t=>({...t,items:parseSafe(t.items)}))) })
       .catch(()=>{})
+    Promise.all([
+      supabase.from('global_industries').select('name').order('name'),
+      supabase.from('org_industries').select('name').eq('organisation_id',orgId),
+      supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId),
+      supabase.from('org_custom_roles').select('*').eq('organisation_id',orgId)
+    ]).then(([gi,oi,cp,cr])=>{
+      const names=[...new Set([...(gi.data||[]),...(oi.data||[])].map(i=>i.name))].sort()
+      setIndustryList(names)
+      if(cp.data) setTvCustomPositions(cp.data.map(p=>p.position_name))
+      if(cr.data) setTvCustomRoles(cr.data)
+    }).catch(()=>{})
   },[orgId])
 
-  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setEditingTpl(null) }
+  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setTplIndustry(''); setTplRole(''); setTplPosition(''); setEditingTpl(null) }
 
   const startEditTpl = (t) => {
     setEditingTpl(t)
     setTplName(t.name||'')
     setTplDescription(t.description||'')
     setTplPriority(t.priority||'medium')
+    setTplIndustry(t.industry||'')
+    setTplRole(t.role||'')
+    setTplPosition(t.position||'')
     const items = parseSafe(t.items)
     setTplItems(items.length?items:[{label:'',required:false}])
     setTimeout(()=>tplFormRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),30)
@@ -7033,12 +7085,12 @@ function TemplatesView({ user }) {
     setTplSaving(true)
     const items = validItems.map(i=>({label:i.label.trim(),required:!!i.required}))
     if (editingTpl) {
-      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, items:JSON.stringify(items) }
+      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, position:tplPosition||null, items:JSON.stringify(items) }
       if (isConfigured()) { const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, position:tplPosition||null, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) { const { error } = await supabase.from('checklist_templates').insert(entry); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
       setTplList(prev=>[...prev,{...entry,items}].sort((a,b)=>a.name.localeCompare(b.name)))
       setMsg('✓ Template saved')
@@ -7072,6 +7124,9 @@ function TemplatesView({ user }) {
                   <span style={{fontWeight:700,fontSize:13}}>{t.name}</span>
                   <PriBadge priority={t.priority||'medium'}/>
                   <span style={{fontSize:11,color:'var(--t2)'}}>{t.items?.length||0} items</span>
+                  {t.position&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{t.position}</span>}
+                  {t.industry&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{t.industry}</span>}
+                  {t.role&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{ROLE_LABELS[t.role]||t.role}</span>}
                 </div>
                 {t.description&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:6}}>{t.description}</div>}
                 <div style={{display:'flex',flexDirection:'column',gap:2}}>
@@ -7116,6 +7171,29 @@ function TemplatesView({ user }) {
           <div className="form-field">
             <label className="form-label">Description <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
             <input className="form-input" placeholder="Brief description of when to use this template" value={tplDescription} onChange={e=>setTplDescription(e.target.value)}/>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+            <div className="form-field">
+              <label className="form-label">Industry <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
+              <select className="form-select" value={tplIndustry} onChange={e=>{setTplIndustry(e.target.value);setTplPosition('')}}>
+                <option value="">All industries</option>
+                {industryList.map(n=><option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <div className="form-field">
+              <label className="form-label">Role <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
+              <select className="form-select" value={tplRole} onChange={e=>{setTplRole(e.target.value);setTplPosition('')}}>
+                <option value="">All roles</option>
+                {['worker','supervisor','manager','client_admin'].map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+            </div>
+            <div className="form-field">
+              <label className="form-label">Position <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
+              <select className="form-select" value={tplPosition} onChange={e=>setTplPosition(e.target.value)} disabled={!tplIndustry&&!tplRole}>
+                <option value="">{tplIndustry||tplRole?'All positions':'Select industry or role first'}</option>
+                {(tplIndustry||tplRole)?getPositionsForIndustry(tplIndustry,tplRole,tvCustomPositions,tvCustomRoles).map(p=><option key={p} value={p}>{p}</option>):[]}
+              </select>
+            </div>
           </div>
           <div className="form-field">
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
