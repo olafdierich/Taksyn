@@ -10116,6 +10116,7 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false)
   const [profileName, setProfileName] = useState('')
   const [profileMsg, setProfileMsg] = useState('')
+  const [profileOrgIndustry, setProfileOrgIndustry] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -10158,6 +10159,12 @@ export default function App() {
   useEffect(()=>{ notifIdsRef.current = new Set(notifications.map(n=>n.id)) },[notifications])
   const tasksRef = useRef([])
   useEffect(()=>{ tasksRef.current = tasks },[tasks])
+  useEffect(()=>{
+    if(!showProfile||!user?.org||!isConfigured()) return
+    supabase.from('organisations').select('industry').eq('name',user.org).maybeSingle()
+      .then(({data})=>{ setProfileOrgIndustry(data?.industry||'') })
+      .catch(()=>{})
+  },[showProfile, user?.org])
   const undoTimer = useRef(null)
   const idleTimer = useRef(null)
   const countdownTimer = useRef(null)
@@ -10480,18 +10487,23 @@ export default function App() {
 
   const handleSwitchOrg = async () => {
     if (!isConfigured() || !user?.id) return
-    const { data: memberships } = await supabase.from('org_members').select('*').eq('user_id', user.id).catch(() => ({data:[]}))
-    const _seen = new Set()
-    const unique = (memberships||[]).filter(m => { if(_seen.has(m.org)) return false; _seen.add(m.org); return true })
-    if (unique.length <= 1) { alert('You only belong to one organisation.'); return }
-    const { data: orgRows } = await supabase.from('organisations').select('id,name,industry').catch(() => ({data:[]}))
-    const enriched = unique.map(m => {
-      const o = (orgRows||[]).find(r=>r.id===m.org||r.name===m.org)
-      return {...m, orgName: o?.name||m.org, industry: o?.industry||''}
-    })
-    setOrgSwitchChoices(enriched)
-    setShowOrgSwitch(true)
-    setShowProfile(false)
+    try {
+      const { data: memberships, error: mbErr } = await supabase.from('org_members').select('org,role,tier').eq('user_id', user.id)
+      if (mbErr) { setProfileMsg('✗ Could not load organisations: ' + mbErr.message); return }
+      const _seen = new Set()
+      const unique = (memberships||[]).filter(m => { if(_seen.has(m.org)) return false; _seen.add(m.org); return true })
+      if (unique.length <= 1) { setProfileMsg('You only belong to one organisation.'); return }
+      const { data: orgRows } = await supabase.from('organisations').select('id,name,industry')
+      const enriched = unique.map(m => {
+        const o = (orgRows||[]).find(r=>r.id===m.org||r.name===m.org)
+        return {...m, orgName: o?.name||m.org, industry: o?.industry||''}
+      })
+      setOrgSwitchChoices(enriched)
+      setShowOrgSwitch(true)
+      setShowProfile(false)
+    } catch(e) {
+      setProfileMsg('✗ Could not load organisations')
+    }
   }
 
   const logout = async () => {
@@ -10683,40 +10695,19 @@ export default function App() {
                     <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{user.email}</div>
                     <div style={{marginTop:4}}><RolePill role={user.role}/></div>
                   </div>
-                  {user.industry&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}><span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Industry</span><span style={{fontSize:12,fontWeight:600}}>{user.industry}</span></div>}
                 </div>
                 {profileMsg&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:6,padding:'8px 12px',fontSize:13,color:'var(--green)',marginBottom:14}}>{profileMsg}</div>}
                 <div className="form-field"><label className="form-label">Display Name</label><input className="form-input" value={profileName} onChange={e=>setProfileName(e.target.value)}/></div>
                 <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
 
-                {['client_admin','super_admin'].includes(user.role)&&<>
-                <div className="form-field">
-                  <label className="form-label">Industry</label>
-                  <select className="form-input" value={user.industry||''} onChange={async e=>{
-                    const ind = e.target.value
-                    setUser(prev=>({...prev,industry:ind}))
-                    if(isConfigured()) await supabase.from('profiles').update({industry:ind}).eq('id',user.id)
-                    setProfileMsg('✓ Industry updated')
-                  }}>
-                    <option value="">— Select industry —</option>
-                    {PRESET_INDUSTRIES.map(k=><option key={k} value={k}>{k}</option>)}
-                  </select>
-                </div>
-                </>}
+                <div className="form-field"><label className="form-label">Organisation</label><input className="form-input" value={user.org||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
+                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={profileOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
 
                 <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                    <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Organisation</span>
-                    <span style={{fontWeight:700,color:'var(--brand)'}}>{user.org||'—'}</span>
-                  </div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
                     <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Role</span>
                     <RolePill role={user.role}/>
                   </div>
-                  {user.industry&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
-                    <span style={{color:'var(--t2)',fontSize:11,textTransform:'uppercase',fontWeight:600,letterSpacing:'.6px'}}>Industry</span>
-                    <span style={{fontSize:12,fontWeight:600}}>{user.industry}</span>
-                  </div>}
                 </div>
 
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:4}}>
