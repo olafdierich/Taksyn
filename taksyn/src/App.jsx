@@ -2371,7 +2371,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       } else { setSelectedTplId('') }
                     }}>
                       <option value="">— None —</option>
-                      {(()=>{ const grps={}; templates.forEach(t=>{ const g=t.position||'General'; if(!grps[g]) grps[g]=[]; grps[g].push(t) }); const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) }); return keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>) })()}
+                      {(()=>{ const pos=newTask.position||''; const filtered=templates.filter(t=>!pos||!t.position||t.position===pos); const grps={}; filtered.forEach(t=>{ const g=t.position||'General'; if(!grps[g]) grps[g]=[]; grps[g].push(t) }); const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) }); return keys.length?keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>):<option disabled>No templates for this position</option> })()}
                     </select>
                     {selectedTplId&&templates.find(t=>t.id===selectedTplId)?.description&&(
                       <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{templates.find(t=>t.id===selectedTplId).description}</div>
