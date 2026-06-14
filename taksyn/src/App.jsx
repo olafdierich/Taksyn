@@ -547,6 +547,19 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
   @page{margin:2cm}
   *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
+html.dark{--s3:#1E2330;--s4:#252B3B;--border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);--text:#E2E8F0;--t2:#94A3B8;--t3:#64748B;--shadow:0 4px 20px rgba(0,0,0,.4);--brand-lt:rgba(0,168,126,.15)}
+html.dark body{background:#0D1117;color:#E2E8F0}
+html.dark .topbar{background:#161B26;border-bottom-color:rgba(255,255,255,.07)}
+html.dark .sidebar{background:#161B26;border-right-color:rgba(255,255,255,.07)}
+html.dark .section,html.dark .stat-card,html.dark .task-card,html.dark .tier-card{background:#1A2035}
+html.dark .modal,html.dark .modal-hdr{background:#1A2035}
+html.dark .tab.active{background:#252B3B}
+html.dark .notif-panel{background:#1A2035;border-color:rgba(255,255,255,.07)}
+html.dark .guide-section,html.dark .guide-section-hdr,html.dark .guide-chapter{background:#1A2035}
+html.dark .celebration-card{background:#1A2035}
+html.dark .auth-bg{background:linear-gradient(135deg,#0D1117,#161B26)}
+html.dark .auth-card{background:#1A2035}
+html.dark .auth-input{background:#1E2330;border-color:rgba(255,255,255,.07);color:#E2E8F0}
 `
 
 const IC = ({ n, s=16 }) => {
@@ -5615,8 +5628,9 @@ function RolesPositionsView({ user }) {
     <div className="anim">
       <div className="ph">
         <div className="ph-title">Roles &amp; Positions</div>
-        <div className="ph-sub">Manage roles and position labels for your organisation</div>
+        <div className="ph-sub">{isSuper ? 'Manage roles and position labels for your organisation' : 'View roles and position labels for your organisation (read-only)'}</div>
       </div>
+      {!isSuper&&<div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',borderRadius:8,padding:'8px 14px',fontSize:12,color:'var(--amber)',marginBottom:12}}>🔒 Roles and positions are managed by Super Admin. Contact your platform administrator to add or modify entries.</div>}
 
       <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16}}>
         {TABS.map(([k,l])=><button key={k} onClick={()=>setActiveTab(k)} style={{flex:'1 1 auto',padding:'6px 10px',borderRadius:6,border:'none',background:activeTab===k?'#fff':'transparent',color:activeTab===k?'var(--text)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:activeTab===k?'0 1px 4px rgba(0,0,0,.1)':'none'}}>{l}</button>)}
@@ -5685,15 +5699,15 @@ function RolesPositionsView({ user }) {
                     ) : (
                       <div style={{display:'flex',alignItems:'center',gap:4,padding:'4px 2px',borderRadius:7,background:selectedIndustry===ind.name?'var(--brand-lt)':'transparent'}}>
                         <button onClick={()=>setSelectedIndustry(ind.name)} style={{flex:1,textAlign:'left',padding:'3px 6px',borderRadius:6,border:'none',background:'transparent',color:selectedIndustry===ind.name?'var(--brand)':'var(--text)',fontSize:12,fontWeight:selectedIndustry===ind.name?600:400,cursor:'pointer',fontFamily:'inherit'}}>{ind.name}</button>
-                        <button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--t2)',padding:'2px 3px',lineHeight:1}} onClick={()=>{setEditIndId(ind.id);setEditIndName(ind.name)}} title="Edit">✏</button>
-                        <button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--red)',padding:'2px 3px',lineHeight:1}} onClick={()=>deleteOrgIndustry(ind.id,ind.name)} title="Delete">✕</button>
+                        {isSuper&&<button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--t2)',padding:'2px 3px',lineHeight:1}} onClick={()=>{setEditIndId(ind.id);setEditIndName(ind.name)}} title="Edit">✏</button>}
+                        {isSuper&&<button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--red)',padding:'2px 3px',lineHeight:1}} onClick={()=>deleteOrgIndustry(ind.id,ind.name)} title="Delete">✕</button>}
                       </div>
                     )}
                   </div>
                 ))}
 
                 {/* Add Industry */}
-                {showAddInd ? (
+                {isSuper&&(showAddInd ? (
                   <div style={{display:'flex',gap:4,marginTop:6,padding:'4px 2px'}}>
                     <input className="form-input" style={{flex:1,fontSize:11,padding:'4px 6px'}} placeholder="Industry name…" value={newIndName} onChange={e=>setNewIndName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addOrgIndustry();if(e.key==='Escape'){setShowAddInd(false);setNewIndName('')}}} autoFocus/>
                     <button className="btn btn-primary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={addOrgIndustry} disabled={saving||!newIndName.trim()}>Add</button>
@@ -5701,7 +5715,7 @@ function RolesPositionsView({ user }) {
                   </div>
                 ) : (
                   <button className="btn btn-secondary btn-sm" style={{width:'100%',marginTop:8,fontSize:11}} onClick={()=>setShowAddInd(true)}>+ Add Industry</button>
-                )}
+                ))}
               </>
             )}
           </div>
@@ -5722,7 +5736,7 @@ function RolesPositionsView({ user }) {
                 <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
                   {roles.map((role,idx)=>(
                     <div key={role.id} style={ROW}>
-                      {editRoleId===role.id ? (
+                      {isSuper&&editRoleId===role.id ? (
                         <>
                           <input className="form-input" style={{flex:1,fontSize:12}} value={editRoleName} onChange={e=>setEditRoleName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveRoleEdit();if(e.key==='Escape'){setEditRoleId(null);setEditRoleName('')}}} autoFocus/>
                           <button className="btn btn-primary btn-sm" onClick={saveRoleEdit} disabled={saving||!editRoleName.trim()}>Save</button>
@@ -5731,21 +5745,21 @@ function RolesPositionsView({ user }) {
                       ) : (
                         <>
                           <span style={{flex:1,fontSize:12,fontWeight:500}}>{role.role_name}</span>
-                          <div style={{display:'flex',gap:3}}>
+                          {isSuper&&<div style={{display:'flex',gap:3}}>
                             <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,-1)} disabled={idx===0}>↑</button>
                             <button style={{background:'none',border:'none',cursor:idx<roles.length-1?'pointer':'default',opacity:idx<roles.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>moveRole(role.id,1)} disabled={idx===roles.length-1}>↓</button>
                             <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditRoleId(role.id);setEditRoleName(role.role_name)}}>Edit</button>
                             <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deleteRole(role.id)}>Delete</button>
-                          </div>
+                          </div>}
                         </>
                       )}
                     </div>
                   ))}
                 </div>
-                <div style={{display:'flex',gap:6}}>
+                {isSuper&&<div style={{display:'flex',gap:6}}>
                   <input className="form-input" style={{flex:1,fontSize:12}} placeholder="New role name…" value={newRoleName} onChange={e=>setNewRoleName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addRole()}/>
                   <button className="btn btn-primary btn-sm" onClick={addRole} disabled={saving||!newRoleName.trim()}>Add Role</button>
-                </div>
+                </div>}
               </>
             )}
           </div>
@@ -5774,7 +5788,7 @@ function RolesPositionsView({ user }) {
               <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
                 {customPositions.map((pos,idx)=>(
                   <div key={pos.id} style={ROW}>
-                    {editPosId===pos.id ? (
+                    {isSuper&&editPosId===pos.id ? (
                       <>
                         <input className="form-input" style={{flex:1,fontSize:12}} value={editPosName} onChange={e=>setEditPosName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')savePosEdit();if(e.key==='Escape'){setEditPosId(null);setEditPosName('')}}} autoFocus/>
                         <button className="btn btn-primary btn-sm" onClick={savePosEdit} disabled={saving}>Save</button>
@@ -5783,22 +5797,22 @@ function RolesPositionsView({ user }) {
                     ) : (
                       <>
                         <span style={{flex:1,fontSize:12,fontWeight:500}}>{pos.position_name}</span>
-                        <div style={{display:'flex',gap:3}}>
+                        {isSuper&&<div style={{display:'flex',gap:3}}>
                           <button style={{background:'none',border:'none',cursor:idx>0?'pointer':'default',opacity:idx>0?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,-1)} disabled={idx===0}>↑</button>
                           <button style={{background:'none',border:'none',cursor:idx<customPositions.length-1?'pointer':'default',opacity:idx<customPositions.length-1?1:.3,fontSize:11,padding:'1px 4px'}} onClick={()=>movePos(pos.id,1)} disabled={idx===customPositions.length-1}>↓</button>
                           <button className="btn btn-secondary btn-sm" style={{fontSize:10}} onClick={()=>{setEditPosId(pos.id);setEditPosName(pos.position_name)}}>Edit</button>
                           <button className="btn btn-danger btn-sm" style={{fontSize:10}} onClick={()=>deletePosition(pos.id)}>Delete</button>
-                        </div>
+                        </div>}
                       </>
                     )}
                   </div>
                 ))}
               </div>
             )}
-            <div style={{display:'flex',gap:6}}>
+            {isSuper&&<div style={{display:'flex',gap:6}}>
               <input className="form-input" style={{flex:1,fontSize:12}} placeholder="e.g. Duty Manager, Head Chef, Team Leader…" value={newPositionName} onChange={e=>setNewPositionName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addPosition()}/>
               <button className="btn btn-primary btn-sm" onClick={addPosition} disabled={saving||!newPositionName.trim()}>Add Position</button>
-            </div>
+            </div>}
           </div>
         </div>
       )}
@@ -8573,7 +8587,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
   )
 }
 
-function SuperAdminAccountView({ user, setUser }) {
+function SuperAdminAccountView({ user, setUser, darkMode, toggleDarkMode }) {
   const [form, setForm] = useState({name:user.name||'',email:user.email||''})
   const [pwForm, setPwForm] = useState({current:'',next:'',confirm:''})
   const [showPw, setShowPw] = useState(false)
@@ -8655,6 +8669,22 @@ function SuperAdminAccountView({ user, setUser }) {
         </div>
         {msg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:msg.startsWith('✓')?'var(--green)':'var(--red)'}}>{msg}</div>}
         <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving…':'Save Profile'}</button>
+      </div>
+
+      <div className="section" style={{maxWidth:480,marginBottom:16}}>
+        <div className="section-title">Appearance</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--s3)',borderRadius:8,padding:'10px 14px'}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:600}}>{darkMode?'🌙 Dark Mode':'☀️ Light Mode'}</div>
+            <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>Toggle light or dark interface theme</div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:11,fontWeight:600,color:darkMode?'var(--brand)':'var(--t2)'}}>{darkMode?'On':'Off'}</span>
+            <button style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:darkMode?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggleDarkMode}>
+              <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:darkMode?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="section" style={{maxWidth:480}}>
@@ -9725,6 +9755,17 @@ export default function App() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [gpsEnabled, setGpsEnabled] = useState(() => { const v = localStorage.getItem('taksyn_gps_enabled'); return v === null ? true : v === 'true' })
+  const [darkMode, setDarkMode] = useState(() => {
+    const val = localStorage.getItem('taksyn_dark_mode') === 'true'
+    document.documentElement.classList.toggle('dark', val)
+    return val
+  })
+  const toggleDarkMode = () => setDarkMode(prev => {
+    const next = !prev
+    localStorage.setItem('taksyn_dark_mode', next ? 'true' : 'false')
+    document.documentElement.classList.toggle('dark', next)
+    return next
+  })
   const [sessionWarning, setSessionWarning] = useState(false)
   const [warnCountdown, setWarnCountdown] = useState(120)
   const [sessionTimeout, setSessionTimeout] = useState(() => { const v = localStorage.getItem('taksyn_session_timeout'); return v === null ? null : Number(v) })
@@ -10363,6 +10404,21 @@ export default function App() {
                   </div>
                 </div>
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>Appearance</div>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--s3)',borderRadius:8,padding:'10px 14px'}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600}}>{darkMode?'🌙 Dark Mode':'☀️ Light Mode'}</div>
+                      <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>Toggle light or dark interface theme</div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:11,fontWeight:600,color:darkMode?'var(--brand)':'var(--t2)'}}>{darkMode?'On':'Off'}</span>
+                      <button style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:darkMode?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggleDarkMode}>
+                        <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:darkMode?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:16}}>
                   <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>Session Timeout</div>
                   <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px'}}>
                     <div style={{fontSize:11,color:'var(--t2)',marginBottom:8}}>Default for your role: <strong>{SESSION_ROLE_TIMEOUTS[user.role]||15} min</strong></div>
@@ -10562,7 +10618,7 @@ export default function App() {
                 {page==='platform_industries' && user.role==='super_admin' && <PlatformIndustriesView user={user}/>}
                 {page==='roles_departments' && ['client_admin','super_admin'].includes(user.role) && <RolesPositionsView user={user}/>}
                 {page==='platform_settings' && user.role==='super_admin' && <PlatformSettingsView user={user} sessionTimeout={sessionTimeout} setSessionTimeout={setSessionTimeout}/>}
-                {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser}/>}
+                {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser} darkMode={darkMode} toggleDarkMode={toggleDarkMode}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
               </>
             )}
