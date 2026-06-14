@@ -4521,8 +4521,8 @@ const COMPANY_COMPLETENESS_FIELDS = [
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
   client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','settings'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
 }
 
@@ -6984,6 +6984,159 @@ function CompanySettingsView({ user }) {
           )}
         </>
       })()}
+    </div>
+  )
+}
+
+function TemplatesView({ user }) {
+  const canEdit = ['client_admin','super_admin'].includes(user.role)
+  const [tplList, setTplList] = useState([])
+  const [orgId, setOrgId] = useState(null)
+  const [tplName, setTplName] = useState('')
+  const [tplDescription, setTplDescription] = useState('')
+  const [tplPriority, setTplPriority] = useState('medium')
+  const [tplItems, setTplItems] = useState([{label:'',required:false}])
+  const [tplSaving, setTplSaving] = useState(false)
+  const [editingTpl, setEditingTpl] = useState(null)
+  const [msg, setMsg] = useState('')
+  const tplFormRef = useRef(null)
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+      .then(({data})=>{ if(data?.id) setOrgId(data.id) })
+      .catch(()=>{})
+  },[user.org])
+
+  useEffect(()=>{
+    if(!isConfigured()||!orgId) return
+    supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
+      .then(({data})=>{ if(data) setTplList(data.map(t=>({...t,items:parseSafe(t.items)}))) })
+      .catch(()=>{})
+  },[orgId])
+
+  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setEditingTpl(null) }
+
+  const startEditTpl = (t) => {
+    setEditingTpl(t)
+    setTplName(t.name||'')
+    setTplDescription(t.description||'')
+    setTplPriority(t.priority||'medium')
+    const items = parseSafe(t.items)
+    setTplItems(items.length?items:[{label:'',required:false}])
+    setTimeout(()=>tplFormRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),30)
+  }
+
+  const saveTemplate = async () => {
+    const validItems = tplItems.filter(i=>(i.label||'').trim())
+    if (!tplName.trim()||!validItems.length) { setMsg('✗ Template needs a name and at least one item'); return }
+    setTplSaving(true)
+    const items = validItems.map(i=>({label:i.label.trim(),required:!!i.required}))
+    if (editingTpl) {
+      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, items:JSON.stringify(items) }
+      if (isConfigured()) { const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
+      setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
+      setMsg('✓ Template updated')
+    } else {
+      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      if (isConfigured()) { const { error } = await supabase.from('checklist_templates').insert(entry); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
+      setTplList(prev=>[...prev,{...entry,items}].sort((a,b)=>a.name.localeCompare(b.name)))
+      setMsg('✓ Template saved')
+    }
+    resetTplForm(); setTplSaving(false)
+    setTimeout(()=>setMsg(''),3000)
+  }
+
+  const deleteTemplate = async (id) => {
+    if (!confirm('Delete this template?')) return
+    if (isConfigured()) await supabase.from('checklist_templates').delete().eq('id',id).catch(()=>{})
+    setTplList(prev=>prev.filter(t=>t.id!==id))
+  }
+
+  return (
+    <div className="anim">
+      <div className="page-header">
+        <h1 className="page-title">Checklist Templates</h1>
+        {!canEdit&&<div style={{fontSize:12,color:'var(--t2)'}}>View-only — contact your Client Admin to create or edit templates.</div>}
+      </div>
+      {msg&&<div style={{background:msg.startsWith('✓')?'rgba(16,185,129,.1)':'rgba(239,68,68,.1)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.3)':'rgba(239,68,68,.3)'),borderRadius:8,padding:'8px 12px',marginBottom:12,fontSize:13,color:msg.startsWith('✓')?'var(--green)':'var(--red)'}}>{msg}</div>}
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">Checklist Templates ({tplList.length})</div>
+        {tplList.length===0?(
+          <div style={{fontSize:13,color:'var(--t2)'}}>{canEdit?'No templates yet — create one below.':'No templates have been created yet.'}</div>
+        ):tplList.map(t=>(
+          <div key={t.id} style={{background:'var(--s3)',border:'1px solid '+(editingTpl?.id===t.id?'rgba(99,102,241,.4)':'var(--border)'),borderRadius:10,padding:12,marginBottom:8,transition:'border-color .2s'}}>
+            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}}>
+                  <span style={{fontWeight:700,fontSize:13}}>{t.name}</span>
+                  <PriBadge priority={t.priority||'medium'}/>
+                  <span style={{fontSize:11,color:'var(--t2)'}}>{t.items?.length||0} items</span>
+                </div>
+                {t.description&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:6}}>{t.description}</div>}
+                <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                  {(t.items||[]).map((item,i)=>(
+                    <div key={i} style={{fontSize:12,color:'var(--t2)',display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{color:'var(--t3)'}}>◽</span>
+                      <span>{item.label||item.text}</span>
+                      {(item.required||item.mandatory)&&<span style={{color:'var(--red)',fontWeight:700,fontSize:10}}>required</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {canEdit&&(
+                <div style={{display:'flex',gap:6,flexShrink:0}}>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>startEditTpl(t)}>Edit</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>deleteTemplate(t.id)}>🗑</button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {canEdit&&(
+        <div className="section" ref={tplFormRef} style={{marginBottom:20,scrollMarginTop:16}}>
+          <div className="section-title">{editingTpl?'Edit Template':'Create New Template'}</div>
+          {editingTpl&&<div style={{background:'rgba(99,102,241,.08)',border:'1px solid rgba(99,102,241,.2)',borderRadius:8,padding:'8px 12px',marginBottom:12,fontSize:12,color:'#6366F1',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span>Editing: <strong>{editingTpl.name}</strong></span>
+            <span style={{cursor:'pointer',fontWeight:600,opacity:.7}} onClick={resetTplForm}>✕ Cancel edit</span>
+          </div>}
+          <div className="two-col">
+            <div className="form-field">
+              <label className="form-label">Template Name <span style={{color:'var(--red)'}}>*</span></label>
+              <input className="form-input" placeholder="e.g. Daily Kitchen Clean" value={tplName} onChange={e=>setTplName(e.target.value)}/>
+            </div>
+            <div className="form-field">
+              <label className="form-label">Priority</label>
+              <select className="form-select" value={tplPriority} onChange={e=>setTplPriority(e.target.value)}>
+                {Object.entries(PRIORITY_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-field">
+            <label className="form-label">Description <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional</span></label>
+            <input className="form-input" placeholder="Brief description of when to use this template" value={tplDescription} onChange={e=>setTplDescription(e.target.value)}/>
+          </div>
+          <div className="form-field">
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+              <label className="form-label" style={{margin:0}}>Checklist Items <span style={{color:'var(--red)'}}>*</span></label>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setTplItems(p=>[...p,{label:'',required:false}])}>+ Add Item</button>
+            </div>
+            {tplItems.map((s,i)=>(
+              <div key={i} className="cl-build-item">
+                <input className="form-input" style={{flex:1,fontSize:12}} placeholder={'Item '+(i+1)} value={s.label} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,label:e.target.value}:x))}/>
+                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button>
+                {tplItems.length>1&&<button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setTplItems(p=>p.filter((_,j)=>j!==i))}>×</button>}
+              </div>
+            ))}
+            <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}><strong style={{color:'var(--red)'}}>*</strong> = required (worker must tick before submitting)</div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-primary" onClick={saveTemplate} disabled={tplSaving}>{tplSaving?'Saving…':editingTpl?'Update Template':'Save Template'}</button>
+            {editingTpl&&<button className="btn btn-secondary" onClick={resetTplForm}>Cancel</button>}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -10706,6 +10859,7 @@ export default function App() {
                 {page==='performance' && user.role!=='super_admin' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
                 {page==='leave'       && user.role!=='super_admin' && <LeaveView {...pageProps}/>}
                 {page==='teams'       && hasAccess(user.role,2) && <TeamsView {...pageProps}/>}
+                {page==='templates'    && user.role!=='super_admin' && hasAccess(user.role,2) && <TemplatesView user={user}/>}
                 {page==='sla'         && ['client_admin','super_admin'].includes(user.role) && <SLASettingsView {...pageProps}/>}
                 {page==='company_settings' && ['client_admin','super_admin'].includes(user.role) && <CompanySettingsView user={user}/>}
                 {page==='notifications' && user.role==='super_admin' && <PlatformAnnouncementsView user={user}/>}
