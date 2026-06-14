@@ -1862,15 +1862,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       ;(async()=>{
         const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
         const orgId = orgRow?.id || user.org
-        const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
+        const {data:members} = await supabase.from('org_members').select('user_id,role,position').eq('org',orgId)
         if(!members?.length) return
         const ids = members.map(m=>m.user_id)
         const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id',ids)
-        if(profiles) setTeamUsers(profiles.map(p=>({
-          ...p,
-          role:members.find(m=>m.user_id===p.id)?.role||p.role,
-          positions:[]
-        })))
+        if(profiles) setTeamUsers(profiles.map(p=>{
+          const m=members.find(m=>m.user_id===p.id)
+          return {...p, role:m?.role||p.role, orgPosition:m?.position||p.position||'', positions:[]}
+        }))
       })().catch(()=>{})
     }
   },[user.org])
@@ -2332,7 +2331,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     <input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>
                     <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
                       <option value="">— Select a staff member —</option>
-                      {teamUsers.filter(u=>(assignableRoles.includes(u.role))&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {getUserDeptRole(u,newTask.position||newTask.category)}</option>)}
+                      {teamUsers.filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position)&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
                     </select>
                     {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
                     {teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
@@ -2362,27 +2361,33 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     <button type="button" className={'btn btn-sm '+(checklistMode==='template'?'btn-primary':'btn-secondary')} onClick={()=>setChecklistMode('template')}>From Template</button>
                   </div>
                 </div>
-                {checklistMode==='template'&&(
-                  <div style={{marginBottom:10}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                      <span style={{fontSize:11,color:'var(--t2)'}}>Select a checklist template</span>
-                      {selectedTplId&&<span style={{fontSize:11,color:'var(--brand)',cursor:'pointer',fontWeight:500}} onClick={()=>{ setSelectedTplId(''); setNewTask({...newTask,subtasks:[]}) }}>✕ Clear</span>}
+                {checklistMode==='template'&&(()=>{
+                  const pos=newTask.position||''
+                  const ppos=p=>{if(!p)return[];try{const a=JSON.parse(p);if(Array.isArray(a))return a}catch(e){}return[p]}
+                  const filtered=templates.filter(t=>!pos||!t.position||ppos(t.position).includes(pos))
+                  const grps={}
+                  filtered.forEach(t=>{ const pp=ppos(t.position); if(!pp.length){if(!grps['General'])grps['General']=[];grps['General'].push(t)} else if(pos){if(!grps[pos])grps[pos]=[];grps[pos].push(t)} else{const g=pp[0];if(!grps[g])grps[g]=[];grps[g].push(t)} })
+                  const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) })
+                  return (
+                    <div style={{marginBottom:10}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                        <span style={{fontSize:11,color:'var(--t2)'}}>Select a checklist template</span>
+                        {selectedTplId&&<span style={{fontSize:11,color:'var(--brand)',cursor:'pointer',fontWeight:500}} onClick={()=>{ setSelectedTplId(''); setNewTask({...newTask,subtasks:[]}) }}>✕ Clear</span>}
+                      </div>
+                      {pos&&!keys.length ? (
+                        <div style={{fontSize:12,color:'var(--t2)',padding:'10px 12px',background:'var(--s3)',borderRadius:8,border:'1px solid var(--border)'}}>No templates available for this position yet</div>
+                      ) : (
+                        <select className="form-select" value={selectedTplId} onChange={e=>{ const tmpl=templates.find(t=>t.id===e.target.value); if(tmpl){ setSelectedTplId(e.target.value); setNewTask({...newTask,priority:tmpl.priority||newTask.priority,subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))}) } else { setSelectedTplId('') } }}>
+                          <option value="">— None —</option>
+                          {keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>)}
+                        </select>
+                      )}
+                      {selectedTplId&&templates.find(t=>t.id===selectedTplId)?.description&&(
+                        <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{templates.find(t=>t.id===selectedTplId).description}</div>
+                      )}
                     </div>
-                    <select className="form-select" value={selectedTplId} onChange={e=>{
-                      const tmpl=templates.find(t=>t.id===e.target.value)
-                      if(tmpl){
-                        setSelectedTplId(e.target.value)
-                        setNewTask({...newTask,priority:tmpl.priority||newTask.priority,subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))})
-                      } else { setSelectedTplId('') }
-                    }}>
-                      <option value="">— None —</option>
-                      {(()=>{ const pos=newTask.position||''; const ppos=p=>{if(!p)return[];try{const a=JSON.parse(p);if(Array.isArray(a))return a}catch(e){}return[p]}; const filtered=templates.filter(t=>!pos||!t.position||ppos(t.position).includes(pos)); const grps={}; filtered.forEach(t=>{ const pp=ppos(t.position); if(!pp.length){if(!grps['General'])grps['General']=[];grps['General'].push(t)} else if(pos){if(!grps[pos])grps[pos]=[];grps[pos].push(t)} else{const g=pp[0];if(!grps[g])grps[g]=[];grps[g].push(t)} }); const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) }); return keys.length?keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>):<option disabled>No templates for this position</option> })()}
-                    </select>
-                    {selectedTplId&&templates.find(t=>t.id===selectedTplId)?.description&&(
-                      <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{templates.find(t=>t.id===selectedTplId).description}</div>
-                    )}
-                  </div>
-                )}
+                  )
+                })()}
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                   <span style={{fontSize:12,color:'var(--t2)'}}>Checklist Items</span>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setNewTask({...newTask,subtasks:[...(newTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
