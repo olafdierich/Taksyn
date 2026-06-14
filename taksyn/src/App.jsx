@@ -4002,10 +4002,7 @@ function UsersView({ user, setAuditLog }) {
           expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           is_active: true,
           invited_name: [inviteFirstName.trim(), inviteLastName.trim()].filter(Boolean).join(' ') || null,
-          invited_first_name: inviteFirstName.trim() || null,
-          invited_last_name: inviteLastName.trim() || null,
           invited_email: inviteEmail.trim() || null,
-          invited_phone: invitePhone.trim() || null,
           invited_role: systemRole || null,
           invited_position: validRows.find(p=>p.position)?.position || null,
           invited_industry: firstIndustry || null
@@ -4865,9 +4862,8 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             organisation_id: showInvite.id, team_id: null, role: 'client_admin', secret: linkId,
             created_by: user.id, created_at: new Date().toISOString(),
             expires_at: new Date(Date.now() + 7*24*60*60*1000).toISOString(), is_active: true,
-            invited_name: fullName||null, invited_first_name: inviteFirstName.trim()||null,
-            invited_last_name: inviteLastName.trim()||null, invited_email: inviteEmail.trim()||null,
-            invited_phone: invitePhone.trim()||null, invited_role: 'client_admin',
+            invited_name: fullName||null, invited_email: inviteEmail.trim()||null,
+            invited_role: 'client_admin',
             invited_industry: firstIndustry||null
           })
         } catch(err) { console.error('Invite link insert error:', err) }
