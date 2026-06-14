@@ -4060,8 +4060,18 @@ function UsersView({ user, setAuditLog }) {
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
-      alert('Invite sent to '+inviteEmail+'!'+(rolesSummary?'\n\nAssignments: '+rolesSummary:''))
+      if (result.alreadyExisted) {
+        // User is already confirmed — close the invite link so they appear in the active list, not Pending
+        supabase.from('invite_links').update({ is_active: false }).eq('organisation_id', linkOrgId).eq('invited_email', inviteEmail.trim().toLowerCase()).is('used_at', null).then(()=>{})
+        alert('This user already exists in Taksyn — they have been added to your organisation.'+(rolesSummary?'\n\nAssignments: '+rolesSummary:''))
+      } else {
+        alert('Invite sent to '+inviteEmail+'!'+(rolesSummary?'\n\nAssignments: '+rolesSummary:''))
+      }
       logAuditEvent(user, 'member.invited', 'member', null, (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), ROLE_LABELS[systemRole]+' · '+inviteEmail.trim())
+      // Refresh pending invites so the Pending section updates immediately
+      if (workforceOrgId) {
+        supabase.from('invite_links').select('id,invited_name,invited_first_name,invited_last_name,invited_email,invited_role,invited_industry,created_at,expires_at').eq('organisation_id', workforceOrgId).is('used_at', null).eq('is_active', true).gt('expires_at', new Date().toISOString()).then(({data})=>{ if(data) setPendingInvites(data) }).catch(()=>{})
+      }
       setShowInvite(false); resetInviteForm()
     } catch(e) {
       alert('Failed to send invite: '+e.message)
@@ -4091,6 +4101,9 @@ function UsersView({ user, setAuditLog }) {
     const em = i.invited_email?.toLowerCase()
     return !em || !realUsers.some(u => u.email?.toLowerCase() === em)
   })
+  // Split workforce into confirmed (active) and pending (invited but not yet confirmed)
+  const confirmedRealUsers = realUsers.filter(u => !pendingEmailSet.has(u.email?.toLowerCase()))
+  const pendingRealUsers = realUsers.filter(u => pendingEmailSet.has(u.email?.toLowerCase()))
 
   return (
     <div className="anim">
@@ -4315,14 +4328,14 @@ function UsersView({ user, setAuditLog }) {
       <div className="ph"><div className="ph-top"><div><div className="ph-title">Workforce</div><div className="ph-sub">Manage your organisation's workforce</div></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{['client_admin','super_admin'].includes(user.role)&&<><button className="btn btn-secondary" onClick={()=>setShowManageIndustries(true)}>🏭 Industries</button><button className="btn btn-primary" onClick={()=>openInviteForm('email')}>📧 Invite via Email</button><button className="btn btn-green" onClick={()=>openInviteForm('whatsapp')}>💬 Invite via WhatsApp</button></>}</div></div></div>
       <div className="section">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div className="section-title" style={{margin:0}}>Workforce ({realUsers.length})</div>
+          <div className="section-title" style={{margin:0}}>Workforce ({confirmedRealUsers.length})</div>
           {pendingMsg&&<div style={{fontSize:12,color:'#059669',padding:'4px 0',fontWeight:600}}>{pendingMsg}</div>}
           <input className="form-input" placeholder="Search by name or role..." value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{fontSize:12,padding:'5px 10px',maxWidth:220}}/>
         </div>
-        {realUsers.length===0
+        {realUsers.length===0&&pendingInvites.length===0
           ? <div style={{fontSize:13,color:'var(--t2)'}}>No workforce members yet. Use the Invite button to add staff.</div>
           : (() => {
-              const filtered = [...realUsers]
+              const filtered = [...confirmedRealUsers]
                 .filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())||u.role?.toLowerCase().includes(userSearch.toLowerCase()))
                 .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
               const isUserPending = (u) => pendingEmailSet.has(u.email?.toLowerCase())
@@ -4405,31 +4418,39 @@ function UsersView({ user, setAuditLog }) {
                     {!collapsedRoles[role]&&groups[role].map(userCard)}
                   </div>
                 ))}
-                {unregisteredPending.length>0&&(
-                  <div style={{marginBottom:12}}>
-                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:8,marginBottom:6,border:'1px solid rgba(245,158,11,.2)'}}>
-                      <span style={{fontSize:11,fontWeight:700,color:'#D97706',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>Pending Invitations ({unregisteredPending.length})</span>
-                    </div>
-                    {unregisteredPending.map(inv=>{
-                      const nm = inv.invited_name || [inv.invited_first_name, inv.invited_last_name].filter(Boolean).join(' ') || inv.invited_email || '—'
-                      return (
-                        <div key={inv.id} className="user-row" style={{flexWrap:'wrap',gap:8,opacity:.85}}>
-                          <Avatar name={nm} role={inv.invited_role||'worker'} size={34}/>
-                          <div className="user-info" style={{flex:1}}>
-                            <div className="user-name" style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-                              {nm}
-                              <span style={{background:'rgba(245,158,11,.15)',color:'#D97706',border:'1px solid rgba(245,158,11,.3)',borderRadius:10,fontSize:10,fontWeight:700,padding:'2px 7px'}}>Pending</span>
+                {(()=>{
+                  // pendingRealUsers filtered by search
+                  const filteredPendingReal = pendingRealUsers.filter(u=>!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase())||u.email?.toLowerCase().includes(userSearch.toLowerCase()))
+                  const filteredUnregistered = unregisteredPending.filter(i=>!userSearch||(i.invited_name||[i.invited_first_name,i.invited_last_name].filter(Boolean).join(' ')||i.invited_email||'').toLowerCase().includes(userSearch.toLowerCase()))
+                  const totalPending = filteredPendingReal.length + filteredUnregistered.length
+                  if (totalPending === 0) return null
+                  return (
+                    <div style={{marginBottom:12}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:8,marginBottom:6,border:'1px solid rgba(245,158,11,.2)'}}>
+                        <span style={{fontSize:11,fontWeight:700,color:'#D97706',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>Pending Invitations ({totalPending})</span>
+                      </div>
+                      {filteredPendingReal.map((u,i)=>userCard(u,i,null))}
+                      {filteredUnregistered.map(inv=>{
+                        const nm = inv.invited_name || [inv.invited_first_name, inv.invited_last_name].filter(Boolean).join(' ') || inv.invited_email || '—'
+                        return (
+                          <div key={inv.id} className="user-row" style={{flexWrap:'wrap',gap:8,opacity:.85}}>
+                            <Avatar name={nm} role={inv.invited_role||'worker'} size={34}/>
+                            <div className="user-info" style={{flex:1}}>
+                              <div className="user-name" style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                                {nm}
+                                <span style={{background:'rgba(245,158,11,.15)',color:'#D97706',border:'1px solid rgba(245,158,11,.3)',borderRadius:10,fontSize:10,fontWeight:700,padding:'2px 7px'}}>Pending</span>
+                              </div>
+                              {inv.invited_email&&<div className="user-email">{inv.invited_email}</div>}
+                              {inv.invited_industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {inv.invited_industry}</div>}
                             </div>
-                            {inv.invited_email&&<div className="user-email">{inv.invited_email}</div>}
-                            {inv.invited_industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {inv.invited_industry}</div>}
+                            <RolePill role={inv.invited_role||'worker'}/>
+                            {inv.invited_email&&['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>resendPendingInvite(inv)}>↩ Resend</button>}
                           </div>
-                          <RolePill role={inv.invited_role||'worker'}/>
-                          {inv.invited_email&&['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>resendPendingInvite(inv)}>↩ Resend</button>}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
               </>)
             })()
         }
