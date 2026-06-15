@@ -45,6 +45,11 @@ const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','month
 const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' }
 const PRESET_INDUSTRIES = ['Aged Care','Disability Care','NDIS','Allied Health','Clinical','Community Services','Hospitality','Food & Beverage','Housekeeping','Mining & Resources','Oil & Gas','Construction','Engineering','Transport & Logistics','Administration','Compliance & Quality','IT & Technology','Security','Retail','Manufacturing','Project Management']
 const CLIENT_ADMIN_POSITIONS = ['Director','Regional Manager','National Manager','General Manager','CEO','Managing Director','Owner']
+// Maps retired/consolidated position names to their replacement, per industry.
+// Applied in getPositionsForIndustry so stale DB entries are silently redirected.
+const CONSOLIDATED_POSITIONS = {
+  'Hospitality': { 'Housekeeper':'Housekeeping', 'Room Attendant':'Housekeeping', 'Cleaner':'Housekeeping', 'Barista':'Bar Tender' },
+}
 const INDUSTRY_POSITIONS = {
   'Administration':        { worker:['Administration Assistant','Data Entry Clerk','Receptionist','Office Assistant','Filing Clerk','Maintenance Officer'],                                   supervisor:['Administration Supervisor','Office Supervisor','Team Leader'],                        manager:['Office Manager','Administration Manager','Operations Manager'] },
   'Aged Care':             { worker:['Personal Carer','Support Worker','Cleaner','Laundry Assistant','Kitchen Assistant','Driver','Activity Assistant','Maintenance Officer'],               supervisor:['Care Supervisor','Shift Supervisor','Team Leader'],                                    manager:['Care Manager','Facility Manager','Operations Manager'] },
@@ -77,10 +82,10 @@ const getPositionsForIndustry = (industry, role, customPositions=[], customRoles
   const preset = INDUSTRY_POSITIONS[industry]?.[rk] || INDUSTRY_POSITIONS[industry]?.worker || ['Receptionist','Cleaner','Administration','Security','Maintenance']
   const orgRoles = customRoles.filter(r=>r.industry_name===industry).map(r=>r.role_name)
   const base = customPositions.length>0 ? [...customPositions,...preset] : preset
-  // Dedup case-insensitively, preferring the preset's capitalisation when there's a conflict
+  const consolidate = CONSOLIDATED_POSITIONS[industry] || {}
   const presetLower = new Map(preset.map(p=>[p.toLowerCase(),p]))
   const seen = new Set()
-  return [...base,...orgRoles].map(p=>presetLower.get(p.toLowerCase())||p).filter(p=>{ const l=p.toLowerCase(); if(seen.has(l)) return false; seen.add(l); return true })
+  return [...base,...orgRoles].map(p=>consolidate[p]||presetLower.get(p.toLowerCase())||p).filter(p=>{ const l=p.toLowerCase(); if(seen.has(l)) return false; seen.add(l); return true })
 }
 const parseTplPositions = (pos) => {
   if (!pos) return []
