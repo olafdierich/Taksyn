@@ -6,7 +6,7 @@
 DO $$
 DECLARE
   kemrose_id uuid;
-  worker_titles  text[] := ARRAY['Cleaner','Kitchen Aid','Waiter','Bar Tender','Chef','Reception','Plumber','Electrician','Driver','Finance','Housekeeper','Room Attendant','Laundry Staff','Barista'];
+  worker_titles  text[] := ARRAY['Housekeeping','Kitchen Aid','Waiter','Bar Tender','Chef','Reception','Plumber','Electrician','Driver','Finance','Laundry Staff'];
   super_titles   text[] := ARRAY['Housekeeping Supervisor','F&B Supervisor','Front Desk Supervisor','Kitchen Supervisor'];
   mgr_titles     text[] := ARRAY['Operations Manager','F&B Manager','Housekeeping Manager','Front Office Manager','General Manager'];
   all_titles     text[];
