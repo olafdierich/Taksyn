@@ -77,7 +77,10 @@ const getPositionsForIndustry = (industry, role, customPositions=[], customRoles
   const preset = INDUSTRY_POSITIONS[industry]?.[rk] || INDUSTRY_POSITIONS[industry]?.worker || ['Receptionist','Cleaner','Administration','Security','Maintenance']
   const orgRoles = customRoles.filter(r=>r.industry_name===industry).map(r=>r.role_name)
   const base = customPositions.length>0 ? [...customPositions,...preset] : preset
-  return [...new Set([...base,...orgRoles])]
+  // Dedup case-insensitively, preferring the preset's capitalisation when there's a conflict
+  const presetLower = new Map(preset.map(p=>[p.toLowerCase(),p]))
+  const seen = new Set()
+  return [...base,...orgRoles].map(p=>presetLower.get(p.toLowerCase())||p).filter(p=>{ const l=p.toLowerCase(); if(seen.has(l)) return false; seen.add(l); return true })
 }
 const parseTplPositions = (pos) => {
   if (!pos) return []
