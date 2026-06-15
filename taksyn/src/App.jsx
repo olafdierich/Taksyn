@@ -400,6 +400,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .task-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:8px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
 .task-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
 .task-card.critical::before{background:var(--red)}.task-card.high::before{background:#F97316}.task-card.medium::before{background:var(--amber)}.task-card.low::before{background:var(--green)}
+.task-card.task-done{background:rgba(16,185,129,.05);border-color:rgba(16,185,129,.3)}.task-card.task-done::before{background:var(--green)!important}
 .task-card:hover{border-color:var(--border2);transform:translateY(-1px);box-shadow:0 2px 12px rgba(0,0,0,.06)}
 .tc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .tc-title{font-size:14px;font-weight:600;flex:1}
@@ -696,17 +697,21 @@ function Celebration({ onClose }) {
 
 const TaskCard = ({ task, onClick }) => {
   const dur = fmtDuration(task.started_at, task.completed_at)
+  const isDone = ['awaiting_review','approved','completed'].includes(task.status)
   return (
-    <div className={"task-card "+task.priority} onClick={onClick}>
+    <div className={"task-card "+task.priority+(isDone?' task-done':'')} onClick={onClick}>
       <div className="tc-top">
         <div style={{flex:1}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:5}}>
             <span className="cat-tag">{CAT_ICONS[task.category]||'📋'} {task.category}</span>
             {task.recurrence&&task.recurrence!=='once'&&<span className="recurrence-tag">🔁 {RECURRENCE_LABELS[task.recurrence]}</span>}
           </div>
-          <div className="tc-title">{task.title}</div>
+          <div className="tc-title" style={isDone?{textDecoration:'line-through',opacity:.7}:{}}>{task.title}</div>
         </div>
-        <StatusBadge status={task.status} />
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          {isDone&&<span style={{color:'var(--green)',fontWeight:700,fontSize:16}}>✓</span>}
+          <StatusBadge status={task.status} />
+        </div>
       </div>
       <div className="tc-meta">
         <PriBadge priority={task.priority} />
@@ -2150,7 +2155,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     const updatedComments = comment.trim() ? [...(task.comments||[]), user.name+': '+comment.trim()] : task.comments||[]
     const doSubmit = (extra={}) => {
       update(tid, { status:'awaiting_review', completed_by:user.name, submitted_at:new Date().toISOString(), comments:updatedComments, ...extra })
-      setCelebration(true); setComment(''); setSelected(null)
+      setCelebration(true); setComment('')
     }
     if (gpsEnabled === false || !navigator.geolocation) { doSubmit(); return }
     navigator.geolocation.getCurrentPosition(
@@ -2705,11 +2710,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   style={{width:'100%',opacity:(sel.compliance&&parseSafe(sel.evidence).length===0)?0.55:1}}
                   onClick={()=>submitTask(sel.id)}
                 >
-                  {sel.compliance&&parseSafe(sel.evidence).length===0?'📷 Add Photo to Submit':'✅ Submit for Review'}
+                  {sel.compliance&&parseSafe(sel.evidence).length===0?'📷 Add Photo to Submit':'✅ Mark as Done'}
                 </button>
               )}
-              {sel.status==='awaiting_review'&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>📋 Awaiting review</div>}
-              {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✅ Approved</div>}
+              {sel.status==='awaiting_review'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Done — awaiting manager review</div>}
+              {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Approved</div>}
             </div>
           )}
           <div className="btn-row">
