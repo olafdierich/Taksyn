@@ -81,6 +81,7 @@ const getPositionsForIndustry = (industry, role, customPositions=[], customRoles
 }
 const parseTplPositions = (pos) => {
   if (!pos) return []
+  if (Array.isArray(pos)) return pos
   try { const a = JSON.parse(pos); if (Array.isArray(a)) return a } catch(e) {}
   return [pos]
 }
@@ -2363,10 +2364,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 </div>
                 {checklistMode==='template'&&(()=>{
                   const pos=newTask.position||''
-                  const ppos=p=>{if(!p)return[];try{const a=JSON.parse(p);if(Array.isArray(a))return a}catch(e){}return[p]}
-                  const filtered=templates.filter(t=>!pos||!t.position||ppos(t.position).includes(pos))
+                  const filtered=templates.filter(t=>!pos||!(t.positions||[]).length||(t.positions||[]).includes(pos))
                   const grps={}
-                  filtered.forEach(t=>{ const pp=ppos(t.position); if(!pp.length){if(!grps['General'])grps['General']=[];grps['General'].push(t)} else if(pos){if(!grps[pos])grps[pos]=[];grps[pos].push(t)} else{const g=pp[0];if(!grps[g])grps[g]=[];grps[g].push(t)} })
+                  filtered.forEach(t=>{ const pp=t.positions||[]; if(!pp.length){if(!grps['General'])grps['General']=[];grps['General'].push(t)} else if(pos){if(!grps[pos])grps[pos]=[];grps[pos].push(t)} else{const g=pp[0];if(!grps[g])grps[g]=[];grps[g].push(t)} })
                   const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) })
                   return (
                     <div style={{marginBottom:10}}>
@@ -6196,18 +6196,9 @@ function CompanySettingsView({ user }) {
   useEffect(()=>{
     if(!isConfigured()||!orgId) return
     supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
-      .then(async({data})=>{
+      .then(({data})=>{
         if(!data) return
-        const parsed = data.map(t=>({...t,items:parseSafe(t.items)}))
-        setTplList(parsed)
-        // One-time migration: tag Cleaning templates with Hospitality + multi-positions
-        const toMigrate = parsed.filter(t=>t.name?.toLowerCase().includes('cleaning')&&(!t.position||!t.position.startsWith('[')))
-        if(toMigrate.length){
-          const pos=JSON.stringify(['Housekeeper','Room Attendant'])
-          await Promise.all(toMigrate.map(t=>supabase.from('checklist_templates').update({industry:'Hospitality',position:pos}).eq('id',t.id).catch(()=>{})))
-          const {data:upd}=await supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
-          if(upd) setTplList(upd.map(t=>({...t,items:parseSafe(t.items)})))
-        }
+        setTplList(data.map(t=>({...t,items:parseSafe(t.items)})))
       })
       .catch(()=>{})
   },[orgId])
@@ -6237,7 +6228,7 @@ function CompanySettingsView({ user }) {
     setTplPriority(t.priority||'medium')
     setTplIndustry(t.industry||'')
     setTplRole(t.role||'')
-    setTplPosition(parseTplPositions(t.position))
+    setTplPosition(parseTplPositions(t.positions||t.position))
     setTplItems((t.items||[]).length ? t.items.map(it=>({label:it.label||it.text||'',required:!!(it.required||it.mandatory)})) : [{label:'',required:false}])
     setMsg('')
     setTimeout(()=>tplFormRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),30)
@@ -6248,9 +6239,9 @@ function CompanySettingsView({ user }) {
     if (!tplName.trim() || !validItems.length) { setMsg('✗ Template needs a name and at least one item'); return }
     setTplSaving(true); setMsg('')
     const items = validItems.map((it,idx)=>({ id:String(idx+1), label:it.label.trim(), required:!!it.required }))
-    const positionVal = tplPosition.length ? JSON.stringify(tplPosition) : null
+    const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
-      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, position:positionVal, items:JSON.stringify(items) }
+      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items) }
       if (isConfigured()) {
         const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id)
         if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
@@ -6258,7 +6249,7 @@ function CompanySettingsView({ user }) {
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, position:positionVal, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) {
         const { error } = await supabase.from('checklist_templates').insert(entry)
         if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
@@ -6700,7 +6691,7 @@ function CompanySettingsView({ user }) {
                     <span style={{fontWeight:700,fontSize:13}}>{t.name}</span>
                     <PriBadge priority={t.priority||'medium'}/>
                     <span style={{fontSize:11,color:'var(--t2)'}}>{t.items?.length||0} items</span>
-                    {parseTplPositions(t.position).map(p=><span key={p} style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{p}</span>)}
+                    {parseTplPositions(t.positions||t.position).map(p=><span key={p} style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{p}</span>)}
                     {t.industry&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{t.industry}</span>}
                     {t.role&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{ROLE_LABELS[t.role]||t.role}</span>}
                   </div>
@@ -7115,17 +7106,9 @@ function TemplatesView({ user }) {
   useEffect(()=>{
     if(!isConfigured()||!orgId) return
     supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
-      .then(async({data})=>{
+      .then(({data})=>{
         if(!data) return
-        const parsed=data.map(t=>({...t,items:parseSafe(t.items)}))
-        setTplList(parsed)
-        const toMigrate=parsed.filter(t=>t.name?.toLowerCase().includes('cleaning')&&(!t.position||!t.position.startsWith('[')))
-        if(toMigrate.length){
-          const pos=JSON.stringify(['Housekeeper','Room Attendant'])
-          await Promise.all(toMigrate.map(t=>supabase.from('checklist_templates').update({industry:'Hospitality',position:pos}).eq('id',t.id).catch(()=>{})))
-          const {data:upd}=await supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
-          if(upd) setTplList(upd.map(t=>({...t,items:parseSafe(t.items)})))
-        }
+        setTplList(data.map(t=>({...t,items:parseSafe(t.items)})))
       })
       .catch(()=>{})
     Promise.all([
@@ -7150,7 +7133,7 @@ function TemplatesView({ user }) {
     setTplPriority(t.priority||'medium')
     setTplIndustry(t.industry||'')
     setTplRole(t.role||'')
-    setTplPosition(parseTplPositions(t.position))
+    setTplPosition(parseTplPositions(t.positions||t.position))
     const items = parseSafe(t.items)
     setTplItems(items.length?items:[{label:'',required:false}])
     setTimeout(()=>tplFormRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),30)
@@ -7161,14 +7144,14 @@ function TemplatesView({ user }) {
     if (!tplName.trim()||!validItems.length) { setMsg('✗ Template needs a name and at least one item'); return }
     setTplSaving(true)
     const items = validItems.map(i=>({label:i.label.trim(),required:!!i.required}))
-    const positionVal = tplPosition.length ? JSON.stringify(tplPosition) : null
+    const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
-      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, position:positionVal, items:JSON.stringify(items) }
+      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items) }
       if (isConfigured()) { const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, position:positionVal, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) { const { error } = await supabase.from('checklist_templates').insert(entry); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
       setTplList(prev=>[...prev,{...entry,items}].sort((a,b)=>a.name.localeCompare(b.name)))
       setMsg('✓ Template saved')
@@ -7202,7 +7185,7 @@ function TemplatesView({ user }) {
                   <span style={{fontWeight:700,fontSize:13}}>{t.name}</span>
                   <PriBadge priority={t.priority||'medium'}/>
                   <span style={{fontSize:11,color:'var(--t2)'}}>{t.items?.length||0} items</span>
-                  {parseTplPositions(t.position).map(p=><span key={p} style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{p}</span>)}
+                  {parseTplPositions(t.positions||t.position).map(p=><span key={p} style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{p}</span>)}
                   {t.industry&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{t.industry}</span>}
                   {t.role&&<span style={{fontSize:10,color:'var(--t2)',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px'}}>{ROLE_LABELS[t.role]||t.role}</span>}
                 </div>
