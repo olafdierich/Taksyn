@@ -492,7 +492,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .form-select{width:100%;background:var(--s3);border:1px solid var(--border);border-radius:var(--rs);padding:9px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;appearance:none;cursor:pointer}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:400;display:flex;align-items:flex-end;justify-content:center;padding:0;backdrop-filter:blur(3px)}
 @media(min-width:600px){.modal-overlay{align-items:center;padding:20px}}
-.modal{background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:520px;max-height:95vh;overflow-y:auto;box-shadow:0 -4px 40px rgba(0,0,0,.15);display:flex;flex-direction:column}
+.modal{background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:520px;max-height:calc(100dvh - 60px);overflow-y:auto;box-shadow:0 -4px 40px rgba(0,0,0,.15);display:flex;flex-direction:column}
 @media(min-width:600px){.modal{border-radius:14px;max-height:85vh}}
 .modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 12px;position:sticky;top:0;background:#fff;z-index:10;border-bottom:1px solid var(--border);flex-shrink:0}
 .modal-title{font-size:15px;font-weight:700}
