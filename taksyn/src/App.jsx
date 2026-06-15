@@ -5447,6 +5447,10 @@ function SuperAdminTemplatesView({ user }) {
   const [filterPosition, setFilterPosition] = useState('')
   const [collapsed, setCollapsed] = useState(new Set())
   const [viewTpl, setViewTpl] = useState(null)
+  const [assignTpl, setAssignTpl] = useState(null)
+  const [assignOrgId, setAssignOrgId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+  const [assignMsg, setAssignMsg] = useState('')
 
   useEffect(() => {
     if (!isConfigured()) { setLoading(false); return }
@@ -5465,6 +5469,37 @@ function SuperAdminTemplatesView({ user }) {
   const industries = [...new Set(templates.map(t=>t.industry).filter(Boolean))].sort()
   const roles      = [...new Set(templates.map(t=>t.role).filter(Boolean))].sort()
   const positions  = [...new Set(templates.flatMap(t=>t.positions||[]))].sort()
+
+  // Count distinct orgs per template name for the "N orgs" badge
+  const orgCounts = {}
+  templates.forEach(t => {
+    if (!orgCounts[t.name]) orgCounts[t.name] = new Set()
+    orgCounts[t.name].add(t.organisation_id)
+  })
+
+  const assignToOrg = async () => {
+    if (!assignTpl || !assignOrgId) return
+    setAssigning(true); setAssignMsg('')
+    const entry = {
+      id: Date.now()+'',
+      organisation_id: assignOrgId,
+      name: assignTpl.name,
+      description: assignTpl.description||null,
+      priority: assignTpl.priority||'medium',
+      industry: assignTpl.industry||null,
+      role: assignTpl.role||null,
+      positions: assignTpl.positions||null,
+      items: JSON.stringify(assignTpl.items||[]),
+      created_by: user.name,
+      created_at: new Date().toISOString()
+    }
+    const {error} = await supabase.from('checklist_templates').insert(entry)
+    if (error) { setAssignMsg('✗ '+error.message); setAssigning(false); return }
+    setTemplates(prev => [...prev, {...entry, items: assignTpl.items||[]}])
+    setAssignMsg('✓ Assigned to '+( orgMap[assignOrgId]||assignOrgId))
+    setAssignOrgId('')
+    setAssigning(false)
+  }
 
   const filtered = templates.filter(t => {
     if (filterIndustry && t.industry !== filterIndustry) return false
@@ -5560,10 +5595,12 @@ function SuperAdminTemplatesView({ user }) {
                               <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:2}}>
                                 <span style={{fontWeight:600,fontSize:13}}>{t.name}</span>
                                 <PriBadge priority={t.priority||'medium'}/>
+                                {(orgCounts[t.name]?.size||0)>0&&<span className="badge" style={{color:'var(--brand)',background:'var(--brand-lt)',fontSize:10}}>{orgCounts[t.name].size} org{orgCounts[t.name].size!==1?'s':''}</span>}
                               </div>
                               <div style={{fontSize:11,color:'var(--t2)'}}>{orgMap[t.organisation_id]||t.organisation_id} · {t.items?.length||0} items</div>
                             </div>
                             <button className="btn btn-secondary btn-sm" style={{flexShrink:0}} onClick={()=>setViewTpl(t)}>View</button>
+                            <button className="btn btn-primary btn-sm" style={{flexShrink:0}} onClick={()=>{setAssignTpl(t);setAssignOrgId('');setAssignMsg('')}}>Assign</button>
                           </div>
                         ))}
                       </div>
@@ -5575,6 +5612,39 @@ function SuperAdminTemplatesView({ user }) {
           </div>
         )
       })}
+
+      {assignTpl&&(
+        <div className="modal-overlay" onClick={()=>setAssignTpl(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
+            <div className="modal-hdr">
+              <div className="modal-title">Assign Template to Organisation</div>
+              <button className="modal-close" onClick={()=>setAssignTpl(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{marginBottom:14}}>
+                <div style={{fontWeight:600,fontSize:14,marginBottom:4}}>{assignTpl.name}</div>
+                <div style={{fontSize:12,color:'var(--t2)'}}>A copy will be added to the selected organisation's template library. The original remains unchanged and the org can edit their copy freely.</div>
+              </div>
+              {assignMsg&&<div style={{padding:'8px 12px',borderRadius:8,marginBottom:12,fontSize:13,background:assignMsg.startsWith('✓')?'rgba(16,185,129,.1)':'rgba(239,68,68,.1)',color:assignMsg.startsWith('✓')?'var(--green)':'var(--red)',border:'1px solid '+(assignMsg.startsWith('✓')?'rgba(16,185,129,.3)':'rgba(239,68,68,.3)')}}>{assignMsg}</div>}
+              <div className="form-field" style={{marginBottom:16}}>
+                <label className="form-label">Organisation</label>
+                <select className="form-select" value={assignOrgId} onChange={e=>setAssignOrgId(e.target.value)}>
+                  <option value="">— Select organisation —</option>
+                  {Object.entries(orgMap).sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=>(
+                    <option key={id} value={id} disabled={orgCounts[assignTpl.name]?.has(id)}>
+                      {name}{orgCounts[assignTpl.name]?.has(id)?' ✓ already assigned':''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>setAssignTpl(null)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!assignOrgId||assigning} onClick={assignToOrg}>{assigning?'Assigning…':'Assign Copy'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {viewTpl&&(
         <div className="modal-overlay" onClick={()=>setViewTpl(null)}>
