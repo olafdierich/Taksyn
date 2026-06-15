@@ -3299,7 +3299,6 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const industryOptions = [...new Set(pt.map(t=>t.industry).filter(Boolean))].sort()
   const categoryOptions = [...new Set(pt.map(t=>t.category).filter(Boolean))].sort()
   const projectOptions = [...new Set(pt.map(t=>t.project).filter(Boolean))].sort()
-  const taskAllIndustries = [...(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES), ...taskOrgIndustries.filter(d=>!(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES).includes(d))]
   const activeFilterCount = [filterTitle, filterWorker, filterDept, filterIndustry, filterCategory, filterStatuses.length>0, filterPriorities.length>0, filterCompliance, filterProject].filter(Boolean).length
   const filteredPt = pt.filter(t=>{
     if(filterTitle && !t.title?.toLowerCase().includes(filterTitle.toLowerCase())) return false
