@@ -1809,6 +1809,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [interventionReason, setInterventionReason] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
   const [showEdit, setShowEdit] = useState(false)
   const [editTask, setEditTask] = useState({})
   const [showReject, setShowReject] = useState(null)
@@ -2176,40 +2177,38 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     setComment('')
   }
 
-  const createTask = () => {
+  const createTask = async () => {
     if (!newTask.title.trim() || creating) return
     setCreating(true)
+    setCreateError('')
     const taskData = {...newTask}
-    // Close and reset immediately — no await before this
+    const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
+    if (isConfigured()) {
+      const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
+      const { data, error } = await supabase.from('tasks').insert(payload).select().single()
+      if (error) {
+        console.error('Task insert failed:', error)
+        setCreateError('Failed to save task: ' + error.message)
+        setCreating(false)
+        return
+      }
+      const saved = { ...data, subtasks:parseSafe(data.subtasks), evidence:parseSafe(data.evidence), comments:parseSafe(data.comments,[]) }
+      setTasks(prev=>[...prev,saved])
+    } else {
+      setTasks(prev=>[...prev,t])
+    }
+    const cEntry = mkAuditEntry('task_created', user, user.org, { priority:t.priority, category:t.category, assignedTo:t.assigned_user_name||t.assigned_role }, t.id, t.title, null, t.title)
+    setAuditLog(prev=>[cEntry,...prev])
+    if (isConfigured()) supabase.from('audit_log').insert(cEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+    logAuditEvent(user, 'task.created', 'task', t.id, t.title, t.priority+' priority'+(t.assigned_user_name?' · '+t.assigned_user_name:''))
     setShowCreate(false)
     setUserSearch('')
     setSelectedTplId('')
     setChecklistMode('scratch')
     setPendingDelete(null)
+    setCreateError('')
     setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[]})
-    // Do the async work in background
-    const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
-    setTasks(prev=>[...prev,t])
-    const cEntry = mkAuditEntry('task_created', user, user.org, { priority:t.priority, category:t.category, assignedTo:t.assigned_user_name||t.assigned_role }, t.id, t.title, null, t.title)
-    setAuditLog(prev=>[cEntry,...prev])
-    if (isConfigured()) supabase.from('audit_log').insert(cEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
-    logAuditEvent(user, 'task.created', 'task', t.id, t.title, t.priority+' priority'+(t.assigned_user_name?' · '+t.assigned_user_name:''))
-    if (isConfigured()) {
-      const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
-      supabase.from('tasks').insert(payload)
-        .then(({data, error})=>{
-          if(error) {
-            console.error('Task insert failed — message:', error.message)
-            console.error('Task insert failed — code:', error.code, '| hint:', error.hint, '| details:', error.details)
-            console.error('Task insert payload:', payload)
-          } else {
-            console.log('Task inserted successfully:', data)
-          }
-        })
-        .finally(()=>setCreating(false))
-    } else {
-      setCreating(false)
-    }
+    setCreating(false)
   }
 
   const canCreate = ['client_admin','manager','supervisor'].includes(user.role)
@@ -2426,8 +2425,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 ))}
                 {!(newTask.subtasks||[]).length&&!pendingDelete&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
               </div>
+              {createError&&<div style={{color:'var(--red)',fontSize:12,marginBottom:6,padding:'6px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6}}>{createError}</div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                <button className="btn btn-secondary" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null) }}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null); setCreateError('') }}>Cancel</button>
                 <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id)} onClick={createTask}>{creating?'Creating…':'Submit Task'}</button>
               </div>
             </div>
