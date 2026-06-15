@@ -2195,8 +2195,17 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     if (isConfigured()) supabase.from('audit_log').insert(cEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
     logAuditEvent(user, 'task.created', 'task', t.id, t.title, t.priority+' priority'+(t.assigned_user_name?' · '+t.assigned_user_name:''))
     if (isConfigured()) {
-      supabase.from('tasks').insert({ ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' })
-        .then(({error})=>{ if(error) console.error('Task save error:', error) })
+      const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
+      supabase.from('tasks').insert(payload)
+        .then(({data, error})=>{
+          if(error) {
+            console.error('Task insert failed — message:', error.message)
+            console.error('Task insert failed — code:', error.code, '| hint:', error.hint, '| details:', error.details)
+            console.error('Task insert payload:', payload)
+          } else {
+            console.log('Task inserted successfully:', data)
+          }
+        })
         .finally(()=>setCreating(false))
     } else {
       setCreating(false)
