@@ -432,6 +432,7 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .cl-warn{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:var(--red)}
 .cl-build-item{display:flex;gap:6px;align-items:center;margin-bottom:6px}
 .cl-flag-btn{padding:8px 11px;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s;min-width:40px;min-height:40px;display:flex;align-items:center;justify-content:center;line-height:1}
+.cl-flag-btn-req{font-size:22px;min-width:48px;min-height:48px;padding:10px 14px}
 .evidence-zone{border:2px dashed var(--border);border-radius:var(--r);padding:22px;text-align:center;cursor:pointer}
 .ev-thumbs{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
 .ev-thumb{width:60px;height:60px;border-radius:var(--rs);background:var(--s3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;position:relative}
@@ -2408,7 +2409,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 {(newTask.subtasks||[]).map((s,i)=>(
                   <div key={s.id||i} className="cl-build-item">
                     <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
-                    <button type="button" className="cl-flag-btn" title="Mandatory — blocks submit" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.12)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}>{s.mandatory?'★':'*'}</button>
+                    <button type="button" className="cl-flag-btn cl-flag-btn-req" title="Mandatory — blocks submit" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.12)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}>{s.mandatory?'★':'*'}</button>
                     <button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
                     <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>{ const removed=(newTask.subtasks||[])[i]; setNewTask({...newTask,subtasks:(newTask.subtasks||[]).filter((_,j)=>j!==i)}); setPendingDelete({idx:i,item:removed}) }}>✕</button>
                   </div>
