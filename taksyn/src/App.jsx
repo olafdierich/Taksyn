@@ -632,6 +632,7 @@ const IC = ({ n, s=16 }) => {
   const paths = {
     home:'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
     tasks:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+    grid:'M3 5a2 2 0 012-2h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm9 0a2 2 0 012-2h3a2 2 0 012 2v3a2 2 0 01-2 2h-3a2 2 0 01-2-2V5zM3 14a2 2 0 012-2h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-3zm9 0a2 2 0 012-2h3a2 2 0 012 2v3a2 2 0 01-2 2h-3a2 2 0 01-2-2v-3z',
     user:'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
     users:'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
     alert:'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
@@ -4569,7 +4570,7 @@ const COMPANY_COMPLETENESS_FIELDS = [
 ]
 
 const NAV = {
-  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
+  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
   client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','settings'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
@@ -5432,6 +5433,180 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     </div>
   </div>
 )}
+    </div>
+  )
+}
+
+function SuperAdminTemplatesView({ user }) {
+  const [templates, setTemplates] = useState([])
+  const [orgMap, setOrgMap] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [filterIndustry, setFilterIndustry] = useState('')
+  const [filterRole, setFilterRole] = useState('')
+  const [filterPosition, setFilterPosition] = useState('')
+  const [collapsed, setCollapsed] = useState(new Set())
+  const [viewTpl, setViewTpl] = useState(null)
+
+  useEffect(() => {
+    if (!isConfigured()) { setLoading(false); return }
+    Promise.all([
+      supabase.from('checklist_templates').select('*').order('name'),
+      supabase.from('organisations').select('id,name').order('name')
+    ]).then(([{data:tpls},{data:orgs}]) => {
+      const map = {}
+      ;(orgs||[]).forEach(o => { map[o.id] = o.name })
+      setOrgMap(map)
+      setTemplates((tpls||[]).map(t => ({...t, items: parseSafe(t.items)})))
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  const industries = [...new Set(templates.map(t=>t.industry).filter(Boolean))].sort()
+  const roles      = [...new Set(templates.map(t=>t.role).filter(Boolean))].sort()
+  const positions  = [...new Set(templates.flatMap(t=>t.positions||[]))].sort()
+
+  const filtered = templates.filter(t => {
+    if (filterIndustry && t.industry !== filterIndustry) return false
+    if (filterRole && t.role !== filterRole) return false
+    if (filterPosition && !(t.positions||[]).includes(filterPosition)) return false
+    if (search) { const q=search.toLowerCase(); return t.name?.toLowerCase().includes(q)||orgMap[t.organisation_id]?.toLowerCase().includes(q) }
+    return true
+  })
+
+  // Build Industry → Role → Position → [templates]
+  const hier = {}
+  filtered.forEach(t => {
+    const ind = t.industry || '— No Industry —'
+    const rol = t.role || '— All Roles —'
+    const plist = (t.positions||[]).length ? t.positions : ['— All Positions —']
+    if (!hier[ind]) hier[ind] = {}
+    if (!hier[ind][rol]) hier[ind][rol] = {}
+    plist.forEach(p => { if (!hier[ind][rol][p]) hier[ind][rol][p]=[]; hier[ind][rol][p].push(t) })
+  })
+
+  const toggle = key => setCollapsed(prev => { const n=new Set(prev); n.has(key)?n.delete(key):n.add(key); return n })
+
+  return (
+    <div className="anim">
+      <div className="page-header">
+        <h1 className="page-title">Checklist Templates</h1>
+        <div style={{fontSize:12,color:'var(--t2)'}}>{filtered.length} template{filtered.length!==1?'s':''} across all organisations</div>
+      </div>
+
+      <div className="section" style={{marginBottom:14}}>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+          <div style={{flex:'1 1 200px',minWidth:160,height:36,borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)',padding:'0 10px',display:'flex',alignItems:'center',gap:6}}>
+            <IC n="search" s={13}/>
+            <input style={{border:'none',background:'none',outline:'none',fontSize:13,width:'100%',color:'var(--text)'}} placeholder="Search templates or organisations…" value={search} onChange={e=>setSearch(e.target.value)}/>
+          </div>
+          <select className="form-select" style={{flex:'1 1 140px',minWidth:130,fontSize:12}} value={filterIndustry} onChange={e=>setFilterIndustry(e.target.value)}>
+            <option value="">All Industries</option>
+            {industries.map(i=><option key={i} value={i}>{i}</option>)}
+          </select>
+          <select className="form-select" style={{flex:'1 1 120px',minWidth:110,fontSize:12}} value={filterRole} onChange={e=>setFilterRole(e.target.value)}>
+            <option value="">All Roles</option>
+            {roles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]||r}</option>)}
+          </select>
+          <select className="form-select" style={{flex:'1 1 140px',minWidth:130,fontSize:12}} value={filterPosition} onChange={e=>setFilterPosition(e.target.value)}>
+            <option value="">All Positions</option>
+            {positions.map(p=><option key={p} value={p}>{p}</option>)}
+          </select>
+          {(search||filterIndustry||filterRole||filterPosition)&&(
+            <button className="btn btn-secondary btn-sm" onClick={()=>{setSearch('');setFilterIndustry('');setFilterRole('');setFilterPosition('')}}>Clear</button>
+          )}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{textAlign:'center',padding:40,color:'var(--t2)'}}>Loading templates…</div>
+      ) : Object.keys(hier).length===0 ? (
+        <div className="section" style={{textAlign:'center',padding:40,color:'var(--t2)'}}>{templates.length===0?'No templates on the platform yet.':'No templates match your search.'}</div>
+      ) : Object.keys(hier).sort().map(ind => {
+        const indCollapsed = collapsed.has(ind)
+        const indCount = Object.values(hier[ind]).flatMap(r=>Object.values(r)).flat().length
+        return (
+          <div key={ind} style={{marginBottom:10,borderRadius:10,overflow:'hidden',border:'1px solid var(--border)'}}>
+            <div onClick={()=>toggle(ind)} style={{display:'flex',alignItems:'center',gap:8,padding:'11px 16px',background:'var(--brand)',cursor:'pointer',userSelect:'none'}}>
+              <span style={{color:'#fff',fontWeight:700,fontSize:14,flex:1}}>{ind}</span>
+              <span style={{color:'rgba(255,255,255,.65)',fontSize:11}}>{indCount} template{indCount!==1?'s':''}</span>
+              <span style={{color:'rgba(255,255,255,.65)',fontSize:12,marginLeft:4}}>{indCollapsed?'▶':'▼'}</span>
+            </div>
+            {!indCollapsed && Object.keys(hier[ind]).sort().map((rol, ri) => {
+              const rolKey = ind+'|'+rol
+              const rolCollapsed = collapsed.has(rolKey)
+              const rolCount = Object.values(hier[ind][rol]).flat().length
+              return (
+                <div key={rol} style={{borderTop:'1px solid var(--border)'}}>
+                  <div onClick={()=>toggle(rolKey)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 16px',background:'var(--s2)',cursor:'pointer',userSelect:'none'}}>
+                    <span style={{fontWeight:600,fontSize:12,color:'var(--text)',flex:1}}>{ROLE_LABELS[rol]||rol}</span>
+                    <span style={{color:'var(--t2)',fontSize:11}}>{rolCount}</span>
+                    <span style={{color:'var(--t2)',fontSize:11,marginLeft:4}}>{rolCollapsed?'▶':'▼'}</span>
+                  </div>
+                  {!rolCollapsed && Object.keys(hier[ind][rol]).sort().map(pos => {
+                    const posKey = ind+'|'+rol+'|'+pos
+                    const posCollapsed = collapsed.has(posKey)
+                    const posTemplates = hier[ind][rol][pos]
+                    return (
+                      <div key={pos} style={{borderTop:'1px solid var(--border)'}}>
+                        <div onClick={()=>toggle(posKey)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 24px',background:'var(--s3)',cursor:'pointer',userSelect:'none'}}>
+                          <span style={{fontSize:12,color:'var(--t2)',flex:1}}>{pos}</span>
+                          <span style={{color:'var(--t3)',fontSize:11}}>{posTemplates.length}</span>
+                          <span style={{color:'var(--t3)',fontSize:11,marginLeft:4}}>{posCollapsed?'▶':'▼'}</span>
+                        </div>
+                        {!posCollapsed && posTemplates.map(t => (
+                          <div key={t.id+pos} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 24px',borderTop:'1px solid var(--border)',background:'var(--bg)'}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:2}}>
+                                <span style={{fontWeight:600,fontSize:13}}>{t.name}</span>
+                                <PriBadge priority={t.priority||'medium'}/>
+                              </div>
+                              <div style={{fontSize:11,color:'var(--t2)'}}>{orgMap[t.organisation_id]||t.organisation_id} · {t.items?.length||0} items</div>
+                            </div>
+                            <button className="btn btn-secondary btn-sm" style={{flexShrink:0}} onClick={()=>setViewTpl(t)}>View</button>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+
+      {viewTpl&&(
+        <div className="modal-overlay" onClick={()=>setViewTpl(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div>
+                <div className="modal-title">{viewTpl.name}</div>
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>{orgMap[viewTpl.organisation_id]||viewTpl.organisation_id}</div>
+              </div>
+              <button className="modal-close" onClick={()=>setViewTpl(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
+                <PriBadge priority={viewTpl.priority||'medium'}/>
+                {viewTpl.industry&&<span className="badge" style={{color:'var(--t2)',background:'var(--s2)'}}>{viewTpl.industry}</span>}
+                {viewTpl.role&&<span className="badge" style={{color:'var(--t2)',background:'var(--s2)'}}>{ROLE_LABELS[viewTpl.role]||viewTpl.role}</span>}
+                {(viewTpl.positions||[]).map(p=><span key={p} className="badge" style={{color:'var(--brand)',background:'var(--brand-lt)'}}>{p}</span>)}
+              </div>
+              {viewTpl.description&&<div style={{fontSize:13,color:'var(--t2)',marginBottom:12,padding:'8px 12px',background:'var(--s3)',borderRadius:8}}>{viewTpl.description}</div>}
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',marginBottom:8,letterSpacing:'.05em'}}>{viewTpl.items?.length||0} CHECKLIST ITEMS</div>
+              {(viewTpl.items||[]).map((item,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                  <span style={{color:'var(--t3)',fontSize:12,minWidth:20,textAlign:'right',marginTop:1}}>{i+1}.</span>
+                  <span style={{flex:1,fontSize:13}}>{item.label||item.text||''}</span>
+                  {(item.required||item.mandatory)&&<span style={{fontSize:10,color:'var(--red)',fontWeight:700,background:'rgba(239,68,68,.1)',padding:'1px 6px',borderRadius:4,flexShrink:0}}>Required</span>}
+                </div>
+              ))}
+              {!(viewTpl.items||[]).length&&<div style={{color:'var(--t2)',fontSize:13}}>No items in this template.</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -11016,6 +11191,7 @@ export default function App() {
                 {page==='sla'         && ['client_admin','super_admin'].includes(user.role) && <SLASettingsView {...pageProps}/>}
                 {page==='company_settings' && ['client_admin','super_admin'].includes(user.role) && <CompanySettingsView user={user}/>}
                 {page==='notifications' && user.role==='super_admin' && <PlatformAnnouncementsView user={user}/>}
+                {page==='sa_templates'       && user.role==='super_admin' && <SuperAdminTemplatesView user={user}/>}
                 {page==='platform_industries' && user.role==='super_admin' && <PlatformIndustriesView user={user}/>}
                 {page==='roles_departments' && ['client_admin','super_admin'].includes(user.role) && <RolesPositionsView user={user}/>}
                 {page==='platform_settings' && user.role==='super_admin' && <PlatformSettingsView user={user} sessionTimeout={sessionTimeout} setSessionTimeout={setSessionTimeout}/>}
