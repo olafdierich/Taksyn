@@ -1786,7 +1786,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA }) {
+function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{} }) {
   const [filter, setFilter] = useState('all')
   const [selectedOrg, setSelectedOrg] = useState('all')
   const [orgSearch, setOrgSearch] = useState('')
@@ -10866,7 +10866,7 @@ export default function App() {
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA:updateOrgSLA }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
