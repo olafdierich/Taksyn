@@ -3989,12 +3989,17 @@ function UsersView({ user, setAuditLog }) {
       orgId = orgData?.id
     }
     if (isConfigured()) {
-      await supabase.from('profiles').update(profileUpdates).eq('id', id)
-      if (orgId) await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }, { onConflict: 'user_id,org' })
+      const { error: profileError } = await supabase.from('profiles').update(profileUpdates).eq('id', id)
+      if (profileError) { alert('Failed to save changes: ' + profileError.message); return }
+      if (orgId) {
+        const { error: memberError } = await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }, { onConflict: 'user_id,org' })
+        if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
+      }
       if (orgId && editPositions.length > 0) {
         for (const pos of editPositions) {
           if (!pos.role && !pos.industry && !pos.position) continue
-          await supabase.from('org_members').insert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' })
+          const { error: posError } = await supabase.from('org_members').insert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' })
+          if (posError) { alert('Failed to save additional position: ' + posError.message); return }
         }
       }
     }
