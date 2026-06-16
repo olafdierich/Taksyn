@@ -4094,9 +4094,10 @@ function UsersView({ user, setAuditLog }) {
       orgId = orgData?.id
     }
     if (isConfigured()) {
-      const validExtraPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
-      const { error: profileError } = await supabase.from('profiles').update({...profileUpdates, additional_positions: validExtraPositions.length ? JSON.stringify(validExtraPositions) : null}).eq('id', id)
+      const { error: profileError } = await supabase.from('profiles').update(profileUpdates).eq('id', id)
       if (profileError) { alert('Failed to save changes: ' + profileError.message); return }
+      const validExtraPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
+      await supabase.from('profiles').update({ additional_positions: validExtraPositions.length ? JSON.stringify(validExtraPositions) : null }).eq('id', id).then(()=>{}).catch(()=>{})
       if (orgId) {
         const { error: memberError } = await supabase.from('org_members').update({ role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }).eq('user_id', id).eq('org', orgId)
         if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
@@ -4545,7 +4546,7 @@ function UsersView({ user, setAuditLog }) {
                     setEditingUser(u)
                     setEditingOrgId(orgId)
                     setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
-                    setEditPositions([]);(async()=>{ try { const {data:apData} = await supabase.from('profiles').select('additional_positions').eq('id',u.id).single(); let ap = []; try { ap = JSON.parse(apData?.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []) } catch(e) { setEditPositions([]) } })()
+                    setEditPositions([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []) } catch(e) {} })()
                   }}>✏️ Edit</button>}
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
                 </div>
