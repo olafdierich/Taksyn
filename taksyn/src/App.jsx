@@ -4097,14 +4097,26 @@ function UsersView({ user, setAuditLog }) {
       const { error: profileError } = await supabase.from('profiles').update(profileUpdates).eq('id', id)
       if (profileError) { alert('Failed to save changes: ' + profileError.message); return }
       if (orgId) {
-        const { error: memberError } = await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }, { onConflict: 'user_id,org' })
-        if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
+        const { data: existingPrimary } = await supabase.from('org_members').select('user_id').eq('user_id', id).eq('org', orgId).maybeSingle()
+        if (existingPrimary) {
+          const { error: memberError } = await supabase.from('org_members').update({ role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }).eq('user_id', id).eq('org', orgId)
+          if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
+        } else {
+          const { error: memberError } = await supabase.from('org_members').insert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' })
+          if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
+        }
       }
       if (orgId && editPositions.length > 0) {
         for (const pos of editPositions) {
           if (!pos.role && !pos.industry && !pos.position) continue
-          const { error: posError } = await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' }, { onConflict: 'user_id,org,industry,role', ignoreDuplicates: false })
-          if (posError) { alert('Failed to save additional position: ' + posError.message); return }
+          const { data: existingPos } = await supabase.from('org_members').select('user_id').eq('user_id', id).eq('org', orgId).eq('industry', pos.industry||'').eq('role', pos.role||'worker').maybeSingle()
+          if (existingPos) {
+            const { error: posError } = await supabase.from('org_members').update({ position: pos.position||'' }).eq('user_id', id).eq('org', orgId).eq('industry', pos.industry||'').eq('role', pos.role||'worker')
+            if (posError) { alert('Failed to save additional position: ' + posError.message); return }
+          } else {
+            const { error: posError } = await supabase.from('org_members').insert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' })
+            if (posError) { alert('Failed to save additional position: ' + posError.message); return }
+          }
         }
       }
     }
