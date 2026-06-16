@@ -2516,7 +2516,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           {(()=>{
             const subs = parseSafe(sel.subtasks)
             if(!subs.length) return null
-            const doneCount = subs.filter(s=>s.done).length
+            const todayStr = new Date().toISOString().slice(0,10)
+            const taskCompletionsMap = clCompletions[sel.id] || {}
+            const doneCount = subs.filter((s,idx)=>{
+              const itemId = s.id || String(idx)
+              const rows = taskCompletionsMap[itemId] || []
+              return rows.some(r=>r.completed_at&&r.completed_at.slice(0,10)===todayStr) || s.done
+            }).length
             const pctVal = Math.round(doneCount/subs.length*100)
             const pctColor = pctVal===100?'var(--green)':pctVal>=50?'var(--amber)':'var(--brand)'
             const isWorker = user.role==='worker'
