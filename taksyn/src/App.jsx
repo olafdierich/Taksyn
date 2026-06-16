@@ -2342,7 +2342,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={newTask.recurrence} onChange={e=>setNewTask({...newTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/></div>
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={taskOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
                 <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value,position:''})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Position</label><select className="form-select" value={newTask.position||''} onChange={e=>setNewTask({...newTask,position:e.target.value})}><option value="">— Select —</option>{getPositionsForIndustry(taskOrgIndustry||newTask.industry,newTask.assigned_role,taskOrgCustomPositions,taskOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
@@ -3500,13 +3499,13 @@ function ReportsView({ tasks, user, setAuditLog }) {
   }
 
   const exportCompliancePDF = () => {
-    const rows = filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(', ')||'—'; return '<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td>'+t.category+'</td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.started_at?fmtTime(t.started_at):'—')+'</td><td>'+(t.completed_at?fmtTime(t.completed_at):'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.gps_start||t.gps_end?'Yes':'No')+'</td><td>'+(parseSafe(t.evidence).length>0?'Yes':'No')+'</td><td style="font-size:10px">'+clTs+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>' }).join('')
+    const rows = filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(', ')||'—'; return '<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.started_at?fmtTime(t.started_at):'—')+'</td><td>'+(t.completed_at?fmtTime(t.completed_at):'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.gps_start||t.gps_end?'Yes':'No')+'</td><td>'+(parseSafe(t.evidence).length>0?'Yes':'No')+'</td><td style="font-size:10px">'+clTs+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>' }).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>${baseStyle}.sg{grid-template-columns:repeat(5,1fr)}</style></head><body>${reportHeader('Compliance Report')}<div class="sg">${statOrder.map(s=>{
         if(s.c==='x') return '<div class="st" style="background:transparent;border:1px dashed #e8ebf0"></div>'
         const colorMap={g:'#10B981',r:'#EF4444',a:'#F59E0B',p:'#8B5CF6',b:'#3B82F6'}
         const col=colorMap[s.c]||'#5BC8C0'
         return '<div class="st"><div class="sv" style="color:'+col+'">'+s.v()+'</div><div class="sl">'+s.l+'</div></div>'
-      }).join('')}</div><table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Time In</th><th>Time Out</th><th>Duration</th><th>GPS</th><th>Photos</th><th>Checklist Timestamps</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+      }).join('')}</div><table><thead><tr><th>ID</th><th>Task</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Time In</th><th>Time Out</th><th>Duration</th><th>GPS</th><th>Photos</th><th>Checklist Timestamps</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
     openReport(html)
   }
 
@@ -3558,7 +3557,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
             {reportOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <button className="btn btn-primary btn-sm" onClick={handleExport}>📄 Generate PDF</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.category,t.status,t.priority,t.compliance?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"',t.assigned_user_name||''].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"',t.assigned_user_name||''].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
         </div>
       </div>
 
@@ -3744,7 +3743,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
                 <thead>
                   <tr style={{background:'var(--s3)'}}>
-                    {['Task','Status','Due Date','Time In','Time Out','Duration','GPS','Photos','Checklist Timestamps','Assigned To'].map(h=>(
+                    {['Task','Status','Due Date','Time In','Time Out','Duration','GPS Recorded','Photos','Checklist Timestamps','Assigned To'].map(h=>(
                       <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
                     ))}
                   </tr>
