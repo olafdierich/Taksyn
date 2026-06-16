@@ -4097,8 +4097,8 @@ function UsersView({ user, setAuditLog }) {
       const { error: profileError } = await supabase.from('profiles').update(profileUpdates).eq('id', id)
       if (profileError) { alert('Failed to save changes: ' + profileError.message); return }
       if (orgId) {
-        const { data: existingPrimary } = await supabase.from('org_members').select('user_id').eq('user_id', id).eq('org', orgId).maybeSingle()
-        if (existingPrimary) {
+        const { data: existingPrimaryRows } = await supabase.from('org_members').select('user_id').eq('user_id', id).eq('org', orgId).limit(1)
+        if (existingPrimaryRows && existingPrimaryRows.length > 0) {
           const { error: memberError } = await supabase.from('org_members').update({ role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }).eq('user_id', id).eq('org', orgId)
           if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
         } else {
@@ -4109,8 +4109,8 @@ function UsersView({ user, setAuditLog }) {
       if (orgId && editPositions.length > 0) {
         for (const pos of editPositions) {
           if (!pos.role && !pos.industry && !pos.position) continue
-          const { data: existingPos } = await supabase.from('org_members').select('user_id').eq('user_id', id).eq('org', orgId).eq('industry', pos.industry||'').eq('role', pos.role||'worker').maybeSingle()
-          if (existingPos) {
+          const { data: existingPosRows } = await supabase.from('org_members').select('user_id').eq('user_id', id).eq('org', orgId).eq('industry', pos.industry||'').eq('role', pos.role||'worker').limit(1)
+          if (existingPosRows && existingPosRows.length > 0) {
             const { error: posError } = await supabase.from('org_members').update({ position: pos.position||'' }).eq('user_id', id).eq('org', orgId).eq('industry', pos.industry||'').eq('role', pos.role||'worker')
             if (posError) { alert('Failed to save additional position: ' + posError.message); return }
           } else {
