@@ -4014,7 +4014,7 @@ function UsersView({ user, setAuditLog }) {
       const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
       if (assignments?.length) {
         const memberIds = assignments.map(a=>a.user_id)
-        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', memberIds)
+        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone,additional_positions').in('id', memberIds)
         const workforceMembers = (profileData || []).filter(p=>p.role!=='super_admin')
         setRealUsers(workforceMembers)
         parsePositions(workforceMembers)
@@ -4026,7 +4026,7 @@ function UsersView({ user, setAuditLog }) {
         setOrgAssignments(map)
       } else {
         // Fallback: query profiles directly by org name (same as PerformanceView)
-        const {data:fallback} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('org', user.org)
+        const {data:fallback} = await supabase.from('profiles').select('id,name,email,org,role,position,phone,additional_positions').eq('org', user.org)
         if (fallback?.length) { const fb=fallback.filter(p=>p.role!=='super_admin'); setRealUsers(fb); parsePositions(fb) }
       }
       setWorkforceOrgId(orgId)
@@ -4095,7 +4095,7 @@ function UsersView({ user, setAuditLog }) {
     }
     if (isConfigured()) {
       const validExtraPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
-      const { error: profileError } = await supabase.from('profiles').update({...profileUpdates, positions: validExtraPositions.length ? JSON.stringify(validExtraPositions) : null}).eq('id', id)
+      const { error: profileError } = await supabase.from('profiles').update({...profileUpdates, additional_positions: validExtraPositions.length ? JSON.stringify(validExtraPositions) : null}).eq('id', id)
       if (profileError) { alert('Failed to save changes: ' + profileError.message); return }
       if (orgId) {
         const { error: memberError } = await supabase.from('org_members').update({ role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }).eq('user_id', id).eq('org', orgId)
@@ -4545,6 +4545,7 @@ function UsersView({ user, setAuditLog }) {
                     setEditingUser(u)
                     setEditingOrgId(orgId)
                     setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
+                    try { const ap = u.additional_positions ? (Array.isArray(u.additional_positions) ? u.additional_positions : JSON.parse(u.additional_positions)) : []; setEditPositions(ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''}))) } catch(e) { setEditPositions([]) }
                   }}>✏️ Edit</button>}
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
                 </div>
