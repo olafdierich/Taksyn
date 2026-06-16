@@ -4751,6 +4751,59 @@ function PasswordSetupView({ onDone }) {
   )
 }
 
+function PasswordResetView({ onDone }) {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [showPw1, setShowPw1] = useState(false)
+  const [showPw2, setShowPw2] = useState(false)
+
+  const handleReset = async () => {
+    if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return }
+    if (newPassword !== confirmPassword) { setError('Passwords do not match'); return }
+    setLoading(true); setError('')
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+      if (updateError) throw updateError
+      setSuccess(true)
+      setTimeout(() => { supabase.auth.signOut().finally(onDone) }, 2500)
+    } catch(e) {
+      setError(e.message || 'Failed to reset password')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="auth-bg">
+      <style>{CSS}</style>
+      <div className="auth-card">
+        <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}}/></div>
+        <div className="auth-title">Reset Your Password</div>
+        <div className="auth-sub">{success ? 'Password updated successfully. Redirecting to sign in…' : 'Enter your new password below.'}</div>
+        {!success && <>
+          {error && <div className="auth-error">{error}</div>}
+          <div className="auth-field">
+            <label className="auth-label">New Password</label>
+            <div style={{position:'relative'}}><input className="auth-input" type={showPw1?'text':'password'} placeholder="Min 6 characters" value={newPassword} onChange={e=>setNewPassword(e.target.value)} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw1(!showPw1)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw1?'👁':'🔒'}</button></div>
+          </div>
+          <div className="auth-field">
+            <label className="auth-label">Confirm Password</label>
+            <div style={{position:'relative'}}><input className="auth-input" type={showPw2?'text':'password'} placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleReset()} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw2(!showPw2)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw2?'👁':'🔒'}</button></div>
+          </div>
+          {newPassword && confirmPassword && newPassword !== confirmPassword && (
+            <div style={{fontSize:11,color:'var(--red)',marginBottom:8}}>Passwords do not match</div>
+          )}
+          <button className="auth-btn" disabled={loading||!newPassword||!confirmPassword||newPassword!==confirmPassword} onClick={handleReset}>
+            {loading ? 'Updating…' : 'Set New Password'}
+          </button>
+        </>}
+      </div>
+    </div>
+  )
+}
+
 
 function OrganisationsView({ user }) {
   const [orgs, setOrgs] = useState([])
@@ -10564,6 +10617,7 @@ export default function App() {
   const [showUndo, setShowUndo] = useState(false)
   const [auditLog, setAuditLog] = useState([])
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
+  const [needsPasswordReset, setNeedsPasswordReset] = useState(false)
   const [activePosition, setActivePosition] = useState(null) // selected role assignment for multi-role users
   const [showRoleSelector, setShowRoleSelector] = useState(false)
   const [userPositionsList, setUserPositionsList] = useState([])
@@ -10791,6 +10845,8 @@ export default function App() {
     const {data:{subscription}} = supabase.auth.onAuthStateChange(async(event, session)=>{
       if(event==='SIGNED_OUT') {
         setUser(null)
+      } else if(event==='PASSWORD_RECOVERY') {
+        setNeedsPasswordReset(true)
       } else if(event==='USER_UPDATED') {
         // Password was just set — log them in properly
         try {
@@ -10956,6 +11012,7 @@ export default function App() {
   },[user?.role])
 
   if(needsPasswordSetup) return <PasswordSetupView onDone={()=>setNeedsPasswordSetup(false)}/>
+  if(needsPasswordReset) return <PasswordResetView onDone={()=>setNeedsPasswordReset(false)}/>
   if(!user) return <AuthView onAuth={handleAuth} deactivatedMsg={deactivatedMsg} onClearDeactivated={()=>setDeactivatedMsg('')}/>
 
   const escalationCount = tasks.filter(t=>t.escalation||t.status==='overdue').length
