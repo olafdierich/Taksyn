@@ -2502,7 +2502,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   const isExpandedKey = sel.id+'::'+itemId
                   const isHistExpanded = clExpanded.has(isExpandedKey)
                   const isMarkOpen = clMarkOpen&&clMarkOpen.taskId===sel.id&&clMarkOpen.idx===idx
-                  const canAct = isWorker || ['supervisor','manager','client_admin'].includes(user.role)
+                  const canAct = isWorker
                   const isNoteOpen = clNoteOpen&&clNoteOpen.taskId===sel.id&&clNoteOpen.idx===idx
                   return (
                     <div key={s.id||idx} className="cl-item">
@@ -2536,7 +2536,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
                         {s.photo&&<img src={s.photo} alt="evidence" className="cl-photo-thumb" style={{marginTop:4}} onClick={()=>window.open(s.photo,'_blank')}/>}
-                        {isMarkOpen&&canAct?(
+                        {isWorker&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
                             <div style={{display:'flex',gap:6,marginTop:4}}>
@@ -2555,8 +2555,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                               </>
                             )}
                           </div>
-                        )}
-                        {isNoteOpen&&(
+                        ))}
+                        {isWorker&&isNoteOpen&&(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Add a note for this item…" value={clNoteText} onChange={e=>setClNoteText(e.target.value)}/>
                             <div style={{display:'flex',gap:6,marginTop:4}}>
@@ -2579,9 +2579,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               </div>
               {sel.compliance
                 ? <span style={{fontSize:11,fontWeight:700,color:'#8B5CF6',background:'rgba(139,92,246,.1)',border:'1px solid rgba(139,92,246,.25)',borderRadius:4,padding:'2px 8px'}}>🔒 Required for compliance</span>
-                : evidenceOpen
+                : user.role==='worker' && (evidenceOpen
                   ? <button onClick={()=>setEvidenceExpandedIds(prev=>{const n=new Set(prev);n.delete(sel.id);return n})} style={{fontSize:11,color:'var(--t2)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:'2px 4px'}}>Hide ↑</button>
-                  : <button onClick={()=>setEvidenceExpandedIds(prev=>new Set([...prev,sel.id]))} style={{fontSize:11,fontWeight:600,color:'var(--brand)',background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.25)',borderRadius:5,cursor:'pointer',fontFamily:'inherit',padding:'3px 10px'}}>+ Add Photo</button>
+                  : <button onClick={()=>setEvidenceExpandedIds(prev=>new Set([...prev,sel.id]))} style={{fontSize:11,fontWeight:600,color:'var(--brand)',background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.25)',borderRadius:5,cursor:'pointer',fontFamily:'inherit',padding:'3px 10px'}}>+ Add Photo</button>)
               }
             </div>
             {evidenceOpen&&sel.compliance&&parseSafe(sel.evidence).length===0&&user.role==='worker'&&(
