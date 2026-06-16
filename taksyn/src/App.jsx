@@ -4102,7 +4102,7 @@ function UsersView({ user, setAuditLog }) {
           const { error: memberError } = await supabase.from('org_members').update({ role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }).eq('user_id', id).eq('org', orgId)
           if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
         } else {
-          const { error: memberError } = await supabase.from('org_members').insert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' })
+          const { error: memberError } = await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }, { onConflict: 'user_id,org' })
           if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
         }
       }
@@ -4114,7 +4114,7 @@ function UsersView({ user, setAuditLog }) {
             const { error: posError } = await supabase.from('org_members').update({ position: pos.position||'' }).eq('user_id', id).eq('org', orgId).eq('industry', pos.industry||'').eq('role', pos.role||'worker')
             if (posError) { alert('Failed to save additional position: ' + posError.message); return }
           } else {
-            const { error: posError } = await supabase.from('org_members').insert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' })
+            const { error: posError } = await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' }, { onConflict: 'user_id,org' })
             if (posError) { alert('Failed to save additional position: ' + posError.message); return }
           }
         }
@@ -4154,7 +4154,7 @@ function UsersView({ user, setAuditLog }) {
     if (!userOrgId) { alert('Could not find your organisation ID. Please refresh and try again.'); return }
     const { data:existing } = await supabase.from('org_members').select('*').eq('user_id',profile.id).eq('org',userOrgId)
     if (existing?.length) { alert('This user is already in your organisation.'); return }
-    await supabase.from('org_members').insert({ user_id:profile.id, org:userOrgId, role, tier:user.tier||'Growth' })
+    await supabase.from('org_members').upsert({ user_id:profile.id, org:userOrgId, role, tier:user.tier||'Growth' }, { onConflict: 'user_id,org' })
     await supabase.from('profiles').update({ org: user.org, role }).eq('id', profile.id)
     setRealUsers(prev=>[...prev,{...profile,role,org:user.org}])
     alert(profile.name+' added to your organisation as '+ROLE_LABELS[role])
@@ -5039,7 +5039,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       const newOrgId = orgs.find(o=>o.name===newOrgName)?.id
       if (!newOrgId) throw new Error('Could not find organisation ID for ' + newOrgName)
       await supabase.from('org_members').delete().eq('user_id', viewingMember.id).eq('org', oldOrgId)
-      await supabase.from('org_members').insert({ user_id: viewingMember.id, org: newOrgId, role: viewingMember.role })
+      await supabase.from('org_members').upsert({ user_id: viewingMember.id, org: newOrgId, role: viewingMember.role }, { onConflict: 'user_id,org' })
       await supabase.from('profiles').update({ org: newOrgName }).eq('id', viewingMember.id)
       setOrgMembers(prev => prev.filter(m => m.id !== viewingMember.id))
       setViewingMember(null); setShowMemberOrgChange(false); setMemberOrgSearch('')
