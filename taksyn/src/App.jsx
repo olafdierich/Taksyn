@@ -1841,6 +1841,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [clMarkOpen, setClMarkOpen] = useState(null) // {taskId, idx, itemId, label}
   const [clMarkNote, setClMarkNote] = useState('')
   const [clFlash, setClFlash] = useState(null) // 'taskId::itemId' — brief ✓ flash
+  const [lightboxUrl, setLightboxUrl] = useState(null)
   const [taskOrgIndustry, setTaskOrgIndustry] = useState('')
   const [taskOrgCustomPositions, setTaskOrgCustomPositions] = useState([])
   const [taskOrgCustomRoles, setTaskOrgCustomRoles] = useState([])
@@ -2440,6 +2441,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         </div>
       )}
 
+      {lightboxUrl&&(
+        <div onClick={()=>setLightboxUrl(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',cursor:'zoom-out'}}>
+          <img src={lightboxUrl} alt="evidence" onClick={e=>e.stopPropagation()} style={{maxWidth:'92vw',maxHeight:'88vh',objectFit:'contain',borderRadius:8,boxShadow:'0 8px 40px rgba(0,0,0,.6)'}}/>
+          <button onClick={()=>setLightboxUrl(null)} style={{position:'absolute',top:16,right:20,background:'none',border:'none',color:'#fff',fontSize:28,cursor:'pointer',lineHeight:1}}>×</button>
+        </div>
+      )}
       {sel ? (
         <div className="anim">
           <button className="back-btn" onClick={()=>{setSelected(null);setShowDeleteConfirm(false);setDeleteScope('')}}><IC n="x" s={14}/> {showArchive?'Back to Archive':'Back to Tasks'}</button>
@@ -2587,7 +2594,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                           </div>
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
-                        {s.photo&&<img src={s.photo} alt="evidence" className="cl-photo-thumb" style={{marginTop:4}} onClick={()=>window.open(s.photo,'_blank')}/>}
+                        {s.photo&&<img src={s.photo} alt="evidence" className="cl-photo-thumb" style={{marginTop:4,cursor:'zoom-in'}} onClick={()=>setLightboxUrl(s.photo)}/>}
                         {isWorker&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
@@ -2653,8 +2660,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 const ts=typeof e==='object'?e.ts:null
                 return (
                   <div key={i} style={{position:'relative',marginBottom:4}}>
-                    <div className="ev-thumb">{typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http'))?<img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18}}>📷</span>}
-                      {user.role==='worker'&&<div className="ev-rm" onClick={()=>update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}>×</div>}
+                    <div className="ev-thumb" onClick={()=>{ if(typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http'))) setLightboxUrl(url) }} style={{cursor:'zoom-in'}}>{typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http'))?<img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18}}>📷</span>}
+                      {user.role==='worker'&&<div className="ev-rm" onClick={e=>{e.stopPropagation();update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}}>×</div>}
                     </div>
                     {ts&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2}}>{new Date(ts).toLocaleDateString('en-AU')}</div>}
                   </div>
