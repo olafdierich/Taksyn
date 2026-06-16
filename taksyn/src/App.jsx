@@ -3288,6 +3288,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [orgLogo, setOrgLogo] = useState(null)
+  const [rptCompletions, setRptCompletions] = useState({}) // {taskId:{itemId:[rows]}}
   const DEFAULT_STAT_ORDER = [
     {id:'total',l:'Total Tasks',v:()=>total,c:'b'},
     {id:'done',l:'Completed',v:()=>done,c:'g'},
@@ -3376,6 +3377,38 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0
   const fmtDur = (s,e) => { if(!s||!e) return '—'; const m=Math.round((new Date(e)-new Date(s))/60000); return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m' }
   const pl = {weekly:'Last 7 Days',monthly:'Last Month',quarterly:'Last 3 Months',annual:'Last Year',custom:customStart+' to '+customEnd}[period]
+
+  // Load checklist completions for filtered tasks
+  useEffect(()=>{
+    if (!isConfigured()) return
+    const ids = filteredPt.map(t=>t.id)
+    if (!ids.length) return
+    supabase.from('checklist_completions').select('*').in('task_id', ids).order('completed_at',{ascending:true})
+      .then(({data})=>{
+        if (!data) return
+        const map = {}
+        data.forEach(row=>{
+          if (!map[row.task_id]) map[row.task_id] = {}
+          if (!map[row.task_id][row.checklist_item_id]) map[row.task_id][row.checklist_item_id] = []
+          map[row.task_id][row.checklist_item_id].push(row)
+        })
+        setRptCompletions(map)
+      }).catch(()=>{})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[period, customStart, customEnd, reportType])
+
+  const getClTimestamps = (t) => {
+    const subs = parseSafe(t.subtasks)
+    const taskMap = rptCompletions[t.id] || {}
+    return subs
+      .filter(s=>s.requireTimestamp)
+      .map(s=>{
+        const rows = taskMap[s.id] || []
+        const latest = rows[rows.length-1]
+        return latest ? (s.text||'Item')+': '+fmtTime(latest.completed_at) : null
+      })
+      .filter(Boolean)
+  }
 
   // --- Compliance report stats ---
   const total=filteredPt.length, done=filteredPt.filter(t=>['completed','approved'].includes(t.status)).length
@@ -3467,13 +3500,13 @@ function ReportsView({ tasks, user, setAuditLog }) {
   }
 
   const exportCompliancePDF = () => {
-    const rows = filteredPt.map(t=>'<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td>'+t.category+'</td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.completed_at?new Date(t.completed_at).toLocaleDateString():'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>').join('')
+    const rows = filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(', ')||'—'; return '<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td>'+t.category+'</td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.started_at?fmtTime(t.started_at):'—')+'</td><td>'+(t.completed_at?fmtTime(t.completed_at):'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.gps_start||t.gps_end?'Yes':'No')+'</td><td>'+(parseSafe(t.evidence).length>0?'Yes':'No')+'</td><td style="font-size:10px">'+clTs+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>' }).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>${baseStyle}.sg{grid-template-columns:repeat(5,1fr)}</style></head><body>${reportHeader('Compliance Report')}<div class="sg">${statOrder.map(s=>{
         if(s.c==='x') return '<div class="st" style="background:transparent;border:1px dashed #e8ebf0"></div>'
         const colorMap={g:'#10B981',r:'#EF4444',a:'#F59E0B',p:'#8B5CF6',b:'#3B82F6'}
         const col=colorMap[s.c]||'#5BC8C0'
         return '<div class="st"><div class="sv" style="color:'+col+'">'+s.v()+'</div><div class="sl">'+s.l+'</div></div>'
-      }).join('')}</div><table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Completed</th><th>Duration</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+      }).join('')}</div><table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Time In</th><th>Time Out</th><th>Duration</th><th>GPS</th><th>Photos</th><th>Checklist Timestamps</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
     openReport(html)
   }
 
@@ -3525,7 +3558,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
             {reportOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <button className="btn btn-primary btn-sm" onClick={handleExport}>📄 Generate PDF</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Completed,Duration,Assigned To\n'+filteredPt.map(t=>[t.id,t.title,t.category,t.status,t.priority,t.compliance,parseSafe(t.evidence).length,t.due_date,t.completed_at||'',fmtDur(t.started_at,t.completed_at)||'',t.assigned_user_name||''].join(',')).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.category,t.status,t.priority,t.compliance?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"',t.assigned_user_name||''].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
         </div>
       </div>
 
@@ -3703,6 +3736,40 @@ function ReportsView({ tasks, user, setAuditLog }) {
                   <div style={{fontSize:9,color:'var(--t2)'}}>{d.label}</div>
                 </div>
               ))}
+            </div>
+          </div>
+          <div className="section">
+            <div className="section-title">Task Detail — {filteredPt.length} tasks</div>
+            <div style={{overflowX:'auto',marginTop:10}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                <thead>
+                  <tr style={{background:'var(--s3)'}}>
+                    {['Task','Status','Due Date','Time In','Time Out','Duration','GPS','Photos','Checklist Timestamps','Assigned To'].map(h=>(
+                      <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPt.length===0&&<tr><td colSpan={10} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No tasks for this period</td></tr>}
+                  {filteredPt.map((t,i)=>{
+                    const clTs = getClTimestamps(t)
+                    return (
+                      <tr key={t.id||i} style={{borderBottom:'1px solid var(--border)'}}>
+                        <td style={{padding:'8px 10px',fontWeight:600,maxWidth:180}}>{t.title}</td>
+                        <td style={{padding:'8px 10px',whiteSpace:'nowrap',color:t.status==='approved'?'var(--green)':t.status==='rejected'?'var(--red)':'var(--t2)',fontWeight:600,fontSize:10,textTransform:'uppercase'}}>{t.status.replace('_',' ')}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{t.due_date||'—'}</td>
+                        <td style={{padding:'8px 10px',whiteSpace:'nowrap',color:t.started_at?'var(--green)':'var(--t3)',fontWeight:t.started_at?600:400}}>{t.started_at?fmtTime(t.started_at):'—'}</td>
+                        <td style={{padding:'8px 10px',whiteSpace:'nowrap',color:t.completed_at?'#F59E0B':'var(--t3)',fontWeight:t.completed_at?600:400}}>{t.completed_at?fmtTime(t.completed_at):'—'}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{fmtDur(t.started_at,t.completed_at)}</td>
+                        <td style={{padding:'8px 10px',textAlign:'center'}}>{(t.gps_start||t.gps_end)?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
+                        <td style={{padding:'8px 10px',textAlign:'center'}}>{parseSafe(t.evidence).length>0?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',fontSize:10,maxWidth:200}}>{clTs.length>0?clTs.join(', '):<span style={{color:'var(--t3)'}}>—</span>}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{t.assigned_user_name||'—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </>
