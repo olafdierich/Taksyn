@@ -4103,7 +4103,7 @@ function UsersView({ user, setAuditLog }) {
       if (orgId && editPositions.length > 0) {
         for (const pos of editPositions) {
           if (!pos.role && !pos.industry && !pos.position) continue
-          const { error: posError } = await supabase.from('org_members').insert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' })
+          const { error: posError } = await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' }, { onConflict: 'user_id,org,industry,role', ignoreDuplicates: false })
           if (posError) { alert('Failed to save additional position: ' + posError.message); return }
         }
       }
