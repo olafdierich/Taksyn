@@ -648,6 +648,7 @@ const IC = ({ n, s=16 }) => {
     audit:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
     org:'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
     settings:'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+    shield:'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
   }
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={paths[n]||paths.check} /></svg>
 }
@@ -4692,7 +4693,7 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','settings'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
@@ -9782,17 +9783,17 @@ const GUIDE_CONTENT = {
         ]},
       ]},
       { num:5, title:'Creating and managing tasks', subChapters:[
-        { id:'ch5-1', title:'Creating and sending a task', steps:[
+        { id:'5.1', title:'Creating and sending a task', steps:[
           { summary:'Open the New Task form', detail:'From Dashboard or Tasks, tap + New Task. On desktop it slides open on the right. On mobile it opens full screen.', foundIn:'Dashboard or Left sidebar → Tasks → + New Task button' },
           { summary:'Fill in all the key fields', detail:'Title — use a clear action-oriented name. Description — full instructions and what evidence to submit. Then set Assigned To, Due Date, Priority, and optionally link to a Project.', foundIn:'New Task form → Title, Description, Assigned To, Due Date, Priority fields', tip:'High-priority tasks trigger an immediate push notification to the worker.' },
           { summary:'Tap Send Task', detail:'The worker is notified immediately and the task appears in their My Tasks list as Pending. You can also Save as Draft if you are not ready to send yet.', foundIn:'New Task form → Send Task button or Save as Draft button' },
         ]},
-        { id:'ch5-2', title:'Reviewing submitted tasks', steps:[
+        { id:'5.2', title:'Reviewing submitted tasks', steps:[
           { summary:'Find tasks awaiting review', detail:'Go to Tasks and filter by Pending Review, or tap the Pending Review card on the Dashboard. The 🔔 notification bell also shows new submissions in real time.', foundIn:'Dashboard → Pending Review card; Tasks → filter by Pending Review' },
           { summary:'Open and inspect the submission', detail:"Tap 👁️ View on the task. You will see the original instructions, the worker's completion notes, and any photos or files they attached as evidence.", foundIn:'Tasks → task card → View or Review button' },
           { summary:'Approve or reject the task', detail:'Tap ✅ Approve to mark the task complete — the worker is notified. Tap ↩️ Reject to return it with a reason — the worker must resubmit. All approvals and rejections are timestamped in the Audit Log with your name.', foundIn:'Task detail → Approve button or Reject button', tip:'Always add a clear reason when rejecting so the worker knows exactly what to fix.' },
         ]},
-        { id:'ch5-3', title:'Editing, deleting and escalating tasks', steps:[
+        { id:'5.3', title:'Editing, deleting and escalating tasks', steps:[
           { summary:'Editing a task', detail:'Tap ✏️ Edit on any task that has not yet been completed. You can change the title, description, due date, priority, or assigned worker. The worker receives a notification that their task has been updated.', foundIn:'Task card or task detail → Edit button' },
           { summary:'Deleting a task', detail:'Tap 🗑️ Delete on the task card then confirm. Tasks in any status except Completed can be deleted. The deletion is logged in the Audit Log and cannot be undone.', foundIn:'Task detail → Delete button', tip:'Deletion cannot be undone — use escalation instead if you want to flag a task without removing it.' },
           { summary:'Escalating a task', detail:'Tap 🔺 Escalate to notify the Manager immediately, change the status to Escalated, and create an entry in the Audit Log. Escalation can also trigger automatically when a task exceeds its SLA deadline. Check Settings → SLA to configure this.', foundIn:'Task detail → Escalate button; Settings → SLA', tip:'Escalate early rather than late — do not wait until a deadline is missed.' },
