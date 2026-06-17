@@ -124,7 +124,7 @@ const getSLAStatus = (task, orgSLA) => {
 const isRecurring = t => t.recurrence && t.recurrence !== '' && t.recurrence !== 'once' && t.recurrence !== null
 const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:2, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1, issue_reports:1 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const workingDaysBetween = (start, end) => {
   let count = 0
@@ -648,6 +648,9 @@ const IC = ({ n, s=16 }) => {
     audit:'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
     org:'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
     settings:'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+    shield:'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+    flag:'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z',
+    clipboard:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
   }
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={paths[n]||paths.check} /></svg>
 }
@@ -1072,6 +1075,24 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
           const orgName = org.trim()
           assignedRole = 'client_admin'
+          // General guard: if this email already has a profile with an existing org_members row,
+          // do not create a new organisation or org_members entry regardless of role.
+          if (isConfigured()) {
+            try {
+              const { data: existingProfile } = await supabase.from('profiles').select('id,role').eq('email', email.toLowerCase()).maybeSingle()
+              if (existingProfile) {
+                if (existingProfile.role === 'super_admin') {
+                  setError('This email is already registered. Please sign in.')
+                  setLoading(false); return
+                }
+                const { data: existingMemberships } = await supabase.from('org_members').select('id').eq('user_id', existingProfile.id).limit(1)
+                if (existingMemberships?.length) {
+                  setError('This email is already registered. Please sign in.')
+                  setLoading(false); return
+                }
+              }
+            } catch (_) {}
+          }
           window.__taksyn_registering = true
           const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email, password,
@@ -1105,6 +1126,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         if (data?.user) {
           const { data:profile } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id',data.user.id).single()
           if (profile) {
+            // Super admin: skip all org checks and onboarding — route directly to the super_admin dashboard
+            if (profile.role === 'super_admin') {
+              window.__taksyn_org_selection_pending = false
+              onAuth({...profile, email:data.user.email})
+              return
+            }
             // Check org_members for multiple org memberships
             const { data:memberships } = await supabase.from('org_members').select('*').eq('user_id',data.user.id)
             // Deduplicate org_members by org key before checking count
@@ -1138,7 +1165,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               const userData = {...profile, email:data.user.email, role:m.role, org:profile.org||m.org, tier:m.tier||'Growth'}
               onAuth(userData)
             } else {
-              // No org_members entry — use profile directly (legacy/super_admin)
+              // No org_members entry — use profile directly. Never create a new org or
+              // org_members row here; if the user already has a role, that was set at
+              // registration time and must not be duplicated.
               window.__taksyn_org_selection_pending = false
               const userData = {...profile, email:data.user.email}
               onAuth(userData)
@@ -1164,7 +1193,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
     try {
       const { error:e } = await supabase.auth.resetPasswordForEmail(email, { redirectTo:'https://taksyn.vercel.app' })
       if (e) throw e
-      setSuccess('✅ Password reset email sent! Check your inbox at ' + email)
+      setSuccess('Password reset email sent. Please check your inbox and spam folder.')
       setEmail('')
       setLoading(false)
     } catch(e) { setError(e.message||'Failed to send reset email') }
@@ -1546,7 +1575,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
     <div className="anim">
       <div className="ph">
         <div className="ph-title">{isCA?'Organisation Dashboard':isMgr?'Team Dashboard':isSup?'Supervisor Dashboard':'My Tasks Today'}</div>
-        <div className="ph-sub">{isWkr?'Hello '+user.name.split(' ')[0]+' — your tasks for today':user.org+' · '+visible.length+' tasks'}</div>
+        <div className="ph-sub">{isWkr?'Hello '+user.name.split(' ')[0]+' — your tasks for today':user.org+(user.industry?' · 🏭 '+user.industry:'')+' · '+visible.length+' tasks'}</div>
       </div>
       <div className="stat-grid">
         {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋"/><Stat label="Completion" val={rate+"%"} sub={done+" done"} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨"/></>}
@@ -1841,6 +1870,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [clMarkOpen, setClMarkOpen] = useState(null) // {taskId, idx, itemId, label}
   const [clMarkNote, setClMarkNote] = useState('')
   const [clFlash, setClFlash] = useState(null) // 'taskId::itemId' — brief ✓ flash
+  const [lightboxUrl, setLightboxUrl] = useState(null)
   const [taskOrgIndustry, setTaskOrgIndustry] = useState('')
   const [taskOrgCustomPositions, setTaskOrgCustomPositions] = useState([])
   const [taskOrgCustomRoles, setTaskOrgCustomRoles] = useState([])
@@ -2272,13 +2302,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               <div className="form-field">
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                   <label className="form-label" style={{margin:0}}>Checklist</label>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setEditTask({...editTask,subtasks:[...(editTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setEditTask({...editTask,subtasks:[...(editTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,requireTimestamp:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
                 </div>
                 {(editTask.subtasks||[]).map((s,i)=>(
                   <div key={s.id||i} className="cl-build-item">
                     <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
                     <button type="button" className="cl-flag-btn" title="Mandatory" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.08)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}><strong>*</strong></button>
                     <button type="button" className="cl-flag-btn" title="Require photo" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
+                    <button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x)})}>🕐</button>
                     <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).filter((_,j)=>j!==i)})}>×</button>
                   </div>
                 ))}
@@ -2339,16 +2370,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             <div className="modal-hdr"><div className="modal-title">Create New Task</div><button className="modal-close" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null) }}>×</button></div>
             <div className="modal-body">
               <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/></div>
+              <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={newTask.recurrence} onChange={e=>setNewTask({...newTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={taskOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
                 <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value,position:''})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={taskOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
                 <div className="form-field"><label className="form-label">Position</label><select className="form-select" value={newTask.position||''} onChange={e=>setNewTask({...newTask,position:e.target.value})}><option value="">— Select —</option>{getPositionsForIndustry(taskOrgIndustry||newTask.industry,newTask.assigned_role,taskOrgCustomPositions,taskOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
-              <div className="two-col">
-                <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={newTask.due_date} onChange={e=>setNewTask({...newTask,due_date:e.target.value})}/></div>
-                <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={newTask.recurrence} onChange={e=>setNewTask({...newTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
-              </div>
+              <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={newTask.due_date} onChange={e=>setNewTask({...newTask,due_date:e.target.value})}/></div>
               <div className="form-field"><label className="form-label">Assign To</label>
                 {teamUsers.length>0 ? (
                   <div>
@@ -2400,7 +2429,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       {pos&&!keys.length ? (
                         <div style={{fontSize:12,color:'var(--t2)',padding:'10px 12px',background:'var(--s3)',borderRadius:8,border:'1px solid var(--border)'}}>No templates available for this position yet</div>
                       ) : (
-                        <select className="form-select" value={selectedTplId} onChange={e=>{ const tmpl=templates.find(t=>t.id===e.target.value); if(tmpl){ setSelectedTplId(e.target.value); setNewTask({...newTask,priority:tmpl.priority||newTask.priority,subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))}) } else { setSelectedTplId('') } }}>
+                        <select className="form-select" value={selectedTplId} onChange={e=>{ const tmpl=templates.find(t=>t.id===e.target.value); if(tmpl){ setSelectedTplId(e.target.value); setNewTask({...newTask,title:newTask.title.trim()?newTask.title:(tmpl.name||''),priority:tmpl.priority||newTask.priority,subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))}) } else { setSelectedTplId('') } }}>
                           <option value="">— None —</option>
                           {keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>)}
                         </select>
@@ -2413,7 +2442,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 })()}
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                   <span style={{fontSize:12,color:'var(--t2)'}}>Checklist Items</span>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setNewTask({...newTask,subtasks:[...(newTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setNewTask({...newTask,subtasks:[...(newTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,requireTimestamp:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
                 </div>
                 {pendingDelete&&(
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6,padding:'6px 10px',marginBottom:6,fontSize:12}}>
@@ -2425,6 +2454,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
                     <button type="button" className="cl-flag-btn cl-flag-btn-req" title="Mandatory — blocks submit" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.12)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}>{s.mandatory?'★':'*'}</button>
                     <button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
+                    <button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x)})}>🕐</button>
                     <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>{ const removed=(newTask.subtasks||[])[i]; setNewTask({...newTask,subtasks:(newTask.subtasks||[]).filter((_,j)=>j!==i)}); setPendingDelete({idx:i,item:removed}) }}>✕</button>
                   </div>
                 ))}
@@ -2440,6 +2470,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         </div>
       )}
 
+      {lightboxUrl&&(
+        <div onClick={()=>setLightboxUrl(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',cursor:'zoom-out'}}>
+          <img src={lightboxUrl} alt="evidence" onClick={e=>e.stopPropagation()} style={{maxWidth:'92vw',maxHeight:'88vh',objectFit:'contain',borderRadius:8,boxShadow:'0 8px 40px rgba(0,0,0,.6)'}}/>
+          <button onClick={()=>setLightboxUrl(null)} style={{position:'absolute',top:16,right:20,background:'none',border:'none',color:'#fff',fontSize:28,cursor:'pointer',lineHeight:1}}>×</button>
+        </div>
+      )}
       {sel ? (
         <div className="anim">
           <button className="back-btn" onClick={()=>{setSelected(null);setShowDeleteConfirm(false);setDeleteScope('')}}><IC n="x" s={14}/> {showArchive?'Back to Archive':'Back to Tasks'}</button>
@@ -2455,13 +2491,53 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end'}}><StatusBadge status={sel.status}/><PriBadge priority={sel.priority}/></div>
           </div>
-          <div className="timing-bar">
-            <div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {sel.started_at?fmtTime(sel.started_at):'—'}</div>
-            <div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {sel.completed_at?fmtTime(sel.completed_at):'—'}</div>
-            {fmtDuration(sel.started_at,sel.completed_at)&&<div className="timing-chip active">⏱ {fmtDuration(sel.started_at,sel.completed_at)}</div>}
-            {sel.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_start)}>📍 Start</span>}
-            {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
-          </div>
+          {user.role==='worker'&&(
+            <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
+              <div style={{flex:1,minWidth:100,background: sel.started_at?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(sel.started_at?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
+                <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time In</div>
+                <div style={{fontSize:15,fontWeight:800,color:sel.started_at?'var(--green)':'var(--t3)'}}>{sel.started_at?fmtTime(sel.started_at):'—'}</div>
+              </div>
+              <div style={{flex:1,minWidth:100,background: sel.completed_at?'rgba(245,158,11,.1)':'var(--s3)',border:'1px solid '+(sel.completed_at?'rgba(245,158,11,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
+                <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time Out</div>
+                <div style={{fontSize:15,fontWeight:800,color:sel.completed_at?'var(--amber)':'var(--t3)'}}>{sel.completed_at?fmtTime(sel.completed_at):'—'}</div>
+              </div>
+              {fmtDuration(sel.started_at,sel.completed_at)&&(
+                <div style={{flex:1,minWidth:100,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px'}}>
+                  <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Duration</div>
+                  <div style={{fontSize:15,fontWeight:800,color:'var(--t1)'}}>{fmtDuration(sel.started_at,sel.completed_at)}</div>
+                </div>
+              )}
+            </div>
+          )}
+          {user.role==='worker'&&(
+            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+                {!sel.started_at&&<button className="btn btn-green" style={{flex:1}} onClick={()=>startTask(sel.id)}>▶ Time In</button>}
+                {sel.started_at&&!sel.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>{ if(gpsEnabled===false||!navigator.geolocation){update(sel.id,{completed_at:new Date().toISOString()});return} navigator.geolocation.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>}
+              </div>
+              {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
+                <button
+                  className="btn btn-primary"
+                  style={{width:'100%',opacity:(sel.compliance&&parseSafe(sel.evidence).length===0)?0.55:1}}
+                  onClick={()=>submitTask(sel.id)}
+                >
+                  {sel.compliance&&parseSafe(sel.evidence).length===0?'📷 Add Photo to Submit':'✅ Submit'}
+                </button>
+              )}
+              {sel.status==='awaiting_review'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Done — awaiting manager review</div>}
+              {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Approved</div>}
+            </div>
+          )}
+          {(user.role!=='worker'||(sel.gps_start||sel.gps_end))&&(
+            <div className="timing-bar">
+              {user.role!=='worker'&&<div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {sel.started_at?fmtTime(sel.started_at):'—'}</div>}
+              {user.role!=='worker'&&<div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {sel.completed_at?fmtTime(sel.completed_at):'—'}</div>}
+              {user.role!=='worker'&&fmtDuration(sel.started_at,sel.completed_at)&&<div className="timing-chip active">⏱ {fmtDuration(sel.started_at,sel.completed_at)}</div>}
+              {sel.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_start)}>📍 Start</span>}
+              {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
+            </div>
+          )}
           {sel.status==='rejected'&&(
             <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back</div>
@@ -2476,7 +2552,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           {(()=>{
             const subs = parseSafe(sel.subtasks)
             if(!subs.length) return null
-            const doneCount = subs.filter(s=>s.done).length
+            const todayStr = new Date().toISOString().slice(0,10)
+            const taskCompletionsMap = clCompletions[sel.id] || {}
+            const doneCount = subs.filter((s,idx)=>{
+              const itemId = s.id || String(idx)
+              const rows = taskCompletionsMap[itemId] || []
+              return rows.some(r=>r.completed_at&&r.completed_at.slice(0,10)===todayStr) || s.done
+            }).length
             const pctVal = Math.round(doneCount/subs.length*100)
             const pctColor = pctVal===100?'var(--green)':pctVal>=50?'var(--amber)':'var(--brand)'
             const isWorker = user.role==='worker'
@@ -2502,7 +2584,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   const isExpandedKey = sel.id+'::'+itemId
                   const isHistExpanded = clExpanded.has(isExpandedKey)
                   const isMarkOpen = clMarkOpen&&clMarkOpen.taskId===sel.id&&clMarkOpen.idx===idx
-                  const canAct = isWorker || ['supervisor','manager','client_admin'].includes(user.role)
+                  const canAct = isWorker
                   const isNoteOpen = clNoteOpen&&clNoteOpen.taskId===sel.id&&clNoteOpen.idx===idx
                   return (
                     <div key={s.id||idx} className="cl-item">
@@ -2514,6 +2596,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                           <span className="cl-text">{s.text||'(untitled)'}</span>
                           {s.mandatory&&<span className="cl-mandatory" title="Mandatory">*</span>}
                           {s.requirePhoto&&<span style={{fontSize:10,color:'#3B82F6',fontWeight:600}} title="Photo required">📷</span>}
+                          {s.requireTimestamp&&todayCount>0&&todayRows[todayRows.length-1]&&(
+                            <span style={{fontSize:10,color:'#F59E0B',fontWeight:600}} title="Completion timestamp">🕐 {new Date(todayRows[todayRows.length-1].completed_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                          )}
+                          {s.requireTimestamp&&todayCount===0&&(
+                            <span style={{fontSize:10,color:'var(--t3)'}} title="Timestamp will be recorded on completion">🕐</span>
+                          )}
                           {todayCount>0&&(
                             <span style={{fontSize:10,fontWeight:700,color:'#10B981',background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.25)',borderRadius:10,padding:'1px 7px',cursor:'pointer'}} onClick={()=>setClExpanded(prev=>{ const n=new Set(prev); n.has(isExpandedKey)?n.delete(isExpandedKey):n.add(isExpandedKey); return n })}>
                               {todayCount}× today {isHistExpanded?'▲':'▼'}
@@ -2535,8 +2623,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                           </div>
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
-                        {s.photo&&<img src={s.photo} alt="evidence" className="cl-photo-thumb" style={{marginTop:4}} onClick={()=>window.open(s.photo,'_blank')}/>}
-                        {isMarkOpen&&canAct?(
+                        {s.photo&&<img src={s.photo} alt="evidence" className="cl-photo-thumb" style={{marginTop:4,cursor:'zoom-in'}} onClick={()=>setLightboxUrl(s.photo)}/>}
+                        {isWorker&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
                             <div style={{display:'flex',gap:6,marginTop:4}}>
@@ -2555,8 +2643,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                               </>
                             )}
                           </div>
-                        )}
-                        {isNoteOpen&&(
+                        ))}
+                        {isWorker&&isNoteOpen&&(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Add a note for this item…" value={clNoteText} onChange={e=>setClNoteText(e.target.value)}/>
                             <div style={{display:'flex',gap:6,marginTop:4}}>
@@ -2579,9 +2667,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               </div>
               {sel.compliance
                 ? <span style={{fontSize:11,fontWeight:700,color:'#8B5CF6',background:'rgba(139,92,246,.1)',border:'1px solid rgba(139,92,246,.25)',borderRadius:4,padding:'2px 8px'}}>🔒 Required for compliance</span>
-                : evidenceOpen
+                : user.role==='worker' && (evidenceOpen
                   ? <button onClick={()=>setEvidenceExpandedIds(prev=>{const n=new Set(prev);n.delete(sel.id);return n})} style={{fontSize:11,color:'var(--t2)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:'2px 4px'}}>Hide ↑</button>
-                  : <button onClick={()=>setEvidenceExpandedIds(prev=>new Set([...prev,sel.id]))} style={{fontSize:11,fontWeight:600,color:'var(--brand)',background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.25)',borderRadius:5,cursor:'pointer',fontFamily:'inherit',padding:'3px 10px'}}>+ Add Photo</button>
+                  : <button onClick={()=>setEvidenceExpandedIds(prev=>new Set([...prev,sel.id]))} style={{fontSize:11,fontWeight:600,color:'var(--brand)',background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.25)',borderRadius:5,cursor:'pointer',fontFamily:'inherit',padding:'3px 10px'}}>+ Add Photo</button>)
               }
             </div>
             {evidenceOpen&&sel.compliance&&parseSafe(sel.evidence).length===0&&user.role==='worker'&&(
@@ -2601,8 +2689,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 const ts=typeof e==='object'?e.ts:null
                 return (
                   <div key={i} style={{position:'relative',marginBottom:4}}>
-                    <div className="ev-thumb">{typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http'))?<img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18}}>📷</span>}
-                      {user.role==='worker'&&<div className="ev-rm" onClick={()=>update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}>×</div>}
+                    <div className="ev-thumb" onClick={()=>{ if(typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http'))) setLightboxUrl(url) }} style={{cursor:'zoom-in'}}>{typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http'))?<img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18}}>📷</span>}
+                      {user.role==='worker'&&<div className="ev-rm" onClick={e=>{e.stopPropagation();update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}}>×</div>}
                     </div>
                     {ts&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2}}>{new Date(ts).toLocaleDateString('en-AU')}</div>}
                   </div>
@@ -2696,27 +2784,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               {sel.project&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Project:</span> <span style={{color:'#3B82F6',fontWeight:600}}>📁 {sel.project}</span></div>}
             </div>
           </div>
-          {user.role==='worker'&&(
-            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
-              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
-                {!sel.started_at?<button className="btn btn-green" style={{flex:1}} onClick={()=>startTask(sel.id)}>▶ Time In</button>:<div style={{flex:1,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--green)',fontWeight:600,textAlign:'center'}}>✓ In: {fmtTime(sel.started_at)}</div>}
-                {sel.started_at&&!sel.completed_at?<button className="btn btn-amber" style={{flex:1}} onClick={()=>{ if(gpsEnabled===false||!navigator.geolocation){update(sel.id,{completed_at:new Date().toISOString()});return} navigator.geolocation.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>:sel.completed_at?<div style={{flex:1,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.25)',borderRadius:6,padding:'8px 12px',fontSize:12,color:'var(--amber)',fontWeight:600,textAlign:'center'}}>✓ Out: {fmtTime(sel.completed_at)}</div>:null}
-              </div>
-              {sel.started_at&&sel.completed_at&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:10,textAlign:'center'}}>⏱ Duration: <strong>{fmtDuration(sel.started_at,sel.completed_at)}</strong></div>}
-              {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
-                <button
-                  className="btn btn-primary"
-                  style={{width:'100%',opacity:(sel.compliance&&parseSafe(sel.evidence).length===0)?0.55:1}}
-                  onClick={()=>submitTask(sel.id)}
-                >
-                  {sel.compliance&&parseSafe(sel.evidence).length===0?'📷 Add Photo to Submit':'✅ Mark as Done'}
-                </button>
-              )}
-              {sel.status==='awaiting_review'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Done — awaiting manager review</div>}
-              {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Approved</div>}
-            </div>
-          )}
           <div className="btn-row">
             {canApprove&&sel.status!=='approved'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit</button>}
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
@@ -3257,6 +3324,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [orgLogo, setOrgLogo] = useState(null)
+  const [rptCompletions, setRptCompletions] = useState({}) // {taskId:{itemId:[rows]}}
   const DEFAULT_STAT_ORDER = [
     {id:'total',l:'Total Tasks',v:()=>total,c:'b'},
     {id:'done',l:'Completed',v:()=>done,c:'g'},
@@ -3345,6 +3413,38 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0
   const fmtDur = (s,e) => { if(!s||!e) return '—'; const m=Math.round((new Date(e)-new Date(s))/60000); return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m' }
   const pl = {weekly:'Last 7 Days',monthly:'Last Month',quarterly:'Last 3 Months',annual:'Last Year',custom:customStart+' to '+customEnd}[period]
+
+  // Load checklist completions for filtered tasks
+  useEffect(()=>{
+    if (!isConfigured()) return
+    const ids = filteredPt.map(t=>t.id)
+    if (!ids.length) return
+    supabase.from('checklist_completions').select('*').in('task_id', ids).order('completed_at',{ascending:true})
+      .then(({data})=>{
+        if (!data) return
+        const map = {}
+        data.forEach(row=>{
+          if (!map[row.task_id]) map[row.task_id] = {}
+          if (!map[row.task_id][row.checklist_item_id]) map[row.task_id][row.checklist_item_id] = []
+          map[row.task_id][row.checklist_item_id].push(row)
+        })
+        setRptCompletions(map)
+      }).catch(()=>{})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[period, customStart, customEnd, reportType])
+
+  const getClTimestamps = (t) => {
+    const subs = parseSafe(t.subtasks)
+    const taskMap = rptCompletions[t.id] || {}
+    return subs
+      .filter(s=>s.requireTimestamp)
+      .map(s=>{
+        const rows = taskMap[s.id] || []
+        const latest = rows[rows.length-1]
+        return latest ? (s.text||'Item')+': '+fmtTime(latest.completed_at) : null
+      })
+      .filter(Boolean)
+  }
 
   // --- Compliance report stats ---
   const total=filteredPt.length, done=filteredPt.filter(t=>['completed','approved'].includes(t.status)).length
@@ -3436,13 +3536,13 @@ function ReportsView({ tasks, user, setAuditLog }) {
   }
 
   const exportCompliancePDF = () => {
-    const rows = filteredPt.map(t=>'<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td>'+t.category+'</td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.completed_at?new Date(t.completed_at).toLocaleDateString():'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>').join('')
+    const rows = filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(', ')||'—'; return '<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.started_at?fmtTime(t.started_at):'—')+'</td><td>'+(t.completed_at?fmtTime(t.completed_at):'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.gps_start||t.gps_end?'Yes':'No')+'</td><td>'+(parseSafe(t.evidence).length>0?'Yes':'No')+'</td><td style="font-size:10px">'+clTs+'</td><td>'+(t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>' }).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>${baseStyle}.sg{grid-template-columns:repeat(5,1fr)}</style></head><body>${reportHeader('Compliance Report')}<div class="sg">${statOrder.map(s=>{
         if(s.c==='x') return '<div class="st" style="background:transparent;border:1px dashed #e8ebf0"></div>'
         const colorMap={g:'#10B981',r:'#EF4444',a:'#F59E0B',p:'#8B5CF6',b:'#3B82F6'}
         const col=colorMap[s.c]||'#5BC8C0'
         return '<div class="st"><div class="sv" style="color:'+col+'">'+s.v()+'</div><div class="sl">'+s.l+'</div></div>'
-      }).join('')}</div><table><thead><tr><th>ID</th><th>Task</th><th>Category</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Completed</th><th>Duration</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+      }).join('')}</div><table><thead><tr><th>ID</th><th>Task</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Time In</th><th>Time Out</th><th>Duration</th><th>GPS</th><th>Photos</th><th>Checklist Timestamps</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
     openReport(html)
   }
 
@@ -3494,7 +3594,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
             {reportOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <button className="btn btn-primary btn-sm" onClick={handleExport}>📄 Generate PDF</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Category,Status,Priority,Compliance,Evidence,Due Date,Completed,Duration,Assigned To\n'+filteredPt.map(t=>[t.id,t.title,t.category,t.status,t.priority,t.compliance,parseSafe(t.evidence).length,t.due_date,t.completed_at||'',fmtDur(t.started_at,t.completed_at)||'',t.assigned_user_name||''].join(',')).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"',t.assigned_user_name||''].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
         </div>
       </div>
 
@@ -3674,6 +3774,40 @@ function ReportsView({ tasks, user, setAuditLog }) {
               ))}
             </div>
           </div>
+          <div className="section">
+            <div className="section-title">Task Detail — {filteredPt.length} tasks</div>
+            <div style={{overflowX:'auto',marginTop:10}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                <thead>
+                  <tr style={{background:'var(--s3)'}}>
+                    {['Task','Status','Due Date','Time In','Time Out','Duration','GPS Recorded','Photos','Checklist Timestamps','Assigned To'].map(h=>(
+                      <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPt.length===0&&<tr><td colSpan={10} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No tasks for this period</td></tr>}
+                  {filteredPt.map((t,i)=>{
+                    const clTs = getClTimestamps(t)
+                    return (
+                      <tr key={t.id||i} style={{borderBottom:'1px solid var(--border)'}}>
+                        <td style={{padding:'8px 10px',fontWeight:600,maxWidth:180}}>{t.title}</td>
+                        <td style={{padding:'8px 10px',whiteSpace:'nowrap',color:t.status==='approved'?'var(--green)':t.status==='rejected'?'var(--red)':'var(--t2)',fontWeight:600,fontSize:10,textTransform:'uppercase'}}>{t.status.replace('_',' ')}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{t.due_date||'—'}</td>
+                        <td style={{padding:'8px 10px',whiteSpace:'nowrap',color:t.started_at?'var(--green)':'var(--t3)',fontWeight:t.started_at?600:400}}>{t.started_at?fmtTime(t.started_at):'—'}</td>
+                        <td style={{padding:'8px 10px',whiteSpace:'nowrap',color:t.completed_at?'#F59E0B':'var(--t3)',fontWeight:t.completed_at?600:400}}>{t.completed_at?fmtTime(t.completed_at):'—'}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{fmtDur(t.started_at,t.completed_at)}</td>
+                        <td style={{padding:'8px 10px',textAlign:'center'}}>{(t.gps_start||t.gps_end)?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
+                        <td style={{padding:'8px 10px',textAlign:'center'}}>{parseSafe(t.evidence).length>0?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',fontSize:10,maxWidth:200}}>{clTs.length>0?clTs.join(', '):<span style={{color:'var(--t3)'}}>—</span>}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{t.assigned_user_name||'—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </>
       )}
 
@@ -3789,6 +3923,11 @@ function UsersView({ user, setAuditLog }) {
   const [allOrgMemberships, setAllOrgMemberships] = useState({}) // super_admin: user_id → [{orgName, role, industry, position}]
   const [editingOrgId, setEditingOrgId] = useState(null)
   const [editPositions, setEditPositions] = useState([])
+  const [editRoster, setEditRoster] = useState([])
+  const [rosterOnlyUser, setRosterOnlyUser] = useState(null)
+  const [rosterOnlyData, setRosterOnlyData] = useState([])
+  const [rosterOnlyRegRostered, setRosterOnlyRegRostered] = useState(false)
+  const [rosterOnlySaving, setRosterOnlySaving] = useState(false)
   const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
   const [pendingInvites, setPendingInvites] = useState([])
   const [workforceOrgId, setWorkforceOrgId] = useState(null)
@@ -3981,7 +4120,9 @@ function UsersView({ user, setAuditLog }) {
       last_name: lastName,
       phone: editForm.phone||'',
       notes: editForm.notes||'',
-      email: editForm.email||''
+      email: editForm.email||'',
+      roster: editRoster,
+      regularly_rostered: !!editForm.regularly_rostered
     }
     let orgId = editingOrgId || orgsList.find(o=>o.name===user.org)?.id
     if (!orgId && isConfigured()) {
@@ -3991,16 +4132,11 @@ function UsersView({ user, setAuditLog }) {
     if (isConfigured()) {
       const { error: profileError } = await supabase.from('profiles').update(profileUpdates).eq('id', id)
       if (profileError) { alert('Failed to save changes: ' + profileError.message); return }
+      const validExtraPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
+      await supabase.from('profiles').update({ additional_positions: validExtraPositions.length ? JSON.stringify(validExtraPositions) : null }).eq('id', id).then(()=>{}).catch(()=>{})
       if (orgId) {
-        const { error: memberError } = await supabase.from('org_members').upsert({ user_id: id, org: orgId, role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }, { onConflict: 'user_id,org' })
+        const { error: memberError } = await supabase.from('org_members').update({ role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }).eq('user_id', id).eq('org', orgId)
         if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
-      }
-      if (orgId && editPositions.length > 0) {
-        for (const pos of editPositions) {
-          if (!pos.role && !pos.industry && !pos.position) continue
-          const { error: posError } = await supabase.from('org_members').insert({ user_id: id, org: orgId, role: pos.role||'worker', industry: pos.industry||'', position: pos.position||'' })
-          if (posError) { alert('Failed to save additional position: ' + posError.message); return }
-        }
       }
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
@@ -4022,7 +4158,21 @@ function UsersView({ user, setAuditLog }) {
     setEditingOrgId(null)
     setEditForm({})
     setEditPositions([])
+    setEditRoster([])
     setNewPosition({ dept:'', role:'worker', title:'' })
+  }
+
+  const saveRosterOnly = async () => {
+    if (!rosterOnlyUser) return
+    setRosterOnlySaving(true)
+    if (isConfigured()) {
+      const { error } = await supabase.from('profiles').update({ roster: rosterOnlyData, regularly_rostered: rosterOnlyRegRostered }).eq('id', rosterOnlyUser.id)
+      if (error) { alert('Failed to save roster: ' + error.message); setRosterOnlySaving(false); return }
+    }
+    setRosterOnlyUser(null)
+    setRosterOnlyData([])
+    setRosterOnlyRegRostered(false)
+    setRosterOnlySaving(false)
   }
 
   const addExistingUserToOrg = async (email, role) => {
@@ -4037,7 +4187,7 @@ function UsersView({ user, setAuditLog }) {
     if (!userOrgId) { alert('Could not find your organisation ID. Please refresh and try again.'); return }
     const { data:existing } = await supabase.from('org_members').select('*').eq('user_id',profile.id).eq('org',userOrgId)
     if (existing?.length) { alert('This user is already in your organisation.'); return }
-    await supabase.from('org_members').insert({ user_id:profile.id, org:userOrgId, role, tier:user.tier||'Growth' })
+    await supabase.from('org_members').upsert({ user_id:profile.id, org:userOrgId, role, tier:user.tier||'Growth' }, { onConflict: 'user_id,org' })
     await supabase.from('profiles').update({ org: user.org, role }).eq('id', profile.id)
     setRealUsers(prev=>[...prev,{...profile,role,org:user.org}])
     alert(profile.name+' added to your organisation as '+ROLE_LABELS[role])
@@ -4179,11 +4329,11 @@ function UsersView({ user, setAuditLog }) {
   return (
     <div className="anim">
       {editingUser&&(
-        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>
+        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]); setEditRoster([]) }}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">Edit Team Member</div>
-              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>×</button>
+              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]); setEditRoster([]) }}>×</button>
             </div>
             <div className="modal-body">
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--s3)',borderRadius:8}}>
@@ -4274,13 +4424,86 @@ function UsersView({ user, setAuditLog }) {
               <div style={{marginBottom:12}}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>setEditPositions(prev=>[...prev,{industry:'',role:'worker',position:''}])}>+ Add Position</button>
               </div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--s3)',borderRadius:8,marginBottom:10}}>
+                <div style={{flex:1,minWidth:0,marginRight:12}}>
+                  <div style={{fontSize:13,fontWeight:600}}>Regularly Rostered</div>
+                  <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>If on, only tasks due during rostered hours count toward this worker's KPI.</div>
+                </div>
+                <button type="button" style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:editForm.regularly_rostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setEditForm({...editForm,regularly_rostered:!editForm.regularly_rostered})}>
+                  <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:editForm.regularly_rostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                </button>
+              </div>
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:12,marginBottom:12,opacity:editForm.regularly_rostered?1:0.4,pointerEvents:editForm.regularly_rostered?'auto':'none',transition:'opacity .2s'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>Roster</span>
+                </div>
+                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>{
+                  const entry = editRoster.find(r=>r.day===day)
+                  return (
+                    <div key={day} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                      <button type="button" onClick={()=>{ if(entry) setEditRoster(prev=>prev.filter(r=>r.day!==day)); else setEditRoster(prev=>[...prev,{day,start:'09:00',end:'17:00'}]) }} style={{width:44,padding:'3px 0',borderRadius:4,border:'1px solid '+(entry?'var(--brand)':'var(--border)'),background:entry?'var(--brand-lt)':'transparent',color:entry?'var(--brand)':'var(--t2)',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>{day}</button>
+                      {entry&&<>
+                        <input type="time" value={entry.start} onChange={e=>setEditRoster(prev=>prev.map(r=>r.day===day?{...r,start:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                        <span style={{fontSize:10,color:'var(--t2)'}}>to</span>
+                        <input type="time" value={entry.end} onChange={e=>setEditRoster(prev=>prev.map(r=>r.day===day?{...r,end:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                      </>}
+                    </div>
+                  )
+                })}
+              </div>
               <div className="form-field">
                 <label className="form-label">Notes</label>
                 <textarea className="comment-box" style={{minHeight:60}} value={editForm.notes||''} onChange={e=>setEditForm({...editForm,notes:e.target.value})} placeholder="Any notes about this team member..."/>
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
-                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]); setEditRoster([]) }}>Cancel</button>
                 <button className="btn btn-primary" disabled={!editForm.first_name?.trim()} onClick={saveEditUser}>Save Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rosterOnlyUser&&(
+        <div className="modal-overlay" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]); setRosterOnlyRegRostered(false) }}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Edit Roster — {rosterOnlyUser.name}</div>
+              <button className="modal-close" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]); setRosterOnlyRegRostered(false) }}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--s3)',borderRadius:8,marginBottom:14}}>
+                <div style={{flex:1,minWidth:0,marginRight:12}}>
+                  <div style={{fontSize:13,fontWeight:600}}>Regularly Rostered</div>
+                  <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>If on, only tasks due during rostered hours count toward this worker's KPI.</div>
+                </div>
+                <button type="button" style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:rosterOnlyRegRostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setRosterOnlyRegRostered(v=>!v)}>
+                  <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:rosterOnlyRegRostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                </button>
+              </div>
+              <div style={{opacity:rosterOnlyRegRostered?1:0.4,pointerEvents:rosterOnlyRegRostered?'auto':'none',transition:'opacity .2s'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:14}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>Roster</span>
+                </div>
+                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>{
+                  const entry = rosterOnlyData.find(r=>r.day===day)
+                  return (
+                    <div key={day} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                      <button type="button" onClick={()=>{ if(entry) setRosterOnlyData(prev=>prev.filter(r=>r.day!==day)); else setRosterOnlyData(prev=>[...prev,{day,start:'09:00',end:'17:00'}]) }} style={{width:44,padding:'3px 0',borderRadius:4,border:'1px solid '+(entry?'var(--brand)':'var(--border)'),background:entry?'var(--brand-lt)':'transparent',color:entry?'var(--brand)':'var(--t2)',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>{day}</button>
+                      {entry&&<>
+                        <input type="time" value={entry.start} onChange={e=>setRosterOnlyData(prev=>prev.map(r=>r.day===day?{...r,start:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                        <span style={{fontSize:10,color:'var(--t2)'}}>to</span>
+                        <input type="time" value={entry.end} onChange={e=>setRosterOnlyData(prev=>prev.map(r=>r.day===day?{...r,end:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                      </>}
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+                <button className="btn btn-secondary" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]); setRosterOnlyRegRostered(false) }}>Cancel</button>
+                <button className="btn btn-primary" disabled={rosterOnlySaving} onClick={saveRosterOnly}>{rosterOnlySaving?'Saving…':'Save Roster'}</button>
               </div>
             </div>
           </div>
@@ -4393,7 +4616,7 @@ function UsersView({ user, setAuditLog }) {
           </div>
         </div>
       )}
-      <div className="ph"><div className="ph-top"><div><div className="ph-title">Workforce</div><div className="ph-sub">Manage your organisation's workforce</div></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{['client_admin','super_admin'].includes(user.role)&&<><button className="btn btn-secondary" onClick={()=>setShowManageIndustries(true)}>🏭 Industries</button><button className="btn btn-primary" onClick={()=>openInviteForm('email')}>📧 Invite via Email</button><button className="btn btn-green" onClick={()=>openInviteForm('whatsapp')}>💬 Invite via WhatsApp</button></>}</div></div></div>
+      <div className="ph"><div className="ph-top"><div><div className="ph-title">Workforce</div><div className="ph-sub">Manage your organisation's workforce{workforceOrgIndustry?' · 🏭 '+workforceOrgIndustry:''}</div></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{['client_admin','super_admin'].includes(user.role)&&<><button className="btn btn-secondary" onClick={()=>setShowManageIndustries(true)}>🏭 Industries</button><button className="btn btn-primary" onClick={()=>openInviteForm('email')}>📧 Invite via Email</button><button className="btn btn-green" onClick={()=>openInviteForm('whatsapp')}>💬 Invite via WhatsApp</button></>}</div></div></div>
       <div className="section">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div className="section-title" style={{margin:0}}>Workforce ({confirmedRealUsers.length})</div>
@@ -4446,8 +4669,10 @@ function UsersView({ user, setAuditLog }) {
                     setEditingUser(u)
                     setEditingOrgId(orgId)
                     setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
+                    setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster,regularly_rostered').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs); setEditForm(prev=>({...prev,regularly_rostered:!!apData.regularly_rostered})) } catch(e) {} })()
                   }}>✏️ Edit</button>}
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
+                  {['manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setRosterOnlyUser(u); setRosterOnlyData([]); setRosterOnlyRegRostered(false); (async()=>{ try { const {data,error}=await supabase.from('profiles').select('roster,regularly_rostered').eq('id',u.id).single(); if(error||!data) return; let rs=[]; try{rs=Array.isArray(data.roster)?data.roster:(JSON.parse(data.roster||'[]'))}catch(e){rs=[]}; setRosterOnlyData(rs); setRosterOnlyRegRostered(!!data.regularly_rostered) } catch(e){} })() }}>📅 Edit Roster</button>}
                 </div>
               )
               if (user.role==='super_admin') {
@@ -4591,10 +4816,10 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','settings'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
-  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Issue Reports','clipboard']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Report an Issue','flag']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Report an Issue','flag']],
+  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Report an Issue','flag']],
 }
 
 function PasswordSetupView({ onDone }) {
@@ -4641,6 +4866,59 @@ function PasswordSetupView({ onDone }) {
         <button className="auth-btn" disabled={loading||!newPassword||!confirmPassword||newPassword!==confirmPassword} onClick={handleSetPassword}>
           {loading?'Activating...':'Activate Account'}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function PasswordResetView({ onDone }) {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [showPw1, setShowPw1] = useState(false)
+  const [showPw2, setShowPw2] = useState(false)
+
+  const handleReset = async () => {
+    if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return }
+    if (newPassword !== confirmPassword) { setError('Passwords do not match'); return }
+    setLoading(true); setError('')
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+      if (updateError) throw updateError
+      setSuccess(true)
+      setTimeout(() => { supabase.auth.signOut().finally(onDone) }, 2500)
+    } catch(e) {
+      setError(e.message || 'Failed to reset password')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="auth-bg">
+      <style>{CSS}</style>
+      <div className="auth-card">
+        <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}}/></div>
+        <div className="auth-title">Reset Your Password</div>
+        <div className="auth-sub">{success ? 'Password updated successfully. Redirecting to sign in…' : 'Enter your new password below.'}</div>
+        {!success && <>
+          {error && <div className="auth-error">{error}</div>}
+          <div className="auth-field">
+            <label className="auth-label">New Password</label>
+            <div style={{position:'relative'}}><input className="auth-input" type={showPw1?'text':'password'} placeholder="Min 6 characters" value={newPassword} onChange={e=>setNewPassword(e.target.value)} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw1(!showPw1)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw1?'👁':'🔒'}</button></div>
+          </div>
+          <div className="auth-field">
+            <label className="auth-label">Confirm Password</label>
+            <div style={{position:'relative'}}><input className="auth-input" type={showPw2?'text':'password'} placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleReset()} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw2(!showPw2)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw2?'👁':'🔒'}</button></div>
+          </div>
+          {newPassword && confirmPassword && newPassword !== confirmPassword && (
+            <div style={{fontSize:11,color:'var(--red)',marginBottom:8}}>Passwords do not match</div>
+          )}
+          <button className="auth-btn" disabled={loading||!newPassword||!confirmPassword||newPassword!==confirmPassword} onClick={handleReset}>
+            {loading ? 'Updating…' : 'Set New Password'}
+          </button>
+        </>}
       </div>
     </div>
   )
@@ -4869,7 +5147,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       const newOrgId = orgs.find(o=>o.name===newOrgName)?.id
       if (!newOrgId) throw new Error('Could not find organisation ID for ' + newOrgName)
       await supabase.from('org_members').delete().eq('user_id', viewingMember.id).eq('org', oldOrgId)
-      await supabase.from('org_members').insert({ user_id: viewingMember.id, org: newOrgId, role: viewingMember.role })
+      await supabase.from('org_members').upsert({ user_id: viewingMember.id, org: newOrgId, role: viewingMember.role }, { onConflict: 'user_id,org' })
       await supabase.from('profiles').update({ org: newOrgName }).eq('id', viewingMember.id)
       setOrgMembers(prev => prev.filter(m => m.id !== viewingMember.id))
       setViewingMember(null); setShowMemberOrgChange(false); setMemberOrgSearch('')
@@ -6514,6 +6792,7 @@ function CompanySettingsView({ user }) {
     const items = validItems.map((it,idx)=>({ id:String(idx+1), label:it.label.trim(), required:!!it.required }))
     const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
+      if (!editingTpl.id) { console.error('checklist_templates update: template id is undefined'); setMsg('✗ Template id is missing — please reload and try again'); setTplSaving(false); return }
       const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items) }
       if (isConfigured()) {
         const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id)
@@ -6522,12 +6801,14 @@ function CompanySettingsView({ user }) {
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) {
-        const { error } = await supabase.from('checklist_templates').insert(entry)
+        const { data:inserted, error } = await supabase.from('checklist_templates').insert(entry).select().single()
         if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
+        setTplList(prev=>[...prev,{...(inserted||entry),items}])
+      } else {
+        setTplList(prev=>[...prev,{...entry,items}])
       }
-      setTplList(prev=>[...prev,{...entry,items}])
       setMsg('✓ Template saved')
     }
     resetTplForm()
@@ -7419,14 +7700,20 @@ function TemplatesView({ user }) {
     const items = validItems.map(i=>({label:i.label.trim(),required:!!i.required}))
     const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
+      if (!editingTpl.id) { console.error('checklist_templates update: template id is undefined'); setMsg('✗ Template id is missing — please reload and try again'); setTplSaving(false); return }
       const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items) }
       if (isConfigured()) { const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
-      if (isConfigured()) { const { error } = await supabase.from('checklist_templates').insert(entry); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
-      setTplList(prev=>[...prev,{...entry,items}].sort((a,b)=>a.name.localeCompare(b.name)))
+      const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      if (isConfigured()) {
+        const { data:inserted, error } = await supabase.from('checklist_templates').insert(entry).select().single()
+        if(error){ setMsg('✗ '+error.message); setTplSaving(false); return }
+        setTplList(prev=>[...prev,{...(inserted||entry),items}].sort((a,b)=>a.name.localeCompare(b.name)))
+      } else {
+        setTplList(prev=>[...prev,{...entry,items}].sort((a,b)=>a.name.localeCompare(b.name)))
+      }
       setMsg('✓ Template saved')
     }
     resetTplForm(); setTplSaving(false)
@@ -8072,16 +8359,18 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
       const orgId = orgRow?.id || user.org
       const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
       if(members?.length) {
-        const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
+        const {data:profiles} = await supabase.from('profiles').select('id,name,role,roster,regularly_rostered').in('id',members.map(m=>m.user_id))
         if(profiles) setOrgMembers(profiles.map(p=>({
           id: p.id,
           name: p.name||'',
-          role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker'
+          role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker',
+          roster: Array.isArray(p.roster)?p.roster:[],
+          regularly_rostered: !!p.regularly_rostered
         })))
       } else {
         // Fallback: query profiles directly by org name
-        const {data:fallback} = await supabase.from('profiles').select('id,name,role').eq('org',user.org)
-        if(fallback?.length) setOrgMembers(fallback.map(p=>({id:p.id,name:p.name||'',role:p.role||'worker'})))
+        const {data:fallback} = await supabase.from('profiles').select('id,name,role,roster,regularly_rostered').eq('org',user.org)
+        if(fallback?.length) setOrgMembers(fallback.map(p=>({id:p.id,name:p.name||'',role:p.role||'worker',roster:Array.isArray(p.roster)?p.roster:[],regularly_rostered:!!p.regularly_rostered})))
       }
     })().catch(()=>{})
   },[user.org])
@@ -8119,9 +8408,11 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
   // Initialise an entry for every confirmed org member so members with zero tasks
   // still appear (empty stats) rather than being silently absent
+  const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
   orgMembers.forEach(m=>{
     peopleMap[m.id] = {
       id:m.id, name:m.name, role:m.role,
+      roster: m.roster||[], regularly_rostered: !!m.regularly_rostered,
       total:0, done:0, onTime:0, rejected:0, overdue:0,
       avgMins:[], submitted:0, reviewedInTime:0,
       clDone:0, clTotal:0, slaTotal:0, slaOnTime:0
@@ -8146,6 +8437,12 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
+
+    // Skip tasks not on a rostered day when regularly_rostered is enabled
+    if (p.regularly_rostered && p.roster.length && t.due_date) {
+      const dueDay = DAY_NAMES[new Date(t.due_date+'T12:00:00').getDay()]
+      if (!p.roster.find(r=>r.day===dueDay)) return
+    }
 
     p.total++
     parseSafe(t.subtasks).forEach(s=>{ p.clTotal++; if(s.done) p.clDone++ })
@@ -9570,92 +9867,78 @@ const GUIDE_CONTENT = {
     icon: '🏢',
     color: '#00A87E',
     chapters: [
-      { num:1, title:'Setting Up Your Organisation', subChapters:[
-        { id:'1.1', title:'Complete your organisation profile', steps:[
-          { summary:'Go to Settings in the left sidebar', detail:'Click the Settings icon in the left navigation sidebar. This opens your organisation settings where you can manage all your organisation details. Settings is only visible to Client Admin and Super Admin roles.', foundIn:'Left sidebar → Settings', tip:'Settings is the first place to go when setting up Taksyn for your organisation.' },
-          { summary:'Click Organisation Profile', detail:'Inside Settings, click Organisation Profile. This page lets you fill in your organisation name, industry, logo, address, and contact details. The more complete your profile the better your reports and exports will look.', foundIn:'Settings → Organisation Profile', tip:'Upload your organisation logo here — it appears on PDF reports and the staff registration page.' },
-          { summary:'Fill in all required fields', detail:'Complete as many fields as possible. Required fields are marked with an asterisk. At minimum fill in your Organisation Name, Industry, and Primary Contact Email. Optional fields like ABN, website, and address add professionalism to your exported reports.', foundIn:'Settings → Organisation Profile → form fields', tip:'Check the Profile Completeness indicator — aim for at least 80% before going live.' },
-          { summary:'Click Save', detail:'When you have filled in your details click the Save button at the bottom of the form. A confirmation message will appear. Your details are saved immediately and will appear on all future reports and exports.', foundIn:'Settings → Organisation Profile → Save button', tip:'You can come back and update these details at any time.' },
-        ]},
-        { id:'1.2', title:'Configure your settings', steps:[
-          { summary:'Go to Settings and open Session Timeout', detail:'In Settings, find the Session Timeout option. This controls how long a user can be inactive before they are automatically signed out. For shared devices in care or hospitality environments this is an important security setting.', foundIn:'Settings → Session Timeout', tip:'We recommend 10 to 30 minutes for most environments. Staff on personal devices can use a longer timeout.' },
-          { summary:'Set your auto logout duration', detail:'Choose a timeout value from the dropdown. Options range from 5 minutes to Never. When a user is inactive for this duration they will see a warning countdown, then be signed out automatically. They can sign back in immediately to continue their work.', foundIn:'Settings → Session Timeout → dropdown', tip:'Super Admins have a default of 10 minutes regardless of the organisation-level setting.' },
-          { summary:'Configure notification preferences', detail:'In Settings you can set which types of notifications your team receives — task assignments, completions, approvals, rejections, and SLA breaches. Toggle each notification type on or off to suit your team\'s workflow.', foundIn:'Settings → Notifications', tip:'Turn on SLA breach notifications so managers are alerted automatically when a task review takes too long.' },
-          { summary:'Review your data retention settings', detail:'Your data retention period determines how long completed tasks, audit logs, and reports are kept. This is set automatically based on your subscription plan. If you need longer retention for compliance purposes go to Settings > Data & Privacy.', foundIn:'Settings → Data & Privacy', tip:'Aged care and NDIS providers typically require 7 years of records. Contact support if you need extended retention.' },
-        ]},
-        { id:'1.3', title:'Set up your industries, roles and positions', steps:[
-          { summary:'Go to Settings and open Roles & Positions', detail:'In Settings, click on Roles & Positions. This is where you define the structure of your workforce — the industries you operate in, the custom roles people hold, and the position titles used in your organisation.', foundIn:'Settings → Roles & Positions', tip:'Set this up before inviting any team members so the right options appear in the invite form.' },
-          { summary:'Add your industries', detail:'Click Add Industry and type the name of each industry your organisation operates in — for example Housekeeping, Food & Beverage, Maintenance, or Aged Care. You can add as many as needed. Industries appear as filters in the Workforce and Tasks sections.', foundIn:'Settings → Roles & Positions → Add Industry', tip:'Use industry names that match your internal terminology so staff recognise them immediately.' },
-          { summary:'Add roles for each industry', detail:'For each industry add the custom role names used in that area — for example under Housekeeping you might add Room Attendant, Laundry Staff, and Floor Supervisor. Roles appear as options when assigning positions to team members.', foundIn:'Settings → Roles & Positions → Add Role', tip:'Keep role names consistent with what appears on your staff contracts and rosters.' },
-          { summary:'Add position levels', detail:'Position levels are the seniority tiers in your organisation — Staff Member, Supervisor, Manager, and Client Admin. These map to permission levels in Taksyn. Assign the correct position when inviting team members so they automatically get the right access level.', foundIn:'Settings → Roles & Positions → Positions', tip:'A Staff Member position gives the lowest access level. Manager and above can approve tasks and view reports.' },
+      { num:1, title:'Your role', subChapters:[
+        { id:'1.1', title:'What a client admin does in Taksyn', steps:[
+          { summary:'You are the top-level owner of your organisation', detail:'As client admin you have full control over your organisation in Taksyn. You manage who is in it, what roles they hold, how it is configured, and how it performs. Everything flows up to you.', foundIn:'All sections of the app — you have full access' },
+          { summary:'You oversee all members — workers, supervisors, and managers', detail:'You can see every member of your organisation regardless of role. You can invite new members, assign or change their roles, and remove members who are no longer active.', foundIn:'Left sidebar → Settings → Members' },
+          { summary:'You review performance across the whole organisation', detail:'You have access to organisation-wide reports and performance reviews. You can see task completion rates, overdue trends, team productivity, and individual worker performance over time.', foundIn:'Left sidebar → Reports → Performance Reviews' },
+          { summary:'You configure how the organisation runs', detail:'You control SLA deadlines, notification settings, leave policies, and other organisation-wide settings. These configurations affect every member and every task in your organisation.', foundIn:'Left sidebar → Settings → SLA, Notifications, Leave' },
+          { summary:'You support your team with minor platform issues', detail:'When team members have trouble with Taksyn — login issues, notification problems, access errors — you are the first point of contact. You can raise a support ticket on their behalf via Help & Support.', foundIn:'Left sidebar → Help & Support → New Ticket button' },
+          { summary:'Your initials badge confirms your role', detail:'Your initials appear in the top-right corner. Tap it to view your profile, confirm your role, or switch between organisations if you manage more than one.', foundIn:'Top-right corner → initials badge → Profile' },
         ]},
       ]},
-      { num:2, title:'Building Your Workforce', subChapters:[
-        { id:'2.1', title:'Invite your first team member', steps:[
-          { summary:'Go to the Workforce section', detail:'Click Workforce in the left navigation sidebar. This is where you manage all team members in your organisation. You will see existing members grouped by role, and a button to invite new members.', foundIn:'Left sidebar → Workforce', tip:'The Workforce section is only visible to Client Admin and Manager roles.' },
-          { summary:'Click Invite to Workforce', detail:'Click the Invite to Workforce button at the top of the page. A modal will appear with fields for the new team member\'s details. Fill in their First Name, Last Name, email address, and phone number.', foundIn:'Workforce → Invite to Workforce button', tip:'The phone number is used to send the invite via WhatsApp. Make sure it is the number they use for WhatsApp.' },
-          { summary:'Select their industry, role and position', detail:'In the Position Assignments section select the industry, role, and position for this team member. These options come from the roles you set up in Settings > Roles & Positions. You can assign multiple industry, role, and position combinations if the person works across multiple areas. The industry you select here carries over automatically to the team member\'s profile when they register — they do not need to select it again.', foundIn:'Workforce → Invite modal → Position Assignments', tip:'The position you select determines their access level — Staff Member, Supervisor, Manager, or Client Admin.' },
-          { summary:'Choose Email or WhatsApp and send', detail:'At the bottom of the invite form select whether to send via Email or WhatsApp. Email sends a branded invite with a Join button. WhatsApp opens a pre-written message with a personalised link. The invite link takes the recipient directly to a registration page with their details pre-filled — they only need to create a password.', foundIn:'Workforce → Invite modal → Send Via', tip:'WhatsApp invites have a much higher open rate than email. Use WhatsApp for field-based staff who may not check email regularly.' },
+      { num:2, title:'Managing members and roles', subChapters:[
+        { id:'2.1', title:'Inviting and setting up members', steps:[
+          { summary:'Go to Settings to manage members', detail:'Open the sidebar and tap Settings → Members. This shows every active member in your organisation with their name, email, role, and join date.', foundIn:'Left sidebar → Settings → Members' },
+          { summary:'Invite a new member', detail:'Tap Invite Member, enter their email address, and select their role — worker, supervisor, or manager. They will receive an email invitation to join your organisation on Taksyn.', foundIn:'Settings → Members → Invite Member button' },
+          { summary:'Assign the right role carefully', detail:'Workers can only complete tasks. Supervisors can assign and review tasks within their team. Managers have organisation-wide access. Assign roles based on actual responsibilities — roles affect what each person can see and do.', foundIn:'Settings → Members → Invite Member → Role field', tip:'Set up your industry, roles, and positions in Settings before inviting staff so the right options appear in the invite form.' },
+          { summary:"Change a member's role at any time", detail:'Find the member in Settings → Members and tap Edit. Update their role and save. The change takes effect immediately — the member will see their new permissions on their next action.', foundIn:'Settings → Members → member card → Edit button' },
+          { summary:'Remove a member who has left', detail:'Find the member and tap Remove. Their account is deactivated and they lose access immediately. Their historical task records remain in the system for reporting purposes.', foundIn:'Settings → Members → member card → Remove button' },
         ]},
-        { id:'2.2', title:'Managing your workforce', steps:[
-          { summary:'View all team members in the Workforce section', detail:'In the Workforce section you can see all team members grouped by their role. Use the search bar to find a specific person by name or email. Each member card shows their name, role, position, and last active time.', foundIn:'Left sidebar → Workforce → member list', tip:'Use the search bar to quickly find a team member in a large organisation.' },
-          { summary:'Identify pending invites', detail:'Team members who have been invited but have not yet accepted their invite are shown with a Pending badge in the workforce list. This makes it easy to see at a glance who still needs to complete their registration. Pending members appear alongside active members in the list.', foundIn:'Workforce → member list → Pending badge', tip:'If a team member says they never received their invite check for a Pending badge next to their name — the invite was sent but not yet accepted.' },
-          { summary:'Resend an invite', detail:'Next to each pending member there is a Resend Invite button. Clicking it sends a fresh invite email to the team member without creating a new account or changing any of their details. Use this if a team member says they did not receive the original invite or if they need the link resent.', foundIn:'Workforce → pending member → Resend Invite button', tip:'Resending an invite does not create a duplicate account — it simply re-sends the registration link to the same email address.' },
-          { summary:'Edit a team member\'s details', detail:'Click the Edit button on any team member\'s card to update their name, email, phone number, role, industry, or position. Changes take effect immediately and the team member will see their updated details next time they sign in.', foundIn:'Workforce → member card → Edit', tip:'If a staff member changes roles update their position in the Edit screen so their access level updates automatically.' },
-          { summary:'Remove a team member', detail:'To remove a team member click Edit on their card and scroll to the bottom. Click Remove Member and confirm. The member will no longer be able to sign in. Their past task history is preserved in the Audit Log.', foundIn:'Workforce → member card → Edit → Remove Member', tip:'Removing a member does not delete their data. All their completed tasks and audit records are retained.' },
-        ]},
-        { id:'2.3', title:'Staff with multiple roles', steps:[
-          { summary:'Open a team member\'s Edit screen', detail:'In the Workforce section find the team member and click Edit. In the edit screen you will see a Positions section showing their current industry, role, and position assignments. You can add additional assignments here.', foundIn:'Workforce → member card → Edit → Positions section', tip:'Multiple role assignments are useful for casual staff who work across different departments.' },
-          { summary:'Add a second position — no new invite needed', detail:'Staff with multiple roles no longer need a new invite to add a second position. Click Add Position inside the Edit Team Member modal and select the additional industry, role, and position combination. For example you can add Housekeeping / Room Attendant / Staff Member as a second assignment for someone who also works in Food & Beverage. There is no limit on the number of assignments.', foundIn:'Workforce → member card → Edit → Add Position button', tip:'Never send a new invite just to add a role — use Add Position in the Edit modal instead. A new invite would create a duplicate account.' },
-          { summary:'Save and explain the role selector to your staff member', detail:'Click Save after adding the new position. The team member will now see a role selector when they sign in, allowing them to choose which role they are working in for that session. Their tasks and reports will be filtered by the role they select.', foundIn:'Workforce → Edit → Save button', tip:'The role selector appears at sign-in only when a staff member has more than one active position.' },
+        { id:'2.2', title:'Pitfalls to avoid with member management', steps:[
+          { summary:'Do not leave inactive members with active roles', detail:'Members who have left but are still active in the system can receive task assignments and notifications. Remove or deactivate them promptly when they leave.', foundIn:'Settings → Members → member card → Remove button' },
+          { summary:'Do not over-assign manager roles', detail:'Managers can see all tasks and all worker data across the organisation. Only give manager access to people who genuinely need that visibility and responsibility.', foundIn:'Settings → Members → Invite Member or Edit → Role field' },
+          { summary:'Always confirm an invite was received', detail:'Invitation emails can end up in spam. Follow up with new members to confirm they received and accepted their invite before assuming they are set up and ready.', foundIn:'Settings → Members — check for pending invite status' },
         ]},
       ]},
-      { num:3, title:'Creating and Managing Tasks', subChapters:[
-        { id:'3.1', title:'Create your first task', steps:[
-          { summary:'Go to Tasks and click New Task', detail:'Click Tasks in the left sidebar to open the Tasks section. Then click the New Task button at the top of the page. A form will appear where you can fill in all the task details.', foundIn:'Left sidebar → Tasks → New Task button', tip:'You can also create tasks quickly from the Dashboard using the shortcut at the top.' },
-          { summary:'Fill in the title and description', detail:'Give the task a clear, specific title — for example "Clean Room 204" or "Complete Morning Safety Checklist". Add detailed instructions in the description field so the staff member knows exactly what is expected before they start.', foundIn:'Tasks → New Task → Title and Description fields', tip:'Write the description as if giving verbal instructions — include what, where, and how.' },
-          { summary:'Assign the task and set priority and due date', detail:'Select the team member from the Assigned To dropdown. Set the Priority (Critical, High, Medium, or Low) and the Due Date. The assigned team member is notified immediately. The due date determines whether the task shows as overdue if not completed in time.', foundIn:'Tasks → New Task → Assigned To, Priority, Due Date fields', tip:'Use Critical priority only for genuine emergencies — it triggers escalation alerts if not actioned quickly.' },
-          { summary:'Click Create Task', detail:'Click Create Task to save and publish. The task appears immediately in the assigned team member\'s dashboard and in your Tasks list. You can edit, reassign, or delete the task at any time after creation.', foundIn:'Tasks → New Task → Create Task button', tip:'Tasks can be set as recurring — use this for daily or weekly routines that repeat on a schedule.' },
+      { num:3, title:'Reports, performance and task analysis', subChapters:[
+        { id:'3.1', title:'Reading your organisation reports', steps:[
+          { summary:'Open Reports from the sidebar', detail:'Tap Reports in the sidebar to access your organisation-wide reporting dashboard. You can filter by date range, team, worker, or task status to drill into exactly what you need.', foundIn:'Left sidebar → Reports' },
+          { summary:'Task completion rate — your key metric', detail:'The completion rate shows the percentage of tasks completed on time versus overdue. A healthy organisation maintains a high completion rate. Sustained drops signal a problem — too many tasks, unclear instructions, or understaffing.', foundIn:'Left sidebar → Reports → completion rate summary' },
+          { summary:'Overdue trends tell you where problems are', detail:'If overdue tasks are concentrated in one team or with one supervisor, that is where to focus. Overdue trends by team help you have targeted conversations rather than blanket reprimands.', foundIn:'Left sidebar → Reports → overdue trends; Dashboard → Overdue card' },
+          { summary:'Individual worker performance', detail:"You can view each worker's task history — tasks assigned, completed, overdue, and returned. Use this data for performance reviews and to identify workers who may need additional support or training.", foundIn:'Left sidebar → Reports → Performance Reviews → select worker' },
+          { summary:'Running a performance review', detail:"Go to Reports → Performance Reviews to start a review cycle. Select the worker or team, set the review period, and Taksyn will compile their task data automatically. Add your observations and save the review to the worker's record.", foundIn:'Left sidebar → Reports → Performance Reviews → New Review' },
         ]},
-        { id:'3.2', title:'Using checklist templates', steps:[
-          { summary:'Open Checklist Templates in Settings', detail:'Go to Settings and click Checklist Templates. Here you can see all existing templates or create new ones. Templates are reusable sets of checklist items that can be attached to tasks. Click New Template to create your first one.', foundIn:'Settings → Checklist Templates → New Template', tip:'Start with your most common recurring task and build a template for it first.' },
-          { summary:'Add checklist items to the template', detail:'Give the template a name then add each checklist item. You can mark items as Required — required items must be completed before the task can be submitted for review. Set a completion frequency if items need to be done multiple times per shift.', foundIn:'Settings → Checklist Templates → Add Item', tip:'Keep checklist items short and action-focused — "Check fire extinguisher seal" not "Make sure the fire extinguisher has a seal".' },
-          { summary:'Attach a template when creating a task', detail:'When creating a new task click Select Template in the Checklist section. Choose the template you want. All checklist items from the template will be added to the task automatically. You can still add, remove, or modify individual items before saving the task.', foundIn:'Tasks → New Task → Checklist → Select Template', tip:'Attaching a template does not permanently link the task to it — you can customise each task\'s checklist independently.' },
-          { summary:'Review template compliance on completed tasks', detail:'When a team member submits a completed task you can see each checklist item with its completion status and timestamp. Required items that were not completed will be highlighted. This gives you a full compliance record for every task.', foundIn:'Tasks → completed task → Checklist section', tip:'Checklist completion records are preserved in the Audit Log even if the task is later deleted.' },
-        ]},
-        { id:'3.3', title:'Approving completed tasks', steps:[
-          { summary:'Check your Awaiting Review queue', detail:'Completed tasks appear in the Awaiting Review queue. You can see this on your Dashboard or by going to Tasks and filtering by Awaiting Review status. The number of tasks awaiting review is shown as a badge on the Tasks navigation item.', foundIn:'Dashboard → Awaiting Review count, or Tasks → filter Awaiting Review', tip:'Check your Awaiting Review queue at the start of each shift to stay on top of completions.' },
-          { summary:'Open a task and review the evidence', detail:'Click on a task in the Awaiting Review queue to open it. Scroll to the Evidence section to see the photo the team member submitted. Check the photo clearly shows the completed work. Then review the Checklist to confirm all required items were completed with timestamps.', foundIn:'Tasks → task detail → Evidence section, Checklist section', tip:'If the photo quality is too low to verify the work you can reject the task and ask for a clearer photo.' },
-          { summary:'Approve or reject the task', detail:'If the work is satisfactory click Approve. The task will be marked as Completed and the team member will be notified. If there is an issue click Reject and type a reason explaining what needs to be redone. The team member will be notified and the task returns to them for rework.', foundIn:'Tasks → task detail → Approve button, Reject button', tip:'When rejecting a task always include a specific reason so the staff member knows exactly what to fix.' },
-          { summary:'Check the audit record', detail:'After approving or rejecting a task the action is recorded in the Audit Log with a timestamp and your name. This creates a permanent compliance record showing who reviewed the task, when, and what decision was made.', foundIn:'Reports → Audit Log → filter by task name or date', tip:'The audit record cannot be edited or deleted — it is a permanent compliance trail.' },
+        { id:'3.2', title:'Analysing task management across your team', steps:[
+          { summary:'Check the Dashboard daily for a quick pulse', detail:'The Dashboard summary cards — Total Tasks, Pending Review, Overdue, and Completed Today — give you an instant read on how the organisation is performing right now. Make this your first screen every morning.', foundIn:'Dashboard → summary cards' },
+          { summary:'Identify supervisors who are slow to review', detail:'A high Pending Review count that sits unchanged day after day points to a supervisor who is not clearing their queue. Address this directly — unapproved tasks distort completion metrics for the whole organisation.', foundIn:'Dashboard → Pending Review card; Reports → supervisor activity' },
+          { summary:'Look at escalation frequency', detail:'Frequent escalations from the same team or supervisor signal a recurring problem — unclear tasks, unrealistic deadlines, or a worker who needs support. Use the Audit Log to trace the pattern.', foundIn:'Left sidebar → Escalations; Audit Log' },
+          { summary:'Use the Audit Log for accountability', detail:'The Audit Log records every action in the system — task creation, approval, rejection, escalation, deletion — with a timestamp and the name of who did it. Use it when you need a factual account of what happened and when.', foundIn:'Left sidebar → Audit Log' },
         ]},
       ]},
-      { num:4, title:'Monitoring and Compliance', subChapters:[
-        { id:'4.1', title:'Using the Audit Log', steps:[
-          { summary:'Open the Audit Log from Reports', detail:'Click Reports in the left sidebar and then click Audit Log. The Audit Log shows every action taken in your organisation including tasks created, completed, approved, rejected, and team members added or removed. Each entry shows the date, time, user, and action performed.', foundIn:'Left sidebar → Reports → Audit Log', tip:'The Audit Log is a read-only record — no one can edit or delete entries, including Super Admins.' },
-          { summary:'Filter the log by date, user, or action type', detail:'Use the filter options at the top of the Audit Log to narrow down by date range, user, or action type. For example you can view all actions taken by a specific staff member this month, or see all task approvals for the past quarter.', foundIn:'Reports → Audit Log → filter bar', tip:'Use date filters when preparing for compliance audits — filter to the date range the auditor is asking about.' },
-          { summary:'Export the audit log as PDF or CSV', detail:'Click Export to download the filtered Audit Log as a PDF or CSV file. The PDF is formatted as a formal compliance report with your organisation name and date range. The CSV can be imported into spreadsheet software for further analysis.', foundIn:'Reports → Audit Log → Export button', tip:'Export monthly audit logs and store them in your compliance folder as part of your record-keeping obligations.' },
+      { num:4, title:'Settings, support and icon reference', subChapters:[
+        { id:'4.1', title:'Configuring your organisation settings', steps:[
+          { summary:'Set your SLA deadlines', detail:"Go to Settings → SLA to configure how many days after a due date a task is automatically escalated. Set this to match your organisation's standards. A common setting is 1 day for high-priority tasks and 3 days for standard tasks.", foundIn:'Left sidebar → Settings → SLA' },
+          { summary:'Manage leave policies', detail:'Go to Settings → Leave to configure leave types and approval workflows for your organisation. Keeping leave records accurate prevents tasks being assigned to workers who are absent.', foundIn:'Left sidebar → Settings → Leave' },
+          { summary:'Configure notifications', detail:'Under Settings → Notifications you can control which events trigger email or in-app alerts for each role. Keeping notifications relevant prevents alert fatigue across your team.', foundIn:'Left sidebar → Settings → Notifications' },
+          { summary:'Supporting your team with minor IT issues', detail:'For login problems, missing notifications, or access errors — go to Help & Support and raise a ticket on behalf of the affected member. Include their email, role, and a description of the issue. The Taksyn support team responds within 24 hours.', foundIn:'Left sidebar → Help & Support → New Ticket button' },
         ]},
-        { id:'4.2', title:'Performance reports', steps:[
-          { summary:'Go to the Performance section', detail:'Click Performance in the left sidebar. This section shows a breakdown of each team member\'s activity including task completion rate, on-time percentage, average response time, and number of rejections. Use this for regular performance monitoring and one-on-one meetings.', foundIn:'Left sidebar → Performance', tip:'Performance data updates in real time as tasks are completed and approved.' },
-          { summary:'Select a date range to view', detail:'At the top of the Performance page use the date filter to select weekly, monthly, or quarterly data. You can also select a custom date range. The stats for each team member will update to reflect the selected period.', foundIn:'Performance → date filter', tip:'Monthly reports are most useful for regular reviews. Quarterly reports are better for management presentations.' },
-          { summary:'Export a performance PDF', detail:'Click Export PDF to download the performance report as a formatted document. The report includes each team member\'s name, role, and key stats for the selected period. You can share this with management or keep it on file as a performance record.', foundIn:'Performance → Export PDF button', tip:'Export and save performance reports monthly so you have a historical record even after data rolls over.' },
-        ]},
-        { id:'4.3', title:'Data retention and privacy', steps:[
-          { summary:'View your current retention settings', detail:'Go to Settings and click Data & Privacy. This page shows your current data retention period, which is set based on your subscription plan. You can see how long tasks, audit logs, and member records are kept before they are archived.', foundIn:'Settings → Data & Privacy', tip:'Most plans include 12 months of active data retention. Archived data may still be accessible on request.' },
-          { summary:'Understand what data is retained', detail:'Taksyn retains task details, checklist completions, photo evidence, audit log entries, and member records for the duration of your retention period. Audit log entries are never permanently deleted — they form your compliance record.', foundIn:'Settings → Data & Privacy → retention details', tip:'Photo evidence can use significant storage. Contact support if you are approaching your storage limit.' },
-          { summary:'Request extended retention if required', detail:'If your organisation requires longer data retention for regulatory compliance — for example NDIS providers requiring 7 years of records — go to Settings > Data & Privacy and click Request Retention Upgrade. Our support team will review your requirements and advise on the appropriate plan.', foundIn:'Settings → Data & Privacy → Request Retention Upgrade', tip:'Check your compliance obligations with your industry regulator before requesting an upgrade.' },
+        { id:'4.2', title:'Icon reference — your admin screens', steps:[
+          { summary:'☰  Menu', detail:'Opens the full sidebar: Dashboard, Tasks, Reports, Leave, Support, and Settings. As client admin you have access to every section.', foundIn:'Top-left corner → ☰ menu icon' },
+          { summary:'🔔  Notifications', detail:'Badge count of unread alerts across the organisation. Tap to see escalations, support ticket updates, and system messages.', foundIn:'Top-right area → 🔔 bell icon' },
+          { summary:'✏️  Edit', detail:'Edit a member, task, or setting. Available on member cards in Settings and on task cards throughout the platform.', foundIn:'Member cards → Edit button; task cards → Edit button' },
+          { summary:'🗑️  Delete / Remove', detail:'Permanently removes a member or task. Always logged in the Audit Log with your name and a timestamp. Cannot be undone.', foundIn:'Member cards or task detail → Delete or Remove button' },
+          { summary:'🔺  Escalated', detail:'A task has been flagged as critically overdue and escalated to manager level. As client admin you can see all escalated tasks across the organisation.', foundIn:'Left sidebar → Escalations; task card → status label' },
+          { summary:'✅  Completed', detail:'Task reviewed and approved. Completed tasks are recorded permanently and contribute to performance and completion rate reports.', foundIn:'Task card → status label; Reports → completed tasks' },
+          { summary:'⚠️  Overdue', detail:'Task has passed its due date. Visible to you, the assigned supervisor, and the manager. Persistent overdue tasks indicate a systemic issue worth investigating.', foundIn:'Dashboard → Overdue card; task card → status label' },
+          { summary:'🔴 🟡 🟢  Priority flags', detail:'High (🔴), Medium (🟡), Low (🟢). Priority affects notification urgency and task ordering in worker lists. Review priority distribution in Reports to ensure high-priority tasks are not being overused.', foundIn:'Task card → priority flag; Reports → task breakdown' },
         ]},
       ]},
-      { num:5, title:'Support', subChapters:[
-        { id:'5.1', title:'Raising a support ticket', steps:[
-          { summary:'Go to Help & Support in the sidebar', detail:'Click Help & Support in the left navigation sidebar. This opens the support page where you can see your existing tickets and create new ones. If you cannot sign in, you can reach support via email from the Taksyn website.', foundIn:'Left sidebar → Help & Support', tip:'Help & Support is visible to all roles — your team members can raise tickets too if they encounter issues.' },
-          { summary:'Click New Ticket and describe your issue', detail:'Click the New Ticket button and fill in a description of your issue. Be as specific as possible — include what you were trying to do, what happened instead, and any error messages you saw. You can also attach a screenshot to help our team diagnose the issue faster.', foundIn:'Help & Support → New Ticket button', tip:'The more detail you provide the faster our team can resolve your issue.' },
-          { summary:'Track your ticket status', detail:'After submitting your ticket it will appear in your ticket list with a status of Open. Our team responds within 24 hours. When we reply the status updates to In Progress. Once resolved the ticket is marked Resolved. You can add follow-up messages to any ticket at any time.', foundIn:'Help & Support → ticket list → ticket status', tip:'You will receive an email notification when we reply to your ticket.' },
+      { num:5, title:'Creating and managing tasks', subChapters:[
+        { id:'5.1', title:'Creating and sending a task', steps:[
+          { summary:'Open the New Task form', detail:'From Dashboard or Tasks, tap + New Task. On desktop it slides open on the right. On mobile it opens full screen.', foundIn:'Dashboard or Left sidebar → Tasks → + New Task button' },
+          { summary:'Fill in all the key fields', detail:'Title — use a clear action-oriented name. Description — full instructions and what evidence to submit. Then set Assigned To, Due Date, Priority, and optionally link to a Project.', foundIn:'New Task form → Title, Description, Assigned To, Due Date, Priority fields', tip:'High-priority tasks trigger an immediate push notification to the worker.' },
+          { summary:'Tap Send Task', detail:'The worker is notified immediately and the task appears in their My Tasks list as Pending. You can also Save as Draft if you are not ready to send yet.', foundIn:'New Task form → Send Task button or Save as Draft button' },
         ]},
-        { id:'5.2', title:'Getting help from your Taksyn administrator', steps:[
-          { summary:'Understand what the Super Admin can and cannot see', detail:'Your Taksyn platform administrator (Super Admin) has access to your organisation settings, billing, and account structure. They cannot see your task content, photos, staff notes, or any operational data. Their role is limited to account configuration and technical support.', foundIn:'Not applicable — background information', tip:'If you are unsure whether to contact your Super Admin or raise a support ticket, start with a support ticket and our team will escalate if needed.' },
-          { summary:'Contact support through the ticket system', detail:'The best way to get hands-on help from the Taksyn team is through the Help & Support ticket system. When you raise a ticket you are connected directly with the platform team. For urgent issues include URGENT in your ticket description and our team will prioritise it.', foundIn:'Left sidebar → Help & Support → New Ticket', tip:'For non-urgent configuration questions the typical response time is within 24 business hours.' },
+        { id:'5.2', title:'Reviewing submitted tasks', steps:[
+          { summary:'Find tasks awaiting review', detail:'Go to Tasks and filter by Pending Review, or tap the Pending Review card on the Dashboard. The 🔔 notification bell also shows new submissions in real time.', foundIn:'Dashboard → Pending Review card; Tasks → filter by Pending Review' },
+          { summary:'Open and inspect the submission', detail:"Tap 👁️ View on the task. You will see the original instructions, the worker's completion notes, and any photos or files they attached as evidence.", foundIn:'Tasks → task card → View or Review button' },
+          { summary:'Approve or reject the task', detail:'Tap ✅ Approve to mark the task complete — the worker is notified. Tap ↩️ Reject to return it with a reason — the worker must resubmit. All approvals and rejections are timestamped in the Audit Log with your name.', foundIn:'Task detail → Approve button or Reject button', tip:'Always add a clear reason when rejecting so the worker knows exactly what to fix.' },
+        ]},
+        { id:'5.3', title:'Editing, deleting and escalating tasks', steps:[
+          { summary:'Editing a task', detail:'Tap ✏️ Edit on any task that has not yet been completed. You can change the title, description, due date, priority, or assigned worker. The worker receives a notification that their task has been updated.', foundIn:'Task card or task detail → Edit button' },
+          { summary:'Deleting a task', detail:'Tap 🗑️ Delete on the task card then confirm. Tasks in any status except Completed can be deleted. The deletion is logged in the Audit Log and cannot be undone.', foundIn:'Task detail → Delete button', tip:'Deletion cannot be undone — use escalation instead if you want to flag a task without removing it.' },
+          { summary:'Escalating a task', detail:'Tap 🔺 Escalate to notify the Manager immediately, change the status to Escalated, and create an entry in the Audit Log. Escalation can also trigger automatically when a task exceeds its SLA deadline. Check Settings → SLA to configure this.', foundIn:'Task detail → Escalate button; Settings → SLA', tip:'Escalate early rather than late — do not wait until a deadline is missed.' },
         ]},
       ]},
     ]
@@ -9665,56 +9948,66 @@ const GUIDE_CONTENT = {
     icon: '📊',
     color: '#8B5CF6',
     chapters: [
-      { num:1, title:'Your Dashboard', subChapters:[
-        { id:'1.1', title:'Understanding your dashboard', steps:[
-          { summary:'Sign in and open your Dashboard', detail:'When you sign in to Taksyn you land directly on your Dashboard. The Dashboard shows your key metrics at the top — Pending, In Progress, Awaiting Review, Completed, and Overdue task counts. These update in real time as your team works.', foundIn:'Automatically shown after sign in', tip:'Bookmark the Taksyn app on your phone\'s home screen so you can check your dashboard quickly throughout the day.' },
-          { summary:'Review your task summary cards', detail:'The summary cards at the top of the Dashboard show your most important numbers. The Overdue count is highlighted in red — these are tasks that have passed their due date. The Awaiting Review count shows tasks that are done and waiting for your approval.', foundIn:'Dashboard → summary cards at top of page', tip:'A high Overdue count usually means tasks are being assigned but not followed up. Check in with your team daily.' },
-          { summary:'Check your activity feed', detail:'Below the summary cards the Dashboard shows recent activity — tasks completed, tasks started, and tasks submitted for review. This gives you a live view of what your team is doing without needing to check in with each person individually.', foundIn:'Dashboard → activity feed below summary cards', tip:'If the activity feed is quiet during a busy period it may mean staff are encountering issues — check in with your team.' },
-        ]},
-        { id:'1.2', title:'Filtering by team and role', steps:[
-          { summary:'Go to Tasks and open the filter bar', detail:'Click Tasks in the left sidebar to open your full task list. By default this shows all tasks across your entire team. Use the filter bar at the top of the Tasks page to narrow down what you see.', foundIn:'Left sidebar → Tasks → filter bar at top', tip:'The Tasks view shows tasks for all team members you manage. Use filters to focus on what matters most.' },
-          { summary:'Filter by a specific team member', detail:'In the filter bar click the Assigned To dropdown and select a specific team member. The task list will update to show only that person\'s tasks. This is useful for reviewing an individual\'s workload or their task history during a one-on-one meeting.', foundIn:'Tasks → filter bar → Assigned To dropdown', tip:'Use this filter during one-on-one meetings to quickly review a team member\'s recent task history.' },
-          { summary:'Filter by status or due date', detail:'Use the Status filter to view only overdue tasks, tasks awaiting review, or tasks in progress. Use the Due Date filter to see everything due today or this week. Combining multiple filters is the fastest way to identify where problems are happening.', foundIn:'Tasks → filter bar → Status dropdown, Due Date picker', tip:'Checking "Overdue + Awaiting Review" as a combined filter each morning is a good daily management habit.' },
-        ]},
-      ]},
-      { num:2, title:'Tasks', subChapters:[
-        { id:'2.1', title:'Creating and assigning tasks', steps:[
-          { summary:'Click New Task in the Tasks section', detail:'Go to Tasks and click the New Task button. A form will open where you fill in the task details. All fields except the title are optional but a well-configured task makes it much easier for your team to complete the work correctly the first time.', foundIn:'Left sidebar → Tasks → New Task button', tip:'Creating specific, clear tasks reduces the need for staff to ask questions before starting.' },
-          { summary:'Set the title, description, and checklist', detail:'Give the task a specific title that makes clear what needs to be done. Add a description with detailed instructions. Optionally select a checklist template from the Checklist section — this adds a list of steps the staff member must complete before they can submit.', foundIn:'Tasks → New Task → Title, Description, Checklist fields', tip:'A checklist template turns a vague task into a structured procedure — use them for any task with a standard set of steps.' },
-          { summary:'Assign to a team member and set priority and due date', detail:'Select the team member from the Assigned To dropdown. Set the Priority level and Due Date. The staff member is notified immediately when the task is created. The due date determines whether the task shows as overdue if not completed in time.', foundIn:'Tasks → New Task → Assigned To, Priority, Due Date fields', tip:'Be realistic with due dates — tasks with unrealistic deadlines will always show as overdue and distort your team\'s performance stats.' },
-          { summary:'Create the task and confirm', detail:'Click Create Task to save and publish. The task appears immediately in the assigned team member\'s dashboard and in your Tasks list. You can view, edit, or reassign the task at any time after creation.', foundIn:'Tasks → New Task → Create Task button', tip:'If you need to assign the same task to multiple people create it once then duplicate it by editing and reassigning.' },
-        ]},
-        { id:'2.2', title:'Reviewing and approving tasks', steps:[
-          { summary:'Open the Awaiting Review queue', detail:'When a staff member submits a completed task it moves to Awaiting Review. Go to Tasks and filter by Awaiting Review status, or click the Awaiting Review count on your Dashboard. Open each task to review it.', foundIn:'Dashboard → Awaiting Review count, or Tasks → filter by Awaiting Review', tip:'Review tasks promptly — staff are waiting for feedback and delays affect morale and workflow.' },
-          { summary:'Check the photo evidence', detail:'Inside the task detail view scroll to the Evidence section to see the photo submitted by the staff member. Verify the photo clearly shows the completed work. If the photo is blurry or does not clearly show the result you can reject the task and ask for a clearer photo.', foundIn:'Tasks → task detail → Evidence section', tip:'Look at both the photo AND the checklist — the checklist confirms each step was done, the photo confirms the end result.' },
-          { summary:'Review the completed checklist', detail:'Scroll to the Checklist section and check that all required items are marked as done with timestamps. Required items are shown with an asterisk. If any required items are missing you should reject the task and ask the staff member to complete them.', foundIn:'Tasks → task detail → Checklist section', tip:'Each checklist item shows the exact time it was marked done — this is your timestamped compliance record.' },
-          { summary:'Approve or reject with clear feedback', detail:'If the work meets your standard click Approve. The task is marked as Completed and the staff member is notified. If there is an issue click Reject and type a specific reason. The staff member will receive a notification with your rejection reason and the task returns to their queue for rework.', foundIn:'Tasks → task detail → Approve button, Reject button', tip:'Always write a specific rejection reason — "Photo unclear" or "Item 3 not completed" is far more useful than "Please redo".' },
-        ]},
-        { id:'2.3', title:'Handling overdue tasks', steps:[
-          { summary:'Identify overdue tasks on your Dashboard', detail:'Overdue tasks are shown in red on your Dashboard and in the Tasks list. A task becomes overdue when its due date passes without the status reaching Completed or Awaiting Review. The system does not automatically reassign overdue tasks — you need to take action.', foundIn:'Dashboard → Overdue count (shown in red), Tasks → overdue tasks highlighted', tip:'Set up overdue notifications in Settings so you are alerted automatically when a task passes its due date.' },
-          { summary:'Open the task and check its status', detail:'Open the overdue task to see who it is assigned to and its current status. If the status is still Pending the staff member may not have seen it. If the status is In Progress they started but have not finished — check if they need help or are blocked.', foundIn:'Tasks → overdue task detail → Status field, Assigned To field', tip:'An overdue task with status In Progress means the staff member started but did not finish — check if they need support.' },
-          { summary:'Reassign or extend the due date', detail:'If the original staff member is unavailable click Edit Task and change the Assigned To field to reassign to another team member. If the task is still relevant but needs more time update the Due Date. Add a note in the description explaining the change so there is a record of why it was modified.', foundIn:'Tasks → task detail → Edit Task → Assigned To field, Due Date field', tip:'All edits to a task are recorded in the audit trail so there is always a history of what changed and when.' },
+      { num:1, title:'Your role', subChapters:[
+        { id:'1.1', title:'What managers and supervisors do', steps:[
+          { summary:'Supervisors assign and monitor tasks', detail:'You assign tasks to individual workers, track their progress, and review submissions when work is done.', foundIn:'Left sidebar → Tasks → task list and status' },
+          { summary:'Supervisors approve or reject work', detail:'When a worker submits a task it lands in your Pending Review queue. Inspect the evidence and approve it or send it back with a reason.', foundIn:'Dashboard → Pending Review card; Tasks → filter by Pending Review' },
+          { summary:'Supervisors can escalate blocked tasks', detail:'If a task is overdue or stuck, tap Escalate to flag it immediately to a Manager. This is recorded in the Audit Log.', foundIn:'Tasks → task detail → Escalate button' },
+          { summary:'Managers have extra organisation-wide powers', detail:'Managers can access organisation-wide reports, configure SLA deadlines, manage leave, run performance reviews, and invite new members.', foundIn:'Left sidebar → Reports, Settings, Leave' },
+          { summary:'Check your role at any time', detail:'Your initials badge in the top-right corner shows your current role. If you belong to multiple organisations you may hold different roles in each.', foundIn:'Top-right corner → initials badge' },
+          { summary:'One person can hold both roles', detail:'In smaller organisations the supervisor and manager are often the same person. All tools are available to you simultaneously.', foundIn:'All sections of the app' },
+          { summary:'Your scope depends on your role', detail:'Supervisors see their team only. Managers see the whole organisation. This affects your task list, dashboard cards, and reports.', foundIn:'Dashboard, Tasks, Reports — all filtered by your role scope' },
         ]},
       ]},
-      { num:3, title:'Performance', subChapters:[
-        { id:'3.1', title:'Monitoring your team', steps:[
-          { summary:'Go to the Performance section', detail:'Click Performance in the left sidebar. This page shows performance statistics for each team member including task completion rate, on-time percentage, average completion time, and number of rejections received.', foundIn:'Left sidebar → Performance', tip:'Review Performance weekly to catch issues early before they become patterns.' },
-          { summary:'Identify performance trends', detail:'Scan the performance table to identify who is consistently on time and who is frequently late or rejected. Look for patterns — a sudden drop in one person\'s stats might indicate they need support. Consistently high performers may be ready for more responsibility.', foundIn:'Performance → team stats table', tip:'Compare stats across similar roles — a Supervisor\'s completion rate should be compared to other Supervisors, not to Staff Members.' },
-          { summary:'Export a performance PDF', detail:'Click Export PDF to generate a formatted report for the selected period. The report includes each team member\'s name, role, and key stats. You can use this in management meetings, performance reviews, or keep it as an official record.', foundIn:'Performance → Export PDF button', tip:'Export and save performance PDFs at the end of each month so you have a full history even after data rolls over.' },
+      { num:2, title:'Pitfalls to avoid', subChapters:[
+        { id:'2.1', title:'Common mistakes and how to avoid them', steps:[
+          { summary:'Always set a due date', detail:'Tasks without a due date are treated as low priority and never trigger SLA alerts. Even a rough deadline is better than none. Set default SLA timers under Settings → SLA.', foundIn:'New Task form → Due Date field; Settings → SLA' },
+          { summary:'Clear your Pending Review queue daily', detail:"A submitted task is not marked complete until you approve it. Leaving tasks in Pending Review distorts your team's completion statistics and hides real progress.", foundIn:'Dashboard → Pending Review card; Tasks → filter by Pending Review' },
+          { summary:'Check the leave calendar before assigning', detail:'Assigning tasks to a worker who is on approved leave creates instant overdue tasks. Open Leave before assigning to verify the worker is available.', foundIn:'Left sidebar → Leave → leave calendar' },
+          { summary:'Act on escalation alerts — they are logged', detail:'Every escalation notification is recorded in the Audit Log with a timestamp and your name. Dismissing an escalation without taking action is visible to managers.', foundIn:'Notifications → escalation alerts; Audit Log' },
+          { summary:"Always fill in the description field", detail:"'Clean kitchen' tells a worker nothing. 'Focus on stovetop and floor drains — inspection at 9am tomorrow' gets the right result every time. Use the description field for full context.", foundIn:'New Task form → Description field' },
         ]},
       ]},
-      { num:4, title:'Workforce', subChapters:[
-        { id:'4.1', title:'Inviting team members', steps:[
-          { summary:'Go to the Workforce section', detail:'Click Workforce in the left navigation sidebar. This is where you can view all team members in your organisation and invite new ones. Click the Invite to Workforce button and fill in the new team member\'s First Name, Last Name, email address, and phone number.', foundIn:'Left sidebar → Workforce → Invite to Workforce button', tip:'First Name and Last Name are separate fields — fill in both so the team member\'s profile and invite are correctly personalised.' },
-          { summary:'Select their industry, role and position, then send the invite', detail:'In the Position Assignments section select the industry, role, and position for the team member. The industry you select here carries over automatically to their profile when they register — they do not need to re-enter it. Choose to send the invite via Email or WhatsApp, then send.', foundIn:'Workforce → Invite modal → Position Assignments → Send Via', tip:'WhatsApp invites have a higher open rate for field-based staff. The industry selection in the invite form pre-fills their profile automatically.' },
+      { num:3, title:'Understanding the dashboard', subChapters:[
+        { id:'3.1', title:'Dashboard cards and activity feed', steps:[
+          { summary:'Total tasks card', detail:'Shows all tasks visible to you across every status and every worker in your scope. This is your master count — it includes Pending, In Progress, Pending Review, and Completed tasks.', foundIn:'Dashboard → Total Tasks card' },
+          { summary:'Pending Review card', detail:'Tasks submitted by workers that are waiting for your approval. Tap the card to jump straight to your review queue. Keep this number as close to zero as possible.', foundIn:'Dashboard → Pending Review card' },
+          { summary:'Overdue card', detail:'Tasks that have passed their due date without being completed or approved. Tap any entry in the overdue panel to open the task and act immediately.', foundIn:'Dashboard → Overdue card and overdue panel' },
+          { summary:'Completed today and the activity feed', detail:'Completed Today is your daily pulse check. The activity feed below shows a live log of all task events — assignments, submissions, approvals — in reverse chronological order.', foundIn:'Dashboard → Completed Today card and activity feed' },
         ]},
-        { id:'4.2', title:'Managing pending invites', steps:[
-          { summary:'Identify pending members', detail:'Team members who have been invited but have not yet accepted their invite are shown with a Pending badge in the workforce list. This makes it easy to see who still needs to complete their registration.', foundIn:'Workforce → member list → Pending badge', tip:'A Pending badge means the invite was sent successfully — the team member just has not completed registration yet.' },
-          { summary:'Resend an invite', detail:'Next to each pending member there is a Resend Invite button. Clicking it sends a fresh invite email to that person without creating a new account or changing any of their details. Use this if someone says they did not receive the original invite or the link has expired.', foundIn:'Workforce → pending member → Resend Invite button', tip:'Resending an invite does not create a duplicate account — it re-sends the same registration link to the same address.' },
+        { id:'3.2', title:'Icon reference — navigation and status', steps:[
+          { summary:'☰  Menu', detail:'Opens the sidebar navigation: Dashboard, Tasks, Reports, Leave, Support, and Settings.', foundIn:'Top-left corner → menu icon' },
+          { summary:'🔔  Notifications', detail:'Shows a badge count of unread alerts. Tap to see task submissions, escalations, approvals, and system messages in real time.', foundIn:'Top-right area → bell icon' },
+          { summary:'🕐  Pending', detail:'Task has been assigned but the worker has not yet started it.', foundIn:'Task card or task detail → status label' },
+          { summary:'⚙️  In progress', detail:'The worker has marked the task as started. Work is underway.', foundIn:'Task card or task detail → status label' },
+          { summary:'📋  Pending review', detail:'Worker has submitted the task for your review. This requires your action — approve or reject.', foundIn:'Task card or task detail → status label' },
+          { summary:'✅  Completed', detail:'Task has been reviewed and approved by a supervisor or manager.', foundIn:'Task card or task detail → status label' },
+          { summary:'⚠️  Overdue', detail:'Task has passed its due date without being completed. Appears in the Overdue panel on the Dashboard.', foundIn:'Dashboard → Overdue panel; task card → status label' },
+          { summary:'🔺  Escalated', detail:'Task has been flagged to a Manager for urgent attention, either manually or automatically via SLA rules.', foundIn:'Task card or task detail → status label; Escalations view' },
+          { summary:'✏️  Edit', detail:'Opens the task editor. Update the title, description, due date, priority, or assigned worker.', foundIn:'Task card or task detail → Edit button' },
+          { summary:'👁️  View / Review', detail:"Opens the full task detail including the worker's completion notes and any photos or files submitted as evidence.", foundIn:'Task card → View or Review button' },
+          { summary:'🗑️  Delete', detail:'Permanently removes the task. You will be asked to confirm. This action is recorded in the Audit Log and cannot be undone.', foundIn:'Task detail → Delete button' },
+          { summary:'↩️  Reject', detail:'Returns the task to the worker with a reason. The worker must resubmit before the task can be approved.', foundIn:'Task detail → Reject button' },
+          { summary:'🔴  High priority', detail:'Urgent task. The worker is notified immediately and the task appears at the top of their list.', foundIn:'Task card → priority indicator; New Task form → Priority field' },
+          { summary:'🟡  Medium priority', detail:'Standard priority. This is the default for most tasks.', foundIn:'Task card → priority indicator; New Task form → Priority field' },
+          { summary:'🟢  Low priority', detail:'Non-urgent. The worker can complete this task alongside other work at their own pace.', foundIn:'Task card → priority indicator; New Task form → Priority field' },
         ]},
-        { id:'4.3', title:'Staff with multiple roles', steps:[
-          { summary:'Add a second position — no new invite needed', detail:'Staff with multiple roles do not need a new invite to add a second position. Find the team member in the Workforce list, click Edit, and use the Add Position button inside the Edit Team Member modal to assign the additional industry, role, and position combination.', foundIn:'Workforce → member card → Edit → Add Position button', tip:'Never send a new invite just to add a role — use Add Position in the Edit modal instead. A new invite would create a duplicate account.' },
-          { summary:'Save and inform the team member', detail:'Click Save after adding the new position. The team member will now see a role selector when they sign in, allowing them to choose which role they are working in for that session. Their tasks and reports will be filtered by the role they select.', foundIn:'Workforce → Edit → Save button', tip:'The role selector appears at sign-in only when a staff member has more than one active position.' },
+      ]},
+      { num:4, title:'Creating and managing tasks', subChapters:[
+        { id:'4.1', title:'Creating and sending a task', steps:[
+          { summary:'Open the New Task form', detail:'From Dashboard or Tasks, tap + New Task. On desktop it slides open on the right. On mobile it opens full screen.', foundIn:'Dashboard or Left sidebar → Tasks → + New Task button' },
+          { summary:'Fill in all the key fields', detail:'Title — use a clear action-oriented name. Description — full instructions and what evidence to submit. Then set Assigned To, Due Date, Priority, and optionally link to a Project.', foundIn:'New Task form → Title, Description, Assigned To, Due Date, Priority fields', tip:'High-priority tasks trigger an immediate push notification to the worker.' },
+          { summary:'Tap Send Task', detail:'The worker is notified immediately and the task appears in their My Tasks list as Pending. You can also Save as Draft if you are not ready to send yet.', foundIn:'New Task form → Send Task button or Save as Draft button' },
+        ]},
+        { id:'4.2', title:'Reviewing submitted tasks', steps:[
+          { summary:'Find tasks awaiting review', detail:'Go to Tasks and filter by Pending Review, or tap the Pending Review card on the Dashboard. The 🔔 notification bell also shows new submissions in real time.', foundIn:'Dashboard → Pending Review card; Tasks → filter by Pending Review' },
+          { summary:'Open and inspect the submission', detail:"Tap 👁️ View on the task. You will see the original instructions, the worker's completion notes, and any photos or files they attached as evidence.", foundIn:'Tasks → task card → View or Review button' },
+          { summary:'Approve or reject the task', detail:'Tap ✅ Approve to mark the task complete — the worker is notified. Tap ↩️ Reject to return it with a reason — the worker must resubmit. All approvals and rejections are timestamped in the Audit Log with your name.', foundIn:'Task detail → Approve button or Reject button', tip:'Always add a clear reason when rejecting so the worker knows exactly what to fix.' },
+        ]},
+        { id:'4.3', title:'Editing, deleting and escalating tasks', steps:[
+          { summary:'Editing a task', detail:'Tap ✏️ Edit on any task that has not yet been completed. You can change the title, description, due date, priority, or assigned worker. The worker receives a notification that their task has been updated.', foundIn:'Task card or task detail → Edit button' },
+          { summary:'Deleting a task', detail:'Tap 🗑️ Delete on the task card then confirm. Tasks in any status except Completed can be deleted. The deletion is logged in the Audit Log and cannot be undone.', foundIn:'Task detail → Delete button', tip:'Deletion cannot be undone — use escalation instead if you want to flag a task without removing it.' },
+          { summary:'Escalating a task', detail:'Tap 🔺 Escalate to notify the Manager immediately, change the status to Escalated, and create an entry in the Audit Log. Escalation can also trigger automatically when a task exceeds its SLA deadline. Check Settings → SLA to configure this.', foundIn:'Task detail → Escalate button; Settings → SLA', tip:'Escalate early rather than late — do not wait until a deadline is missed.' },
         ]},
       ]},
     ]
@@ -9724,41 +10017,66 @@ const GUIDE_CONTENT = {
     icon: '👷',
     color: '#F59E0B',
     chapters: [
-      { num:1, title:'Your Tasks', subChapters:[
-        { id:'1.1', title:'Viewing your assigned tasks', steps:[
-          { summary:'Sign in and check your Dashboard', detail:'When you sign in to Taksyn your Dashboard shows all tasks currently assigned to you. Tasks are listed with their title, priority colour, and due date. The most urgent tasks appear at the top. You can also see a summary count of your Pending, In Progress, and Overdue tasks.', foundIn:'Dashboard (home screen shown after sign in)', tip:'Check your Dashboard at the start of every shift to plan your day.' },
-          { summary:'Understand priority colour codes', detail:'Each task is colour coded by priority. Red means Critical — do this immediately. Orange means High — complete today. Yellow means Medium — complete this shift if possible. Green means Low — complete when time permits. Overdue tasks are highlighted regardless of their priority colour.', foundIn:'Dashboard → task cards (coloured priority indicator on left side)', tip:'If you have multiple Critical tasks and cannot decide which to do first contact your manager for guidance.' },
-          { summary:'Switch between list and calendar view', detail:'The Tasks section offers both a list view and a calendar view. The list view shows all your tasks sorted by due date. The calendar view shows tasks plotted across the week so you can see how your workload is spread. Switch between them using the view toggle at the top of the Tasks page.', foundIn:'Left sidebar → Tasks → list/calendar view toggle', tip:'The calendar view is useful for planning ahead — check it at the start of each week.' },
-        ]},
-        { id:'1.2', title:'Understanding task details', steps:[
-          { summary:'Tap a task to open the full detail view', detail:'Tap or click any task card on your Dashboard or in the Tasks list to open the full task detail view. This page shows the complete task information including the title, description, priority, due date, checklist items, and any notes from your manager.', foundIn:'Dashboard or Tasks → tap any task card', tip:'Read the description carefully — your manager may have included specific instructions that are easy to miss.' },
-          { summary:'Review the checklist items', detail:'If the task has a checklist you will see each item listed in the task detail view. Items marked with an asterisk are Required — you must complete all required items before you can submit the task for review. Optional items are still expected to be completed unless your manager says otherwise.', foundIn:'Task detail → Checklist section', tip:'If a checklist item is unclear contact your manager before starting — it is easier to clarify upfront than to redo the task.' },
-          { summary:'Check the due date and any comments', detail:'Check the due date shown on the task — this is your submission deadline. If there are previous comments from your manager they will appear in the Comments section at the bottom of the task detail. Read these as they may contain updated instructions.', foundIn:'Task detail → Due Date field, Comments section at bottom', tip:'If you think the due date is not achievable let your manager know as soon as possible — they can extend it.' },
-        ]},
-      ]},
-      { num:2, title:'Completing Tasks', subChapters:[
-        { id:'2.1', title:'Starting a task', steps:[
-          { summary:'Open the task and tap the Start button', detail:'Open the task from your Dashboard or Tasks list. Tap the Start button. This records your official start time and changes the task status to In Progress. Your manager can now see that you have started working on the task.', foundIn:'Task detail → Start button', tip:'Only tap Start when you are physically ready to begin the task — the start time is recorded and is part of your performance record.' },
-          { summary:'Re-read the description and checklist before beginning', detail:'Before you start the physical work re-read the description and checklist one more time. Make sure you have everything you need — equipment, access, information. If anything is unclear now is the time to check with your manager before you begin.', foundIn:'Task detail → Description section, Checklist section', tip:'Starting a task and then stopping to ask questions delays your record. Clarify first, then tap Start.' },
-          { summary:'Work through the task following the checklist', detail:'Work through the task following the checklist order if there is one. The checklist is designed to guide you through the correct sequence. As you complete each item tap the checkbox to mark it done — this is timestamped automatically as proof of completion.', foundIn:'Task detail → Checklist → checkbox next to each item', tip:'Mark items as you go rather than all at once at the end — individual timestamps prove each step was completed at the right time.' },
-        ]},
-        { id:'2.2', title:'Completing the checklist', steps:[
-          { summary:'Work through each checklist item in order', detail:'Work through each item sequentially. Tap the checkbox next to each item when you have completed it. The system records the exact time you marked each item as done. This creates a detailed timestamped record of your work for compliance purposes.', foundIn:'Task detail → Checklist section → checkboxes', tip:'Complete items in the order they appear — the checklist sequence is usually designed for the most efficient workflow.' },
-          { summary:'Complete all required items before submitting', detail:'Items marked with an asterisk are Required. You cannot submit the task for review until all required items are checked. If you cannot complete a required item — for example if equipment is missing or an area is inaccessible — contact your manager before submitting.', foundIn:'Task detail → Checklist → items marked with asterisk (*)', tip:'If a required item genuinely cannot be completed add a comment to the task explaining why before submitting.' },
-          { summary:'Complete recurring items every required time', detail:'Some checklist items need to be completed multiple times per shift — for example checking a temperature reading every two hours. These items show a completion count. Tap Mark Done each time you complete the item. Each completion is recorded with a separate timestamp.', foundIn:'Task detail → Checklist → recurring items with completion counter', tip:'Recurring items are common in safety, food handling, and aged care tasks. Complete them the required number of times.' },
-          { summary:'Add a comment if anything is unusual', detail:'If anything was different during your task — equipment issues, unusual findings, access problems — tap Add Comment before submitting. Type a brief note describing what you found. Your manager can see this comment when reviewing the task.', foundIn:'Task detail → Add Comment button', tip:'Comments are timestamped and become part of the permanent audit record. Use them to document anything out of the ordinary.' },
-        ]},
-        { id:'2.3', title:'Adding photo evidence', steps:[
-          { summary:'Take a clear photo of the completed work', detail:'When the task is complete tap the camera icon in the Evidence section of the task. Take a photo that shows the completed work. Make sure the photo is in focus and the key details are visible — for example a clean room, a completed form, or a correctly set piece of equipment.', foundIn:'Task detail → Evidence section → camera icon', tip:'Take the photo from a distance that shows the full context — not so close the photo only shows one small detail.' },
-          { summary:'Review the photo before submitting', detail:'After taking the photo it will appear as a thumbnail in the Evidence section. Tap it to check it is clear and shows what your manager needs to see. If the photo is blurry or does not clearly show the completed work delete it and take another one.', foundIn:'Task detail → Evidence section → photo thumbnail', tip:'Managers can reject a task solely because the photo does not clearly show the completed work. Take a good photo the first time.' },
-          { summary:'Tap Submit for Review', detail:'Once your photo is attached and all checklist items are complete tap the Submit for Review button. The task status changes to Awaiting Review. Your manager or supervisor will receive a notification. You will be notified once they approve or reject it.', foundIn:'Task detail → Submit for Review button', tip:'After submitting you can still view the task but cannot edit it until your manager reviews it.' },
+      { num:1, title:'Your role', subChapters:[
+        { id:'1.1', title:'What managers and supervisors do', steps:[
+          { summary:'Supervisors assign and monitor tasks', detail:'You assign tasks to individual workers, track their progress, and review submissions when work is done.', foundIn:'Left sidebar → Tasks → task list and status' },
+          { summary:'Supervisors approve or reject work', detail:'When a worker submits a task it lands in your Pending Review queue. Inspect the evidence and approve it or send it back with a reason.', foundIn:'Dashboard → Pending Review card; Tasks → filter by Pending Review' },
+          { summary:'Supervisors can escalate blocked tasks', detail:'If a task is overdue or stuck, tap Escalate to flag it immediately to a Manager. This is recorded in the Audit Log.', foundIn:'Tasks → task detail → Escalate button' },
+          { summary:'Managers have extra organisation-wide powers', detail:'Managers can access organisation-wide reports, configure SLA deadlines, manage leave, run performance reviews, and invite new members.', foundIn:'Left sidebar → Reports, Settings, Leave' },
+          { summary:'Check your role at any time', detail:'Your initials badge in the top-right corner shows your current role. If you belong to multiple organisations you may hold different roles in each.', foundIn:'Top-right corner → initials badge' },
+          { summary:'One person can hold both roles', detail:'In smaller organisations the supervisor and manager are often the same person. All tools are available to you simultaneously.', foundIn:'All sections of the app' },
+          { summary:'Your scope depends on your role', detail:'Supervisors see their team only. Managers see the whole organisation. This affects your task list, dashboard cards, and reports.', foundIn:'Dashboard, Tasks, Reports — all filtered by your role scope' },
         ]},
       ]},
-      { num:3, title:'Other Features', subChapters:[
-        { id:'3.1', title:'Requesting leave', steps:[
-          { summary:'Go to Leave in the left sidebar', detail:'Click Leave in the left navigation sidebar. This opens your leave management page where you can see your upcoming approved leave, pending requests, and leave history. Click New Leave Request to submit a new request.', foundIn:'Left sidebar → Leave → New Leave Request button', tip:'Submit leave requests as early as possible to give your manager time to plan cover.' },
-          { summary:'Fill in your leave dates, type, and reason', detail:'Select your start date and end date. Choose the leave type from the dropdown — Annual Leave, Sick Leave, Personal Leave, or Unpaid Leave. Add a reason in the notes field. Your manager will see all of this when reviewing your request.', foundIn:'Leave → New Leave Request → Start Date, End Date, Leave Type, Notes fields', tip:'For sick leave you may not know the end date in advance — submit with the start date and update it later.' },
-          { summary:'Submit the request and wait for approval', detail:'Click Submit Request. Your manager will receive a notification and will approve or reject the request. You will receive a notification of the outcome. If your request is rejected your manager should include a reason. Approved leave will appear on the team roster.', foundIn:'Leave → New Leave Request → Submit button', tip:'If your leave is urgent contact your manager directly in addition to submitting through the app.' },
+      { num:2, title:'Pitfalls to avoid', subChapters:[
+        { id:'2.1', title:'Common mistakes and how to avoid them', steps:[
+          { summary:'Always set a due date', detail:'Tasks without a due date are treated as low priority and never trigger SLA alerts. Even a rough deadline is better than none. Set default SLA timers under Settings → SLA.', foundIn:'New Task form → Due Date field; Settings → SLA' },
+          { summary:'Clear your Pending Review queue daily', detail:"A submitted task is not marked complete until you approve it. Leaving tasks in Pending Review distorts your team's completion statistics and hides real progress.", foundIn:'Dashboard → Pending Review card; Tasks → filter by Pending Review' },
+          { summary:'Check the leave calendar before assigning', detail:'Assigning tasks to a worker who is on approved leave creates instant overdue tasks. Open Leave before assigning to verify the worker is available.', foundIn:'Left sidebar → Leave → leave calendar' },
+          { summary:'Act on escalation alerts — they are logged', detail:'Every escalation notification is recorded in the Audit Log with a timestamp and your name. Dismissing an escalation without taking action is visible to managers.', foundIn:'Notifications → escalation alerts; Audit Log' },
+          { summary:"Always fill in the description field", detail:"'Clean kitchen' tells a worker nothing. 'Focus on stovetop and floor drains — inspection at 9am tomorrow' gets the right result every time. Use the description field for full context.", foundIn:'New Task form → Description field' },
+        ]},
+      ]},
+      { num:3, title:'Understanding the dashboard', subChapters:[
+        { id:'3.1', title:'Dashboard cards and activity feed', steps:[
+          { summary:'Total tasks card', detail:'Shows all tasks visible to you across every status and every worker in your scope. This is your master count — it includes Pending, In Progress, Pending Review, and Completed tasks.', foundIn:'Dashboard → Total Tasks card' },
+          { summary:'Pending Review card', detail:'Tasks submitted by workers that are waiting for your approval. Tap the card to jump straight to your review queue. Keep this number as close to zero as possible.', foundIn:'Dashboard → Pending Review card' },
+          { summary:'Overdue card', detail:'Tasks that have passed their due date without being completed or approved. Tap any entry in the overdue panel to open the task and act immediately.', foundIn:'Dashboard → Overdue card and overdue panel' },
+          { summary:'Completed today and the activity feed', detail:'Completed Today is your daily pulse check. The activity feed below shows a live log of all task events — assignments, submissions, approvals — in reverse chronological order.', foundIn:'Dashboard → Completed Today card and activity feed' },
+        ]},
+        { id:'3.2', title:'Icon reference — navigation and status', steps:[
+          { summary:'☰  Menu', detail:'Opens the sidebar navigation: Dashboard, Tasks, Reports, Leave, Support, and Settings.', foundIn:'Top-left corner → menu icon' },
+          { summary:'🔔  Notifications', detail:'Shows a badge count of unread alerts. Tap to see task submissions, escalations, approvals, and system messages in real time.', foundIn:'Top-right area → bell icon' },
+          { summary:'🕐  Pending', detail:'Task has been assigned but the worker has not yet started it.', foundIn:'Task card or task detail → status label' },
+          { summary:'⚙️  In progress', detail:'The worker has marked the task as started. Work is underway.', foundIn:'Task card or task detail → status label' },
+          { summary:'📋  Pending review', detail:'Worker has submitted the task for your review. This requires your action — approve or reject.', foundIn:'Task card or task detail → status label' },
+          { summary:'✅  Completed', detail:'Task has been reviewed and approved by a supervisor or manager.', foundIn:'Task card or task detail → status label' },
+          { summary:'⚠️  Overdue', detail:'Task has passed its due date without being completed. Appears in the Overdue panel on the Dashboard.', foundIn:'Dashboard → Overdue panel; task card → status label' },
+          { summary:'🔺  Escalated', detail:'Task has been flagged to a Manager for urgent attention, either manually or automatically via SLA rules.', foundIn:'Task card or task detail → status label; Escalations view' },
+          { summary:'✏️  Edit', detail:'Opens the task editor. Update the title, description, due date, priority, or assigned worker.', foundIn:'Task card or task detail → Edit button' },
+          { summary:'👁️  View / Review', detail:"Opens the full task detail including the worker's completion notes and any photos or files submitted as evidence.", foundIn:'Task card → View or Review button' },
+          { summary:'🗑️  Delete', detail:'Permanently removes the task. You will be asked to confirm. This action is recorded in the Audit Log and cannot be undone.', foundIn:'Task detail → Delete button' },
+          { summary:'↩️  Reject', detail:'Returns the task to the worker with a reason. The worker must resubmit before the task can be approved.', foundIn:'Task detail → Reject button' },
+          { summary:'🔴  High priority', detail:'Urgent task. The worker is notified immediately and the task appears at the top of their list.', foundIn:'Task card → priority indicator; New Task form → Priority field' },
+          { summary:'🟡  Medium priority', detail:'Standard priority. This is the default for most tasks.', foundIn:'Task card → priority indicator; New Task form → Priority field' },
+          { summary:'🟢  Low priority', detail:'Non-urgent. The worker can complete this task alongside other work at their own pace.', foundIn:'Task card → priority indicator; New Task form → Priority field' },
+        ]},
+      ]},
+      { num:4, title:'Creating and managing tasks', subChapters:[
+        { id:'4.1', title:'Creating and sending a task', steps:[
+          { summary:'Open the New Task form', detail:'From Dashboard or Tasks, tap + New Task. On desktop it slides open on the right. On mobile it opens full screen.', foundIn:'Dashboard or Left sidebar → Tasks → + New Task button' },
+          { summary:'Fill in all the key fields', detail:'Title — use a clear action-oriented name. Description — full instructions and what evidence to submit. Then set Assigned To, Due Date, Priority, and optionally link to a Project.', foundIn:'New Task form → Title, Description, Assigned To, Due Date, Priority fields', tip:'High-priority tasks trigger an immediate push notification to the worker.' },
+          { summary:'Tap Send Task', detail:'The worker is notified immediately and the task appears in their My Tasks list as Pending. You can also Save as Draft if you are not ready to send yet.', foundIn:'New Task form → Send Task button or Save as Draft button' },
+        ]},
+        { id:'4.2', title:'Reviewing submitted tasks', steps:[
+          { summary:'Find tasks awaiting review', detail:'Go to Tasks and filter by Pending Review, or tap the Pending Review card on the Dashboard. The 🔔 notification bell also shows new submissions in real time.', foundIn:'Dashboard → Pending Review card; Tasks → filter by Pending Review' },
+          { summary:'Open and inspect the submission', detail:"Tap 👁️ View on the task. You will see the original instructions, the worker's completion notes, and any photos or files they attached as evidence.", foundIn:'Tasks → task card → View or Review button' },
+          { summary:'Approve or reject the task', detail:'Tap ✅ Approve to mark the task complete — the worker is notified. Tap ↩️ Reject to return it with a reason — the worker must resubmit. All approvals and rejections are timestamped in the Audit Log with your name.', foundIn:'Task detail → Approve button or Reject button', tip:'Always add a clear reason when rejecting so the worker knows exactly what to fix.' },
+        ]},
+        { id:'4.3', title:'Editing, deleting and escalating tasks', steps:[
+          { summary:'Editing a task', detail:'Tap ✏️ Edit on any task that has not yet been completed. You can change the title, description, due date, priority, or assigned worker. The worker receives a notification that their task has been updated.', foundIn:'Task card or task detail → Edit button' },
+          { summary:'Deleting a task', detail:'Tap 🗑️ Delete on the task card then confirm. Tasks in any status except Completed can be deleted. The deletion is logged in the Audit Log and cannot be undone.', foundIn:'Task detail → Delete button', tip:'Deletion cannot be undone — use escalation instead if you want to flag a task without removing it.' },
+          { summary:'Escalating a task', detail:'Tap 🔺 Escalate to notify the Manager immediately, change the status to Escalated, and create an entry in the Audit Log. Escalation can also trigger automatically when a task exceeds its SLA deadline. Check Settings → SLA to configure this.', foundIn:'Task detail → Escalate button; Settings → SLA', tip:'Escalate early rather than late — do not wait until a deadline is missed.' },
         ]},
       ]},
     ]
@@ -9768,46 +10086,61 @@ const GUIDE_CONTENT = {
     icon: '👤',
     color: '#3B82F6',
     chapters: [
-      { num:1, title:'Getting Started', subChapters:[
-        { id:'1.1', title:'Setting up your account', steps:[
-          { summary:'Tap the invite link from WhatsApp or email', detail:'Your manager will send you an invite via WhatsApp message or email. Tap the link in the message. It will open the Taksyn registration page in your phone\'s browser. You do not need to download an app — Taksyn works directly in your web browser.', foundIn:'WhatsApp or email message from your manager → invite link', tip:'If the link does not open try copying and pasting it into your phone\'s browser (Chrome or Safari).' },
-          { summary:'Check your pre-filled details on the registration page', detail:'The registration page will already have your First Name, Last Name, email address, phone number, industry, and organisation filled in by your manager. Check that all the details are correct. If anything is wrong contact your manager and ask them to resend the invite with the correct details.', foundIn:'Registration page → pre-filled First Name, Last Name, Email, Industry, Organisation fields', tip:'Your industry, organisation, and role are set by your manager and cannot be changed on the registration page.' },
-          { summary:'Create a secure password', detail:'In the Password field type a password you will remember. It must be at least 6 characters long. Type the same password again in the Confirm Password field to confirm it. Choose something secure that you do not use for other apps.', foundIn:'Registration page → Password field, Confirm Password field', tip:'Write your password down somewhere safe when you first create it. You can change it later in your Profile settings.' },
-          { summary:'Tick the checkbox and tap Create My Account', detail:'Read the confirmation statement — it says your details are correct and you agree to the Terms of Use. If everything is correct tick the checkbox. The Create My Account button will become active. Tap it to create your account. You will see a success message and then be redirected to the sign in page.', foundIn:'Registration page → agreement checkbox → Create My Account button', tip:'After creating your account you will be taken to the sign in page. Use your email and new password to sign in for the first time.' },
-        ]},
-        { id:'1.2', title:'Signing in', steps:[
-          { summary:'Open Taksyn in your phone\'s browser', detail:'Open your web browser (Chrome, Safari, or Firefox) and go to the Taksyn web address provided by your manager. The sign in page will load automatically. You do not need to install anything — Taksyn works as a web app in your browser.', foundIn:'Phone browser → Taksyn web address', tip:'Add the Taksyn page to your phone\'s home screen as a shortcut so you can open it quickly at the start of each shift.' },
-          { summary:'Enter your email and password and tap Sign In', detail:'Type your email address in the Email field. Type your password in the Password field. Tap Sign In. If your details are correct you will be taken straight to your Dashboard where you can see all your assigned tasks.', foundIn:'Sign in page → Email field, Password field → Sign In button', tip:'Make sure Caps Lock is off when typing your password — passwords are case sensitive.' },
-          { summary:'Use Forgot Password if you cannot sign in', detail:'If you have forgotten your password tap Forgot Password below the Sign In button. Enter your email address and tap Send Reset Email. You will receive an email with a link to reset your password. Tap the link and follow the steps to create a new password.', foundIn:'Sign in page → Forgot Password link below Sign In button', tip:'The password reset email sometimes ends up in your spam or junk folder. Check there if you do not see it within a few minutes.' },
+      { num:1, title:'Your role', subChapters:[
+        { id:'1.1', title:'What workers do in Taksyn', steps:[
+          { summary:'You receive tasks from your supervisor', detail:'Your supervisor assigns tasks directly to you. You will receive a notification each time a new task arrives. All your tasks appear in My Tasks.', foundIn:'Left sidebar → Tasks → My Tasks; 🔔 notifications bell' },
+          { summary:'You are responsible for completing tasks on time', detail:'Each task has a due date. It is your responsibility to complete and submit the task before that deadline. Overdue tasks are visible to your supervisor.', foundIn:'Task card → due date; My Tasks → Overdue status' },
+          { summary:'You submit evidence when the work is done', detail:'When you finish a task, you mark it complete and submit it for review. You may be asked to attach a photo or notes as evidence of completion.', foundIn:'Task detail → Submit or Complete button; attachment icon' },
+          { summary:'Your supervisor reviews and approves your work', detail:'After you submit, the task moves to Pending Review. Your supervisor inspects it and either approves it or returns it to you with feedback.', foundIn:'Task status → Pending Review; notifications bell → approval or rejection' },
+          { summary:'You can raise a support ticket if you need help', detail:'If you encounter a problem — with a task, the app, or anything else — go to Help & Support and raise a ticket. The support team responds within 24 hours.', foundIn:'Left sidebar → Help & Support → New Ticket button' },
+          { summary:'Your profile shows your organisation and role', detail:'Tap your initials badge in the top-right corner to view your profile. You can see which organisation you belong to, your role, and update your personal details.', foundIn:'Top-right corner → initials badge → Profile' },
         ]},
       ]},
-      { num:2, title:'Your Tasks', subChapters:[
-        { id:'2.1', title:'Finding your tasks', steps:[
-          { summary:'Check your Dashboard when you arrive', detail:'When you sign in you land on your Dashboard. This shows all tasks currently assigned to you. Tasks are sorted with the most urgent at the top. You can see the task title, priority colour, and due date at a glance without opening each task.', foundIn:'Dashboard (home screen shown after sign in)', tip:'Make checking your Dashboard the first thing you do at the start of every shift.' },
-          { summary:'Tap a task to see the full details', detail:'Tap any task card on your Dashboard to open the full task detail page. This shows the complete description, checklist items, due date, and any notes from your manager. Read everything carefully before you start work.', foundIn:'Dashboard → tap any task card', tip:'If a task description is unclear tap Add Comment and ask your manager a question directly in the task — this keeps a record.' },
-          { summary:'Use the Tasks section for your full task history', detail:'The Dashboard shows only your most recent and urgent tasks. To see your full task list including completed tasks, tap Tasks in the left sidebar. Use the filter bar to search by status, priority, or date.', foundIn:'Left sidebar → Tasks → filter bar', tip:'Check your Completed tasks occasionally to confirm that past tasks were approved by your manager.' },
+      { num:2, title:'Receiving and starting tasks', subChapters:[
+        { id:'2.1', title:'How to find and open your tasks', steps:[
+          { summary:'Check My Tasks for everything assigned to you', detail:'Tap Tasks in the sidebar to open My Tasks. This shows every task assigned to you — Pending, In Progress, and any that are Overdue. This is your main working screen.', foundIn:'Left sidebar → Tasks → My Tasks' },
+          { summary:'New tasks arrive as notifications', detail:'When your supervisor assigns you a task, you receive a notification immediately. Tap the 🔔 bell in the top bar to see it, then tap the task to open it.', foundIn:'Top bar → 🔔 notifications bell' },
+          { summary:'Read the full task before starting', detail:'Tap 👁️ View on any task to open the full detail. Read the title, description, and instructions carefully before you begin. The description tells you exactly what is expected and what evidence to submit.', foundIn:'My Tasks → task card → 👁️ View button' },
+          { summary:'Check the due date and priority', detail:'Every task shows a due date and a priority flag — 🔴 High, 🟡 Medium, or 🟢 Low. High-priority tasks need your immediate attention. Plan your day around due dates.', foundIn:'Task card → due date and priority flag' },
+          { summary:"Mark a task as In Progress when you start", detail:"Once you begin working on a task, tap In Progress to update its status. This lets your supervisor know you have started and are working on it. Don't leave tasks sitting in Pending if you have already begun.", foundIn:'Task detail → In Progress button' },
         ]},
-        { id:'2.2', title:'Completing a task', steps:[
-          { summary:'Tap Start when you begin working on the task', detail:'Open the task and tap the Start button. This records your official start time and updates the task status to In Progress. Your manager can see that you have started. Only tap Start when you are physically at the location and ready to begin the actual work.', foundIn:'Task detail → Start button', tip:'Do not tap Start until you are ready to begin — the start time is part of your performance record.' },
-          { summary:'Work through the checklist and tick each item', detail:'If the task has a checklist work through each item and tap the checkbox as you complete it. Each tick is timestamped automatically. Required items marked with an asterisk must all be completed before you can submit. Do not skip items — your manager reviews each one.', foundIn:'Task detail → Checklist section → checkboxes', tip:'Tick each item as you go rather than all at once — individual timestamps prove you completed each step at the right time.' },
-          { summary:'Take a clear photo of your completed work', detail:'When the work is done tap the camera icon in the Evidence section and take a clear photo. The photo should clearly show that the work is complete — for example a clean room, a correctly prepared area, or a completed form. Make sure the photo is in focus and well lit.', foundIn:'Task detail → Evidence section → camera icon', tip:'If your photo is blurry or too dark your manager may reject the task. Take a good photo the first time.' },
-          { summary:'Tap Submit for Review', detail:'When your photo is attached and all checklist items are ticked tap Submit for Review. The task moves to Awaiting Review status and your manager receives a notification. You will be notified once your manager has approved or rejected the task.', foundIn:'Task detail → Submit for Review button', tip:'Once submitted you cannot edit the task. If you made a mistake contact your manager directly.' },
-        ]},
-        { id:'2.3', title:'What happens after you submit', steps:[
-          { summary:'Your task moves to Awaiting Review', detail:'After submitting, the task status changes to Awaiting Review. Your manager or supervisor receives a notification and will review your photo and checklist. Review times vary but most are completed within a few hours.', foundIn:'Task detail → task status shows Awaiting Review', tip:'While waiting for review you can work on your other tasks — you do not need to wait before starting the next one.' },
-          { summary:'You are notified of the approval or rejection', detail:'When your manager makes a decision you will receive a notification. If the task is approved it will be marked as Completed. If it is rejected you will receive a notification with the reason. Rejected tasks appear back in your task list for rework.', foundIn:'Notification → task approved or task rejected', tip:'Read rejection reasons carefully — they tell you exactly what your manager needs you to fix or redo.' },
-          { summary:'Redo and resubmit rejected tasks', detail:'Open a rejected task to see your manager\'s rejection reason. Address the issue — taking a better photo, completing a missed checklist item, or redoing the physical work. Then take a new photo and tap Submit for Review again. You can submit as many times as needed.', foundIn:'Task detail → rejection reason → then re-submit via Submit for Review button', tip:'If you disagree with a rejection or do not understand the reason add a comment to the task and ask your manager to clarify.' },
+        { id:'2.2', title:'Pitfalls to avoid when receiving tasks', steps:[
+          { summary:'Do not ignore notifications', detail:'Every notification is either a new task, an approved task, or a returned task needing your attention. Ignoring them leads to missed deadlines and overdue tasks that are visible to your supervisor.', foundIn:'Top bar → 🔔 notifications bell' },
+          { summary:'Do not start without reading the instructions', detail:'The description field contains everything you need to know — what to do, how to do it, and what evidence to provide. Starting without reading it often means having to redo the work.', foundIn:'Task detail → Description field' },
+          { summary:'Ask early if something is unclear', detail:'If a task is unclear, contact your supervisor as soon as possible — not after the deadline has passed. Use the support ticket system if you cannot reach them directly.', foundIn:'Left sidebar → Help & Support; contact your supervisor directly' },
         ]},
       ]},
-      { num:3, title:'Leave and Support', subChapters:[
-        { id:'3.1', title:'Requesting leave', steps:[
-          { summary:'Go to Leave in the left sidebar', detail:'Tap Leave in the left navigation sidebar. This opens your leave management page where you can see approved leave, pending requests, and leave history. Tap New Leave Request to start a new request.', foundIn:'Left sidebar → Leave → New Leave Request button', tip:'Check your existing leave before submitting to make sure you are not requesting dates that overlap with already approved leave.' },
-          { summary:'Fill in your dates, type, and reason', detail:'Select your start date and end date. Choose your leave type from the dropdown — Annual Leave, Sick Leave, Personal Leave, or Unpaid Leave. Add a short reason in the notes field. Your manager will see all of this when reviewing your request.', foundIn:'Leave → New Leave Request → Start Date, End Date, Leave Type, Notes fields', tip:'For unexpected sick leave you can submit with just the start date and add the end date later when you know when you will return.' },
-          { summary:'Tap Submit and wait for a response', detail:'Tap Submit Request. Your manager will receive a notification and will approve or reject it. You will receive a notification of the outcome. If rejected your manager will include a reason. Approved leave shows as confirmed in your leave history.', foundIn:'Leave → New Leave Request → Submit button', tip:'For urgent leave requests contact your manager directly by phone as well as submitting through the app.' },
+      { num:3, title:'Submitting and completing tasks', subChapters:[
+        { id:'3.1', title:'How to submit a completed task', steps:[
+          { summary:'Finish the work first', detail:'Complete the physical or digital work described in the task before submitting. Submitting an incomplete task will result in it being returned to you, which delays completion and affects your record.', foundIn:'Task detail → read instructions before tapping Submit' },
+          { summary:'Tap Submit on the task', detail:'Open the task and tap the Submit or Complete button. A form will appear asking for your completion notes and any required evidence such as a photo or file.', foundIn:'Task detail → Submit or Complete button' },
+          { summary:'Add your completion notes', detail:'Write a brief note describing what you did. For example: "Cleaned stovetop and floor drains as instructed. Area clear and ready for inspection." Good notes help your supervisor approve quickly.', foundIn:'Task detail → Submit form → completion notes field' },
+          { summary:'Attach evidence if required', detail:'If the task asks for a photo or document, attach it before submitting. Tap the attachment icon, choose your file or take a photo, then confirm. Tasks submitted without required evidence are often returned.', foundIn:'Task detail → Submit form → 📎 attachment icon' },
+          { summary:'Confirm the submission', detail:'Tap Confirm Submit. The task status changes to Pending Review and your supervisor is notified immediately. You will receive a notification once they approve or return it.', foundIn:'Task detail → Submit form → Confirm Submit button' },
         ]},
-        { id:'3.2', title:'Getting help', steps:[
-          { summary:'Contact your supervisor or manager first', detail:'If you have a problem with the app — a task not loading, an error message, or you cannot sign in — the first step is to contact your supervisor or manager directly. They can often resolve simple issues quickly and will know whether to escalate to the Taksyn support team.', foundIn:'Contact your supervisor or manager directly', tip:'Tell your manager the exact error message you saw and what you were trying to do when the problem occurred.' },
-          { summary:'Ask your manager to raise a support ticket on your behalf', detail:'If your manager cannot resolve the issue they can raise a support ticket through Help & Support in the app. The Taksyn support team responds within 24 hours. Provide your manager with as much detail as possible so they can describe the problem accurately in the ticket.', foundIn:'Help & Support (your manager raises the ticket on your behalf)', tip:'For sign in problems — if you are locked out entirely — your manager can also reset your access from the Workforce section.' },
+        { id:'3.2', title:'What happens after you submit', steps:[
+          { summary:'Your task moves to Pending Review', detail:"After submission the task is in your supervisor's queue. It is not yet complete. Do not assume it is finished until you receive an approval notification.", foundIn:'My Tasks → task status → Pending Review' },
+          { summary:'Approved — task is complete', detail:'If your supervisor approves, you receive a notification and the task moves to Completed. No further action needed.', foundIn:'Notifications bell → approval notification; task status → Completed' },
+          { summary:'Rejected — read the reason and resubmit', detail:'If your supervisor returns the task, you receive a notification with their reason. Open the task, read the feedback carefully, make the necessary changes, and resubmit. A returned task is not a failure — it is guidance.', foundIn:'Notifications bell → rejection notification; task detail → rejection reason → Submit button' },
+        ]},
+      ]},
+      { num:4, title:'Understanding your task list', subChapters:[
+        { id:'4.1', title:'Task statuses explained', steps:[
+          { summary:'🕐  Pending — task is waiting for you', detail:'The task has been assigned to you but you have not started it yet. Check the due date and begin as soon as possible, especially if it is marked High priority.', foundIn:'My Tasks → task card → status label' },
+          { summary:'⚙️  In progress — you have started', detail:'You have marked the task as started. Keep working and submit when complete. Your supervisor can see this status.', foundIn:'My Tasks → task card → status label' },
+          { summary:'📋  Pending review — waiting for approval', detail:"You have submitted the task and it is in your supervisor's review queue. Nothing more is needed from you unless it is returned.", foundIn:'My Tasks → task card → status label' },
+          { summary:'✅  Completed — approved and done', detail:'Your supervisor has approved the task. It is fully complete and recorded. You can view completed tasks at any time in your task history.', foundIn:'My Tasks → Completed filter; task card → status label' },
+          { summary:'⚠️  Overdue — past the due date', detail:'The task has passed its due date without being submitted. This is visible to your supervisor. Submit it as soon as possible and let your supervisor know if there was a reason for the delay.', foundIn:'My Tasks → Overdue filter; task card → status label' },
+          { summary:'🔺  Escalated — flagged as urgent', detail:'The task has been escalated to a Manager because it is significantly overdue or blocked. Contact your supervisor immediately to resolve this.', foundIn:'My Tasks → task card → status label; contact your supervisor' },
+        ]},
+        { id:'4.2', title:'Icon reference — your task screen', steps:[
+          { summary:'🔔  Notifications bell', detail:'Shows a badge count of unread alerts. Tap to see new task assignments, approvals, rejections, and any messages from your supervisor.', foundIn:'Top bar → 🔔 bell icon' },
+          { summary:'👁️  View', detail:'Opens the full task detail — instructions, due date, priority, and any evidence already attached. Always tap View before starting a task.', foundIn:'My Tasks → task card → 👁️ View button' },
+          { summary:'🔴  High priority', detail:'This task is urgent. Start it immediately. You were notified the moment it was assigned.', foundIn:'Task card → priority flag' },
+          { summary:'🟡  Medium priority', detail:'Standard priority. Complete it by the due date alongside your other tasks.', foundIn:'Task card → priority flag' },
+          { summary:'🟢  Low priority', detail:'Non-urgent. Complete it when your higher-priority tasks are done, but do not let it become overdue.', foundIn:'Task card → priority flag' },
+          { summary:'☰  Menu', detail:'Opens the sidebar: My Tasks, Leave, Help & Support, and Settings.', foundIn:'Top-left corner → ☰ menu icon' },
+          { summary:'📎  Attachment', detail:'Tap to attach a photo or file as evidence when submitting a task. Some tasks require this — check the task description.', foundIn:'Task detail → Submit form → 📎 attachment icon' },
         ]},
       ]},
     ]
@@ -10175,10 +10508,12 @@ function GettingStartedGuide({ user, setPage }) {
         ))}
 
         {/* Footer */}
+        {['client_admin','super_admin'].includes(user.role) && (
         <div style={{marginTop:20,padding:'14px 16px',background:'var(--s3)',borderRadius:10,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
           <div style={{fontSize:12,color:'var(--t2)',flex:1}}>Need more help? Go to <strong>Help &amp; Support</strong> to raise a ticket and the Taksyn support team will respond within 24 hours.</div>
           <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setPage('help')}>Go to Support →</button>
         </div>
+        )}
       </div>
 
       {/* ── Print document — always in DOM, visible only during print or printMode ── */}
@@ -10314,6 +10649,234 @@ function HelpView({ user }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+const ISSUE_PRIORITY_CFG = {
+  high:   { label:'High',   emoji:'🔴', color:'#EF4444', bg:'rgba(239,68,68,.12)' },
+  medium: { label:'Medium', emoji:'🟡', color:'#F59E0B', bg:'rgba(245,158,11,.12)' },
+  low:    { label:'Low',    emoji:'🟢', color:'#10B981', bg:'rgba(16,185,129,.12)' },
+}
+const ISSUE_STATUS_CFG = {
+  open:        { label:'Open',        color:'#F59E0B', bg:'rgba(245,158,11,.12)' },
+  in_progress: { label:'In Progress', color:'#3B82F6', bg:'rgba(59,130,246,.12)' },
+  resolved:    { label:'Resolved',    color:'#10B981', bg:'rgba(16,185,129,.12)' },
+}
+const ROLES_ABOVE = {
+  worker:     ['supervisor','manager','client_admin'],
+  supervisor: ['manager','client_admin'],
+  manager:    ['client_admin'],
+}
+
+function ReportIssueView({ user }) {
+  const [title, setTitle] = useState('')
+  const [desc, setDesc] = useState('')
+  const [priority, setPriority] = useState('medium')
+  const [photo, setPhoto] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [issues, setIssues] = useState([])
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('issue_reports').select('*').eq('reported_by',user.id).order('created_at',{ascending:false})
+      .then(({data})=>{ if(data) setIssues(data) }).catch(()=>{})
+  },[])
+
+  const submit = async () => {
+    if(!title.trim()||!desc.trim()) return
+    setSubmitting(true)
+    const entry = {
+      id: 'ISS'+Date.now(),
+      created_at: new Date().toISOString(),
+      reported_by: user.id,
+      org: user.org,
+      title: title.trim(),
+      description: desc.trim(),
+      priority,
+      photo_url: photo||null,
+      status: 'open',
+      resolved_by: null,
+      resolved_at: null,
+    }
+    if(isConfigured()) {
+      await supabase.from('issue_reports').insert(entry).catch(()=>{})
+      // Notify all roles above the reporter in the same org
+      const notifyRoles = ROLES_ABOVE[user.role]||[]
+      if(notifyRoles.length && user.org) {
+        supabase.from('profiles').select('email,name,role').eq('org',user.org)
+          .then(({data})=>{
+            if(!data) return
+            data.filter(p=>notifyRoles.includes(p.role)&&p.email).forEach(p=>{
+              sendEmailNotif(p.email, `New issue reported: ${entry.title}`,
+                `${user.name} (${ROLE_LABELS[user.role]||user.role}) reported a new ${priority} priority issue in ${user.org}.\n\nTitle: ${entry.title}\n\nDescription: ${entry.description}\n\nLog in to Taksyn to review and action this issue.`)
+            })
+          }).catch(()=>{})
+      }
+    }
+    setIssues(prev=>[entry,...prev])
+    setTitle(''); setDesc(''); setPriority('medium'); setPhoto(null)
+    setSubmitted(true); setSubmitting(false)
+    setTimeout(()=>setSubmitted(false), 4000)
+  }
+
+  return (
+    <div className="page-wrap">
+      <div className="ph"><div className="ph-title">Report an Issue</div><div className="ph-sub">Let your team know about a problem that needs attention</div></div>
+      <div style={{maxWidth:560,marginBottom:24}}>
+        <div className="form-group">
+          <label className="form-label">Title *</label>
+          <input className="form-input" placeholder="Brief summary of the issue" value={title} onChange={e=>setTitle(e.target.value)} maxLength={120}/>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Description *</label>
+          <textarea className="form-input" rows={4} placeholder="Describe the issue in detail — what happened, where, and when" value={desc} onChange={e=>setDesc(e.target.value)} style={{resize:'vertical'}}/>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Priority</label>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {['high','medium','low'].map(p=>{
+              const cfg = ISSUE_PRIORITY_CFG[p]
+              return (
+                <button key={p} onClick={()=>setPriority(p)} style={{padding:'7px 16px',borderRadius:20,border:`2px solid ${priority===p?cfg.color:'var(--border)'}`,background:priority===p?cfg.bg:'none',color:priority===p?cfg.color:'var(--t2)',fontWeight:priority===p?700:400,cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',gap:5,fontFamily:'inherit',transition:'all .15s'}}>
+                  {cfg.emoji} {cfg.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Photo <span style={{color:'var(--t2)',fontWeight:400}}>(optional)</span></label>
+          {photo
+            ? <div style={{position:'relative',display:'inline-block'}}>
+                <img src={photo} alt="issue" style={{maxWidth:240,maxHeight:160,borderRadius:8,border:'1px solid var(--border)',display:'block'}}/>
+                <button onClick={()=>setPhoto(null)} style={{position:'absolute',top:4,right:4,background:'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',color:'#fff',width:22,height:22,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'inherit'}}>×</button>
+              </div>
+            : <button className="btn btn-secondary" style={{fontSize:13}} onClick={()=>document.getElementById('issue-photo-inp').click()}>📷 Attach Photo</button>
+          }
+          <input id="issue-photo-inp" type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>setPhoto(ev.target.result); r.readAsDataURL(f); e.target.value='' }}/>
+        </div>
+        {submitted && <div style={{padding:'10px 14px',borderRadius:8,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.3)',color:'#059669',fontWeight:600,marginBottom:12}}>✓ Issue reported successfully</div>}
+        <button className="btn btn-primary" disabled={!title.trim()||!desc.trim()||submitting} onClick={submit} style={{width:'100%'}}>
+          {submitting?'Submitting…':'Submit Issue Report'}
+        </button>
+      </div>
+
+      {issues.length>0&&(
+        <div>
+          <div className="section-title">My Reported Issues</div>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {issues.map(issue=>{
+              const pc = ISSUE_PRIORITY_CFG[issue.priority]||ISSUE_PRIORITY_CFG.medium
+              const sc = ISSUE_STATUS_CFG[issue.status]||ISSUE_STATUS_CFG.open
+              return (
+                <div key={issue.id} style={{background:'var(--card)',borderRadius:10,border:'1px solid var(--border)',padding:'12px 16px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
+                    <span style={{fontWeight:700,flex:1,minWidth:0}}>{issue.title}</span>
+                    <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:pc.bg,color:pc.color}}>{pc.emoji} {pc.label}</span>
+                    <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:sc.bg,color:sc.color}}>{sc.label}</span>
+                  </div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginBottom:4}}>{issue.description}</div>
+                  {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:180,maxHeight:120,borderRadius:6,border:'1px solid var(--border)',display:'block',marginBottom:4}}/>}
+                  <div style={{fontSize:11,color:'var(--t3)'}}>{new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function IssueReportsAdminView({ user }) {
+  const [issues, setIssues] = useState([])
+  const [reporterNames, setReporterNames] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState('open')
+
+  const load = async () => {
+    if(!isConfigured()) { setLoading(false); return }
+    const { data } = await supabase.from('issue_reports').select('*').eq('org',user.org).order('created_at',{ascending:false})
+    if(data) {
+      setIssues(data)
+      const ids = [...new Set(data.map(i=>i.reported_by).filter(Boolean))]
+      if(ids.length) {
+        supabase.from('profiles').select('id,name').in('id',ids)
+          .then(({data:p})=>{ if(p) setReporterNames(Object.fromEntries(p.map(r=>[r.id,r.name]))) })
+          .catch(()=>{})
+      }
+    }
+    setLoading(false)
+  }
+
+  useEffect(()=>{ load() },[])
+
+  const updateStatus = async (id, status) => {
+    const patch = status==='resolved'
+      ? { status, resolved_by: user.name, resolved_at: new Date().toISOString() }
+      : { status, resolved_by: null, resolved_at: null }
+    setIssues(prev=>prev.map(i=>i.id===id?{...i,...patch}:i))
+    if(isConfigured()) await supabase.from('issue_reports').update(patch).eq('id',id).catch(()=>{})
+  }
+
+  const visible = issues.filter(i=> filterStatus==='all' ? true : i.status===filterStatus)
+  const grouped = { high: visible.filter(i=>i.priority==='high'), medium: visible.filter(i=>i.priority==='medium'), low: visible.filter(i=>i.priority==='low') }
+
+  return (
+    <div className="page-wrap">
+      <div className="ph"><div className="ph-title">Issue Reports</div><div className="ph-sub">Issues reported by your team</div></div>
+      <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
+        {[['open','Open'],['in_progress','In Progress'],['resolved','Resolved'],['all','All']].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilterStatus(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${filterStatus===v?'var(--brand)':'var(--border)'}`,background:filterStatus===v?'var(--brand-lt)':'none',color:filterStatus===v?'var(--brand)':'var(--t2)',fontWeight:filterStatus===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all .15s'}}>
+            {l} {v!=='all'&&<span style={{fontSize:10,opacity:.7}}>({issues.filter(i=>i.status===v).length})</span>}
+          </button>
+        ))}
+      </div>
+      {loading ? <div style={{color:'var(--t2)',fontSize:13}}>Loading…</div> : visible.length===0 ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No {filterStatus==='all'?'':filterStatus} issues</div></div> : (
+        ['high','medium','low'].map(pri=>{
+          const grp = grouped[pri]
+          if(!grp.length) return null
+          const pc = ISSUE_PRIORITY_CFG[pri]
+          return (
+            <div key={pri} style={{marginBottom:28}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+                <span style={{fontSize:13,fontWeight:700,color:pc.color}}>{pc.emoji} {pc.label} Priority</span>
+                <span style={{fontSize:11,color:'var(--t2)'}}>({grp.length})</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {grp.map(issue=>{
+                  const sc = ISSUE_STATUS_CFG[issue.status]||ISSUE_STATUS_CFG.open
+                  return (
+                    <div key={issue.id} style={{background:'var(--card)',borderRadius:10,border:`1px solid ${issue.status==='open'?pc.color+'44':'var(--border)'}`,padding:'14px 16px'}}>
+                      <div style={{display:'flex',alignItems:'flex-start',gap:10,flexWrap:'wrap',marginBottom:6}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:700,marginBottom:2}}>{issue.title}</div>
+                          <div style={{fontSize:12,color:'var(--t2)',marginBottom:6}}>{issue.description}</div>
+                          {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:220,maxHeight:150,borderRadius:6,border:'1px solid var(--border)',display:'block',marginBottom:6}}/>}
+                          <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
+                            <span>👤 {reporterNames[issue.reported_by]||'Team member'}</span>
+                            <span>📅 {new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</span>
+                            {issue.status==='resolved'&&issue.resolved_by&&<span>✓ Resolved by {issue.resolved_by}</span>}
+                          </div>
+                        </div>
+                        <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:sc.bg,color:sc.color,flexShrink:0}}>{sc.label}</span>
+                      </div>
+                      {issue.status!=='resolved'&&(
+                        <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+                          {issue.status==='open'&&<button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>updateStatus(issue.id,'in_progress')}>Mark In Progress</button>}
+                          <button className="btn btn-primary btn-sm" style={{fontSize:11}} onClick={()=>updateStatus(issue.id,'resolved')}>Mark Resolved</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }
@@ -10488,6 +11051,7 @@ export default function App() {
   const [showUndo, setShowUndo] = useState(false)
   const [auditLog, setAuditLog] = useState([])
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
+  const [needsPasswordReset, setNeedsPasswordReset] = useState(false)
   const [activePosition, setActivePosition] = useState(null) // selected role assignment for multi-role users
   const [showRoleSelector, setShowRoleSelector] = useState(false)
   const [userPositionsList, setUserPositionsList] = useState([])
@@ -10715,6 +11279,8 @@ export default function App() {
     const {data:{subscription}} = supabase.auth.onAuthStateChange(async(event, session)=>{
       if(event==='SIGNED_OUT') {
         setUser(null)
+      } else if(event==='PASSWORD_RECOVERY') {
+        setNeedsPasswordReset(true)
       } else if(event==='USER_UPDATED') {
         // Password was just set — log them in properly
         try {
@@ -10880,6 +11446,7 @@ export default function App() {
   },[user?.role])
 
   if(needsPasswordSetup) return <PasswordSetupView onDone={()=>setNeedsPasswordSetup(false)}/>
+  if(needsPasswordReset) return <PasswordResetView onDone={()=>setNeedsPasswordReset(false)}/>
   if(!user) return <AuthView onAuth={handleAuth} deactivatedMsg={deactivatedMsg} onClearDeactivated={()=>setDeactivatedMsg('')}/>
 
   const escalationCount = tasks.filter(t=>t.escalation||t.status==='overdue').length
@@ -11269,10 +11836,10 @@ export default function App() {
                 {page==='reports'     && user.role!=='super_admin' && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
                 {page==='audit'       && hasAccess(user.role,2) && <AuditLogView   {...pageProps}/>}
                 {page==='orgs'        && user.role==='super_admin' && <OrganisationsView {...pageProps}/>}
-                {page==='users'       && hasAccess(user.role,4) && <UsersView      {...pageProps}/>}
+                {page==='users'       && hasAccess(user.role,2) && <UsersView      {...pageProps}/>}
                 {page==='tiers'       && user.role!=='super_admin' && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
                 {page==='support'     && user.role==='super_admin' && <SupportView {...pageProps}/>}
-                {page==='help'        && user.role!=='super_admin' && <HelpView {...pageProps}/>}
+                {page==='help'        && ['client_admin','super_admin'].includes(user.role) && <HelpView {...pageProps}/>}
                 {page==='projects'    && user.role!=='super_admin' && hasAccess(user.role,2) && <ProjectsView {...pageProps}/>}
                 {page==='performance' && user.role!=='super_admin' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
                 {page==='leave'       && user.role!=='super_admin' && <LeaveView {...pageProps}/>}
@@ -11286,6 +11853,8 @@ export default function App() {
                 {page==='roles_departments' && ['client_admin','super_admin'].includes(user.role) && <RolesPositionsView user={user}/>}
                 {page==='platform_settings' && user.role==='super_admin' && <PlatformSettingsView user={user} sessionTimeout={sessionTimeout} setSessionTimeout={setSessionTimeout}/>}
                 {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser} darkMode={darkMode} toggleDarkMode={toggleDarkMode}/>}
+                {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
+                {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
               </>
             )}
