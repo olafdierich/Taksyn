@@ -4405,7 +4405,7 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:editForm.regularly_rostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
                 </button>
               </div>
-              <div style={{borderTop:'1px solid var(--border)',paddingTop:12,marginBottom:12}}>
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:12,marginBottom:12,opacity:editForm.regularly_rostered?1:0.4,pointerEvents:editForm.regularly_rostered?'auto':'none',transition:'opacity .2s'}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   <span style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>Roster</span>
@@ -4454,23 +4454,25 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:rosterOnlyRegRostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
                 </button>
               </div>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:14}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                <span style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>Roster</span>
+              <div style={{opacity:rosterOnlyRegRostered?1:0.4,pointerEvents:rosterOnlyRegRostered?'auto':'none',transition:'opacity .2s'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:14}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>Roster</span>
+                </div>
+                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>{
+                  const entry = rosterOnlyData.find(r=>r.day===day)
+                  return (
+                    <div key={day} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                      <button type="button" onClick={()=>{ if(entry) setRosterOnlyData(prev=>prev.filter(r=>r.day!==day)); else setRosterOnlyData(prev=>[...prev,{day,start:'09:00',end:'17:00'}]) }} style={{width:44,padding:'3px 0',borderRadius:4,border:'1px solid '+(entry?'var(--brand)':'var(--border)'),background:entry?'var(--brand-lt)':'transparent',color:entry?'var(--brand)':'var(--t2)',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>{day}</button>
+                      {entry&&<>
+                        <input type="time" value={entry.start} onChange={e=>setRosterOnlyData(prev=>prev.map(r=>r.day===day?{...r,start:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                        <span style={{fontSize:10,color:'var(--t2)'}}>to</span>
+                        <input type="time" value={entry.end} onChange={e=>setRosterOnlyData(prev=>prev.map(r=>r.day===day?{...r,end:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                      </>}
+                    </div>
+                  )
+                })}
               </div>
-              {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>{
-                const entry = rosterOnlyData.find(r=>r.day===day)
-                return (
-                  <div key={day} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                    <button type="button" onClick={()=>{ if(entry) setRosterOnlyData(prev=>prev.filter(r=>r.day!==day)); else setRosterOnlyData(prev=>[...prev,{day,start:'09:00',end:'17:00'}]) }} style={{width:44,padding:'3px 0',borderRadius:4,border:'1px solid '+(entry?'var(--brand)':'var(--border)'),background:entry?'var(--brand-lt)':'transparent',color:entry?'var(--brand)':'var(--t2)',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>{day}</button>
-                    {entry&&<>
-                      <input type="time" value={entry.start} onChange={e=>setRosterOnlyData(prev=>prev.map(r=>r.day===day?{...r,start:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
-                      <span style={{fontSize:10,color:'var(--t2)'}}>to</span>
-                      <input type="time" value={entry.end} onChange={e=>setRosterOnlyData(prev=>prev.map(r=>r.day===day?{...r,end:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
-                    </>}
-                  </div>
-                )
-              })}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
                 <button className="btn btn-secondary" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]); setRosterOnlyRegRostered(false) }}>Cancel</button>
                 <button className="btn btn-primary" disabled={rosterOnlySaving} onClick={saveRosterOnly}>{rosterOnlySaving?'Saving…':'Save Roster'}</button>
