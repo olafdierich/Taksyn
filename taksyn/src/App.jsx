@@ -4815,9 +4815,9 @@ const COMPANY_COMPLETENESS_FIELDS = [
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
   client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
-  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock']],
+  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock']],
 }
 
 function PasswordSetupView({ onDone }) {
@@ -10506,10 +10506,12 @@ function GettingStartedGuide({ user, setPage }) {
         ))}
 
         {/* Footer */}
+        {['client_admin','super_admin'].includes(user.role) && (
         <div style={{marginTop:20,padding:'14px 16px',background:'var(--s3)',borderRadius:10,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
           <div style={{fontSize:12,color:'var(--t2)',flex:1}}>Need more help? Go to <strong>Help &amp; Support</strong> to raise a ticket and the Taksyn support team will respond within 24 hours.</div>
           <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setPage('help')}>Go to Support →</button>
         </div>
+        )}
       </div>
 
       {/* ── Print document — always in DOM, visible only during print or printMode ── */}
@@ -11607,7 +11609,7 @@ export default function App() {
                 {page==='users'       && hasAccess(user.role,2) && <UsersView      {...pageProps}/>}
                 {page==='tiers'       && user.role!=='super_admin' && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
                 {page==='support'     && user.role==='super_admin' && <SupportView {...pageProps}/>}
-                {page==='help'        && user.role!=='super_admin' && <HelpView {...pageProps}/>}
+                {page==='help'        && ['client_admin','super_admin'].includes(user.role) && <HelpView {...pageProps}/>}
                 {page==='projects'    && user.role!=='super_admin' && hasAccess(user.role,2) && <ProjectsView {...pageProps}/>}
                 {page==='performance' && user.role!=='super_admin' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
                 {page==='leave'       && user.role!=='super_admin' && <LeaveView {...pageProps}/>}
