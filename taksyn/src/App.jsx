@@ -9781,6 +9781,23 @@ const GUIDE_CONTENT = {
           { summary:'🔴 🟡 🟢  Priority flags', detail:'High (🔴), Medium (🟡), Low (🟢). Priority affects notification urgency and task ordering in worker lists. Review priority distribution in Reports to ensure high-priority tasks are not being overused.', foundIn:'Task card → priority flag; Reports → task breakdown' },
         ]},
       ]},
+      { num:5, title:'Creating and managing tasks', subChapters:[
+        { id:'ch5-1', title:'Creating and sending a task', steps:[
+          { summary:'Open the New Task form', detail:'From Dashboard or Tasks, tap + New Task. On desktop it slides open on the right. On mobile it opens full screen.', foundIn:'Dashboard or Left sidebar → Tasks → + New Task button' },
+          { summary:'Fill in all the key fields', detail:'Title — use a clear action-oriented name. Description — full instructions and what evidence to submit. Then set Assigned To, Due Date, Priority, and optionally link to a Project.', foundIn:'New Task form → Title, Description, Assigned To, Due Date, Priority fields', tip:'High-priority tasks trigger an immediate push notification to the worker.' },
+          { summary:'Tap Send Task', detail:'The worker is notified immediately and the task appears in their My Tasks list as Pending. You can also Save as Draft if you are not ready to send yet.', foundIn:'New Task form → Send Task button or Save as Draft button' },
+        ]},
+        { id:'ch5-2', title:'Reviewing submitted tasks', steps:[
+          { summary:'Find tasks awaiting review', detail:'Go to Tasks and filter by Pending Review, or tap the Pending Review card on the Dashboard. The 🔔 notification bell also shows new submissions in real time.', foundIn:'Dashboard → Pending Review card; Tasks → filter by Pending Review' },
+          { summary:'Open and inspect the submission', detail:"Tap 👁️ View on the task. You will see the original instructions, the worker's completion notes, and any photos or files they attached as evidence.", foundIn:'Tasks → task card → View or Review button' },
+          { summary:'Approve or reject the task', detail:'Tap ✅ Approve to mark the task complete — the worker is notified. Tap ↩️ Reject to return it with a reason — the worker must resubmit. All approvals and rejections are timestamped in the Audit Log with your name.', foundIn:'Task detail → Approve button or Reject button', tip:'Always add a clear reason when rejecting so the worker knows exactly what to fix.' },
+        ]},
+        { id:'ch5-3', title:'Editing, deleting and escalating tasks', steps:[
+          { summary:'Editing a task', detail:'Tap ✏️ Edit on any task that has not yet been completed. You can change the title, description, due date, priority, or assigned worker. The worker receives a notification that their task has been updated.', foundIn:'Task card or task detail → Edit button' },
+          { summary:'Deleting a task', detail:'Tap 🗑️ Delete on the task card then confirm. Tasks in any status except Completed can be deleted. The deletion is logged in the Audit Log and cannot be undone.', foundIn:'Task detail → Delete button', tip:'Deletion cannot be undone — use escalation instead if you want to flag a task without removing it.' },
+          { summary:'Escalating a task', detail:'Tap 🔺 Escalate to notify the Manager immediately, change the status to Escalated, and create an entry in the Audit Log. Escalation can also trigger automatically when a task exceeds its SLA deadline. Check Settings → SLA to configure this.', foundIn:'Task detail → Escalate button; Settings → SLA', tip:'Escalate early rather than late — do not wait until a deadline is missed.' },
+        ]},
+      ]},
     ]
   },
   manager: {
