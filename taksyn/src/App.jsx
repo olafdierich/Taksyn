@@ -10680,8 +10680,10 @@ function ReportIssueView({ user }) {
 
   useEffect(()=>{
     if(!isConfigured()) return
-    supabase.from('issue_reports').select('*').eq('reported_by',user.id).order('created_at',{ascending:false})
-      .then(({data})=>{ if(data) setIssues(data) }).catch(()=>{})
+    ;(async()=>{
+      const { data, error } = await supabase.from('issue_reports').select('*').eq('reported_by',user.id).order('created_at',{ascending:false})
+      if(!error && data) setIssues(data)
+    })()
   },[])
 
   const submit = async () => {
@@ -10701,7 +10703,13 @@ function ReportIssueView({ user }) {
       resolved_at: null,
     }
     if(isConfigured()) {
-      await supabase.from('issue_reports').insert(entry).catch(()=>{})
+      try {
+        const { error } = await supabase.from('issue_reports').insert(entry)
+        if(error) throw error
+      } catch(err) {
+        setSubmitting(false)
+        return
+      }
       // Notify all roles above the reporter in the same org
       const notifyRoles = ROLES_ABOVE[user.role]||[]
       if(notifyRoles.length && user.org) {
