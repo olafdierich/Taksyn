@@ -10689,22 +10689,19 @@ function ReportIssueView({ user }) {
   const submit = async () => {
     if(!title.trim()||!desc.trim()) return
     setSubmitting(true)
-    const entry = {
-      id: 'ISS'+Date.now(),
-      created_at: new Date().toISOString(),
+    const now = new Date().toISOString()
+    const payload = {
       reported_by: user.id,
       org: user.org,
       title: title.trim(),
       description: desc.trim(),
       priority,
-      photo_url: photo||null,
       status: 'open',
-      resolved_by: null,
-      resolved_at: null,
     }
+    if(photo) payload.photo_url = photo
     if(isConfigured()) {
       try {
-        const { error } = await supabase.from('issue_reports').insert(entry)
+        const { error } = await supabase.from('issue_reports').insert(payload)
         if(error) throw error
       } catch(err) {
         setSubmitting(false)
@@ -10717,13 +10714,13 @@ function ReportIssueView({ user }) {
           .then(({data})=>{
             if(!data) return
             data.filter(p=>notifyRoles.includes(p.role)&&p.email).forEach(p=>{
-              sendEmailNotif(p.email, `New issue reported: ${entry.title}`,
-                `${user.name} (${ROLE_LABELS[user.role]||user.role}) reported a new ${priority} priority issue in ${user.org}.\n\nTitle: ${entry.title}\n\nDescription: ${entry.description}\n\nLog in to Taksyn to review and action this issue.`)
+              sendEmailNotif(p.email, `New issue reported: ${payload.title}`,
+                `${user.name} (${ROLE_LABELS[user.role]||user.role}) reported a new ${priority} priority issue in ${user.org}.\n\nTitle: ${payload.title}\n\nDescription: ${payload.description}\n\nLog in to Taksyn to review and action this issue.`)
             })
           }).catch(()=>{})
       }
     }
-    setIssues(prev=>[entry,...prev])
+    setIssues(prev=>[{...payload, id:'local_'+Date.now(), created_at:now},...prev])
     setTitle(''); setDesc(''); setPriority('medium'); setPhoto(null)
     setSubmitted(true); setSubmitting(false)
     setTimeout(()=>setSubmitted(false), 4000)
