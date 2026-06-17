@@ -6677,7 +6677,7 @@ function CompanySettingsView({ user }) {
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) {
         const { error } = await supabase.from('checklist_templates').insert(entry)
         if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
@@ -7579,7 +7579,7 @@ function TemplatesView({ user }) {
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { id:Date.now()+'', organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) { const { error } = await supabase.from('checklist_templates').insert(entry); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
       setTplList(prev=>[...prev,{...entry,items}].sort((a,b)=>a.name.localeCompare(b.name)))
       setMsg('✓ Template saved')
