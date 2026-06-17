@@ -3898,6 +3898,7 @@ function UsersView({ user, setAuditLog }) {
   const [editRoster, setEditRoster] = useState([])
   const [rosterOnlyUser, setRosterOnlyUser] = useState(null)
   const [rosterOnlyData, setRosterOnlyData] = useState([])
+  const [rosterOnlyRegRostered, setRosterOnlyRegRostered] = useState(false)
   const [rosterOnlySaving, setRosterOnlySaving] = useState(false)
   const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
   const [pendingInvites, setPendingInvites] = useState([])
@@ -4092,7 +4093,8 @@ function UsersView({ user, setAuditLog }) {
       phone: editForm.phone||'',
       notes: editForm.notes||'',
       email: editForm.email||'',
-      roster: editRoster
+      roster: editRoster,
+      regularly_rostered: !!editForm.regularly_rostered
     }
     let orgId = editingOrgId || orgsList.find(o=>o.name===user.org)?.id
     if (!orgId && isConfigured()) {
@@ -4136,11 +4138,12 @@ function UsersView({ user, setAuditLog }) {
     if (!rosterOnlyUser) return
     setRosterOnlySaving(true)
     if (isConfigured()) {
-      const { error } = await supabase.from('profiles').update({ roster: rosterOnlyData }).eq('id', rosterOnlyUser.id)
+      const { error } = await supabase.from('profiles').update({ roster: rosterOnlyData, regularly_rostered: rosterOnlyRegRostered }).eq('id', rosterOnlyUser.id)
       if (error) { alert('Failed to save roster: ' + error.message); setRosterOnlySaving(false); return }
     }
     setRosterOnlyUser(null)
     setRosterOnlyData([])
+    setRosterOnlyRegRostered(false)
     setRosterOnlySaving(false)
   }
 
@@ -4393,6 +4396,15 @@ function UsersView({ user, setAuditLog }) {
               <div style={{marginBottom:12}}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>setEditPositions(prev=>[...prev,{industry:'',role:'worker',position:''}])}>+ Add Position</button>
               </div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--s3)',borderRadius:8,marginBottom:10}}>
+                <div style={{flex:1,minWidth:0,marginRight:12}}>
+                  <div style={{fontSize:13,fontWeight:600}}>Regularly Rostered</div>
+                  <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>If on, only tasks due during rostered hours count toward this worker's KPI.</div>
+                </div>
+                <button type="button" style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:editForm.regularly_rostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setEditForm({...editForm,regularly_rostered:!editForm.regularly_rostered})}>
+                  <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:editForm.regularly_rostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                </button>
+              </div>
               <div style={{borderTop:'1px solid var(--border)',paddingTop:12,marginBottom:12}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -4426,13 +4438,22 @@ function UsersView({ user, setAuditLog }) {
       )}
 
       {rosterOnlyUser&&(
-        <div className="modal-overlay" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]) }}>
+        <div className="modal-overlay" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]); setRosterOnlyRegRostered(false) }}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">Edit Roster — {rosterOnlyUser.name}</div>
-              <button className="modal-close" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]) }}>×</button>
+              <button className="modal-close" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]); setRosterOnlyRegRostered(false) }}>×</button>
             </div>
             <div className="modal-body">
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--s3)',borderRadius:8,marginBottom:14}}>
+                <div style={{flex:1,minWidth:0,marginRight:12}}>
+                  <div style={{fontSize:13,fontWeight:600}}>Regularly Rostered</div>
+                  <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>If on, only tasks due during rostered hours count toward this worker's KPI.</div>
+                </div>
+                <button type="button" style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:rosterOnlyRegRostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setRosterOnlyRegRostered(v=>!v)}>
+                  <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:rosterOnlyRegRostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                </button>
+              </div>
               <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:14}}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 <span style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>Roster</span>
@@ -4451,7 +4472,7 @@ function UsersView({ user, setAuditLog }) {
                 )
               })}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
-                <button className="btn btn-secondary" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]) }}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]); setRosterOnlyRegRostered(false) }}>Cancel</button>
                 <button className="btn btn-primary" disabled={rosterOnlySaving} onClick={saveRosterOnly}>{rosterOnlySaving?'Saving…':'Save Roster'}</button>
               </div>
             </div>
@@ -4618,10 +4639,10 @@ function UsersView({ user, setAuditLog }) {
                     setEditingUser(u)
                     setEditingOrgId(orgId)
                     setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
-                    setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs) } catch(e) {} })()
+                    setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster,regularly_rostered').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs); setEditForm(prev=>({...prev,regularly_rostered:!!apData.regularly_rostered})) } catch(e) {} })()
                   }}>✏️ Edit</button>}
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
-                  {['manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setRosterOnlyUser(u); setRosterOnlyData([]); (async()=>{ try { const {data,error}=await supabase.from('profiles').select('roster').eq('id',u.id).single(); if(error||!data) return; let rs=[]; try{rs=Array.isArray(data.roster)?data.roster:(JSON.parse(data.roster||'[]'))}catch(e){rs=[]}; setRosterOnlyData(rs) } catch(e){} })() }}>📅 Edit Roster</button>}
+                  {['manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setRosterOnlyUser(u); setRosterOnlyData([]); setRosterOnlyRegRostered(false); (async()=>{ try { const {data,error}=await supabase.from('profiles').select('roster,regularly_rostered').eq('id',u.id).single(); if(error||!data) return; let rs=[]; try{rs=Array.isArray(data.roster)?data.roster:(JSON.parse(data.roster||'[]'))}catch(e){rs=[]}; setRosterOnlyData(rs); setRosterOnlyRegRostered(!!data.regularly_rostered) } catch(e){} })() }}>📅 Edit Roster</button>}
                 </div>
               )
               if (user.role==='super_admin') {
@@ -8308,16 +8329,18 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
       const orgId = orgRow?.id || user.org
       const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
       if(members?.length) {
-        const {data:profiles} = await supabase.from('profiles').select('id,name,role').in('id',members.map(m=>m.user_id))
+        const {data:profiles} = await supabase.from('profiles').select('id,name,role,roster,regularly_rostered').in('id',members.map(m=>m.user_id))
         if(profiles) setOrgMembers(profiles.map(p=>({
           id: p.id,
           name: p.name||'',
-          role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker'
+          role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker',
+          roster: Array.isArray(p.roster)?p.roster:[],
+          regularly_rostered: !!p.regularly_rostered
         })))
       } else {
         // Fallback: query profiles directly by org name
-        const {data:fallback} = await supabase.from('profiles').select('id,name,role').eq('org',user.org)
-        if(fallback?.length) setOrgMembers(fallback.map(p=>({id:p.id,name:p.name||'',role:p.role||'worker'})))
+        const {data:fallback} = await supabase.from('profiles').select('id,name,role,roster,regularly_rostered').eq('org',user.org)
+        if(fallback?.length) setOrgMembers(fallback.map(p=>({id:p.id,name:p.name||'',role:p.role||'worker',roster:Array.isArray(p.roster)?p.roster:[],regularly_rostered:!!p.regularly_rostered})))
       }
     })().catch(()=>{})
   },[user.org])
@@ -8355,9 +8378,11 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
   // Initialise an entry for every confirmed org member so members with zero tasks
   // still appear (empty stats) rather than being silently absent
+  const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
   orgMembers.forEach(m=>{
     peopleMap[m.id] = {
       id:m.id, name:m.name, role:m.role,
+      roster: m.roster||[], regularly_rostered: !!m.regularly_rostered,
       total:0, done:0, onTime:0, rejected:0, overdue:0,
       avgMins:[], submitted:0, reviewedInTime:0,
       clDone:0, clTotal:0, slaTotal:0, slaOnTime:0
@@ -8382,6 +8407,12 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
+
+    // Skip tasks not on a rostered day when regularly_rostered is enabled
+    if (p.regularly_rostered && p.roster.length && t.due_date) {
+      const dueDay = DAY_NAMES[new Date(t.due_date+'T12:00:00').getDay()]
+      if (!p.roster.find(r=>r.day===dueDay)) return
+    }
 
     p.total++
     parseSafe(t.subtasks).forEach(s=>{ p.clTotal++; if(s.done) p.clDone++ })
