@@ -124,7 +124,7 @@ const getSLAStatus = (task, orgSLA) => {
 const isRecurring = t => t.recurrence && t.recurrence !== '' && t.recurrence !== 'once' && t.recurrence !== null
 const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:2, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:2, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1, issue_reports:1 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const workingDaysBetween = (start, end) => {
   let count = 0
@@ -649,6 +649,8 @@ const IC = ({ n, s=16 }) => {
     org:'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
     settings:'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
     shield:'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+    flag:'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z',
+    clipboard:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
   }
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={paths[n]||paths.check} /></svg>
 }
@@ -4814,10 +4816,10 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock']],
-  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Issue Reports','clipboard']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Report an Issue','flag']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Report an Issue','flag']],
+  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Report an Issue','flag']],
 }
 
 function PasswordSetupView({ onDone }) {
@@ -10651,6 +10653,234 @@ function HelpView({ user }) {
   )
 }
 
+const ISSUE_PRIORITY_CFG = {
+  high:   { label:'High',   emoji:'🔴', color:'#EF4444', bg:'rgba(239,68,68,.12)' },
+  medium: { label:'Medium', emoji:'🟡', color:'#F59E0B', bg:'rgba(245,158,11,.12)' },
+  low:    { label:'Low',    emoji:'🟢', color:'#10B981', bg:'rgba(16,185,129,.12)' },
+}
+const ISSUE_STATUS_CFG = {
+  open:        { label:'Open',        color:'#F59E0B', bg:'rgba(245,158,11,.12)' },
+  in_progress: { label:'In Progress', color:'#3B82F6', bg:'rgba(59,130,246,.12)' },
+  resolved:    { label:'Resolved',    color:'#10B981', bg:'rgba(16,185,129,.12)' },
+}
+const ROLES_ABOVE = {
+  worker:     ['supervisor','manager','client_admin'],
+  supervisor: ['manager','client_admin'],
+  manager:    ['client_admin'],
+}
+
+function ReportIssueView({ user }) {
+  const [title, setTitle] = useState('')
+  const [desc, setDesc] = useState('')
+  const [priority, setPriority] = useState('medium')
+  const [photo, setPhoto] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [issues, setIssues] = useState([])
+
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('issue_reports').select('*').eq('reported_by',user.id).order('created_at',{ascending:false})
+      .then(({data})=>{ if(data) setIssues(data) }).catch(()=>{})
+  },[])
+
+  const submit = async () => {
+    if(!title.trim()||!desc.trim()) return
+    setSubmitting(true)
+    const entry = {
+      id: 'ISS'+Date.now(),
+      created_at: new Date().toISOString(),
+      reported_by: user.id,
+      org: user.org,
+      title: title.trim(),
+      description: desc.trim(),
+      priority,
+      photo_url: photo||null,
+      status: 'open',
+      resolved_by: null,
+      resolved_at: null,
+    }
+    if(isConfigured()) {
+      await supabase.from('issue_reports').insert(entry).catch(()=>{})
+      // Notify all roles above the reporter in the same org
+      const notifyRoles = ROLES_ABOVE[user.role]||[]
+      if(notifyRoles.length && user.org) {
+        supabase.from('profiles').select('email,name,role').eq('org',user.org)
+          .then(({data})=>{
+            if(!data) return
+            data.filter(p=>notifyRoles.includes(p.role)&&p.email).forEach(p=>{
+              sendEmailNotif(p.email, `New issue reported: ${entry.title}`,
+                `${user.name} (${ROLE_LABELS[user.role]||user.role}) reported a new ${priority} priority issue in ${user.org}.\n\nTitle: ${entry.title}\n\nDescription: ${entry.description}\n\nLog in to Taksyn to review and action this issue.`)
+            })
+          }).catch(()=>{})
+      }
+    }
+    setIssues(prev=>[entry,...prev])
+    setTitle(''); setDesc(''); setPriority('medium'); setPhoto(null)
+    setSubmitted(true); setSubmitting(false)
+    setTimeout(()=>setSubmitted(false), 4000)
+  }
+
+  return (
+    <div className="page-wrap">
+      <div className="ph"><div className="ph-title">Report an Issue</div><div className="ph-sub">Let your team know about a problem that needs attention</div></div>
+      <div style={{maxWidth:560,marginBottom:24}}>
+        <div className="form-group">
+          <label className="form-label">Title *</label>
+          <input className="form-input" placeholder="Brief summary of the issue" value={title} onChange={e=>setTitle(e.target.value)} maxLength={120}/>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Description *</label>
+          <textarea className="form-input" rows={4} placeholder="Describe the issue in detail — what happened, where, and when" value={desc} onChange={e=>setDesc(e.target.value)} style={{resize:'vertical'}}/>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Priority</label>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {['high','medium','low'].map(p=>{
+              const cfg = ISSUE_PRIORITY_CFG[p]
+              return (
+                <button key={p} onClick={()=>setPriority(p)} style={{padding:'7px 16px',borderRadius:20,border:`2px solid ${priority===p?cfg.color:'var(--border)'}`,background:priority===p?cfg.bg:'none',color:priority===p?cfg.color:'var(--t2)',fontWeight:priority===p?700:400,cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',gap:5,fontFamily:'inherit',transition:'all .15s'}}>
+                  {cfg.emoji} {cfg.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Photo <span style={{color:'var(--t2)',fontWeight:400}}>(optional)</span></label>
+          {photo
+            ? <div style={{position:'relative',display:'inline-block'}}>
+                <img src={photo} alt="issue" style={{maxWidth:240,maxHeight:160,borderRadius:8,border:'1px solid var(--border)',display:'block'}}/>
+                <button onClick={()=>setPhoto(null)} style={{position:'absolute',top:4,right:4,background:'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',color:'#fff',width:22,height:22,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'inherit'}}>×</button>
+              </div>
+            : <button className="btn btn-secondary" style={{fontSize:13}} onClick={()=>document.getElementById('issue-photo-inp').click()}>📷 Attach Photo</button>
+          }
+          <input id="issue-photo-inp" type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>setPhoto(ev.target.result); r.readAsDataURL(f); e.target.value='' }}/>
+        </div>
+        {submitted && <div style={{padding:'10px 14px',borderRadius:8,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.3)',color:'#059669',fontWeight:600,marginBottom:12}}>✓ Issue reported successfully</div>}
+        <button className="btn btn-primary" disabled={!title.trim()||!desc.trim()||submitting} onClick={submit} style={{width:'100%'}}>
+          {submitting?'Submitting…':'Submit Issue Report'}
+        </button>
+      </div>
+
+      {issues.length>0&&(
+        <div>
+          <div className="section-title">My Reported Issues</div>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {issues.map(issue=>{
+              const pc = ISSUE_PRIORITY_CFG[issue.priority]||ISSUE_PRIORITY_CFG.medium
+              const sc = ISSUE_STATUS_CFG[issue.status]||ISSUE_STATUS_CFG.open
+              return (
+                <div key={issue.id} style={{background:'var(--card)',borderRadius:10,border:'1px solid var(--border)',padding:'12px 16px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
+                    <span style={{fontWeight:700,flex:1,minWidth:0}}>{issue.title}</span>
+                    <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:pc.bg,color:pc.color}}>{pc.emoji} {pc.label}</span>
+                    <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:sc.bg,color:sc.color}}>{sc.label}</span>
+                  </div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginBottom:4}}>{issue.description}</div>
+                  {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:180,maxHeight:120,borderRadius:6,border:'1px solid var(--border)',display:'block',marginBottom:4}}/>}
+                  <div style={{fontSize:11,color:'var(--t3)'}}>{new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function IssueReportsAdminView({ user }) {
+  const [issues, setIssues] = useState([])
+  const [reporterNames, setReporterNames] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState('open')
+
+  const load = async () => {
+    if(!isConfigured()) { setLoading(false); return }
+    const { data } = await supabase.from('issue_reports').select('*').eq('org',user.org).order('created_at',{ascending:false})
+    if(data) {
+      setIssues(data)
+      const ids = [...new Set(data.map(i=>i.reported_by).filter(Boolean))]
+      if(ids.length) {
+        supabase.from('profiles').select('id,name').in('id',ids)
+          .then(({data:p})=>{ if(p) setReporterNames(Object.fromEntries(p.map(r=>[r.id,r.name]))) })
+          .catch(()=>{})
+      }
+    }
+    setLoading(false)
+  }
+
+  useEffect(()=>{ load() },[])
+
+  const updateStatus = async (id, status) => {
+    const patch = status==='resolved'
+      ? { status, resolved_by: user.name, resolved_at: new Date().toISOString() }
+      : { status, resolved_by: null, resolved_at: null }
+    setIssues(prev=>prev.map(i=>i.id===id?{...i,...patch}:i))
+    if(isConfigured()) await supabase.from('issue_reports').update(patch).eq('id',id).catch(()=>{})
+  }
+
+  const visible = issues.filter(i=> filterStatus==='all' ? true : i.status===filterStatus)
+  const grouped = { high: visible.filter(i=>i.priority==='high'), medium: visible.filter(i=>i.priority==='medium'), low: visible.filter(i=>i.priority==='low') }
+
+  return (
+    <div className="page-wrap">
+      <div className="ph"><div className="ph-title">Issue Reports</div><div className="ph-sub">Issues reported by your team</div></div>
+      <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
+        {[['open','Open'],['in_progress','In Progress'],['resolved','Resolved'],['all','All']].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilterStatus(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${filterStatus===v?'var(--brand)':'var(--border)'}`,background:filterStatus===v?'var(--brand-lt)':'none',color:filterStatus===v?'var(--brand)':'var(--t2)',fontWeight:filterStatus===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all .15s'}}>
+            {l} {v!=='all'&&<span style={{fontSize:10,opacity:.7}}>({issues.filter(i=>i.status===v).length})</span>}
+          </button>
+        ))}
+      </div>
+      {loading ? <div style={{color:'var(--t2)',fontSize:13}}>Loading…</div> : visible.length===0 ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No {filterStatus==='all'?'':filterStatus} issues</div></div> : (
+        ['high','medium','low'].map(pri=>{
+          const grp = grouped[pri]
+          if(!grp.length) return null
+          const pc = ISSUE_PRIORITY_CFG[pri]
+          return (
+            <div key={pri} style={{marginBottom:28}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+                <span style={{fontSize:13,fontWeight:700,color:pc.color}}>{pc.emoji} {pc.label} Priority</span>
+                <span style={{fontSize:11,color:'var(--t2)'}}>({grp.length})</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {grp.map(issue=>{
+                  const sc = ISSUE_STATUS_CFG[issue.status]||ISSUE_STATUS_CFG.open
+                  return (
+                    <div key={issue.id} style={{background:'var(--card)',borderRadius:10,border:`1px solid ${issue.status==='open'?pc.color+'44':'var(--border)'}`,padding:'14px 16px'}}>
+                      <div style={{display:'flex',alignItems:'flex-start',gap:10,flexWrap:'wrap',marginBottom:6}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:700,marginBottom:2}}>{issue.title}</div>
+                          <div style={{fontSize:12,color:'var(--t2)',marginBottom:6}}>{issue.description}</div>
+                          {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:220,maxHeight:150,borderRadius:6,border:'1px solid var(--border)',display:'block',marginBottom:6}}/>}
+                          <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
+                            <span>👤 {reporterNames[issue.reported_by]||'Team member'}</span>
+                            <span>📅 {new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</span>
+                            {issue.status==='resolved'&&issue.resolved_by&&<span>✓ Resolved by {issue.resolved_by}</span>}
+                          </div>
+                        </div>
+                        <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:sc.bg,color:sc.color,flexShrink:0}}>{sc.label}</span>
+                      </div>
+                      {issue.status!=='resolved'&&(
+                        <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+                          {issue.status==='open'&&<button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>updateStatus(issue.id,'in_progress')}>Mark In Progress</button>}
+                          <button className="btn btn-primary btn-sm" style={{fontSize:11}} onClick={()=>updateStatus(issue.id,'resolved')}>Mark Resolved</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
 function SupportView({ user, tickets=[], setTickets }) {
   const [filter, setFilter] = useState('open')
   const [showArchive, setShowArchive] = useState(false)
@@ -11623,6 +11853,8 @@ export default function App() {
                 {page==='roles_departments' && ['client_admin','super_admin'].includes(user.role) && <RolesPositionsView user={user}/>}
                 {page==='platform_settings' && user.role==='super_admin' && <PlatformSettingsView user={user} sessionTimeout={sessionTimeout} setSessionTimeout={setSessionTimeout}/>}
                 {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser} darkMode={darkMode} toggleDarkMode={toggleDarkMode}/>}
+                {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
+                {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
               </>
             )}
