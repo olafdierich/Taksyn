@@ -1073,6 +1073,24 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
           const orgName = org.trim()
           assignedRole = 'client_admin'
+          // General guard: if this email already has a profile with an existing org_members row,
+          // do not create a new organisation or org_members entry regardless of role.
+          if (isConfigured()) {
+            try {
+              const { data: existingProfile } = await supabase.from('profiles').select('id,role').eq('email', email.toLowerCase()).maybeSingle()
+              if (existingProfile) {
+                if (existingProfile.role === 'super_admin') {
+                  setError('This email is already registered. Please sign in.')
+                  setLoading(false); return
+                }
+                const { data: existingMemberships } = await supabase.from('org_members').select('id').eq('user_id', existingProfile.id).limit(1)
+                if (existingMemberships?.length) {
+                  setError('This email is already registered. Please sign in.')
+                  setLoading(false); return
+                }
+              }
+            } catch (_) {}
+          }
           window.__taksyn_registering = true
           const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email, password,
@@ -1106,6 +1124,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         if (data?.user) {
           const { data:profile } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id',data.user.id).single()
           if (profile) {
+            // Super admin: skip all org checks and onboarding — route directly to the super_admin dashboard
+            if (profile.role === 'super_admin') {
+              window.__taksyn_org_selection_pending = false
+              onAuth({...profile, email:data.user.email})
+              return
+            }
             // Check org_members for multiple org memberships
             const { data:memberships } = await supabase.from('org_members').select('*').eq('user_id',data.user.id)
             // Deduplicate org_members by org key before checking count
@@ -1139,7 +1163,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               const userData = {...profile, email:data.user.email, role:m.role, org:profile.org||m.org, tier:m.tier||'Growth'}
               onAuth(userData)
             } else {
-              // No org_members entry — use profile directly (legacy/super_admin)
+              // No org_members entry — use profile directly. Never create a new org or
+              // org_members row here; if the user already has a role, that was set at
+              // registration time and must not be duplicated.
               window.__taksyn_org_selection_pending = false
               const userData = {...profile, email:data.user.email}
               onAuth(userData)
