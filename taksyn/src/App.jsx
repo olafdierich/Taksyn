@@ -124,7 +124,7 @@ const getSLAStatus = (task, orgSLA) => {
 const isRecurring = t => t.recurrence && t.recurrence !== '' && t.recurrence !== 'once' && t.recurrence !== null
 const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:4, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:2, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const workingDaysBetween = (start, end) => {
   let count = 0
@@ -3896,6 +3896,9 @@ function UsersView({ user, setAuditLog }) {
   const [editingOrgId, setEditingOrgId] = useState(null)
   const [editPositions, setEditPositions] = useState([])
   const [editRoster, setEditRoster] = useState([])
+  const [rosterOnlyUser, setRosterOnlyUser] = useState(null)
+  const [rosterOnlyData, setRosterOnlyData] = useState([])
+  const [rosterOnlySaving, setRosterOnlySaving] = useState(false)
   const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
   const [pendingInvites, setPendingInvites] = useState([])
   const [workforceOrgId, setWorkforceOrgId] = useState(null)
@@ -4127,6 +4130,18 @@ function UsersView({ user, setAuditLog }) {
     setEditPositions([])
     setEditRoster([])
     setNewPosition({ dept:'', role:'worker', title:'' })
+  }
+
+  const saveRosterOnly = async () => {
+    if (!rosterOnlyUser) return
+    setRosterOnlySaving(true)
+    if (isConfigured()) {
+      const { error } = await supabase.from('profiles').update({ roster: rosterOnlyData }).eq('id', rosterOnlyUser.id)
+      if (error) { alert('Failed to save roster: ' + error.message); setRosterOnlySaving(false); return }
+    }
+    setRosterOnlyUser(null)
+    setRosterOnlyData([])
+    setRosterOnlySaving(false)
   }
 
   const addExistingUserToOrg = async (email, role) => {
@@ -4410,6 +4425,40 @@ function UsersView({ user, setAuditLog }) {
         </div>
       )}
 
+      {rosterOnlyUser&&(
+        <div className="modal-overlay" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]) }}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Edit Roster — {rosterOnlyUser.name}</div>
+              <button className="modal-close" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]) }}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:14}}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>Roster</span>
+              </div>
+              {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>{
+                const entry = rosterOnlyData.find(r=>r.day===day)
+                return (
+                  <div key={day} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <button type="button" onClick={()=>{ if(entry) setRosterOnlyData(prev=>prev.filter(r=>r.day!==day)); else setRosterOnlyData(prev=>[...prev,{day,start:'09:00',end:'17:00'}]) }} style={{width:44,padding:'3px 0',borderRadius:4,border:'1px solid '+(entry?'var(--brand)':'var(--border)'),background:entry?'var(--brand-lt)':'transparent',color:entry?'var(--brand)':'var(--t2)',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>{day}</button>
+                    {entry&&<>
+                      <input type="time" value={entry.start} onChange={e=>setRosterOnlyData(prev=>prev.map(r=>r.day===day?{...r,start:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                      <span style={{fontSize:10,color:'var(--t2)'}}>to</span>
+                      <input type="time" value={entry.end} onChange={e=>setRosterOnlyData(prev=>prev.map(r=>r.day===day?{...r,end:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                    </>}
+                  </div>
+                )
+              })}
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+                <button className="btn btn-secondary" onClick={()=>{ setRosterOnlyUser(null); setRosterOnlyData([]) }}>Cancel</button>
+                <button className="btn btn-primary" disabled={rosterOnlySaving} onClick={saveRosterOnly}>{rosterOnlySaving?'Saving…':'Save Roster'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showInvite&&(
         <div className="modal-overlay" onClick={()=>setShowInvite(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -4572,6 +4621,7 @@ function UsersView({ user, setAuditLog }) {
                     setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs) } catch(e) {} })()
                   }}>✏️ Edit</button>}
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
+                  {['manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setRosterOnlyUser(u); setRosterOnlyData([]); (async()=>{ try { const {data,error}=await supabase.from('profiles').select('roster').eq('id',u.id).single(); if(error||!data) return; let rs=[]; try{rs=Array.isArray(data.roster)?data.roster:(JSON.parse(data.roster||'[]'))}catch(e){rs=[]}; setRosterOnlyData(rs) } catch(e){} })() }}>📅 Edit Roster</button>}
                 </div>
               )
               if (user.role==='super_admin') {
@@ -4716,8 +4766,8 @@ const COMPANY_COMPLETENESS_FIELDS = [
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
   client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['audit','Audit Log','audit'],['templates','Templates','tasks'],['projects','Projects 🔜','tasks'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['help','Help & Support','alert']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['help','Help & Support','alert']],
 }
 
@@ -11495,7 +11545,7 @@ export default function App() {
                 {page==='reports'     && user.role!=='super_admin' && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
                 {page==='audit'       && hasAccess(user.role,2) && <AuditLogView   {...pageProps}/>}
                 {page==='orgs'        && user.role==='super_admin' && <OrganisationsView {...pageProps}/>}
-                {page==='users'       && hasAccess(user.role,4) && <UsersView      {...pageProps}/>}
+                {page==='users'       && hasAccess(user.role,2) && <UsersView      {...pageProps}/>}
                 {page==='tiers'       && user.role!=='super_admin' && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
                 {page==='support'     && user.role==='super_admin' && <SupportView {...pageProps}/>}
                 {page==='help'        && user.role!=='super_admin' && <HelpView {...pageProps}/>}
