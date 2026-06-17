@@ -3895,6 +3895,7 @@ function UsersView({ user, setAuditLog }) {
   const [allOrgMemberships, setAllOrgMemberships] = useState({}) // super_admin: user_id → [{orgName, role, industry, position}]
   const [editingOrgId, setEditingOrgId] = useState(null)
   const [editPositions, setEditPositions] = useState([])
+  const [editRoster, setEditRoster] = useState([])
   const [newPosition, setNewPosition] = useState({ dept:'', role:'worker', title:'' })
   const [pendingInvites, setPendingInvites] = useState([])
   const [workforceOrgId, setWorkforceOrgId] = useState(null)
@@ -4087,7 +4088,8 @@ function UsersView({ user, setAuditLog }) {
       last_name: lastName,
       phone: editForm.phone||'',
       notes: editForm.notes||'',
-      email: editForm.email||''
+      email: editForm.email||'',
+      roster: editRoster
     }
     let orgId = editingOrgId || orgsList.find(o=>o.name===user.org)?.id
     if (!orgId && isConfigured()) {
@@ -4123,6 +4125,7 @@ function UsersView({ user, setAuditLog }) {
     setEditingOrgId(null)
     setEditForm({})
     setEditPositions([])
+    setEditRoster([])
     setNewPosition({ dept:'', role:'worker', title:'' })
   }
 
@@ -4280,11 +4283,11 @@ function UsersView({ user, setAuditLog }) {
   return (
     <div className="anim">
       {editingUser&&(
-        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>
+        <div className="modal-overlay" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]); setEditRoster([]) }}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">Edit Team Member</div>
-              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>×</button>
+              <button className="modal-close" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]); setEditRoster([]) }}>×</button>
             </div>
             <div className="modal-body">
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--s3)',borderRadius:8}}>
@@ -4375,12 +4378,31 @@ function UsersView({ user, setAuditLog }) {
               <div style={{marginBottom:12}}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>setEditPositions(prev=>[...prev,{industry:'',role:'worker',position:''}])}>+ Add Position</button>
               </div>
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:12,marginBottom:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>Roster</span>
+                </div>
+                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(day=>{
+                  const entry = editRoster.find(r=>r.day===day)
+                  return (
+                    <div key={day} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                      <button type="button" onClick={()=>{ if(entry) setEditRoster(prev=>prev.filter(r=>r.day!==day)); else setEditRoster(prev=>[...prev,{day,start:'09:00',end:'17:00'}]) }} style={{width:44,padding:'3px 0',borderRadius:4,border:'1px solid '+(entry?'var(--brand)':'var(--border)'),background:entry?'var(--brand-lt)':'transparent',color:entry?'var(--brand)':'var(--t2)',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>{day}</button>
+                      {entry&&<>
+                        <input type="time" value={entry.start} onChange={e=>setEditRoster(prev=>prev.map(r=>r.day===day?{...r,start:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                        <span style={{fontSize:10,color:'var(--t2)'}}>to</span>
+                        <input type="time" value={entry.end} onChange={e=>setEditRoster(prev=>prev.map(r=>r.day===day?{...r,end:e.target.value}:r))} style={{padding:'3px 7px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',color:'var(--text)',fontSize:11,fontFamily:'inherit'}}/>
+                      </>}
+                    </div>
+                  )
+                })}
+              </div>
               <div className="form-field">
                 <label className="form-label">Notes</label>
                 <textarea className="comment-box" style={{minHeight:60}} value={editForm.notes||''} onChange={e=>setEditForm({...editForm,notes:e.target.value})} placeholder="Any notes about this team member..."/>
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
-                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]) }}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setEditingUser(null); setEditingOrgId(null); setEditForm({}); setEditPositions([]); setEditRoster([]) }}>Cancel</button>
                 <button className="btn btn-primary" disabled={!editForm.first_name?.trim()} onClick={saveEditUser}>Save Changes</button>
               </div>
             </div>
@@ -4547,7 +4569,7 @@ function UsersView({ user, setAuditLog }) {
                     setEditingUser(u)
                     setEditingOrgId(orgId)
                     setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
-                    setEditPositions([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []) } catch(e) {} })()
+                    setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs) } catch(e) {} })()
                   }}>✏️ Edit</button>}
                   {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
                 </div>
