@@ -6669,6 +6669,7 @@ function CompanySettingsView({ user }) {
     const items = validItems.map((it,idx)=>({ id:String(idx+1), label:it.label.trim(), required:!!it.required }))
     const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
+      if (!editingTpl.id) { console.error('checklist_templates update: template id is undefined'); setMsg('✗ Template id is missing — please reload and try again'); setTplSaving(false); return }
       const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items) }
       if (isConfigured()) {
         const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id)
@@ -6679,10 +6680,12 @@ function CompanySettingsView({ user }) {
     } else {
       const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) {
-        const { error } = await supabase.from('checklist_templates').insert(entry)
+        const { data:inserted, error } = await supabase.from('checklist_templates').insert(entry).select().single()
         if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
+        setTplList(prev=>[...prev,{...(inserted||entry),items}])
+      } else {
+        setTplList(prev=>[...prev,{...entry,items}])
       }
-      setTplList(prev=>[...prev,{...entry,items}])
       setMsg('✓ Template saved')
     }
     resetTplForm()
@@ -7574,14 +7577,20 @@ function TemplatesView({ user }) {
     const items = validItems.map(i=>({label:i.label.trim(),required:!!i.required}))
     const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
+      if (!editingTpl.id) { console.error('checklist_templates update: template id is undefined'); setMsg('✗ Template id is missing — please reload and try again'); setTplSaving(false); return }
       const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items) }
       if (isConfigured()) { const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
       const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
-      if (isConfigured()) { const { error } = await supabase.from('checklist_templates').insert(entry); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
-      setTplList(prev=>[...prev,{...entry,items}].sort((a,b)=>a.name.localeCompare(b.name)))
+      if (isConfigured()) {
+        const { data:inserted, error } = await supabase.from('checklist_templates').insert(entry).select().single()
+        if(error){ setMsg('✗ '+error.message); setTplSaving(false); return }
+        setTplList(prev=>[...prev,{...(inserted||entry),items}].sort((a,b)=>a.name.localeCompare(b.name)))
+      } else {
+        setTplList(prev=>[...prev,{...entry,items}].sort((a,b)=>a.name.localeCompare(b.name)))
+      }
       setMsg('✓ Template saved')
     }
     resetTplForm(); setTplSaving(false)
