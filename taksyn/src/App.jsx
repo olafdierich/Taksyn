@@ -4100,6 +4100,23 @@ function UsersView({ user, setAuditLog }) {
     setShowInvite(true)
     const targetOrg = user.role==='super_admin' ? inviteOrg.trim()||'' : user.org
     await loadInviteOrgData(targetOrg)
+    // Re-fetch workforce members so realUsers is current for the duplicate email check
+    if (isConfigured() && user.org && user.role !== 'super_admin') {
+      try {
+        const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+        const orgId = orgRow?.id || user.org
+        let {data:assignments, error:assignErr} = await supabase.from('org_members').select('user_id, role, position, industry, is_active, deactivated_at').eq('org', orgId)
+        if (assignErr) {
+          const fb = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
+          assignments = fb.data
+        }
+        if (assignments?.length) {
+          const activeIds = assignments.filter(a => a.is_active == null || a.is_active !== false).map(a => a.user_id)
+          const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', activeIds)
+          if (profiles) setRealUsers(profiles.filter(p => p.role !== 'super_admin'))
+        }
+      } catch(_) {}
+    }
   }
 
   useEffect(()=>{
