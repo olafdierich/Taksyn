@@ -8836,6 +8836,7 @@ function TeamsView({ user }) {
   const [showAddMember, setShowAddMember] = useState(false)
   const [addMemberUser, setAddMemberUser] = useState('')
   const [addMemberRole, setAddMemberRole] = useState('')
+  const [addMemberLoading, setAddMemberLoading] = useState(false)
   const [addMemberSearch, setAddMemberSearch] = useState('')
   const [addMemberPosFilter, setAddMemberPosFilter] = useState('')
   const [addMemberPool, setAddMemberPool] = useState([])
@@ -8995,23 +8996,31 @@ function TeamsView({ user }) {
   }
 
   const openAddMember = async () => {
-    setAddMemberUser(''); setAddMemberRole(''); setAddMemberSearch(''); setAddMemberPosFilter(''); setAddMemberPool([])
-    setShowAddMember(true)
-    if(!isConfigured()||!selectedTeam) return
-    // Resolve the current team's already-loaded member IDs to exclude them
-    const existingIds = new Set((selectedTeam.members||[]).map(m=>m.user_id))
-    // org_members.org stores the org name, consistent with the rest of the Teams section
-    const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',user.org)
-    if(!members?.length) return
-    const eligible = members.filter(m=>!existingIds.has(m.user_id))
-    if(!eligible.length) return
-    const {data:profiles} = await supabase.from('profiles').select('id,name,position,role').in('id',eligible.map(m=>m.user_id))
-    if(!profiles) return
-    const pool = eligible.map(m=>{
-      const p = profiles.find(x=>x.id===m.user_id)||{}
-      return {id:m.user_id, name:p.name||'', role:m.role||p.role||'worker', position:p.position||''}
-    }).filter(m=>m.name)
-    setAddMemberPool(pool)
+    setAddMemberUser(''); setAddMemberRole(''); setAddMemberSearch(''); setAddMemberPosFilter('')
+    setAddMemberPool([]); setAddMemberLoading(true); setShowAddMember(true)
+    if(!isConfigured()||!selectedTeam) { setAddMemberLoading(false); return }
+    try {
+      // Exclude user_ids already in the team
+      const existingIds = new Set((selectedTeam.members||[]).map(m=>m.user_id))
+      // Query 1: get all user_ids + roles from org_members using the resolved org ID
+      const currentOrgId = orgId || null
+      if(!currentOrgId) { setAddMemberLoading(false); return }
+      const {data:members, error:mErr} = await supabase.from('org_members').select('user_id,role').eq('org',currentOrgId)
+      if(mErr||!members?.length) { setAddMemberLoading(false); return }
+      const eligible = members.filter(m=>!existingIds.has(m.user_id))
+      if(!eligible.length) { setAddMemberLoading(false); return }
+      // Query 2: get names and positions from profiles using .in()
+      const {data:profiles, error:pErr} = await supabase.from('profiles').select('id,name,position,role').in('id',eligible.map(m=>m.user_id))
+      if(pErr||!profiles) { setAddMemberLoading(false); return }
+      // Combine in JS
+      const pool = eligible.map(m=>{
+        const p = profiles.find(x=>x.id===m.user_id)||{}
+        return {id:m.user_id, name:p.name||'', role:m.role||p.role||'worker', position:p.position||''}
+      }).filter(m=>m.name)
+      setAddMemberPool(pool)
+    } finally {
+      setAddMemberLoading(false)
+    }
   }
 
   const addMember = async () => {
@@ -9184,7 +9193,8 @@ function TeamsView({ user }) {
                       const filtered = addMemberPool
                         .filter(m=>!addMemberSearch||m.name.toLowerCase().includes(addMemberSearch.toLowerCase()))
                         .filter(m=>!addMemberPosFilter||m.position===addMemberPosFilter)
-                      if(!filtered.length) return <div style={{padding:16,fontSize:13,color:'var(--t2)',textAlign:'center'}}>{addMemberPool.length?'No members match filters':'Loading…'}</div>
+                      if(addMemberLoading) return <div style={{padding:16,fontSize:13,color:'var(--t2)',textAlign:'center'}}>Loading…</div>
+                      if(!filtered.length) return <div style={{padding:16,fontSize:13,color:'var(--t2)',textAlign:'center'}}>{addMemberPool.length?'No members match filters':'No available members'}</div>
                       return filtered.map(m=>(
                         <div key={m.id} onClick={()=>setAddMemberUser(m.id===addMemberUser?'':m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',cursor:'pointer',background:m.id===addMemberUser?'var(--brand-lt)':'transparent',borderBottom:'1px solid var(--border)'}}>
                           <Avatar name={m.name} role={m.role} size={30}/>
