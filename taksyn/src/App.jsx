@@ -4952,7 +4952,7 @@ function UsersView({ user, setAuditLog }) {
               </>)
             })()
         }
-        {user.role !== 'worker' && archivedUsers.length > 0 && (
+        {user.role !== 'worker' && (
           <div style={{marginTop:20}}>
             <div
               style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(100,116,139,.08)',borderRadius:8,cursor:'pointer',border:'1px solid rgba(100,116,139,.2)',marginBottom:showArchived?8:0}}
@@ -4961,24 +4961,27 @@ function UsersView({ user, setAuditLog }) {
               <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>Archived Members ({archivedUsers.length})</span>
               <span style={{fontSize:12,color:'var(--t2)'}}>{showArchived?'▼':'▶'}</span>
             </div>
-            {showArchived && archivedUsers.map((u,i)=>{
-              const assignment = archiveOrgAssignments[u.id]?.[0] || {}
-              const deactivatedDate = assignment.deactivated_at ? new Date(assignment.deactivated_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : null
-              return (
-                <div key={u.id} className="user-row" style={{flexWrap:'wrap',gap:8,opacity:.7}}>
-                  <Avatar name={u.name} role={u.role} size={34}/>
-                  <div className="user-info" style={{flex:1}}>
-                    <div className="user-name">{u.name}</div>
-                    <div className="user-email">{u.email||'—'}</div>
-                    {(assignment.position||assignment.industry)&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>{[assignment.industry,assignment.position].filter(Boolean).join(' · ')}</div>}
-                    {deactivatedDate&&<div style={{fontSize:10,color:'var(--t3)',marginTop:1}}>Deactivated {deactivatedDate}</div>}
-                  </div>
-                  <RolePill role={assignment.role||u.role}/>
-                  {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>reactivateUser(u.id)}>↩ Reactivate</button>}
-                  {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>🗑 Delete</button>}
-                </div>
-              )
-            })}
+            {showArchived && (archivedUsers.length === 0
+              ? <div style={{fontSize:13,color:'var(--t2)',padding:'8px 4px'}}>No archived members</div>
+              : archivedUsers.map((u,i)=>{
+                  const assignment = archiveOrgAssignments[u.id]?.[0] || {}
+                  const deactivatedDate = assignment.deactivated_at ? new Date(assignment.deactivated_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : null
+                  return (
+                    <div key={u.id} className="user-row" style={{flexWrap:'wrap',gap:8,opacity:.7}}>
+                      <Avatar name={u.name} role={u.role} size={34}/>
+                      <div className="user-info" style={{flex:1}}>
+                        <div className="user-name">{u.name}</div>
+                        <div className="user-email">{u.email||'—'}</div>
+                        {(assignment.position||assignment.industry)&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>{[assignment.industry,assignment.position].filter(Boolean).join(' · ')}</div>}
+                        {deactivatedDate&&<div style={{fontSize:10,color:'var(--t3)',marginTop:1}}>Deactivated {deactivatedDate}</div>}
+                      </div>
+                      <RolePill role={assignment.role||u.role}/>
+                      {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>reactivateUser(u.id)}>↩ Reactivate</button>}
+                      {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>🗑 Delete</button>}
+                    </div>
+                  )
+                })
+            )}
           </div>
         )}
       </div>
