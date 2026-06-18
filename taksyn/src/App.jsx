@@ -9027,7 +9027,7 @@ function TeamsView({ user }) {
     if(!addMemberUser||!selectedTeam) return
     const u = addMemberPool.find(x=>x.id===addMemberUser) || orgUsers.find(x=>x.id===addMemberUser)
     if(!u) return
-    const entry = {id:'TM'+Date.now(), team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:addMemberRole||u.role, org:orgId||user.org, added_by:user.name, added_at:new Date().toISOString()}
+    const entry = {id:'TM'+Date.now(), team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:addMemberRole||u.role, position:u.position||'', org:orgId||user.org, added_by:user.name, added_at:new Date().toISOString()}
     if(isConfigured()) await supabase.from('team_members').insert(entry)
     const updated = {...selectedTeam, members:[...(selectedTeam.members||[]),{...entry,profile:u}]}
     setSelectedTeam(updated)
@@ -9221,24 +9221,22 @@ function TeamsView({ user }) {
               {(selectedTeam.members||[]).length===0
                 ? <div style={{fontSize:13,color:'var(--t2)',textAlign:'center',padding:20}}>No members yet — add staff to this team</div>
                 : (()=>{
-                    const roleOrder = ['client_admin','manager','supervisor','worker']
                     const grouped = {}
-                    ;(selectedTeam.members||[]).forEach(m=>{ const r=m.profile?.role||m.role||'worker'; if(!grouped[r]) grouped[r]=[]; grouped[r].push(m) })
-                    return roleOrder.filter(r=>grouped[r]?.length).map(role=>(
-                      <div key={role} style={{marginBottom:14}}>
+                    ;(selectedTeam.members||[]).forEach(m=>{ const pos=m.profile?.position||m.position||'Other'; if(!grouped[pos]) grouped[pos]=[]; grouped[pos].push(m) })
+                    return Object.keys(grouped).sort().map(pos=>(
+                      <div key={pos} style={{marginBottom:14}}>
                         <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-                          <span style={{width:8,height:8,borderRadius:'50%',background:avatarColor(role),display:'inline-block'}}/>
-                          {ROLE_LABELS[role]} ({grouped[role].length})
+                          <span style={{width:8,height:8,borderRadius:'50%',background:'var(--brand)',display:'inline-block'}}/>
+                          {pos} ({grouped[pos].length})
                         </div>
-                        {grouped[role].map((m,i)=>(
+                        {grouped[pos].map((m,i)=>(
                           <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
-                            <Avatar name={m.profile?.name||m.user_name||'?'} role={m.profile?.role||role} size={32} avatarUrl={m.profile?.avatar_url}/>
+                            <Avatar name={m.profile?.name||m.user_name||'?'} role={m.profile?.role||m.role||'worker'} size={32} avatarUrl={m.profile?.avatar_url}/>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontWeight:600,fontSize:13}}>{m.profile?.name||m.user_name||'—'}</div>
-                              <div style={{fontSize:11,color:'var(--t2)'}}>{m.role_in_team||m.role||ROLE_LABELS[role]}{m.profile?.industry?' · '+m.profile.industry:''}</div>
-                              {m.positions?.length>0&&<div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>{m.positions.map((pos,pi)=><PositionChip key={pi} pos={pos}/>)}</div>}
+                              <div style={{fontSize:11,color:'var(--t2)'}}>{m.profile?.position||m.position||'—'}{m.role_in_team?' · '+m.role_in_team:''}</div>
                             </div>
-                            <RolePill role={m.profile?.role||role}/>
+                            <RolePill role={m.profile?.role||m.role||'worker'}/>
                             {(isCA||user.role==='manager')&&<button className="btn btn-danger btn-sm" onClick={()=>removeMember(m.id)}>Remove</button>}
                           </div>
                         ))}
