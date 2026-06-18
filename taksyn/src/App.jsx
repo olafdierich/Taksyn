@@ -8850,12 +8850,15 @@ function TeamsView({ user }) {
     if(!isConfigured()) return
     // Load teams in parallel with org data
     // Load teams and org data in parallel; re-fetch teams by org ID once resolved
+    console.log('[Teams] user.org before organisations lookup:', user.org)
     supabase.from('organisations').select('id,team_types,industry').eq('name',user.org).maybeSingle()
-      .then(async ({data}) => {
+      .then(async ({data, error}) => {
+        console.log('[Teams] organisations lookup response:', { data, error })
         if(!data) return
         if(data.team_types) setTeamTypes(JSON.parse(data.team_types||'[]'))
         if(data.industry) { setTeamOrgIndustry(data.industry); setInviteLinkIndustry(data.industry) }
         if(data.id) {
+          console.log('[Teams] data.id before teams query:', data.id)
           setOrgId(data.id)
           supabase.from('teams').select('*').eq('org',data.id).order('name')
             .then(({data:td})=>{ if(td) setTeams(td) }).catch(()=>{})
