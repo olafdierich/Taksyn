@@ -9028,9 +9028,11 @@ function TeamsView({ user }) {
     const u = addMemberPool.find(x=>x.id===addMemberUser) || orgUsers.find(x=>x.id===addMemberUser)
     if(!u) return
     const entry = {team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:u.role, org:orgId||user.org, added_by:user.id}
+    console.log('[AddMember] inserting into team_members:', JSON.stringify(entry, null, 2))
     if(isConfigured()) {
-      const {error} = await supabase.from('team_members').insert(entry)
-      if(error) { alert('Failed to add member: '+error.message); return }
+      const {data, error} = await supabase.from('team_members').insert(entry).select()
+      console.log('[AddMember] insert response — data:', data, '| error:', error)
+      if(error) { console.error('[AddMember] insert failed:', error); alert('Failed to add member: '+error.message); return }
     }
     // Reload members from DB so count and list are always in sync
     const fresh = await loadTeamMembers(selectedTeam.id)
