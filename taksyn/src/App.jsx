@@ -9054,6 +9054,52 @@ function TeamsView({ user }) {
 
   const TYPE_COLORS = ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#F97316','#06B6D4','#84CC16']
 
+  if(user.role==='worker') {
+    // Find the team the worker belongs to from already-loaded teams + members
+    const myTeam = selectedTeam || teams.find(t=>(t.members||[]).some(m=>m.user_id===user.id))
+    const myMembers = myTeam?.members || []
+
+    // If not found yet, trigger a lookup
+    if(!myTeam && isConfigured() && teams.length>0) {
+      supabase.from('team_members').select('team_id').eq('user_id',user.id).limit(1).maybeSingle()
+        .then(({data})=>{ if(data?.team_id) { const t=teams.find(x=>x.id===data.team_id); if(t) openTeam(t) } }).catch(()=>{})
+    }
+
+    if(!myTeam) return (
+      <div className="anim">
+        <div className="ph"><div className="ph-title">My Team</div><div className="ph-sub">{user.org}</div></div>
+        <div style={{textAlign:'center',padding:'40px 16px',color:'var(--t2)',fontSize:14}}>
+          {teams.length===0?'Loading…':'You have not been assigned to a team yet. Contact your manager.'}
+        </div>
+      </div>
+    )
+
+    return (
+      <div className="anim">
+        <div className="ph"><div className="ph-title">My Team</div><div className="ph-sub">{myTeam.name}{myTeam.type?' · '+myTeam.type:''}</div></div>
+        <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:14,padding:20}}>
+          <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>{myTeam.name}</div>
+          {myTeam.description&&<div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>{myTeam.description}</div>}
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:myMembers.length?16:0}}>👥 {myMembers.length} member{myMembers.length!==1?'s':''}</div>
+          {myMembers.length>0&&(
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Team Members</div>
+              {myMembers.map((m,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                  <Avatar name={m.profile?.name||m.user_name||'?'} role={m.profile?.role||m.role||'worker'} size={32} avatarUrl={m.profile?.avatar_url}/>
+                  <div>
+                    <div style={{fontWeight:600,fontSize:13}}>{m.profile?.name||m.user_name||'—'}</div>
+                    <div style={{fontSize:11,color:'var(--t2)'}}>{m.profile?.position||m.position||ROLE_LABELS[m.profile?.role||m.role||'worker']}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="anim">
       <div className="ph">
