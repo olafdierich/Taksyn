@@ -9027,7 +9027,7 @@ function TeamsView({ user }) {
     if(!addMemberUser||!selectedTeam) return
     const u = addMemberPool.find(x=>x.id===addMemberUser) || orgUsers.find(x=>x.id===addMemberUser)
     if(!u) return
-    const entry = {id:'TM'+Date.now(), team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:u.role, position:u.position||'', org:user.org, added_by:user.name, added_at:new Date().toISOString()}
+    const entry = {team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:u.role, org:orgId||user.org, added_by:user.id, added_at:new Date().toISOString()}
     if(isConfigured()) {
       const {error} = await supabase.from('team_members').insert(entry)
       if(error) { alert('Failed to add member: '+error.message); return }
