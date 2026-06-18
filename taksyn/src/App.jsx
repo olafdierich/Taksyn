@@ -3994,12 +3994,14 @@ function UsersView({ user, setAuditLog }) {
       orgId = data?.id
     }
     if(!orgId) return
-    const [rolesRes, posRes] = await Promise.all([
+    const [rolesRes, posRes, teamsRes] = await Promise.all([
       supabase.from('org_custom_roles').select('industry_name,role_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('role_name'),
-      supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name')
+      supabase.from('org_custom_positions').select('position_name').eq('organisation_id',orgId).order('sort_order',{nullsFirst:false}).order('position_name'),
+      supabase.from('teams').select('id,name').eq('org',orgId).order('name')
     ])
     setOrgCustomRoles(rolesRes.data||[])
     setOrgCustomPositions(posRes.data?.map(p=>p.position_name)||[])
+    setInviteOrgTeams(teamsRes.data||[])
   }
 
   const openInviteForm = async (method) => {
@@ -4572,15 +4574,13 @@ function UsersView({ user, setAuditLog }) {
                 })}
                 <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setInvitePositions(prev=>[...prev,{industry:workforceOrgIndustry,role:'',position:''}])}>+ Add another position</button>
               </div>
-              {inviteOrgTeams.length>0&&(
-                <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
-                  <label className="form-label" style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px'}}>Team Assignment <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none',letterSpacing:0}}>(optional)</span></label>
-                  <select className="form-select" value={inviteTeamId} onChange={e=>setInviteTeamId(e.target.value)}>
-                    <option value="">— No Team —</option>
-                    {inviteOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-              )}
+              <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
+                <label className="form-label" style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px'}}>Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none',letterSpacing:0}}>(optional)</span></label>
+                <select className="form-select" value={inviteTeamId} onChange={e=>setInviteTeamId(e.target.value)}>
+                  <option value="">— No Team —</option>
+                  {inviteOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
               {(inviteFirstName.trim()||inviteLastName.trim())&&invitePositions.some(p=>p.role||p.position)&&(
                 <div style={{background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--text)',lineHeight:1.5}}>
                   <div style={{fontSize:10,fontWeight:700,color:'var(--brand)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.8px'}}>Invite Summary</div>
