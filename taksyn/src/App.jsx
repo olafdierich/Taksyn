@@ -1591,11 +1591,14 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   }, [user?.org, user?.role])
 
   const cancelInvite = async (id) => {
-    const { error } = await supabase.from('invite_links').update({ is_active: false }).eq('id', id)
-    if (error) { alert('Failed to cancel: ' + error.message); return }
-    setInviteMsg('Invitation cancelled')
+    setPendingInvites(prev => prev.filter(i => i.id !== id))
+    const { error } = await supabase.from('invite_links').delete().eq('id', id)
+    if (error) {
+      fetchPendingInvites(orgId) // restore on failure
+      alert('Failed to remove invitation: ' + error.message); return
+    }
+    setInviteMsg('Invitation removed')
     setTimeout(() => setInviteMsg(''), 3000)
-    fetchPendingInvites(orgId)
   }
 
   const resendInvite = async (invite) => {
@@ -4007,6 +4010,7 @@ function UsersView({ user, setAuditLog }) {
   const [workforceOrgIndustry, setWorkforceOrgIndustry] = useState('')
   const [inviteTeamId, setInviteTeamId] = useState('')
   const [inviteOrgTeams, setInviteOrgTeams] = useState([])
+  const [duplicateInvite, setDuplicateInvite] = useState(null) // {existingId, linkOrgId, ...} when duplicate detected
 
   const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
   const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
@@ -4273,7 +4277,7 @@ function UsersView({ user, setAuditLog }) {
 
   const resetInviteForm = () => {
     setInviteEmail(''); setInviteFirstName(''); setInviteLastName(''); setInviteOrg(''); setInvitePhone('')
-    setInvitePositions([{industry:'',role:'',position:''}]); setInviteTeamId('')
+    setInvitePositions([{industry:'',role:'',position:''}]); setInviteTeamId(''); setDuplicateInvite(null)
   }
 
 
@@ -4288,6 +4292,25 @@ function UsersView({ user, setAuditLog }) {
     const firstIndustry = validRows.find(p=>p.industry)?.industry || ''
     const rolesSummary = validRows.map(p=>[p.industry,p.position,p.role].filter(Boolean).join(' / ')).join('; ')
     const positionsSummary = rolesSummary ? '\n\nAssignments: '+rolesSummary : ''
+
+    // Resolve org ID once up front for use in duplicate check and buildInviteUrl
+    const orgEntry = orgsList.find(o => o.name === targetOrg)
+    const resolvedOrgId = orgEntry?.id || ''
+
+    // Check for existing active unused invite for this email + org
+    if (isConfigured() && inviteEmail.trim() && resolvedOrgId && !duplicateInvite) {
+      const { data: existing } = await supabase.from('invite_links')
+        .select('id').eq('organisation_id', resolvedOrgId)
+        .eq('invited_email', inviteEmail.trim().toLowerCase())
+        .is('used_at', null).eq('is_active', true)
+        .maybeSingle()
+      if (existing) {
+        setDuplicateInvite({ existingId: existing.id, resolvedOrgId, systemRole, firstIndustry, rolesSummary, positionsSummary })
+        return
+      }
+    }
+    // Clear duplicate state if we're proceeding (resend path)
+    setDuplicateInvite(null)
 
     const buildInviteUrl = async (orgId) => {
       if (!orgId || !isConfigured()) return window.location.origin + window.location.pathname
@@ -4332,9 +4355,7 @@ function UsersView({ user, setAuditLog }) {
 
     if (inviteMethod==='whatsapp') {
       try {
-        const orgEntry = orgsList.find(o=>o.name===targetOrg)
-        const linkOrgId = orgEntry?.id || ''
-        const inviteUrl = await buildInviteUrl(linkOrgId)
+        const inviteUrl = await buildInviteUrl(resolvedOrgId)
         const msg = encodeURIComponent(`Hi ${inviteFirstName.trim()}, ${targetOrg} has invited you to join Taksyn. Tap the link to set up your account: ${inviteUrl}`)
         window.open('https://wa.me/?text='+msg, '_blank')
         setShowInvite(false); resetInviteForm()
@@ -4346,8 +4367,7 @@ function UsersView({ user, setAuditLog }) {
 
     if (!isConfigured()) { alert('Supabase not configured'); return }
     try {
-      const orgEntry = orgsList.find(o=>o.name===targetOrg)
-      const linkOrgId = orgEntry?.id || ''
+      const linkOrgId = resolvedOrgId
       const inviteUrl = await buildInviteUrl(linkOrgId)
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
       const invitePayload = { email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, orgId: linkOrgId, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl }
@@ -4375,6 +4395,19 @@ function UsersView({ user, setAuditLog }) {
       setShowInvite(false); resetInviteForm()
     } catch(e) {
       alert('Failed to send invite: '+e.message)
+    }
+  }
+
+  const cancelPendingInvite = async (id) => {
+    setPendingInvites(prev => prev.filter(i => i.id !== id))
+    const { error } = await supabase.from('invite_links').delete().eq('id', id)
+    if (error) {
+      // restore on failure
+      if (workforceOrgId) supabase.from('invite_links').select('id,invited_name,invited_email,invited_role,invited_position,invited_industry,created_at,expires_at').eq('organisation_id', workforceOrgId).is('used_at', null).eq('is_active', true).gt('expires_at', new Date().toISOString()).then(({data})=>{ if(data) setPendingInvites(data) }).catch(()=>{})
+      alert('Failed to remove invitation: ' + error.message)
+    } else {
+      setPendingMsg('Invitation removed')
+      setTimeout(() => setPendingMsg(''), 3000)
     }
   }
 
@@ -4665,10 +4698,25 @@ function UsersView({ user, setAuditLog }) {
                   <button className={"btn btn-sm "+(inviteMethod==='whatsapp'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('whatsapp')}>💬 WhatsApp</button>
                 </div>
               </div>
-              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                <button className="btn btn-secondary" onClick={()=>{ setShowInvite(false); resetInviteForm() }}>Cancel</button>
-                <button className="btn btn-primary" onClick={sendInvite}>{inviteMethod==='whatsapp'?'💬 Send via WhatsApp':'📧 Send Invite'}</button>
-              </div>
+              {duplicateInvite ? (
+                <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.3)',borderRadius:10,padding:'14px 16px',marginTop:4}}>
+                  <div style={{fontWeight:700,fontSize:13,color:'#D97706',marginBottom:6}}>⚠️ Invite already sent</div>
+                  <div style={{fontSize:13,color:'var(--text)',marginBottom:12}}>An invite has already been sent to this email. Do you want to resend it instead?</div>
+                  <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                    <button className="btn btn-secondary" onClick={()=>setDuplicateInvite(null)}>Cancel</button>
+                    <button className="btn btn-primary" onClick={async()=>{
+                      // Delete old invite and re-send
+                      await supabase.from('invite_links').delete().eq('id', duplicateInvite.existingId)
+                      sendInvite()
+                    }}>↩ Resend</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                  <button className="btn btn-secondary" onClick={()=>{ setShowInvite(false); resetInviteForm() }}>Cancel</button>
+                  <button className="btn btn-primary" onClick={sendInvite}>{inviteMethod==='whatsapp'?'💬 Send via WhatsApp':'📧 Send Invite'}</button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -4824,6 +4872,7 @@ function UsersView({ user, setAuditLog }) {
                             </div>
                             <RolePill role={inv.invited_role||'worker'}/>
                             {inv.invited_email&&['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>resendPendingInvite(inv)}>↩ Resend</button>}
+                            {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>cancelPendingInvite(inv.id)}>✕ Remove</button>}
                           </div>
                         )
                       })}
