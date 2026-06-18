@@ -8849,9 +8849,7 @@ function TeamsView({ user }) {
   useEffect(()=>{
     if(!isConfigured()) return
     // Load teams in parallel with org data
-    supabase.from('teams').select('*').eq('org',user.org).order('name')
-      .then(({data})=>{ if(data) setTeams(data) }).catch(()=>{})
-    // Load org id and team types first, then load members using both org name and id
+    // Load teams and org data in parallel; re-fetch teams by org ID once resolved
     supabase.from('organisations').select('id,team_types,industry').eq('name',user.org).maybeSingle()
       .then(async ({data}) => {
         if(!data) return
@@ -8859,6 +8857,8 @@ function TeamsView({ user }) {
         if(data.industry) { setTeamOrgIndustry(data.industry); setInviteLinkIndustry(data.industry) }
         if(data.id) {
           setOrgId(data.id)
+          supabase.from('teams').select('*').eq('org',data.id).order('name')
+            .then(({data:td})=>{ if(td) setTeams(td) }).catch(()=>{})
           supabase.from('org_custom_positions').select('position_name').eq('organisation_id',data.id)
             .then(({data:p})=>{ if(p) setTeamOrgCustomPositions(p.map(x=>x.position_name)) }).catch(()=>{})
           supabase.from('org_custom_roles').select('role_name,industry_name').eq('organisation_id',data.id)
@@ -8932,7 +8932,7 @@ function TeamsView({ user }) {
   const createTeam = async () => {
     if(!newTeam.name.trim()||saving) return
     setSaving(true)
-    const entry = {id:'TM'+Date.now(), name:newTeam.name.trim(), type:newTeam.type, description:newTeam.description.trim(), org:user.org, created_by:user.name, created_at:new Date().toISOString()}
+    const entry = {id:'TM'+Date.now(), name:newTeam.name.trim(), type:newTeam.type, description:newTeam.description.trim(), org:orgId||user.org, created_by:user.name, created_at:new Date().toISOString()}
     if(isConfigured()) {
       const {error} = await supabase.from('teams').insert(entry)
       if(error){alert('Error: '+error.message);setSaving(false);return}
