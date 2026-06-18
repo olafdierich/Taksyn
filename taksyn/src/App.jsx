@@ -9028,18 +9028,28 @@ function TeamsView({ user }) {
     const u = addMemberPool.find(x=>x.id===addMemberUser) || orgUsers.find(x=>x.id===addMemberUser)
     if(!u) return
     const entry = {id:'TM'+Date.now(), team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:u.role, position:u.position||'', org:user.org, added_by:user.name, added_at:new Date().toISOString()}
-    if(isConfigured()) await supabase.from('team_members').insert(entry)
-    const updated = {...selectedTeam, members:[...(selectedTeam.members||[]),{...entry,profile:u}]}
-    setSelectedTeam(updated)
-    setTeams(prev=>prev.map(t=>t.id===selectedTeam.id?{...t,member_count:(t.member_count||0)+1}:t))
+    if(isConfigured()) {
+      const {error} = await supabase.from('team_members').insert(entry)
+      if(error) { alert('Failed to add member: '+error.message); return }
+    }
+    // Reload members from DB so count and list are always in sync
+    const fresh = await loadTeamMembers(selectedTeam.id)
+    setSelectedTeam(prev=>({...prev, members:fresh}))
+    setTeams(prev=>prev.map(t=>t.id===selectedTeam.id?{...t,member_count:fresh.length}:t))
     setShowAddMember(false)
     setAddMemberUser(''); setAddMemberRole(''); setAddMemberSearch(''); setAddMemberPosFilter(''); setAddMemberPool([])
   }
 
   const removeMember = async (memberId) => {
     if(!confirm('Remove this member from the team?')) return
-    if(isConfigured()) await supabase.from('team_members').delete().eq('id',memberId)
-    setSelectedTeam(prev=>({...prev, members:prev.members.filter(m=>m.id!==memberId)}))
+    if(isConfigured()) {
+      const {error} = await supabase.from('team_members').delete().eq('id',memberId)
+      if(error) { alert('Failed to remove member: '+error.message); return }
+    }
+    // Reload members from DB so count and list are always in sync
+    const fresh = await loadTeamMembers(selectedTeam.id)
+    setSelectedTeam(prev=>({...prev, members:fresh}))
+    setTeams(prev=>prev.map(t=>t.id===selectedTeam.id?{...t,member_count:fresh.length}:t))
   }
 
   const deleteTeam = async (id) => {
