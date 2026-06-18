@@ -8997,9 +8997,11 @@ function TeamsView({ user }) {
   const openAddMember = async () => {
     setAddMemberUser(''); setAddMemberRole(''); setAddMemberSearch(''); setAddMemberPosFilter(''); setAddMemberPool([])
     setShowAddMember(true)
-    if(!isConfigured()||!orgId||!selectedTeam) return
+    if(!isConfigured()||!selectedTeam) return
+    // Resolve the current team's already-loaded member IDs to exclude them
     const existingIds = new Set((selectedTeam.members||[]).map(m=>m.user_id))
-    const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
+    // org_members.org stores the org name, consistent with the rest of the Teams section
+    const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',user.org)
     if(!members?.length) return
     const eligible = members.filter(m=>!existingIds.has(m.user_id))
     if(!eligible.length) return
