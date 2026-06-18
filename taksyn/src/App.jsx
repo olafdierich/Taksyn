@@ -8852,17 +8852,12 @@ function TeamsView({ user }) {
 
   useEffect(()=>{
     if(!isConfigured()) return
-    // Load teams in parallel with org data
-    // Load teams and org data in parallel; re-fetch teams by org ID once resolved
-    console.log('[Teams] user.org before organisations lookup:', user.org)
     supabase.from('organisations').select('id,team_types,industry').eq('name',user.org).maybeSingle()
-      .then(async ({data, error}) => {
-        console.log('[Teams] organisations lookup response:', { data, error })
+      .then(async ({data}) => {
         if(!data) return
         if(data.team_types) setTeamTypes(JSON.parse(data.team_types||'[]'))
         if(data.industry) { setTeamOrgIndustry(data.industry); setInviteLinkIndustry(data.industry) }
         if(data.id) {
-          console.log('[Teams] data.id before teams query:', data.id)
           setOrgId(data.id)
           supabase.from('teams').select('*').eq('org',data.id).order('name')
             .then(({data:td})=>{ if(td) setTeams(td) }).catch(()=>{})
@@ -8922,7 +8917,7 @@ function TeamsView({ user }) {
   }
 
   const loadTeamMembers = async (teamId) => {
-    const {data} = await supabase.from('team_members').select('*').eq('team_id',teamId).eq('org',user.org)
+    const {data} = await supabase.from('team_members').select('*').eq('team_id',teamId)
     if(data) {
       const ids = data.map(m=>m.user_id)
       const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id',ids)
@@ -9028,11 +9023,9 @@ function TeamsView({ user }) {
     const u = addMemberPool.find(x=>x.id===addMemberUser) || orgUsers.find(x=>x.id===addMemberUser)
     if(!u) return
     const entry = {team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:u.role, org:orgId||user.org, added_by:user.id}
-    console.log('[AddMember] inserting into team_members:', JSON.stringify(entry, null, 2))
     if(isConfigured()) {
-      const {data, error} = await supabase.from('team_members').insert(entry).select()
-      console.log('[AddMember] insert response — data:', data, '| error:', error)
-      if(error) { console.error('[AddMember] insert failed:', error); alert('Failed to add member: '+error.message); return }
+      const {error} = await supabase.from('team_members').insert(entry)
+      if(error) { alert('Failed to add member: '+error.message); return }
     }
     // Reload members from DB so count and list are always in sync
     const fresh = await loadTeamMembers(selectedTeam.id)
