@@ -8860,7 +8860,14 @@ function TeamsView({ user }) {
         if(data.id) {
           setOrgId(data.id)
           supabase.from('teams').select('*').eq('org',data.id).order('name')
-            .then(({data:td})=>{ if(td) setTeams(td) }).catch(()=>{})
+            .then(async ({data:td})=>{
+              if(!td) return
+              // Fetch member counts for all teams in one query
+              const {data:counts} = await supabase.from('team_members').select('team_id').in('team_id',td.map(t=>t.id))
+              const countMap = {}
+              ;(counts||[]).forEach(r=>{ countMap[r.team_id]=(countMap[r.team_id]||0)+1 })
+              setTeams(td.map(t=>({...t, member_count:countMap[t.id]||0})))
+            }).catch(()=>{})
           supabase.from('org_custom_positions').select('position_name').eq('organisation_id',data.id)
             .then(({data:p})=>{ if(p) setTeamOrgCustomPositions(p.map(x=>x.position_name)) }).catch(()=>{})
           supabase.from('org_custom_roles').select('role_name,industry_name').eq('organisation_id',data.id)
