@@ -1031,16 +1031,11 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             }
             // team_members
             try {
-              let resolvedTeamId = inviteTeamId
-              if (!resolvedTeamId && inviteOrgId) {
-                const { data: teamRow } = await supabase.from('teams').select('id').eq('org', inviteOrgId).limit(1).maybeSingle()
-                resolvedTeamId = teamRow?.id || null
-              }
-              if (resolvedTeamId) {
+              if (inviteTeamId) {
                 await supabase.from('team_members').insert({
-                  id: 'TM'+Date.now(), team_id: resolvedTeamId, user_id: newUserId,
-                  user_name: (firstName + ' ' + lastName).trim(), role: assignedRole, org: orgName,
-                  added_by: 'invite_link', added_at: new Date().toISOString()
+                  team_id: inviteTeamId, user_id: newUserId,
+                  user_name: (firstName + ' ' + lastName).trim(), role: assignedRole, org: inviteOrgId,
+                  added_by: user?.id || 'invite_link'
                 })
               }
             } catch (err) {
@@ -3942,6 +3937,8 @@ function UsersView({ user, setAuditLog }) {
   const [workforceOrgId, setWorkforceOrgId] = useState(null)
   const [pendingMsg, setPendingMsg] = useState('')
   const [workforceOrgIndustry, setWorkforceOrgIndustry] = useState('')
+  const [inviteTeamId, setInviteTeamId] = useState('')
+  const [inviteOrgTeams, setInviteOrgTeams] = useState([])
 
   const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
   const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
@@ -4073,6 +4070,8 @@ function UsersView({ user, setAuditLog }) {
         if (fallback?.length) { const fb=fallback.filter(p=>p.role!=='super_admin'); setRealUsers(fb); parsePositions(fb) }
       }
       setWorkforceOrgId(orgId)
+      supabase.from('teams').select('id,name').eq('org',orgId).order('name')
+        .then(({data})=>{ if(data) setInviteOrgTeams(data) }).catch(()=>{})
       supabase.from('invite_links')
         .select('id,invited_name,invited_email,invited_role,invited_position,invited_industry,created_at,expires_at')
         .eq('organisation_id', orgId).is('used_at', null).eq('is_active', true)
@@ -4204,7 +4203,7 @@ function UsersView({ user, setAuditLog }) {
 
   const resetInviteForm = () => {
     setInviteEmail(''); setInviteFirstName(''); setInviteLastName(''); setInviteOrg(''); setInvitePhone('')
-    setInvitePositions([{industry:'',role:'',position:''}])
+    setInvitePositions([{industry:'',role:'',position:''}]); setInviteTeamId('')
   }
 
 
@@ -4226,7 +4225,7 @@ function UsersView({ user, setAuditLog }) {
       try {
         const { error } = await supabase.from('invite_links').insert({
           organisation_id: orgId,
-          team_id: null,
+          team_id: inviteTeamId || null,
           role: systemRole,
           position: validRows.find(p=>p.position)?.position || null,
           secret: linkId,
@@ -4255,7 +4254,8 @@ function UsersView({ user, setAuditLog }) {
         position: validRows.find(p=>p.position)?.position || '',
         industry: firstIndustry,
         secret: 'taksyn-secret-2024',
-        link: linkId
+        link: linkId,
+        ...(inviteTeamId ? {team: inviteTeamId} : {})
       })
       return window.location.origin + window.location.pathname + '?' + params.toString()
     }
@@ -4572,6 +4572,15 @@ function UsersView({ user, setAuditLog }) {
                 })}
                 <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setInvitePositions(prev=>[...prev,{industry:workforceOrgIndustry,role:'',position:''}])}>+ Add another position</button>
               </div>
+              {inviteOrgTeams.length>0&&(
+                <div className="form-field" style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
+                  <label className="form-label" style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px'}}>Team Assignment <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none',letterSpacing:0}}>(optional)</span></label>
+                  <select className="form-select" value={inviteTeamId} onChange={e=>setInviteTeamId(e.target.value)}>
+                    <option value="">— No Team —</option>
+                    {inviteOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
               {(inviteFirstName.trim()||inviteLastName.trim())&&invitePositions.some(p=>p.role||p.position)&&(
                 <div style={{background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--text)',lineHeight:1.5}}>
                   <div style={{fontSize:10,fontWeight:700,color:'var(--brand)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.8px'}}>Invite Summary</div>
