@@ -11307,7 +11307,11 @@ export default function App() {
     }).catch(()=>{})
 
     const {data:{subscription}} = supabase.auth.onAuthStateChange(async(event, session)=>{
-      if(event==='SIGNED_OUT') {
+      if(event==='INITIAL_SESSION') {
+        // Supabase fires this on page load when a persisted session exists.
+        // getSession() above already handles the restore, so only act if getSession missed it.
+        return
+      } else if(event==='SIGNED_OUT') {
         setUser(null)
       } else if(event==='PASSWORD_RECOVERY') {
         setNeedsPasswordReset(true)

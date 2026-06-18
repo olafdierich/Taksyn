@@ -6,6 +6,7 @@ export const supabase = createClient(
   {
     auth: {
       storage: window.localStorage,
+      storageKey: 'taksyn-auth',
       persistSession: true,
       autoRefreshToken: true,
     }
