@@ -988,6 +988,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           let linkTeamId = inviteTeamId || null
           let linkCreatedBy = null
           let linkOrgId = null
+          let linkRecord = null
           if (inviteLinkId) {
             try {
               const { data: linkCheck } = await supabase
@@ -996,6 +997,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 .eq('secret', inviteLinkId)
                 .maybeSingle()
               if (linkCheck) {
+                linkRecord = linkCheck
                 console.log('[invite-reg] invite_links record:', linkCheck)
                 if (linkCheck.is_active === false) {
                   setError('This invite link has already been used. Please ask your admin for a new link.')
@@ -1098,7 +1100,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               console.error('org_members upsert exception:', orgMemberErr)
             }
             // team_members
-            console.log('[invite-reg] team_members check — linkTeamId:', linkTeamId, 'newUserId:', newUserId)
+            console.log('[invite-reg] pre-insert state — linkTeamId:', linkTeamId, 'inviteLinkId:', inviteLinkId, 'invite_links record:', linkRecord)
             if (linkTeamId) {
               const tmPayload = {
                 team_id: linkTeamId, user_id: newUserId,
