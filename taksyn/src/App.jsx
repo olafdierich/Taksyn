@@ -4143,9 +4143,14 @@ function UsersView({ user, setAuditLog }) {
       if (!user.org) return
       const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
       const orgId = orgRow?.id || user.org
-      const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry, is_active, deactivated_at').eq('org', orgId)
+      let {data:assignments, error:assignErr} = await supabase.from('org_members').select('user_id, role, position, industry, is_active, deactivated_at').eq('org', orgId)
+      if (assignErr) {
+        // Fallback: columns may not exist yet — select without them
+        const fallbackRes = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
+        assignments = fallbackRes.data
+      }
       if (assignments?.length) {
-        const activeAssignments = assignments.filter(a => a.is_active !== false)
+        const activeAssignments = assignments.filter(a => a.is_active == null || a.is_active !== false)
         const inactiveAssignments = assignments.filter(a => a.is_active === false)
         const activeMemberIds = activeAssignments.map(a=>a.user_id)
         const inactiveMemberIds = inactiveAssignments.map(a=>a.user_id)
@@ -4797,7 +4802,7 @@ function UsersView({ user, setAuditLog }) {
           </div>
         </div>
       )}
-      <div className="ph"><div className="ph-top"><div><div className="ph-title">Workforce</div><div className="ph-sub">Manage your organisation's workforce{workforceOrgIndustry?' · 🏭 '+workforceOrgIndustry:''}</div></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{['client_admin','super_admin'].includes(user.role)&&<><button className="btn btn-secondary" onClick={()=>setShowManageIndustries(true)}>🏭 Industries</button><button className="btn btn-primary" onClick={()=>openInviteForm('email')}>📧 Invite via Email</button><button className="btn btn-green" onClick={()=>openInviteForm('whatsapp')}>💬 Invite via WhatsApp</button></>}</div></div></div>
+      <div className="ph"><div className="ph-top"><div><div className="ph-title">Workforce</div><div className="ph-sub">Manage your organisation's workforce{workforceOrgIndustry?' · 🏭 '+workforceOrgIndustry:''}</div></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{['client_admin','super_admin'].includes(user.role)&&<><button className="btn btn-primary" onClick={()=>openInviteForm('email')}>📧 Invite via Email</button><button className="btn btn-green" onClick={()=>openInviteForm('whatsapp')}>💬 Invite via WhatsApp</button></>}</div></div></div>
       <div className="section">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div className="section-title" style={{margin:0}}>Workforce ({confirmedRealUsers.length})</div>
