@@ -943,11 +943,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           // Validate invite link
           let linkTeamId = inviteTeamId || null
           let linkCreatedBy = null
+          let linkOrgId = null
           if (inviteLinkId) {
             try {
               const { data: linkCheck } = await supabase
                 .from('invite_links')
-                .select('id, is_active, expires_at, used_at, team_id, created_by')
+                .select('id, is_active, expires_at, used_at, team_id, created_by, organisation_id')
                 .eq('secret', inviteLinkId)
                 .maybeSingle()
               if (linkCheck) {
@@ -959,9 +960,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                   setError('This invite link has expired. Please ask your admin for a new link.')
                   setLoading(false); return
                 }
-                // Prefer team_id from the DB record — more reliable than URL param
                 if (linkCheck.team_id) linkTeamId = linkCheck.team_id
                 if (linkCheck.created_by) linkCreatedBy = linkCheck.created_by
+                if (linkCheck.organisation_id) linkOrgId = linkCheck.organisation_id
               }
             } catch (linkErr) {
               console.warn('invite_links validation query failed, proceeding:', linkErr.message)
@@ -1035,16 +1036,14 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               console.error('org_members upsert exception:', orgMemberErr)
             }
             // team_members
-            try {
-              if (linkTeamId) {
-                await supabase.from('team_members').insert({
-                  team_id: linkTeamId, user_id: newUserId,
-                  user_name: (firstName + ' ' + lastName).trim(), role: assignedRole, org: inviteOrgId,
-                  added_by: linkCreatedBy
-                })
-              }
-            } catch (err) {
-              console.error('team_members insert error:', err)
+            if (linkTeamId) {
+              const { error: tmError } = await supabase.from('team_members').insert({
+                team_id: linkTeamId, user_id: newUserId,
+                user_name: (firstName + ' ' + lastName).trim(), role: assignedRole,
+                org: linkOrgId || inviteOrgId,
+                added_by: linkCreatedBy
+              })
+              if (tmError) console.error('team_members insert error:', tmError.message, tmError)
             }
 
             // Mark invite link used
