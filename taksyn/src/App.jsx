@@ -9027,10 +9027,13 @@ function TeamsView({ user }) {
       const {error} = await supabase.from('team_members').insert(entry)
       if(error) { alert('Failed to add member: '+error.message); return }
     }
-    // Reload members from DB so count and list are always in sync
-    const fresh = await loadTeamMembers(selectedTeam.id)
-    setSelectedTeam(prev=>({...prev, members:fresh}))
-    setTeams(prev=>prev.map(t=>t.id===selectedTeam.id?{...t,member_count:fresh.length}:t))
+    // Optimistic update — append immediately with data we already have
+    const newMember = {...entry, profile:{id:u.id, name:u.name, role:u.role, position:u.position||''}}
+    setSelectedTeam(prev=>{
+      const members = [...(prev.members||[]), newMember]
+      return {...prev, members}
+    })
+    setTeams(prev=>prev.map(t=>t.id===selectedTeam.id?{...t,member_count:(t.member_count||0)+1}:t))
     setShowAddMember(false)
     setAddMemberUser(''); setAddMemberRole(''); setAddMemberSearch(''); setAddMemberPosFilter(''); setAddMemberPool([])
   }
