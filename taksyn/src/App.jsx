@@ -941,11 +941,13 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           } catch (_) {}
 
           // Validate invite link
+          let linkTeamId = inviteTeamId || null
+          let linkCreatedBy = null
           if (inviteLinkId) {
             try {
               const { data: linkCheck } = await supabase
                 .from('invite_links')
-                .select('id, is_active, expires_at, used_at')
+                .select('id, is_active, expires_at, used_at, team_id, created_by')
                 .eq('secret', inviteLinkId)
                 .maybeSingle()
               if (linkCheck) {
@@ -957,6 +959,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                   setError('This invite link has expired. Please ask your admin for a new link.')
                   setLoading(false); return
                 }
+                // Prefer team_id from the DB record — more reliable than URL param
+                if (linkCheck.team_id) linkTeamId = linkCheck.team_id
+                if (linkCheck.created_by) linkCreatedBy = linkCheck.created_by
               }
             } catch (linkErr) {
               console.warn('invite_links validation query failed, proceeding:', linkErr.message)
@@ -1031,11 +1036,11 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             }
             // team_members
             try {
-              if (inviteTeamId) {
+              if (linkTeamId) {
                 await supabase.from('team_members').insert({
-                  team_id: inviteTeamId, user_id: newUserId,
+                  team_id: linkTeamId, user_id: newUserId,
                   user_name: (firstName + ' ' + lastName).trim(), role: assignedRole, org: inviteOrgId,
-                  added_by: user?.id || 'invite_link'
+                  added_by: linkCreatedBy
                 })
               }
             } catch (err) {
