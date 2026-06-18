@@ -8836,6 +8836,9 @@ function TeamsView({ user }) {
   const [showAddMember, setShowAddMember] = useState(false)
   const [addMemberUser, setAddMemberUser] = useState('')
   const [addMemberRole, setAddMemberRole] = useState('')
+  const [addMemberSearch, setAddMemberSearch] = useState('')
+  const [addMemberPosFilter, setAddMemberPosFilter] = useState('')
+  const [addMemberPool, setAddMemberPool] = useState([])
   const [orgId, setOrgId] = useState('')
   const [showInviteLink, setShowInviteLink] = useState(false)
   const [inviteLinkRole, setInviteLinkRole] = useState('worker')
@@ -8991,18 +8994,35 @@ function TeamsView({ user }) {
       .then(()=>alert('Invite link copied!')).catch(()=>{})
   }
 
+  const openAddMember = async () => {
+    setAddMemberUser(''); setAddMemberRole(''); setAddMemberSearch(''); setAddMemberPosFilter(''); setAddMemberPool([])
+    setShowAddMember(true)
+    if(!isConfigured()||!orgId||!selectedTeam) return
+    const existingIds = new Set((selectedTeam.members||[]).map(m=>m.user_id))
+    const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
+    if(!members?.length) return
+    const eligible = members.filter(m=>!existingIds.has(m.user_id))
+    if(!eligible.length) return
+    const {data:profiles} = await supabase.from('profiles').select('id,name,position,role').in('id',eligible.map(m=>m.user_id))
+    if(!profiles) return
+    const pool = eligible.map(m=>{
+      const p = profiles.find(x=>x.id===m.user_id)||{}
+      return {id:m.user_id, name:p.name||'', role:m.role||p.role||'worker', position:p.position||''}
+    }).filter(m=>m.name)
+    setAddMemberPool(pool)
+  }
+
   const addMember = async () => {
     if(!addMemberUser||!selectedTeam) return
-    const u = orgUsers.find(x=>x.id===addMemberUser)
+    const u = addMemberPool.find(x=>x.id===addMemberUser) || orgUsers.find(x=>x.id===addMemberUser)
     if(!u) return
-    const entry = {id:'TM'+Date.now(), team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:addMemberRole||u.role, org:user.org, added_by:user.name, added_at:new Date().toISOString()}
+    const entry = {id:'TM'+Date.now(), team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:addMemberRole||u.role, org:orgId||user.org, added_by:user.name, added_at:new Date().toISOString()}
     if(isConfigured()) await supabase.from('team_members').insert(entry)
     const updated = {...selectedTeam, members:[...(selectedTeam.members||[]),{...entry,profile:u}]}
     setSelectedTeam(updated)
     setTeams(prev=>prev.map(t=>t.id===selectedTeam.id?{...t,member_count:(t.member_count||0)+1}:t))
     setShowAddMember(false)
-    setAddMemberUser('')
-    setAddMemberRole('')
+    setAddMemberUser(''); setAddMemberRole(''); setAddMemberSearch(''); setAddMemberPosFilter(''); setAddMemberPool([])
   }
 
   const removeMember = async (memberId) => {
@@ -9110,7 +9130,7 @@ function TeamsView({ user }) {
                 <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>Members ({(selectedTeam.members||[]).length})</div>
                 <div style={{display:'flex',gap:6}}>
                   {(isCA||user.role==='manager')&&<button className="btn btn-secondary btn-sm" onClick={()=>setShowInviteLink(!showInviteLink)}>💬 Invite Link</button>}
-                  {(isCA||user.role==='manager'||user.role==='supervisor')&&<button className="btn btn-primary btn-sm" onClick={()=>setShowAddMember(true)}><IC n="plus" s={12}/> Add Member</button>}
+                  {(isCA||user.role==='manager'||user.role==='supervisor')&&<button className="btn btn-primary btn-sm" onClick={openAddMember}><IC n="plus" s={12}/> Add Member</button>}
                 </div>
               </div>
 
@@ -9150,18 +9170,34 @@ function TeamsView({ user }) {
               {showAddMember&&(
                 <div style={{background:'var(--s3)',borderRadius:10,padding:14,marginBottom:14}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',marginBottom:10}}>Add Member</div>
-                  <div className="two-col">
-                    <div className="form-field">
-                      <label className="form-label">Staff Member</label>
-                      <select className="form-select" value={addMemberUser} onChange={e=>setAddMemberUser(e.target.value)}>
-                        <option value="">— Select —</option>
-                        {orgUsers.filter(u=>!(selectedTeam.members||[]).find(m=>m.user_id===u.id)).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
-                      </select>
-                    </div>
-                    <div className="form-field">
-                      <label className="form-label">Role in Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
-                      <input className="form-input" value={addMemberRole} onChange={e=>setAddMemberRole(e.target.value)} placeholder="e.g. Team Lead, On-call..."/>
-                    </div>
+                  <div style={{display:'flex',gap:8,marginBottom:8}}>
+                    <input className="form-input" style={{flex:1,fontSize:13}} placeholder="Search by name…" value={addMemberSearch} onChange={e=>{setAddMemberSearch(e.target.value);setAddMemberUser('')}}/>
+                    <select className="form-select" style={{flex:'0 0 160px',fontSize:13}} value={addMemberPosFilter} onChange={e=>{setAddMemberPosFilter(e.target.value);setAddMemberUser('')}}>
+                      <option value="">All Positions</option>
+                      {[...new Set(addMemberPool.map(m=>m.position).filter(Boolean))].sort().map(pos=><option key={pos} value={pos}>{pos}</option>)}
+                    </select>
+                  </div>
+                  <div style={{maxHeight:220,overflowY:'auto',borderRadius:8,border:'1px solid var(--border)',marginBottom:10}}>
+                    {(()=>{
+                      const filtered = addMemberPool
+                        .filter(m=>!addMemberSearch||m.name.toLowerCase().includes(addMemberSearch.toLowerCase()))
+                        .filter(m=>!addMemberPosFilter||m.position===addMemberPosFilter)
+                      if(!filtered.length) return <div style={{padding:16,fontSize:13,color:'var(--t2)',textAlign:'center'}}>{addMemberPool.length?'No members match filters':'Loading…'}</div>
+                      return filtered.map(m=>(
+                        <div key={m.id} onClick={()=>setAddMemberUser(m.id===addMemberUser?'':m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',cursor:'pointer',background:m.id===addMemberUser?'var(--brand-lt)':'transparent',borderBottom:'1px solid var(--border)'}}>
+                          <Avatar name={m.name} role={m.role} size={30}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontWeight:600,fontSize:13,color:m.id===addMemberUser?'var(--brand)':'inherit'}}>{m.name}</div>
+                            <div style={{fontSize:11,color:'var(--t2)'}}>{ROLE_LABELS[m.role]||m.role}{m.position?' · '+m.position:''}</div>
+                          </div>
+                          {m.id===addMemberUser&&<span style={{fontSize:12,color:'var(--brand)',fontWeight:700}}>✓</span>}
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                  <div className="form-field" style={{marginBottom:10}}>
+                    <label className="form-label">Role in Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
+                    <input className="form-input" value={addMemberRole} onChange={e=>setAddMemberRole(e.target.value)} placeholder="e.g. Team Lead, On-call…"/>
                   </div>
                   <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                     <button className="btn btn-secondary btn-sm" onClick={()=>setShowAddMember(false)}>Cancel</button>
