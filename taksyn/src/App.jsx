@@ -4026,6 +4026,9 @@ function UsersView({ user, setAuditLog }) {
   const [inviteTeamId, setInviteTeamId] = useState('')
   const [inviteOrgTeams, setInviteOrgTeams] = useState([])
   const [duplicateInvite, setDuplicateInvite] = useState(null) // {existingId, linkOrgId, ...} when duplicate detected
+  const [archivedUsers, setArchivedUsers] = useState([])
+  const [showArchived, setShowArchived] = useState(false)
+  const [archiveOrgAssignments, setArchiveOrgAssignments] = useState({})
 
   const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
   const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
@@ -4140,19 +4143,32 @@ function UsersView({ user, setAuditLog }) {
       if (!user.org) return
       const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
       const orgId = orgRow?.id || user.org
-      const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
+      const {data:assignments} = await supabase.from('org_members').select('user_id, role, position, industry, is_active, deactivated_at').eq('org', orgId)
       if (assignments?.length) {
-        const memberIds = assignments.map(a=>a.user_id)
-        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', memberIds)
+        const activeAssignments = assignments.filter(a => a.is_active !== false)
+        const inactiveAssignments = assignments.filter(a => a.is_active === false)
+        const activeMemberIds = activeAssignments.map(a=>a.user_id)
+        const inactiveMemberIds = inactiveAssignments.map(a=>a.user_id)
+        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', activeMemberIds)
         const workforceMembers = (profileData || []).filter(p=>p.role!=='super_admin')
         setRealUsers(workforceMembers)
         parsePositions(workforceMembers)
         const map = {}
-        for (const a of assignments) {
+        for (const a of activeAssignments) {
           if (!map[a.user_id]) map[a.user_id] = []
           map[a.user_id].push(a)
         }
         setOrgAssignments(map)
+        if (inactiveMemberIds.length) {
+          const {data:archivedProfiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', inactiveMemberIds)
+          setArchivedUsers(archivedProfiles || [])
+          const archMap = {}
+          for (const a of inactiveAssignments) {
+            if (!archMap[a.user_id]) archMap[a.user_id] = []
+            archMap[a.user_id].push(a)
+          }
+          setArchiveOrgAssignments(archMap)
+        }
       } else {
         // Fallback: query profiles directly by org name (same as PerformanceView)
         const {data:fallback} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('org', user.org)
@@ -4169,40 +4185,56 @@ function UsersView({ user, setAuditLog }) {
     })().catch(()=>{})
   },[user.org])
 
-  const deleteUser = async (id) => {
-    if (!confirm('Remove this user from your organisation?\n\nTheir active tasks will be unassigned — work history is preserved.')) return
+  const deactivateUser = async (id) => {
     const target = realUsers.find(u=>u.id===id)
-    if(isConfigured()) {
-      try {
-        const userOrgId = orgsList.find(o=>o.name===user.org)?.id || user.org
-        await supabase.from('org_members').delete().eq('user_id',id).eq('org',userOrgId)
-      } catch(err) { console.error('Remove member org_members error:', err) }
-      try {
-        await supabase.from('team_members').delete().eq('user_id',id)
-      } catch(err) { console.error('Remove member team_members error:', err) }
-      try {
-        await supabase.from('profiles').delete().eq('id',id)
-      } catch(err) { console.error('Remove member profiles error:', err) }
-      // user_positions table removed
+    if (!confirm(`Are you sure you want to deactivate ${target?.name||'this member'}? They will no longer be able to access the system.`)) return
+    if (isConfigured()) {
+      const userOrgId = workforceOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org
+      const { error } = await supabase.from('org_members').update({ is_active: false, deactivated_at: new Date().toISOString() }).eq('user_id', id).eq('org', userOrgId)
+      if (error) { alert('Failed to deactivate: ' + error.message); return }
+    }
+    setRealUsers(prev => prev.filter(u => u.id !== id))
+    setArchivedUsers(prev => [...prev, target])
+    const assignment = orgAssignments[id]?.[0] || {}
+    setArchiveOrgAssignments(prev => ({ ...prev, [id]: [{ ...assignment, is_active: false, deactivated_at: new Date().toISOString() }] }))
+    setOrgAssignments(prev => { const n = {...prev}; delete n[id]; return n })
+  }
+
+  const reactivateUser = async (id) => {
+    const target = archivedUsers.find(u=>u.id===id)
+    if (isConfigured()) {
+      const userOrgId = workforceOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org
+      const { error } = await supabase.from('org_members').update({ is_active: true, deactivated_at: null }).eq('user_id', id).eq('org', userOrgId)
+      if (error) { alert('Failed to reactivate: ' + error.message); return }
+    }
+    setArchivedUsers(prev => prev.filter(u => u.id !== id))
+    if (target) {
+      setRealUsers(prev => [...prev, target])
+      const assignment = archiveOrgAssignments[id]?.[0] || {}
+      setOrgAssignments(prev => ({ ...prev, [id]: [{ ...assignment, is_active: true, deactivated_at: null }] }))
+    }
+    setArchiveOrgAssignments(prev => { const n = {...prev}; delete n[id]; return n })
+  }
+
+  const deleteUser = async (id) => {
+    const target = archivedUsers.find(u=>u.id===id) || realUsers.find(u=>u.id===id)
+    if (!confirm(`This will permanently delete ${target?.name||'this member'} and cannot be undone.`)) return
+    if (isConfigured()) {
+      const userOrgId = workforceOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org
+      try { await supabase.from('invite_links').delete().eq('invited_email', target?.email).eq('organisation_id', userOrgId) } catch(err) {}
+      try { await supabase.from('team_members').delete().eq('user_id', id) } catch(err) {}
+      try { await supabase.from('org_members').delete().eq('user_id', id).eq('org', userOrgId) } catch(err) {}
+      try { await supabase.from('profiles').delete().eq('id', id) } catch(err) {}
       try {
         await supabase.from('tasks').update({ assigned_user_id: null })
           .eq('assigned_user_id', id).eq('org', user.org)
           .not('status', 'in', '("completed","approved")')
-      } catch(err) { console.error('Remove member tasks error:', err) }
-      if (supabaseAdmin) {
-        try {
-          const { error } = await supabaseAdmin.auth.admin.deleteUser(id)
-          if (error) throw error
-        } catch(err) { console.error('Remove member auth delete error:', err) }
-      }
+      } catch(err) {}
     }
-    setRealUsers(prev=>prev.filter(u=>u.id!==id))
-    setUserPositions(prev=>{ const n={...prev}; delete n[id]; return n })
-    if (setAuditLog) {
-      const rmEntry = mkAuditEntry('member_removed', user, user.org, { memberRole:target?.role||'' }, null, null, target?.name||id, null)
-      setAuditLog(prev=>[rmEntry,...prev])
-      if (isConfigured()) supabase.from('audit_log').insert(rmEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
-    }
+    setArchivedUsers(prev => prev.filter(u => u.id !== id))
+    setRealUsers(prev => prev.filter(u => u.id !== id))
+    setUserPositions(prev => { const n = {...prev}; delete n[id]; return n })
+    setArchiveOrgAssignments(prev => { const n = {...prev}; delete n[id]; return n })
   }
 
   const saveEditUser = async () => {
@@ -4820,7 +4852,8 @@ function UsersView({ user, setAuditLog }) {
                     setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
                     setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster,regularly_rostered').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs); setEditForm(prev=>({...prev,regularly_rostered:!!apData.regularly_rostered})) } catch(e) {} })()
                   }}>✏️ Edit</button>}
-                  {['client_admin','super_admin'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>Remove</button>}
+                  {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deactivateUser(u.id)}>Deactivate</button>}
+                  {user.role==='supervisor'&&<button className="btn btn-danger btn-sm" onClick={()=>deactivateUser(u.id)}>Deactivate</button>}
                   {['manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setRosterOnlyUser(u); setRosterOnlyData([]); setRosterOnlyRegRostered(false); (async()=>{ try { const {data,error}=await supabase.from('profiles').select('roster,regularly_rostered').eq('id',u.id).single(); if(error||!data) return; let rs=[]; try{rs=Array.isArray(data.roster)?data.roster:(JSON.parse(data.roster||'[]'))}catch(e){rs=[]}; setRosterOnlyData(rs); setRosterOnlyRegRostered(!!data.regularly_rostered) } catch(e){} })() }}>📅 Edit Roster</button>}
                 </div>
               )
@@ -4897,6 +4930,35 @@ function UsersView({ user, setAuditLog }) {
               </>)
             })()
         }
+        {user.role !== 'worker' && archivedUsers.length > 0 && (
+          <div style={{marginTop:20}}>
+            <div
+              style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(100,116,139,.08)',borderRadius:8,cursor:'pointer',border:'1px solid rgba(100,116,139,.2)',marginBottom:showArchived?8:0}}
+              onClick={()=>setShowArchived(v=>!v)}
+            >
+              <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>Archived Members ({archivedUsers.length})</span>
+              <span style={{fontSize:12,color:'var(--t2)'}}>{showArchived?'▼':'▶'}</span>
+            </div>
+            {showArchived && archivedUsers.map((u,i)=>{
+              const assignment = archiveOrgAssignments[u.id]?.[0] || {}
+              const deactivatedDate = assignment.deactivated_at ? new Date(assignment.deactivated_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : null
+              return (
+                <div key={u.id} className="user-row" style={{flexWrap:'wrap',gap:8,opacity:.7}}>
+                  <Avatar name={u.name} role={u.role} size={34}/>
+                  <div className="user-info" style={{flex:1}}>
+                    <div className="user-name">{u.name}</div>
+                    <div className="user-email">{u.email||'—'}</div>
+                    {(assignment.position||assignment.industry)&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>{[assignment.industry,assignment.position].filter(Boolean).join(' · ')}</div>}
+                    {deactivatedDate&&<div style={{fontSize:10,color:'var(--t3)',marginTop:1}}>Deactivated {deactivatedDate}</div>}
+                  </div>
+                  <RolePill role={assignment.role||u.role}/>
+                  {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>reactivateUser(u.id)}>↩ Reactivate</button>}
+                  {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>🗑 Delete</button>}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
