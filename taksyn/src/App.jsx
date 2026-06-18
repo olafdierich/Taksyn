@@ -310,7 +310,7 @@ const clearAuthCache = () => {
   localStorage.clear()
   sessionStorage.clear()
 }
-const SESSION_ROLE_TIMEOUTS = { worker:60, supervisor:60, manager:240, client_admin:480, super_admin:60 }
+const SESSION_ROLE_TIMEOUTS = { worker:30, supervisor:60, manager:120, client_admin:240, super_admin:30 }
 const TAKSYN_LAST_ACTIVITY_KEY = 'taksyn_last_activity'
 const parseSafe = (val, fallback=[]) => {
   if (Array.isArray(val)) return val
