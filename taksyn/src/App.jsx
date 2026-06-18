@@ -996,6 +996,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 .eq('secret', inviteLinkId)
                 .maybeSingle()
               if (linkCheck) {
+                console.log('[invite-reg] invite_links record:', linkCheck)
                 if (linkCheck.is_active === false) {
                   setError('This invite link has already been used. Please ask your admin for a new link.')
                   setLoading(false); return
@@ -1007,6 +1008,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 if (linkCheck.team_id) linkTeamId = linkCheck.team_id
                 if (linkCheck.created_by) linkCreatedBy = linkCheck.created_by
                 if (linkCheck.organisation_id) linkOrgId = linkCheck.organisation_id
+                console.log('[invite-reg] resolved linkTeamId:', linkTeamId, 'linkOrgId:', linkOrgId, 'linkCreatedBy:', linkCreatedBy)
+              } else {
+                console.log('[invite-reg] invite_links query returned no record for secret:', inviteLinkId)
               }
             } catch (linkErr) {
               console.warn('invite_links validation query failed, proceeding:', linkErr.message)
@@ -1094,20 +1098,29 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               console.error('org_members upsert exception:', orgMemberErr)
             }
             // team_members
+            console.log('[invite-reg] team_members check — linkTeamId:', linkTeamId, 'newUserId:', newUserId)
             if (linkTeamId) {
-              const { error: tmError } = await supabase.from('team_members').insert({
+              const tmPayload = {
                 team_id: linkTeamId, user_id: newUserId,
                 user_name: (firstName + ' ' + lastName).trim(), role: assignedRole,
                 org: linkOrgId || inviteOrgId,
                 added_by: linkCreatedBy
-              })
-              if (tmError) console.error('team_members insert error:', tmError.message, tmError)
+              }
+              console.log('[invite-reg] attempting team_members insert:', tmPayload)
+              const { error: tmError } = await supabase.from('team_members').insert(tmPayload)
+              if (tmError) console.error('[invite-reg] team_members insert FAILED:', tmError.message, tmError)
+              else console.log('[invite-reg] team_members insert succeeded')
+            } else {
+              console.log('[invite-reg] skipping team_members insert — no linkTeamId')
             }
 
             // Mark invite link used
+            console.log('[invite-reg] marking invite_links used — inviteLinkId:', inviteLinkId, 'newUserId:', newUserId)
             if (inviteLinkId) {
-              supabase.from('invite_links').update({ used_at: new Date().toISOString(), used_by: newUserId, is_active: false })
-                .eq('secret', inviteLinkId).then(()=>{}).catch(()=>{})
+              const { error: markUsedErr } = await supabase.from('invite_links').update({ used_at: new Date().toISOString(), used_by: newUserId, is_active: false })
+                .eq('secret', inviteLinkId)
+              if (markUsedErr) console.error('[invite-reg] invite_links mark-used FAILED:', markUsedErr.message, markUsedErr)
+              else console.log('[invite-reg] invite_links marked as used')
             }
 
             // Auto sign-in
