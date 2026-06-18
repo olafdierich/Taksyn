@@ -820,6 +820,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   const [showPw1, setShowPw1] = useState(false)
   const [pendingAuthUser, setPendingAuthUser] = useState(null)
   const [inviteToken, setInviteToken] = useState(null)
+  const pendingInviteAcceptRef = useRef(null)
+  const [inviteSignInPrompt, setInviteSignInPrompt] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeChecked, setAgreeChecked] = useState(false)
@@ -872,7 +874,24 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 if (inviteEmailForCheck) {
                   try {
                     const { data: existingProf } = await supabase.from('profiles').select('id').eq('email', inviteEmailForCheck).maybeSingle()
-                    if (existingProf) { setError('You already have an account. Please sign in.'); return }
+                    if (existingProf) {
+                      // Existing user — fetch full invite link details and redirect to login
+                      try {
+                        const { data: fullLink } = await supabase.from('invite_links')
+                          .select('team_id, created_by, organisation_id').eq('secret', linkId).maybeSingle()
+                        pendingInviteAcceptRef.current = {
+                          linkTeamId: fullLink?.team_id || null,
+                          linkOrgId: fullLink?.organisation_id || null,
+                          linkCreatedBy: fullLink?.created_by || null,
+                          inviteLinkId: linkId,
+                          assignedRole: inviteUrlRef.current?.role || 'worker',
+                          userName: inviteUrlRef.current?.name || inviteEmailForCheck,
+                        }
+                      } catch (_) {}
+                      setInviteSignInPrompt(true)
+                      setMode('login')
+                      return
+                    }
                   } catch (_) {}
                 }
                 setError('This invite link has already been used. Please ask your admin for a new link.')
@@ -935,7 +954,32 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             const { data: existingAccount } = await supabase
               .from('profiles').select('id').eq('email', inviteEmail).maybeSingle()
             if (existingAccount) {
-              setError('You already have an account. Please sign in.')
+              // Store invite context so it can be applied after they sign in
+              pendingInviteAcceptRef.current = {
+                linkTeamId: inviteTeamId || null,
+                linkOrgId: null,
+                linkCreatedBy: null,
+                inviteLinkId: inviteLinkId || null,
+                assignedRole: inviteRole || 'worker',
+                userName: (inviteUrlRef.current?.firstName + ' ' + inviteUrlRef.current?.lastName).trim() || inviteEmail,
+              }
+              // Pre-fill the link details from DB before switching to login
+              if (inviteLinkId) {
+                try {
+                  const { data: lc } = await supabase.from('invite_links')
+                    .select('team_id, created_by, organisation_id')
+                    .eq('secret', inviteLinkId).maybeSingle()
+                  if (lc) {
+                    pendingInviteAcceptRef.current.linkTeamId = lc.team_id || inviteTeamId || null
+                    pendingInviteAcceptRef.current.linkCreatedBy = lc.created_by || null
+                    pendingInviteAcceptRef.current.linkOrgId = lc.organisation_id || null
+                  }
+                } catch (_) {}
+              }
+              setInviteSignInPrompt(true)
+              setMode('login')
+              setSuccess('')
+              setError('')
               setLoading(false); return
             }
           } catch (_) {}
@@ -979,7 +1023,21 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           // Supabase returns a user with empty identities when the email is already registered
           if (signUpData?.user?.identities?.length === 0) {
             window.__taksyn_registering = false
-            setError('You already have an account. Please sign in.')
+            if (!pendingInviteAcceptRef.current && inviteLinkId) {
+              // Populate pending invite context if not already set by the profiles check
+              pendingInviteAcceptRef.current = {
+                linkTeamId: linkTeamId || null,
+                linkOrgId: linkOrgId || null,
+                linkCreatedBy: linkCreatedBy || null,
+                inviteLinkId: inviteLinkId,
+                assignedRole: assignedRole,
+                userName: (firstName + ' ' + lastName).trim(),
+              }
+            }
+            setInviteSignInPrompt(true)
+            setMode('login')
+            setSuccess('')
+            setError('')
             setLoading(false); return
           }
 
@@ -1408,6 +1466,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
         <div className="auth-title">{mode==='login'?'Sign in to your account':mode==='register'?'Create your account':'Reset your password'}</div>
         <div className="auth-sub">Task compliance & accountability platform</div>
+        {inviteSignInPrompt&&mode==='login'&&(
+          <div style={{background:'rgba(99,102,241,.08)',border:'1px solid rgba(99,102,241,.25)',borderRadius:10,padding:'14px 16px',marginBottom:12,textAlign:'center'}}>
+            <div style={{fontSize:14,fontWeight:700,color:'var(--brand)',marginBottom:4}}>You already have an account</div>
+            <div style={{fontSize:13,color:'var(--t2)'}}>Sign in below to accept the invitation and join the team.</div>
+          </div>
+        )}
         {error&&<div className="auth-error">{error}</div>}
         {success&&<div className="auth-success" style={{fontSize:14,fontWeight:600,padding:'14px 16px',textAlign:'center'}}>{success}</div>}
         {mode==='register'&&<div className="auth-field"><label className="auth-label">Full Name</label><input className="auth-input" placeholder="Your full name" value={name} onChange={e=>setName(e.target.value)} /></div>}
@@ -11442,10 +11506,11 @@ export default function App() {
         } catch(e) {}
       } else if(event==='SIGNED_IN') {
         // If we're in the invite registration flow and not actively registering, sign out —
-        // the invite page must never restore a previous session
+        // the invite page must never restore a previous session.
+        // Exception: pendingInviteAcceptRef means an existing user chose to sign in to accept an invite.
         const _isp = new URLSearchParams(window.location.search)
         const _isInviteContext = (_isp.get('invite')==='true' && _isp.get('secret')==='taksyn-secret-2024') || window.__taksyn_invite_registration
-        if (_isInviteContext && !window.__taksyn_registering) {
+        if (_isInviteContext && !window.__taksyn_registering && !pendingInviteAcceptRef.current) {
           await supabase.auth.signOut()
           return
         }
@@ -11462,6 +11527,30 @@ export default function App() {
         try {
           const {data} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('id',session.user.id).maybeSingle()
           if (data) {
+            // Apply pending invite accept (existing user signing in via invite link)
+            const pending = pendingInviteAcceptRef.current
+            if (pending) {
+              pendingInviteAcceptRef.current = null
+              setInviteSignInPrompt(false)
+              window.__taksyn_invite_registration = false
+              if (pending.linkTeamId) {
+                supabase.from('team_members').insert({
+                  team_id: pending.linkTeamId,
+                  user_id: session.user.id,
+                  user_name: data.name || pending.userName,
+                  role: data.role || pending.assignedRole,
+                  org: pending.linkOrgId || data.org,
+                  added_by: pending.linkCreatedBy,
+                }).then(({error: tmErr}) => {
+                  if (tmErr) console.error('pending invite team_members insert error:', tmErr.message)
+                })
+              }
+              if (pending.inviteLinkId) {
+                supabase.from('invite_links')
+                  .update({ used_at: new Date().toISOString(), used_by: session.user.id, is_active: false })
+                  .eq('secret', pending.inviteLinkId).then(()=>{}).catch(()=>{})
+              }
+            }
             const savedOrgName = sessionStorage.getItem('currentOrgName')
             const savedRole = sessionStorage.getItem('currentRole')
             if (savedOrgName && savedRole) { setUser({...data, email:session.user.email, org:savedOrgName, role:savedRole}); return }
