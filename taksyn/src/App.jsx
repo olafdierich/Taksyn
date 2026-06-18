@@ -9233,7 +9233,7 @@ function TeamsView({ user }) {
                               <div style={{fontSize:11,color:'var(--t2)'}}>{m.profile?.position||m.position||'—'}{m.role_in_team?' · '+m.role_in_team:''}</div>
                             </div>
                             <span className="role-pill" style={{color:'var(--brand)',background:'var(--brand-lt)'}}>{m.profile?.position||m.position||ROLE_LABELS[m.profile?.role||m.role||'worker']}</span>
-                            {(isCA||user.role==='manager')&&<button className="btn btn-danger btn-sm" onClick={()=>removeMember(m.id)}>Remove</button>}
+                            {(isCA||user.role==='manager'||user.role==='supervisor')&&<button className="btn btn-danger btn-sm" onClick={()=>removeMember(m.id)}>Remove</button>}
                           </div>
                         ))}
                       </div>
