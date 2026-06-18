@@ -310,6 +310,8 @@ const clearAuthCache = () => {
   localStorage.clear()
   sessionStorage.clear()
 }
+const SESSION_ROLE_TIMEOUTS = { worker:60, supervisor:60, manager:240, client_admin:480, super_admin:60 }
+const TAKSYN_LAST_ACTIVITY_KEY = 'taksyn_last_activity'
 const parseSafe = (val, fallback=[]) => {
   if (Array.isArray(val)) return val
   if (typeof val === 'string') { try { return JSON.parse(val) } catch(e) { return fallback } }
@@ -11146,12 +11148,11 @@ export default function App() {
     })
   }
 
-  const SESSION_ROLE_TIMEOUTS = { worker:30, supervisor:30, manager:30, client_admin:30, super_admin:10 }
   const WARN_BEFORE_MINS = 1
 
   useEffect(() => {
     if (!user) return
-    const minutes = sessionTimeout !== null ? sessionTimeout : (SESSION_ROLE_TIMEOUTS[user.role] || 15)
+    const minutes = sessionTimeout !== null ? sessionTimeout : (SESSION_ROLE_TIMEOUTS[user.role] || 60)
     if (minutes === 0) return // Never timeout
 
     const warnMs = (minutes - WARN_BEFORE_MINS) * 60 * 1000
@@ -11173,6 +11174,7 @@ export default function App() {
             setSessionWarning(false)
             if (isConfigured()) supabase.auth.signOut().catch(() => {})
             clearAuthCache()
+            setDeactivatedMsg('You were logged out due to inactivity')
             setUser(null); setTasks(DEMO_TASKS); setPage('dashboard')
           }
         }, 1000)
@@ -11186,11 +11188,14 @@ export default function App() {
       const now = Date.now()
       if (now - lastFire < 1000) return
       lastFire = now
+      localStorage.setItem(TAKSYN_LAST_ACTIVITY_KEY, now.toString())
       startTimer()
     }
 
     const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'touchmove', 'touchend', 'input', 'click']
     events.forEach(e => window.addEventListener(e, onActivity, { passive: true }))
+    // Record activity now so a fresh session/tab-restore has a baseline timestamp
+    localStorage.setItem(TAKSYN_LAST_ACTIVITY_KEY, Date.now().toString())
     startTimer()
 
     return () => {
@@ -11277,6 +11282,19 @@ export default function App() {
       if(session?.user) {
         supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('id',session.user.id).single().then(async({data})=>{
           if(data) {
+            // Check lastActivity — if idle longer than the role's timeout, sign out immediately
+            const lastActivity = parseInt(localStorage.getItem(TAKSYN_LAST_ACTIVITY_KEY) || '0', 10)
+            if (lastActivity) {
+              const role = sessionStorage.getItem('currentRole') || data.role
+              const timeoutMs = (SESSION_ROLE_TIMEOUTS[role] || 60) * 60 * 1000
+              if (Date.now() - lastActivity > timeoutMs) {
+                supabase.auth.signOut().catch(()=>{})
+                clearAuthCache()
+                setDeactivatedMsg('You were logged out due to inactivity')
+                return
+              }
+            }
+            localStorage.setItem(TAKSYN_LAST_ACTIVITY_KEY, Date.now().toString())
             const savedOrgName = sessionStorage.getItem('currentOrgName')
             const savedRole = sessionStorage.getItem('currentRole')
             if (savedOrgName && savedRole) { setUser({...data, email:session.user.email, org:savedOrgName, role:savedRole}); return }
@@ -11702,12 +11720,12 @@ export default function App() {
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:16}}>
                   <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>Session Timeout</div>
                   <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px'}}>
-                    <div style={{fontSize:11,color:'var(--t2)',marginBottom:8}}>Default for your role: <strong>{SESSION_ROLE_TIMEOUTS[user.role]||15} min</strong></div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginBottom:8}}>Default for your role: <strong>{SESSION_ROLE_TIMEOUTS[user.role]||60} min</strong></div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {[{label:'5 min',v:5},{label:'10 min',v:10},{label:'15 min',v:15},{label:'20 min',v:20},{label:'30 min',v:30},{label:'Never',v:0}].map(({label,v})=>{
-                        const active = sessionTimeout===v||(sessionTimeout===null&&v===(SESSION_ROLE_TIMEOUTS[user.role]||15))
+                      {[{label:'30 min',v:30},{label:'60 min',v:60},{label:'2 hrs',v:120},{label:'4 hrs',v:240},{label:'8 hrs',v:480},{label:'Never',v:0}].map(({label,v})=>{
+                        const active = sessionTimeout===v||(sessionTimeout===null&&v===(SESSION_ROLE_TIMEOUTS[user.role]||60))
                         return <button key={v} style={{fontSize:11,padding:'4px 10px',borderRadius:5,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand)':'transparent',color:active?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:active?700:400}} onClick={()=>{
-                          const pref = v===(SESSION_ROLE_TIMEOUTS[user.role]||15)?null:v
+                          const pref = v===(SESSION_ROLE_TIMEOUTS[user.role]||60)?null:v
                           if(pref===null) localStorage.removeItem('taksyn_session_timeout'); else localStorage.setItem('taksyn_session_timeout',String(v))
                           setSessionTimeout(pref===null?null:v)
                           setProfileMsg(v===0?'Session will never expire':'Session timeout set to '+v+' min')
