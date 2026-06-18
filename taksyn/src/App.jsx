@@ -9016,7 +9016,7 @@ function TeamsView({ user }) {
       const pool = eligible.map(m=>{
         const p = profiles.find(x=>x.id===m.user_id)||{}
         return {id:m.user_id, name:p.name||'', role:m.role||p.role||'worker', position:p.position||''}
-      }).filter(m=>m.name)
+      }).filter(m=>m.name && m.role!=='client_admin')
       setAddMemberPool(pool)
     } finally {
       setAddMemberLoading(false)
@@ -9027,7 +9027,7 @@ function TeamsView({ user }) {
     if(!addMemberUser||!selectedTeam) return
     const u = addMemberPool.find(x=>x.id===addMemberUser) || orgUsers.find(x=>x.id===addMemberUser)
     if(!u) return
-    const entry = {id:'TM'+Date.now(), team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:addMemberRole||u.role, position:u.position||'', org:orgId||user.org, added_by:user.name, added_at:new Date().toISOString()}
+    const entry = {id:'TM'+Date.now(), team_id:selectedTeam.id, user_id:u.id, user_name:u.name, role:u.role, position:u.position||'', org:user.org, added_by:user.name, added_at:new Date().toISOString()}
     if(isConfigured()) await supabase.from('team_members').insert(entry)
     const updated = {...selectedTeam, members:[...(selectedTeam.members||[]),{...entry,profile:u}]}
     setSelectedTeam(updated)
@@ -9200,16 +9200,12 @@ function TeamsView({ user }) {
                           <Avatar name={m.name} role={m.role} size={30}/>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontWeight:600,fontSize:13,color:m.id===addMemberUser?'var(--brand)':'inherit'}}>{m.name}</div>
-                            <div style={{fontSize:11,color:'var(--t2)'}}>{ROLE_LABELS[m.role]||m.role}{m.position?' · '+m.position:''}</div>
+                            <div style={{fontSize:11,color:'var(--t2)'}}>{m.position||ROLE_LABELS[m.role]||m.role}</div>
                           </div>
                           {m.id===addMemberUser&&<span style={{fontSize:12,color:'var(--brand)',fontWeight:700}}>✓</span>}
                         </div>
                       ))
                     })()}
-                  </div>
-                  <div className="form-field" style={{marginBottom:10}}>
-                    <label className="form-label">Role in Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
-                    <input className="form-input" value={addMemberRole} onChange={e=>setAddMemberRole(e.target.value)} placeholder="e.g. Team Lead, On-call…"/>
                   </div>
                   <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                     <button className="btn btn-secondary btn-sm" onClick={()=>setShowAddMember(false)}>Cancel</button>
@@ -9236,7 +9232,7 @@ function TeamsView({ user }) {
                               <div style={{fontWeight:600,fontSize:13}}>{m.profile?.name||m.user_name||'—'}</div>
                               <div style={{fontSize:11,color:'var(--t2)'}}>{m.profile?.position||m.position||'—'}{m.role_in_team?' · '+m.role_in_team:''}</div>
                             </div>
-                            <RolePill role={m.profile?.role||m.role||'worker'}/>
+                            <span className="role-pill" style={{color:'var(--brand)',background:'var(--brand-lt)'}}>{m.profile?.position||m.position||ROLE_LABELS[m.profile?.role||m.role||'worker']}</span>
                             {(isCA||user.role==='manager')&&<button className="btn btn-danger btn-sm" onClick={()=>removeMember(m.id)}>Remove</button>}
                           </div>
                         ))}
