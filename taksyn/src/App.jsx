@@ -9346,13 +9346,10 @@ function TeamsView({ user }) {
           console.log('[team-notif] insert response — data:', notifData, '| error:', notifErr)
         })
     }
-    // Optimistic update — append immediately with data we already have
-    const newMember = {...entry, profile:{id:u.id, name:u.name, role:u.role, position:u.position||''}}
-    setSelectedTeam(prev=>{
-      const members = [...(prev.members||[]), newMember]
-      return {...prev, members}
-    })
-    setTeams(prev=>prev.map(t=>t.id===selectedTeam.id?{...t,member_count:(t.member_count||0)+1}:t))
+    // Reload members from DB so newly-added members have their DB id for future removals
+    const fresh = await loadTeamMembers(selectedTeam.id)
+    setSelectedTeam(prev=>({...prev, members:fresh}))
+    setTeams(prev=>prev.map(t=>t.id===selectedTeam.id?{...t,member_count:fresh.length}:t))
     setShowAddMember(false)
     setAddMemberUser(''); setAddMemberRole(''); setAddMemberSearch(''); setAddMemberPosFilter(''); setAddMemberPool([])
   }
