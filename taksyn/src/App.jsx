@@ -1072,7 +1072,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             const tier = orgData?.plan || 'Starter'
             console.log('About to insert profile with:', { id: newUserId, org: orgName, tier, role: assignedRole })
 
-            const { data: profileData, error: profileError } = await supabase
+            const dbAdmin = supabaseAdmin || supabase
+            const { data: profileData, error: profileError } = await dbAdmin
               .from('profiles')
               .upsert({
                 id: newUserId,
