@@ -11353,6 +11353,7 @@ function SupportView({ user, tickets=[], setTickets }) {
   const [selected, setSelected] = useState(null)
   const [response, setResponse] = useState('')
   const [updating, setUpdating] = useState(false)
+  const [ticketMsg, setTicketMsg] = useState('')
 
   // tickets loaded from App-level state
 
@@ -11439,9 +11440,10 @@ function SupportView({ user, tickets=[], setTickets }) {
                   <textarea className="comment-box" style={{minHeight:80}} placeholder="Type your response..." value={response||selected.response||''} onChange={e=>setResponse(e.target.value)}/>
                 </div>
                 <div style={{display:'flex',gap:8}}>
-                  <button className="btn btn-primary" disabled={!response.trim()||updating} onClick={()=>{ updateTicket(selected.id,{response:response.trim(),status:'resolved'}); setResponse('') }}>✅ Send & Resolve</button>
-                  <button className="btn btn-secondary" disabled={!response.trim()||updating} onClick={()=>{ updateTicket(selected.id,{response:response.trim()}); setResponse('') }}>💬 Send Reply</button>
+                  <button className="btn btn-primary" disabled={!response.trim()||updating} onClick={async()=>{ await updateTicket(selected.id,{response:response.trim(),status:'resolved'}); setResponse(''); setTicketMsg('Ticket resolved successfully'); setTimeout(()=>setTicketMsg(''),3000) }}>✅ Send & Resolve</button>
+                  <button className="btn btn-secondary" disabled={!response.trim()||updating} onClick={async()=>{ await updateTicket(selected.id,{response:response.trim()}); setResponse(''); setTicketMsg('Reply sent successfully'); setTimeout(()=>setTicketMsg(''),3000) }}>💬 Send Reply</button>
                 </div>
+                {ticketMsg&&<div style={{marginTop:8,fontSize:12,fontWeight:600,color:'#10B981'}}>{ticketMsg}</div>}
               </div>
             </div>
           ) : (
