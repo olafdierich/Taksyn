@@ -4227,16 +4227,30 @@ function UsersView({ user, setAuditLog }) {
       }
       if (assignments?.length) {
         const activeAssignments = assignments.filter(a => a.is_active == null || a.is_active !== false)
+        const inactiveAssignments = assignments.filter(a => a.is_active === false)
         const activeMemberIds = activeAssignments.map(a => a.user_id)
+        const inactiveMemberIds = inactiveAssignments.map(a => a.user_id)
         const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', activeMemberIds)
         const workforceMembers = (profileData || []).filter(p => p.role !== 'super_admin')
         setRealUsers(workforceMembers)
         const map = {}
         for (const a of activeAssignments) { if (!map[a.user_id]) map[a.user_id] = []; map[a.user_id].push(a) }
         setOrgAssignments(map)
+        if (inactiveMemberIds.length) {
+          const {data:archivedProfiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', inactiveMemberIds)
+          setArchivedUsers(archivedProfiles || [])
+          const archMap = {}
+          for (const a of inactiveAssignments) { if (!archMap[a.user_id]) archMap[a.user_id] = []; archMap[a.user_id].push(a) }
+          setArchiveOrgAssignments(archMap)
+        } else {
+          setArchivedUsers([])
+          setArchiveOrgAssignments({})
+        }
       } else {
         setRealUsers([])
         setOrgAssignments({})
+        setArchivedUsers([])
+        setArchiveOrgAssignments({})
       }
     } catch(e) {
       console.error('[refreshWorkforce] failed:', e)
@@ -4266,7 +4280,8 @@ function UsersView({ user, setAuditLog }) {
     const target = archivedUsers.find(u=>u.id===id)
     if (isConfigured()) {
       const userOrgId = workforceOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org
-      const { error } = await supabase.from('org_members').update({ is_active: true, deactivated_at: null }).eq('user_id', id).eq('org', userOrgId)
+      const db = supabaseAdmin || supabase
+      const { error } = await db.from('org_members').update({ is_active: true, deactivated_at: null }).eq('user_id', id).eq('org', userOrgId)
       if (error) { alert('Failed to reactivate: ' + error.message); return }
     }
     setArchivedUsers(prev => prev.filter(u => u.id !== id))
@@ -4283,10 +4298,11 @@ function UsersView({ user, setAuditLog }) {
     if (!confirm(`This will permanently delete ${target?.name||'this member'} and cannot be undone.`)) return
     if (isConfigured()) {
       const userOrgId = workforceOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org
-      try { await supabase.from('invite_links').delete().eq('invited_email', target?.email).eq('organisation_id', userOrgId) } catch(err) {}
-      try { await supabase.from('team_members').delete().eq('user_id', id) } catch(err) {}
-      try { await supabase.from('org_members').delete().eq('user_id', id).eq('org', userOrgId) } catch(err) {}
-      try { await supabase.from('profiles').delete().eq('id', id) } catch(err) {}
+      const db = supabaseAdmin || supabase
+      try { await db.from('invite_links').delete().eq('invited_email', target?.email).eq('organisation_id', userOrgId) } catch(err) {}
+      try { await db.from('team_members').delete().eq('user_id', id) } catch(err) {}
+      try { await db.from('org_members').delete().eq('user_id', id).eq('org', userOrgId) } catch(err) {}
+      try { await db.from('profiles').delete().eq('id', id) } catch(err) {}
       try {
         await supabase.from('tasks').update({ assigned_user_id: null })
           .eq('assigned_user_id', id).eq('org', user.org)
@@ -4861,6 +4877,38 @@ function UsersView({ user, setAuditLog }) {
         </div>
       )}
       <div className="ph"><div className="ph-top"><div><div className="ph-title">Workforce</div><div className="ph-sub">Manage your organisation's workforce{workforceOrgIndustry?' · 🏭 '+workforceOrgIndustry:''}</div></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{['client_admin','super_admin'].includes(user.role)&&<><button className="btn btn-primary" onClick={()=>openInviteForm('email')}>📧 Invite via Email</button><button className="btn btn-green" onClick={()=>openInviteForm('whatsapp')}>💬 Invite via WhatsApp</button></>}</div></div></div>
+      {user.role !== 'worker' && (
+        <div className="section" style={{marginBottom:16}}>
+          <div
+            style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(100,116,139,.08)',borderRadius:8,cursor:'pointer',border:'1px solid rgba(100,116,139,.2)',marginBottom:showArchived?8:0}}
+            onClick={()=>setShowArchived(v=>!v)}
+          >
+            <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>📦 Archived Members ({archivedUsers.length})</span>
+            <span style={{fontSize:12,color:'var(--t2)'}}>{showArchived?'▼':'▶'}</span>
+          </div>
+          {showArchived && (archivedUsers.length === 0
+            ? <div style={{fontSize:13,color:'var(--t2)',padding:'8px 4px'}}>No archived members</div>
+            : archivedUsers.map((u)=>{
+                const assignment = archiveOrgAssignments[u.id]?.[0] || {}
+                const deactivatedDate = assignment.deactivated_at ? new Date(assignment.deactivated_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : null
+                return (
+                  <div key={u.id} className="user-row" style={{flexWrap:'wrap',gap:8,opacity:.7}}>
+                    <Avatar name={u.name} role={u.role} size={34}/>
+                    <div className="user-info" style={{flex:1}}>
+                      <div className="user-name">{u.name}</div>
+                      <div className="user-email">{u.email||'—'}</div>
+                      {(assignment.position||assignment.industry)&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>{[assignment.industry,assignment.position].filter(Boolean).join(' · ')}</div>}
+                      {deactivatedDate&&<div style={{fontSize:10,color:'var(--t3)',marginTop:1}}>Deactivated {deactivatedDate}</div>}
+                    </div>
+                    <RolePill role={assignment.role||u.role}/>
+                    {['client_admin','super_admin','manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>reactivateUser(u.id)}>↩ Reactivate</button>}
+                    {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>🗑 Delete</button>}
+                  </div>
+                )
+              })
+          )}
+        </div>
+      )}
       <div className="section">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div className="section-title" style={{margin:0}}>Workforce ({confirmedRealUsers.length})</div>
@@ -4993,38 +5041,6 @@ function UsersView({ user, setAuditLog }) {
               </>)
             })()
         }
-        {user.role !== 'worker' && (
-          <div style={{marginTop:20}}>
-            <div
-              style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(100,116,139,.08)',borderRadius:8,cursor:'pointer',border:'1px solid rgba(100,116,139,.2)',marginBottom:showArchived?8:0}}
-              onClick={()=>setShowArchived(v=>!v)}
-            >
-              <span style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',flex:1}}>Archived Members ({archivedUsers.length})</span>
-              <span style={{fontSize:12,color:'var(--t2)'}}>{showArchived?'▼':'▶'}</span>
-            </div>
-            {showArchived && (archivedUsers.length === 0
-              ? <div style={{fontSize:13,color:'var(--t2)',padding:'8px 4px'}}>No archived members</div>
-              : archivedUsers.map((u,i)=>{
-                  const assignment = archiveOrgAssignments[u.id]?.[0] || {}
-                  const deactivatedDate = assignment.deactivated_at ? new Date(assignment.deactivated_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : null
-                  return (
-                    <div key={u.id} className="user-row" style={{flexWrap:'wrap',gap:8,opacity:.7}}>
-                      <Avatar name={u.name} role={u.role} size={34}/>
-                      <div className="user-info" style={{flex:1}}>
-                        <div className="user-name">{u.name}</div>
-                        <div className="user-email">{u.email||'—'}</div>
-                        {(assignment.position||assignment.industry)&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>{[assignment.industry,assignment.position].filter(Boolean).join(' · ')}</div>}
-                        {deactivatedDate&&<div style={{fontSize:10,color:'var(--t3)',marginTop:1}}>Deactivated {deactivatedDate}</div>}
-                      </div>
-                      <RolePill role={assignment.role||u.role}/>
-                      {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>reactivateUser(u.id)}>↩ Reactivate</button>}
-                      {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>🗑 Delete</button>}
-                    </div>
-                  )
-                })
-            )}
-          </div>
-        )}
       </div>
     </div>
   )
