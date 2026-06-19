@@ -3,6 +3,10 @@ import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 
+// Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
+// Declared here (outside all components) so it is always in scope everywhere in this file.
+const pendingInviteAcceptRef = { current: null }
+
 const ROLES = ['super_admin','client_admin','manager','supervisor','worker']
 const ROLE_LABELS = { super_admin:'Super Admin', client_admin:'Client Admin', manager:'Manager', supervisor:'Supervisor', worker:'Staff Member' }
 const ROLE_COLORS = { super_admin:'#F59E0B', client_admin:'#8B5CF6', manager:'#3B82F6', supervisor:'#10B981', worker:'#6B7280' }
@@ -824,7 +828,6 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   const [showPw1, setShowPw1] = useState(false)
   const [pendingAuthUser, setPendingAuthUser] = useState(null)
   const [inviteToken, setInviteToken] = useState(null)
-  const pendingInviteAcceptRef = useRef(null)
   const [inviteSignInPrompt, setInviteSignInPrompt] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
