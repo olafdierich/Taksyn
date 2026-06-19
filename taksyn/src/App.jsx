@@ -4674,7 +4674,7 @@ function UsersView({ user, setAuditLog }) {
                 <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates the display email — user must change their own login email via Profile</div>
                 {['client_admin','manager'].includes(user.role)&&editForm.email&&(
                   <div style={{marginTop:6}}>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={async()=>{
+                    <button type="button" className="btn btn-primary btn-sm" onClick={async()=>{
                       const email = editForm.email.trim()
                       if (!window.confirm('Send password reset email to '+email+'?')) return
                       setResendInviteMsg('')
