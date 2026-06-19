@@ -5328,6 +5328,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   const [viewingMember, setViewingMember] = useState(null)
   const [editingMember, setEditingMember] = useState(null)
   const [memberEditForm, setMemberEditForm] = useState({})
+  const [memberResendMsg, setMemberResendMsg] = useState('')
   const [orgChangeSearch, setOrgChangeSearch] = useState('')
   const [showAddMember, setShowAddMember] = useState(false)
   const [allProfiles, setAllProfiles] = useState([])
@@ -5834,6 +5835,25 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                 <div className="form-field"><label className="form-label">Email</label>
                   <input className="form-input" type="email" value={memberEditForm.email||''} onChange={e=>setMemberEditForm({...memberEditForm,email:e.target.value})} placeholder="email@example.com"/>
                   <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates display email — user changes login email via their own Profile</div>
+                  {memberEditForm.email&&(
+                    <div style={{marginTop:6}}>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={async()=>{
+                        const email = memberEditForm.email.trim()
+                        if (!window.confirm('Send password reset email to '+email+'?')) return
+                        setMemberResendMsg('')
+                        try {
+                          const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+                          if (error) throw error
+                          setMemberResendMsg('Password reset email sent to '+email)
+                          setTimeout(()=>setMemberResendMsg(''),4000)
+                        } catch(e) {
+                          setMemberResendMsg('Error: '+e.message)
+                          setTimeout(()=>setMemberResendMsg(''),5000)
+                        }
+                      }}>📧 Resend Invite</button>
+                      {memberResendMsg&&<div style={{fontSize:12,marginTop:6,fontWeight:600,color:memberResendMsg.startsWith('Error')?'var(--red)':'#10B981'}}>{memberResendMsg}</div>}
+                    </div>
+                  )}
                 </div>
                 <div className="form-field"><label className="form-label">Permission Level</label>
                   <select className="form-input" value={memberEditForm.role||'worker'} onChange={e=>setMemberEditForm({...memberEditForm,role:e.target.value,position:''})}>
