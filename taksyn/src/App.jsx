@@ -4086,6 +4086,7 @@ function UsersView({ user, setAuditLog }) {
   const [archivedUsers, setArchivedUsers] = useState([])
   const [showArchived, setShowArchived] = useState(false)
   const [archiveOrgAssignments, setArchiveOrgAssignments] = useState({})
+  const [resendInviteMsg, setResendInviteMsg] = useState('')
 
   const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
   const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
@@ -4671,6 +4672,34 @@ function UsersView({ user, setAuditLog }) {
                 <label className="form-label">Email</label>
                 <input className="form-input" type="email" value={editForm.email||''} onChange={e=>setEditForm({...editForm,email:e.target.value})} placeholder="email@example.com"/>
                 <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates the display email — user must change their own login email via Profile</div>
+                {['client_admin','manager'].includes(user.role)&&editForm.email&&(
+                  <div style={{marginTop:6}}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={async()=>{
+                      const email = editForm.email.trim()
+                      if (!window.confirm('Resend invite to '+email+'?')) return
+                      setResendInviteMsg('')
+                      try {
+                        const targetOrg = user.org
+                        const orgEntry = orgsList.find(o=>o.name===targetOrg)
+                        const orgId = workforceOrgId || orgEntry?.id || ''
+                        const linkId = 'IL'+Date.now()+Math.random().toString(36).slice(2,5)
+                        await (supabaseAdmin||supabase).from('invite_links').insert({ organisation_id: orgId, role: editForm.role||'worker', secret: linkId, created_by: user.id, created_at: new Date().toISOString(), expires_at: new Date(Date.now()+7*24*60*60*1000).toISOString(), is_active: true, invited_name: editForm.name||'', invited_email: email, invited_role: editForm.role||'worker', invited_position: editForm.position||null, invited_industry: editForm.industry||null })
+                        const params = new URLSearchParams({ invite:'true', org:orgId, orgname:targetOrg, firstname:editForm.first_name||'', lastname:editForm.last_name||'', email, role:editForm.role||'worker', position:editForm.position||'', industry:editForm.industry||'', secret:'taksyn-secret-2024', link:linkId })
+                        const inviteUrl = window.location.origin+window.location.pathname+'?'+params.toString()
+                        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
+                        const res = await fetch(supabaseUrl+'/functions/v1/invite-user', { method:'POST', headers:{'Content-Type':'application/json','Authorization': await getEdgeFunctionAuthHeader()}, body: JSON.stringify({ email, name:editForm.name||email, role:editForm.role||'worker', org:targetOrg, orgId, industry:editForm.industry||'', positions:'', secret:import.meta.env.VITE_INVITE_SECRET||'', inviteUrl }) })
+                        const result = await res.json()
+                        if (!res.ok) throw new Error(result.error||result.message||'Failed ('+res.status+')')
+                        setResendInviteMsg('Invite resent to '+email)
+                        setTimeout(()=>setResendInviteMsg(''),4000)
+                      } catch(e) {
+                        setResendInviteMsg('Error: '+e.message)
+                        setTimeout(()=>setResendInviteMsg(''),5000)
+                      }
+                    }}>📧 Resend Invite</button>
+                    {resendInviteMsg&&<div style={{fontSize:12,marginTop:6,fontWeight:600,color:resendInviteMsg.startsWith('Error')?'var(--red)':'#10B981'}}>{resendInviteMsg}</div>}
+                  </div>
+                )}
               </div>
               <div className="two-col">
                 <div className="form-field">
