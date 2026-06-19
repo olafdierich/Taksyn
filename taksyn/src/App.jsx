@@ -4316,6 +4316,10 @@ function UsersView({ user, setAuditLog }) {
           .eq('assigned_user_id', id).eq('org', user.org)
           .not('status', 'in', '("completed","approved")')
       } catch(err) {}
+      if (supabaseAdmin) {
+        try { await supabaseAdmin.auth.admin.deleteUser(id) }
+        catch(err) { console.error('[deleteUser] auth.admin.deleteUser failed:', err.message) }
+      }
     }
     setArchivedUsers(prev => prev.filter(u => u.id !== id))
     setRealUsers(prev => prev.filter(u => u.id !== id))
