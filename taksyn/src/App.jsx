@@ -792,7 +792,6 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   // Parse URL params once synchronously so initial state is correct — avoids the login→register flash
   const _sp = new URLSearchParams(window.location.search)
   const _isInvite = _sp.get('invite')==='true' && _sp.get('secret')==='taksyn-secret-2024'
-  if (_isInvite) console.log('[invite-init] _sp.get("orgname"):', _sp.get('orgname'), '| full search:', window.location.search)
 
   // Capture all invite URL params in a ref on first render, before useEffect clears the URL.
   // useRef persists across re-renders so handleSubmit always reads the original values.
@@ -1003,7 +1002,6 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 .maybeSingle()
               if (linkCheck) {
                 linkRecord = linkCheck
-                console.log('[invite-reg] invite_links record:', linkCheck)
                 if (linkCheck.is_active === false) {
                   setError('This invite link has already been used. Please ask your admin for a new link.')
                   setLoading(false); return
@@ -1015,9 +1013,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 if (linkCheck.team_id) linkTeamId = linkCheck.team_id
                 if (linkCheck.created_by) linkCreatedBy = linkCheck.created_by
                 if (linkCheck.organisation_id) linkOrgId = linkCheck.organisation_id
-                console.log('[invite-reg] resolved linkTeamId:', linkTeamId, 'linkOrgId:', linkOrgId, 'linkCreatedBy:', linkCreatedBy)
               } else {
-                console.log('[invite-reg] invite_links query returned no record for secret:', inviteLinkId)
               }
             } catch (linkErr) {
               console.warn('invite_links validation query failed, proceeding:', linkErr.message)
@@ -1106,7 +1102,6 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               console.error('org_members upsert exception:', orgMemberErr)
             }
             // team_members
-            console.log('[invite-reg] pre-insert state — linkTeamId:', linkTeamId, 'inviteLinkId:', inviteLinkId, 'invite_links record:', linkRecord)
             if (linkTeamId) {
               const tmPayload = {
                 team_id: linkTeamId, user_id: newUserId,
@@ -1114,22 +1109,16 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 org: linkOrgId || inviteOrgId,
                 added_by: linkCreatedBy
               }
-              console.log('[invite-reg] attempting team_members insert:', tmPayload)
               const { error: tmError } = await supabase.from('team_members').insert(tmPayload)
               if (tmError) console.error('[invite-reg] team_members insert FAILED:', tmError.message, tmError)
-              else console.log('[invite-reg] team_members insert succeeded')
-            } else {
-              console.log('[invite-reg] skipping team_members insert — no linkTeamId')
             }
 
             // Mark invite link used
-            console.log('[invite-reg] marking invite_links used — inviteLinkId:', inviteLinkId, 'newUserId:', newUserId)
             if (inviteLinkId) {
               const dbAdmin = supabaseAdmin || supabase
               const { error: markUsedErr } = await dbAdmin.from('invite_links').update({ used_at: new Date().toISOString(), used_by: newUserId, is_active: false })
                 .eq('secret', inviteLinkId)
               if (markUsedErr) console.error('[invite-reg] invite_links mark-used FAILED:', markUsedErr.message, markUsedErr)
-              else console.log('[invite-reg] invite_links marked as used')
             }
 
             window.__taksyn_registering = false
@@ -1291,9 +1280,6 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
 
   // ── Dedicated invite registration page ──
   if (inviteParams && mode === 'register') {
-    console.log('[invite-reg] window.location.search:', window.location.search)
-    console.log('[invite-reg] _sp.get("orgname"):', new URLSearchParams(window.location.search).get('orgname'))
-    console.log('[invite-reg] inviteParams.orgName:', inviteParams.orgName)
     const hasName = !!(inviteParams.name || name)
     const hasEmail = !!(inviteParams.email || email)
     const canSubmit = !loading && password.length >= 6 && password === confirmPassword && agreeChecked && !!(inviteParams.orgName || inviteParams.orgId) && hasName && hasEmail
@@ -4510,8 +4496,6 @@ function UsersView({ user, setAuditLog }) {
       const inviteUrl = await buildInviteUrl(linkOrgId)
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
       const invitePayload = { email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, orgId: linkOrgId, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl }
-      console.log('[invite-user] payload:', invitePayload)
-      console.log('[invite-user] secret:', import.meta.env.VITE_INVITE_SECRET || '')
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
@@ -5531,8 +5515,6 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       }
 
       const invitePayload = { email:inviteEmail.trim(), name:fullName, role:'client_admin', org:showInvite.name, orgId:showInvite.id, industry:firstIndustry, positions:rolesSummary, secret:inviteSecret }
-      console.log('[invite-user] payload:', invitePayload)
-      console.log('[invite-user] secret:', inviteSecret)
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
@@ -9339,12 +9321,8 @@ function TeamsView({ user }) {
         created_at: new Date().toISOString(),
         read: false
       }
-      console.log('[team-notif] supabaseAdmin available:', !!supabaseAdmin)
-      console.log('[team-notif] inserting payload:', notifPayload)
       ;(supabaseAdmin || supabase).from('user_notifications').insert(notifPayload)
-        .then(({data:notifData, error:notifErr})=>{
-          console.log('[team-notif] insert response — data:', notifData, '| error:', notifErr)
-        })
+        .then(({error:notifErr})=>{ if(notifErr) console.error('[team-notif] notification insert failed:', notifErr.message) })
     }
     // Reload members from DB so newly-added members have their DB id for future removals
     const fresh = await loadTeamMembers(selectedTeam.id)
