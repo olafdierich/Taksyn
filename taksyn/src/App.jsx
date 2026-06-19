@@ -4406,9 +4406,9 @@ function UsersView({ user, setAuditLog }) {
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
     const addedPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
     setOrgAssignments(prev=>({...prev, [id]: [{role:editForm.role, industry:editForm.industry||'', position:editForm.position||''}, ...(prev[id]||[]).slice(1), ...addedPositions]}))
-    if (editRoster.length > 0 && isConfigured()) {
+    if (isConfigured()) {
       const db = supabaseAdmin || supabase
-      db.from('user_notifications').insert({ user_id: id, title: 'Your roster has been updated', message: `Your roster has been updated by ${user.name}. Please check your schedule.`, org: orgId || user.org, read: false, created_at: new Date().toISOString() }).then(({error:ne})=>{ if(ne) console.error('[roster-notif]', ne.message) })
+      db.from('user_notifications').insert({ user_id: id, title: 'Your roster has been updated', message: `Your roster has been updated by ${user.name}. Please check your schedule.`, org: workforceOrgId || orgId || user.org, read: false, created_at: new Date().toISOString() }).then(({error:ne})=>{ if(ne) console.error('[roster-notif]', ne.message) })
     }
     if (setAuditLog) {
       const oldRole = orgAssignments[id]?.[0]?.role || realUsers.find(u=>u.id===id)?.role
@@ -4436,13 +4436,8 @@ function UsersView({ user, setAuditLog }) {
     if (isConfigured()) {
       const { error } = await supabase.from('profiles').update({ roster: rosterOnlyData, regularly_rostered: rosterOnlyRegRostered }).eq('id', rosterOnlyUser.id)
       if (error) { alert('Failed to save roster: ' + error.message); setRosterOnlySaving(false); return }
-      let rosterOrgId = orgsList.find(o=>o.name===user.org)?.id
-      if (!rosterOrgId) {
-        const { data: orgRow } = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
-        rosterOrgId = orgRow?.id
-      }
       const db = supabaseAdmin || supabase
-      db.from('user_notifications').insert({ user_id: rosterOnlyUser.id, title: 'Your roster has been updated', message: `Your roster has been updated by ${user.name}. Please check your schedule.`, org: rosterOrgId || user.org, read: false, created_at: new Date().toISOString() }).then(({error:ne})=>{ if(ne) console.error('[roster-notif]', ne.message) })
+      db.from('user_notifications').insert({ user_id: rosterOnlyUser.id, title: 'Your roster has been updated', message: `Your roster has been updated by ${user.name}. Please check your schedule.`, org: workforceOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org, read: false, created_at: new Date().toISOString() }).then(({error:ne})=>{ if(ne) console.error('[roster-notif]', ne.message) })
     }
     setRosterOnlyUser(null)
     setRosterOnlyData([])
