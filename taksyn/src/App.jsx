@@ -802,9 +802,11 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
     phone:     _sp.get('phone')     || null,
     linkId:    _sp.get('link')      || null,
     teamId:    _sp.get('team')      || null,
+    orgName:   _sp.get('orgname')   || '',
   } : null)
 
   const [mode, setMode] = useState(_isInvite ? 'register' : 'login')
+  const [registrationComplete, setRegistrationComplete] = useState(false)
   const [email, setEmail] = useState(_isInvite && _sp.get('email') ? _sp.get('email') : '')
   const [password, setPassword] = useState('')
   const [name, setName] = useState(_isInvite ? ([_sp.get('firstname'), _sp.get('lastname')].filter(Boolean).join(' ') || _sp.get('name') || '') : '')
@@ -830,7 +832,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   // Invite params: set immediately from URL, names resolved async
   const [inviteParams, setInviteParams] = useState(_isInvite ? {
     orgId: _sp.get('org')||'',
-    orgName: null,   // filled in async
+    orgName: _sp.get('orgname')||null,
     teamId: _sp.get('team')||null,
     teamName: null,  // filled in async
     role: _sp.get('role')||'worker',
@@ -901,14 +903,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             }
           }).catch(()=>{})
       }
-      Promise.all([
-        supabase.from('organisations').select('id,name').eq('id', orgId).single(),
-        teamId ? supabase.from('teams').select('id,name').eq('id', teamId).single() : Promise.resolve({data:null})
-      ]).then(([{data:orgData}, {data:teamData}])=>{
-        setInviteParams(prev => prev ? {...prev, orgName:orgData?.name||orgId, teamName:teamData?.name||null} : prev)
-      }).catch(()=>{
-        setInviteParams(prev => prev ? {...prev, orgName:orgId} : prev)
-      })
+      if (teamId) {
+        supabase.from('teams').select('id,name').eq('id', teamId).single()
+          .then(({data:teamData})=>{
+            setInviteParams(prev => prev ? {...prev, teamName:teamData?.name||null} : prev)
+          }).catch(()=>{})
+      }
       window.history.replaceState(null, '', window.location.pathname)
     }
 
@@ -1119,31 +1119,19 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             // Mark invite link used
             console.log('[invite-reg] marking invite_links used — inviteLinkId:', inviteLinkId, 'newUserId:', newUserId)
             if (inviteLinkId) {
-              const { error: markUsedErr } = await supabase.from('invite_links').update({ used_at: new Date().toISOString(), used_by: newUserId, is_active: false })
+              const dbAdmin = supabaseAdmin || supabase
+              const { error: markUsedErr } = await dbAdmin.from('invite_links').update({ used_at: new Date().toISOString(), used_by: newUserId, is_active: false })
                 .eq('secret', inviteLinkId)
               if (markUsedErr) console.error('[invite-reg] invite_links mark-used FAILED:', markUsedErr.message, markUsedErr)
               else console.log('[invite-reg] invite_links marked as used')
             }
 
-            // Auto sign-in
-            try {
-              await new Promise(resolve => setTimeout(resolve, 500))
-              const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
-              if (!signInErr && signInData?.user) {
-                const { data: profile } = await supabase.from('profiles').select('id,name,email,org,role,position,avatar_url,phone').eq('id', signInData.user.id).single()
-                if (profile) {
-                  window.__taksyn_invite_registration = false
-                  onAuth({...profile, email: signInData.user.email})
-                  return
-                }
-              }
-              setSuccess('Account created. Please sign in with your new password.')
-              setLoading(false)
-              setTimeout(()=>{ setInviteParams(null); setMode('login'); setSuccess(''); setPassword(''); setConfirmPassword(''); setAgreeChecked(false) }, 2500)
-              return
-            } finally {
-              window.__taksyn_registering = false
-            }
+            window.__taksyn_registering = false
+            window.__taksyn_invite_registration = false
+            await supabase.auth.signOut()
+            setRegistrationComplete(true)
+            setLoading(false)
+            return
           }
         } else {
           if (!org.trim()) { setError('Please enter your organisation name'); setLoading(false); return }
@@ -1279,11 +1267,27 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
     <div className="auth-bg"><style>{CSS}</style><TermsOfUseView onBack={()=>setShowTerms(false)}/></div>
   )
 
+  // ── Registration success screen ──
+  if (registrationComplete) {
+    return (
+      <div className="auth-bg">
+        <style>{CSS}</style>
+        <div className="auth-card" style={{textAlign:'center',padding:'40px 32px'}}>
+          <div style={{fontSize:48,marginBottom:16}}>🎉</div>
+          <div style={{fontSize:20,fontWeight:700,color:'var(--text)',marginBottom:10}}>Welcome to Taksyn!</div>
+          <div style={{fontSize:15,color:'var(--text)',marginBottom:6}}>Your account has been set up successfully.</div>
+          <div style={{fontSize:14,color:'var(--t2)',marginBottom:28}}>Please sign in to continue.</div>
+          <button className="auth-btn" onClick={()=>{ setRegistrationComplete(false); setInviteParams(null); setMode('login'); setPassword(''); setConfirmPassword(''); setAgreeChecked(false) }}>Sign In</button>
+        </div>
+      </div>
+    )
+  }
+
   // ── Dedicated invite registration page ──
   if (inviteParams && mode === 'register') {
     const hasName = !!(inviteParams.name || name)
     const hasEmail = !!(inviteParams.email || email)
-    const canSubmit = !loading && password.length >= 6 && password === confirmPassword && agreeChecked && !!inviteParams.orgName && hasName && hasEmail
+    const canSubmit = !loading && password.length >= 6 && password === confirmPassword && agreeChecked && !!(inviteParams.orgName || inviteParams.orgId) && hasName && hasEmail
     return (
       <div className="auth-bg">
         <style>{CSS}</style>
@@ -4444,6 +4448,7 @@ function UsersView({ user, setAuditLog }) {
       const params = new URLSearchParams({
         invite: 'true',
         org: orgId,
+        orgname: targetOrg,
         firstname: inviteFirstName.trim(),
         lastname: inviteLastName.trim(),
         email: inviteEmail.trim(),
@@ -5489,7 +5494,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             invited_industry: firstIndustry||null
           })
         } catch(err) { console.error('Invite link insert error:', err) }
-        const params = new URLSearchParams({ invite:'true', org:showInvite.id, firstname:inviteFirstName.trim(), lastname:inviteLastName.trim(), email:inviteEmail.trim(), phone:invitePhone.trim(), role:'client_admin', secret:'taksyn-secret-2024', link:linkId })
+        const params = new URLSearchParams({ invite:'true', org:showInvite.id, orgname:showInvite.name, firstname:inviteFirstName.trim(), lastname:inviteLastName.trim(), email:inviteEmail.trim(), phone:invitePhone.trim(), role:'client_admin', secret:'taksyn-secret-2024', link:linkId })
         const inviteUrl = window.location.origin + window.location.pathname + '?' + params.toString()
         const msg = encodeURIComponent(`Hi ${inviteFirstName.trim()}, ${showInvite.name} has invited you to join Taksyn as Client Admin. Tap the link to set up your account: ${inviteUrl}`)
         window.open('https://wa.me/?text='+msg, '_blank')
