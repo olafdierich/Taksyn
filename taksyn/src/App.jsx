@@ -4674,7 +4674,7 @@ function UsersView({ user, setAuditLog }) {
               </div>
               <div className="two-col">
                 <div className="form-field">
-                  <label className="form-label">Permission Level</label>
+                  <label className="form-label">Role</label>
                   <select className="form-input" value={editForm.role||'worker'} onChange={e=>setEditForm({...editForm,role:e.target.value})}>
                     {getInvitableRoles(user.role).map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
@@ -4688,12 +4688,12 @@ function UsersView({ user, setAuditLog }) {
                 </div>
               </div>
               <div className="form-field">
-                <label className="form-label">Job Title</label>
+                <label className="form-label">Position</label>
                 <select className="form-input" value={editForm.position||''} onChange={e=>setEditForm({...editForm,position:e.target.value})}>
-                  <option value="">— Select Job Title —</option>
+                  <option value="">— Select Position —</option>
                   {getPositionsForIndustry(editForm.industry||'', editForm.role||'worker', orgCustomPositions, orgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
-                <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Permission level, industry and job title are saved per-organisation</div>
+                <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Role, industry and position are saved per-organisation</div>
               </div>
               {editPositions.length>0&&(
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:10,marginBottom:6}}>
@@ -5021,7 +5021,7 @@ function UsersView({ user, setAuditLog }) {
                       : orgAssignments[u.id]?.[0] || {}
                     setEditingUser(u)
                     setEditingOrgId(orgId)
-                    setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||'', position:a.position||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
+                    setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||u.industry||'', position:a.position||u.position||u.orgPosition||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
                     setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster,regularly_rostered').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs); setEditForm(prev=>({...prev,regularly_rostered:!!apData.regularly_rostered})) } catch(e) {} })()
                   }}>✏️ Edit</button>}
                   {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deactivateUser(u.id)}>Deactivate</button>}
