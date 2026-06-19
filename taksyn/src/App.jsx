@@ -4676,21 +4676,12 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{marginTop:6}}>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={async()=>{
                       const email = editForm.email.trim()
-                      if (!window.confirm('Resend invite to '+email+'?')) return
+                      if (!window.confirm('Send password reset email to '+email+'?')) return
                       setResendInviteMsg('')
                       try {
-                        const targetOrg = user.org
-                        const orgEntry = orgsList.find(o=>o.name===targetOrg)
-                        const orgId = workforceOrgId || orgEntry?.id || ''
-                        const linkId = 'IL'+Date.now()+Math.random().toString(36).slice(2,5)
-                        await (supabaseAdmin||supabase).from('invite_links').insert({ organisation_id: orgId, role: editForm.role||'worker', secret: linkId, created_by: user.id, created_at: new Date().toISOString(), expires_at: new Date(Date.now()+7*24*60*60*1000).toISOString(), is_active: true, invited_name: editForm.name||'', invited_email: email, invited_role: editForm.role||'worker', invited_position: editForm.position||null, invited_industry: editForm.industry||null })
-                        const params = new URLSearchParams({ invite:'true', org:orgId, orgname:targetOrg, firstname:editForm.first_name||'', lastname:editForm.last_name||'', email, role:editForm.role||'worker', position:editForm.position||'', industry:editForm.industry||'', secret:'taksyn-secret-2024', link:linkId })
-                        const inviteUrl = window.location.origin+window.location.pathname+'?'+params.toString()
-                        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
-                        const res = await fetch(supabaseUrl+'/functions/v1/invite-user', { method:'POST', headers:{'Content-Type':'application/json','Authorization': await getEdgeFunctionAuthHeader()}, body: JSON.stringify({ email, name:editForm.name||email, role:editForm.role||'worker', org:targetOrg, orgId, industry:editForm.industry||'', positions:'', secret:import.meta.env.VITE_INVITE_SECRET||'', inviteUrl }) })
-                        const result = await res.json()
-                        if (!res.ok) throw new Error(result.error||result.message||'Failed ('+res.status+')')
-                        setResendInviteMsg('Invite resent to '+email)
+                        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+                        if (error) throw error
+                        setResendInviteMsg('Password reset email sent to '+email)
                         setTimeout(()=>setResendInviteMsg(''),4000)
                       } catch(e) {
                         setResendInviteMsg('Error: '+e.message)
