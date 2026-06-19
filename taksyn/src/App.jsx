@@ -1513,7 +1513,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   )
 }
 
-function visibleTasks(tasks, user, leaveRecords=[]) {
+function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
   // Super admin sees NO task content — privacy/confidentiality
   if (user.role==='super_admin') return []
 
@@ -1547,7 +1547,8 @@ function visibleTasks(tasks, user, leaveRecords=[]) {
     const myTasks = orgTasks.filter(t =>
       t.assigned_user_id===user.id ||
       t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase() ||
-      (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='worker')
+      (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='worker') ||
+      (t.team_id && userTeamIds.includes(t.team_id))
     )
     // Add tasks of people being covered
     const coverTasks = coveringFor.length>0 ? orgTasks.filter(t=>
@@ -1942,7 +1943,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[] })
+  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'' })
   const [selectedTplId, setSelectedTplId] = useState('')
   const [taskGlobalIndustries, setTaskGlobalIndustries] = useState([])
   const [taskOrgIndustries, setTaskOrgIndustries] = useState([])
@@ -1965,6 +1966,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [taskOrgCustomRoles, setTaskOrgCustomRoles] = useState([])
   const [checklistMode, setChecklistMode] = useState('scratch')
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [taskOrgTeams, setTaskOrgTeams] = useState([]) // teams for the create-task selector
+  const [taskTeamMembers, setTaskTeamMembers] = useState([]) // members of the selected team
+  const [userTeamIds, setUserTeamIds] = useState([]) // team IDs the logged-in user belongs to
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
@@ -2010,6 +2014,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     }
   },[user.org])
   useEffect(()=>{ if(isConfigured()&&user.role==='super_admin') supabase.from('organisations').select('name,status').eq('status','active').order('name').then(({data})=>{ if(data) setOrgsList(data.map(o=>o.name)) }) },[])
+
+  // Load org teams for task creation and current user's team memberships
+  useEffect(()=>{
+    if(!isConfigured()||!user.org||user.role==='super_admin') return
+    ;(async()=>{
+      const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+      const orgId = orgRow?.id; if(!orgId) return
+      const {data:teams} = await supabase.from('teams').select('id,name').eq('org',orgId).order('name')
+      if(teams) setTaskOrgTeams(teams)
+      const {data:myMemberships} = await supabase.from('team_members').select('team_id').eq('user_id',user.id)
+      if(myMemberships) setUserTeamIds(myMemberships.map(m=>m.team_id))
+    })().catch(()=>{})
+  },[user.org])
   useEffect(()=>{
     if(!isConfigured()) return
     supabase.from('global_industries').select('name').order('name')
@@ -2032,7 +2049,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
 
   const taskAllIndustries = [...(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES), ...taskOrgIndustries.filter(d=>!(taskGlobalIndustries.length?taskGlobalIndustries:PRESET_INDUSTRIES).includes(d))]
 
-  const visible = visibleTasks(tasks, user, leaveRecords)
+  const visible = visibleTasks(tasks, user, leaveRecords, userTeamIds)
   // Super admin: filter by selected org
   const orgFiltered = user.role==='super_admin' && selectedOrg!=='all'
     ? visible.filter(t=>t.org===selectedOrg)
@@ -2318,6 +2335,23 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       }
       const saved = { ...data, subtasks:parseSafe(data.subtasks), evidence:parseSafe(data.evidence), comments:parseSafe(data.comments,[]) }
       setTasks(prev=>[...prev,saved])
+      // Send notifications to all team members when a team task is created
+      if (t.team_id) {
+        supabase.from('team_members').select('user_id').eq('team_id', t.team_id)
+          .then(({data:members})=>{
+            if(!members?.length) return
+            const db = supabaseAdmin || supabase
+            const notifs = members.map(m=>({
+              user_id: m.user_id,
+              title: 'New team task assigned',
+              message: `${t.title} has been assigned to your team`,
+              org: t.org,
+              created_at: new Date().toISOString(),
+              read: false
+            }))
+            db.from('user_notifications').insert(notifs).then(()=>{}).catch(()=>{})
+          }).catch(()=>{})
+      }
     } else {
       setTasks(prev=>[...prev,t])
     }
@@ -2331,7 +2365,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     setChecklistMode('scratch')
     setPendingDelete(null)
     setCreateError('')
-    setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[]})
+    setTaskTeamMembers([])
+    setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[],team_id:'',team_name:''})
     setCreating(false)
   }
 
@@ -2467,16 +2502,39 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
               <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={newTask.due_date} onChange={e=>setNewTask({...newTask,due_date:e.target.value})}/></div>
-              <div className="form-field"><label className="form-label">Assign To</label>
-                {teamUsers.length>0 ? (
+              {taskOrgTeams.length>0&&(
+                <div className="form-field">
+                  <label className="form-label">Assign to Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
+                  <select className="form-select" value={newTask.team_id} onChange={e=>{
+                    const team = taskOrgTeams.find(t=>t.id===e.target.value)
+                    setNewTask(prev=>({...prev,team_id:team?.id||'',team_name:team?.name||'',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}))
+                    setTaskTeamMembers([])
+                    if(team?.id && isConfigured()) {
+                      supabase.from('team_members').select('user_id,user_name,role').eq('team_id',team.id)
+                        .then(({data:tms})=>{
+                          if(!tms?.length) return
+                          const ids=tms.map(m=>m.user_id)
+                          supabase.from('profiles').select('id,name,email,role,position').in('id',ids)
+                            .then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{})
+                        }).catch(()=>{})
+                    }
+                  }}>
+                    <option value="">— No team —</option>
+                    {taskOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  {newTask.team_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>📋 Task will be visible to all members of {newTask.team_name}</div>}
+                </div>
+              )}
+              <div className="form-field"><label className="form-label">Assign To {newTask.team_id&&<span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— pick from team or leave blank for all team members</span>}</label>
+                {(newTask.team_id ? taskTeamMembers : teamUsers).length>0 ? (
                   <div>
-                    <input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>
-                    <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
+                    {!newTask.team_id&&<input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>}
+                    <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const pool=newTask.team_id?taskTeamMembers:teamUsers; const u=pool.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
                       <option value="">— Select a staff member —</option>
-                      {teamUsers.filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position)&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
+                      {(newTask.team_id?taskTeamMembers:teamUsers).filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position||newTask.team_id)&&(!userSearch||newTask.team_id||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
                     </select>
                     {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
-                    {teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
+                    {!newTask.team_id&&teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
                   </div>
                 ) : (
                   <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
@@ -2552,7 +2610,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               {createError&&<div style={{color:'var(--red)',fontSize:12,marginBottom:6,padding:'6px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6}}>{createError}</div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null); setCreateError('') }}>Cancel</button>
-                <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id)} onClick={createTask}>{creating?'Creating…':'Submit Task'}</button>
+                <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id&&!newTask.team_id)} onClick={createTask}>{creating?'Creating…':'Submit Task'}</button>
               </div>
             </div>
           </div>
