@@ -820,6 +820,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   const [success, setSuccess] = useState('')
   const [orgChoices, setOrgChoices] = useState(null)
   const [showPw, setShowPw] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [showPw1, setShowPw1] = useState(false)
   const [pendingAuthUser, setPendingAuthUser] = useState(null)
   const [inviteToken, setInviteToken] = useState(null)
@@ -1365,7 +1366,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               </div>
               <div className="auth-field">
                 <label className="auth-label">Confirm Password</label>
-                <input className="auth-input" type="password" placeholder="Repeat your password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&canSubmit&&handleSubmit()}/>
+                <div style={{position:'relative'}}><input className="auth-input" type={showConfirmPw?'text':'password'} placeholder="Repeat your password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&canSubmit&&handleSubmit()} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowConfirmPw(!showConfirmPw)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showConfirmPw?'👁':'🔒'}</button></div>
                 {password&&confirmPassword&&password!==confirmPassword&&<div style={{fontSize:11,color:'var(--red)',marginTop:4}}>Passwords do not match</div>}
               </div>
               {/* Agree checkbox */}
