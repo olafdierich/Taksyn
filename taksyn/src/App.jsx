@@ -2530,7 +2530,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   <div>
                     {!newTask.team_id&&<input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>}
                     <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const pool=newTask.team_id?taskTeamMembers:teamUsers; const u=pool.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
-                      <option value="">— Select a staff member —</option>
+                      <option value="">{newTask.team_id ? '— All team members —' : '— Select a staff member —'}</option>
                       {(newTask.team_id?taskTeamMembers:teamUsers).filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position||newTask.team_id)&&(!userSearch||newTask.team_id||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
                     </select>
                     {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
