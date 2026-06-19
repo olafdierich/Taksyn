@@ -9331,7 +9331,7 @@ function TeamsView({ user }) {
     if(isConfigured()) {
       const {error} = await supabase.from('team_members').insert(entry)
       if(error) { alert('Failed to add member: '+error.message); return }
-      supabase.from('user_notifications').insert({
+      ;(supabaseAdmin || supabase).from('user_notifications').insert({
         user_id: u.id,
         title: "You've been added to a team",
         message: `You have been added to ${selectedTeam.name} by ${user.name}`,
