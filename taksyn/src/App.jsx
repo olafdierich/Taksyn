@@ -11531,17 +11531,17 @@ export default function App() {
 
   const markNotifRead = (id) => {
     setNotifications(prev=>prev.map(n=>n.id===id?{...n,read:true}:n))
-    // if(isConfigured()) supabase.from('user_notifications').update({read:true}).eq('id',id)
+    if(isConfigured()) supabase.from('user_notifications').update({read:true}).eq('id',id).then(()=>{}).catch(()=>{})
   }
 
   const deleteNotif = (id) => {
     setNotifications(prev=>prev.filter(n=>n.id!==id))
-    // if(isConfigured()) supabase.from('user_notifications').delete().eq('id',id)
+    if(isConfigured()) supabase.from('user_notifications').delete().eq('id',id).then(()=>{}).catch(()=>{})
   }
 
   const clearAllNotifs = () => {
     setNotifications([])
-    // if(isConfigured()) supabase.from('user_notifications').delete().eq('user_id',user?.id)
+    if(isConfigured()&&user?.id) supabase.from('user_notifications').delete().eq('user_id',user.id).then(()=>{}).catch(()=>{})
   }
 
   const saveNotifPrefs = (prefs) => {
@@ -11829,8 +11829,14 @@ export default function App() {
       loadTasks()
       if(user.role==='super_admin') loadTickets()
       // Load persisted notifications from Supabase
-      // user_notifications table not yet created — disabled
-      // supabase.from('user_notifications').select('*').eq('user_id',user.id).order('at',{ascending:false}).limit(50)
+      supabase.from('user_notifications').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).limit(50)
+        .then(({data})=>{
+          if(data?.length) {
+            const mapped = data.map(n=>({ id:n.id, title:n.title, body:n.message, at:n.created_at, read:n.read||false, type:n.type||'info', org:n.org }))
+            setNotifications(mapped)
+            notifIdsRef.current = new Set(mapped.map(n=>n.id))
+          }
+        }).catch(()=>{})
       // Load org SLA settings
       if(isConfigured()&&user.org) {
         supabase.from('organisations').select('sla_settings,auto_logout_minutes').eq('name',user.org).maybeSingle()
