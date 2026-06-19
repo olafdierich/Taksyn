@@ -9326,6 +9326,14 @@ function TeamsView({ user }) {
     if(isConfigured()) {
       const {error} = await supabase.from('team_members').insert(entry)
       if(error) { alert('Failed to add member: '+error.message); return }
+      supabase.from('user_notifications').insert({
+        user_id: u.id,
+        title: "You've been added to a team",
+        message: `You have been added to ${selectedTeam.name} by ${user.name}`,
+        org: orgId || user.org,
+        created_at: new Date().toISOString(),
+        is_read: false
+      }).then(({error:notifErr})=>{ if(notifErr) console.error('[team] notification insert failed:', notifErr.message) })
     }
     // Optimistic update — append immediately with data we already have
     const newMember = {...entry, profile:{id:u.id, name:u.name, role:u.role, position:u.position||''}}
