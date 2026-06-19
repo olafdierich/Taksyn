@@ -9332,7 +9332,7 @@ function TeamsView({ user }) {
         message: `You have been added to ${selectedTeam.name} by ${user.name}`,
         org: orgId || user.org,
         created_at: new Date().toISOString(),
-        is_read: false
+        read: false
       }).then(({error:notifErr})=>{ if(notifErr) console.error('[team] notification insert failed:', notifErr.message) })
     }
     // Optimistic update — append immediately with data we already have
