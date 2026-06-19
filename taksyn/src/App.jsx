@@ -2750,12 +2750,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                             <span style={{fontSize:10,color:'var(--t3)'}} title="Timestamp will be recorded on completion">🕐</span>
                           )}
                           {todayCount>0&&(
-                            <span style={{fontSize:10,fontWeight:700,color:'#10B981',background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.25)',borderRadius:10,padding:'1px 7px',cursor:'pointer'}} onClick={()=>setClExpanded(prev=>{ const n=new Set(prev); n.has(isExpandedKey)?n.delete(isExpandedKey):n.add(isExpandedKey); return n })}>
-                              {todayCount}× today {isHistExpanded?'▲':'▼'}
+                            <span style={{fontSize:10,fontWeight:700,color:'#10B981',background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.25)',borderRadius:10,padding:'1px 7px'}}>
+                              {todayCount}× today
                             </span>
                           )}
                         </div>
-                        {isHistExpanded&&(
+                        {todayCount>0&&(
                           <div style={{marginTop:4,borderLeft:'2px solid rgba(16,185,129,.3)',paddingLeft:8}}>
                             {todayRows.map((r,ri)=>(
                               <div key={r.id||ri} style={{fontSize:11,color:'var(--t2)',marginBottom:2}}>
