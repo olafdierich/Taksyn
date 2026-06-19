@@ -788,6 +788,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   // Parse URL params once synchronously so initial state is correct — avoids the login→register flash
   const _sp = new URLSearchParams(window.location.search)
   const _isInvite = _sp.get('invite')==='true' && _sp.get('secret')==='taksyn-secret-2024'
+  if (_isInvite) console.log('[invite-init] _sp.get("orgname"):', _sp.get('orgname'), '| full search:', window.location.search)
 
   // Capture all invite URL params in a ref on first render, before useEffect clears the URL.
   // useRef persists across re-renders so handleSubmit always reads the original values.
@@ -1285,6 +1286,9 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
 
   // ── Dedicated invite registration page ──
   if (inviteParams && mode === 'register') {
+    console.log('[invite-reg] window.location.search:', window.location.search)
+    console.log('[invite-reg] _sp.get("orgname"):', new URLSearchParams(window.location.search).get('orgname'))
+    console.log('[invite-reg] inviteParams.orgName:', inviteParams.orgName)
     const hasName = !!(inviteParams.name || name)
     const hasEmail = !!(inviteParams.email || email)
     const canSubmit = !loading && password.length >= 6 && password === confirmPassword && agreeChecked && !!(inviteParams.orgName || inviteParams.orgId) && hasName && hasEmail
