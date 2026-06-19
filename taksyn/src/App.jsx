@@ -4207,19 +4207,55 @@ function UsersView({ user, setAuditLog }) {
     })().catch(()=>{})
   },[user.org])
 
-  const deactivateUser = async (id) => {
-    const target = realUsers.find(u=>u.id===id)
-    if (!confirm(`Are you sure you want to deactivate ${target?.name||'this member'}? They will no longer be able to access the system.`)) return
-    if (isConfigured()) {
-      const userOrgId = workforceOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org
-      const { error } = await supabase.from('org_members').update({ is_active: false, deactivated_at: new Date().toISOString() }).eq('user_id', id).eq('org', userOrgId)
-      if (error) { alert('Failed to deactivate: ' + error.message); return }
+  const refreshWorkforce = async () => {
+    if (!isConfigured() || !user.org || user.role === 'super_admin') return
+    try {
+      let orgId = workforceOrgId
+      if (!orgId) {
+        const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+        orgId = orgRow?.id
+      }
+      if (!orgId) return
+      let {data:assignments, error:assignErr} = await supabase.from('org_members').select('user_id, role, position, industry, is_active, deactivated_at').eq('org', orgId)
+      if (assignErr) {
+        const fb = await supabase.from('org_members').select('user_id, role, position, industry').eq('org', orgId)
+        assignments = fb.data
+      }
+      if (assignments?.length) {
+        const activeAssignments = assignments.filter(a => a.is_active == null || a.is_active !== false)
+        const activeMemberIds = activeAssignments.map(a => a.user_id)
+        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', activeMemberIds)
+        const workforceMembers = (profileData || []).filter(p => p.role !== 'super_admin')
+        setRealUsers(workforceMembers)
+        const map = {}
+        for (const a of activeAssignments) { if (!map[a.user_id]) map[a.user_id] = []; map[a.user_id].push(a) }
+        setOrgAssignments(map)
+      } else {
+        setRealUsers([])
+        setOrgAssignments({})
+      }
+    } catch(e) {
+      console.error('[refreshWorkforce] failed:', e)
     }
+  }
+
+  const deactivateUser = async (id) => {
+    const target = realUsers.find(u => u.id === id)
+    if (!confirm(`Are you sure you want to deactivate ${target?.name||'this member'}? They will no longer be able to access the system.`)) return
+    // Optimistic update
     setRealUsers(prev => prev.filter(u => u.id !== id))
-    setArchivedUsers(prev => [...prev, target])
-    const assignment = orgAssignments[id]?.[0] || {}
-    setArchiveOrgAssignments(prev => ({ ...prev, [id]: [{ ...assignment, is_active: false, deactivated_at: new Date().toISOString() }] }))
-    setOrgAssignments(prev => { const n = {...prev}; delete n[id]; return n })
+    if (isConfigured()) {
+      let userOrgId = workforceOrgId
+      if (!userOrgId) {
+        const {data:orgRow} = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
+        userOrgId = orgRow?.id || orgsList.find(o => o.name === user.org)?.id
+      }
+      if (!userOrgId) { alert('Could not resolve organisation ID — deactivation aborted.'); await refreshWorkforce(); return }
+      const db = supabaseAdmin || supabase
+      const { error } = await db.from('org_members').update({ is_active: false, deactivated_at: new Date().toISOString() }).eq('user_id', id).eq('org', userOrgId)
+      if (error) { alert('Failed to deactivate: ' + error.message); await refreshWorkforce(); return }
+    }
+    await refreshWorkforce()
   }
 
   const reactivateUser = async (id) => {
