@@ -4864,7 +4864,7 @@ function UsersView({ user, setAuditLog }) {
                 </div>
                 {invitePositions.map((row,i)=>{
                   const positions = getPositionsForIndustry(workforceOrgIndustry, row.role, orgCustomPositions, orgCustomRoles)
-                  const invitableRoles = getInvitableRoles(user.role)
+                  const invitableRoles = user.role==='client_admin' ? ['client_admin',...getInvitableRoles(user.role)] : getInvitableRoles(user.role)
                   return (
                     <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
                       <input className="form-input" style={{fontSize:11,background:'var(--s3)',cursor:'default'}} value={workforceOrgIndustry||'—'} readOnly/>
