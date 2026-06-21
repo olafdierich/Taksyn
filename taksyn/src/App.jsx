@@ -48,7 +48,7 @@ const LEAVE_COLORS = { sick_leave:'#EF4444', annual_leave:'#10B981', personal_le
 const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','monthly','quarterly','annually']
 const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' }
 const PRESET_INDUSTRIES = ['Aged Care','Disability Care','NDIS','Allied Health','Clinical','Community Services','Hospitality','Food & Beverage','Housekeeping','Mining & Resources','Oil & Gas','Construction','Engineering','Transport & Logistics','Administration','Compliance & Quality','IT & Technology','Security','Retail','Manufacturing','Project Management']
-const CLIENT_ADMIN_POSITIONS = ['Director','Regional Manager','National Manager','General Manager','CEO','Managing Director','Owner']
+const CLIENT_ADMIN_POSITIONS = ['Director','Regional Manager','National Manager','General Manager','CEO','Managing Director','Owner','Consultant']
 // Maps retired/consolidated position names to their replacement, per industry.
 // Applied in getPositionsForIndustry so stale DB entries are silently redirected.
 const CONSOLIDATED_POSITIONS = {
