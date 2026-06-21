@@ -7,9 +7,9 @@ import html2canvas from 'html2canvas'
 // Declared here (outside all components) so it is always in scope everywhere in this file.
 const pendingInviteAcceptRef = { current: null }
 
-const ROLES = ['super_admin','client_admin','manager','supervisor','worker']
+const ROLES = ['super_admin','client_admin','manager','consultant','supervisor','worker']
 const ROLE_LABELS = { super_admin:'Super Admin', client_admin:'Client Admin', manager:'Manager', consultant:'Consultant', supervisor:'Supervisor', worker:'Staff Member' }
-const ROLE_COLORS = { super_admin:'#F59E0B', client_admin:'#8B5CF6', manager:'#3B82F6', supervisor:'#10B981', worker:'#6B7280' }
+const ROLE_COLORS = { super_admin:'#F59E0B', client_admin:'#8B5CF6', manager:'#3B82F6', consultant:'#10B981', supervisor:'#10B981', worker:'#6B7280' }
 const TIERS = {
   Personal:     { color:'#6B7280', base:'$4',   perUser:'$2', users:'Max 4',    storage:'0.5GB', images:'—',     retention:'30 days',  features:['Basic task tracking','Simple checklists','Reminders'], locked:['Photo evidence','Escalation','Compliance reporting'] },
   Starter:      { color:'#3B82F6', base:'$19',  perUser:'$9', users:'1-10',     storage:'5GB',   images:'2/task',retention:'6 months', features:['Task assignment','Photo evidence','Basic reporting'], locked:['Escalation'] },
@@ -78,7 +78,7 @@ const INDUSTRY_POSITIONS = {
   'Transport & Logistics': { worker:['Driver','Forklift Operator','Warehouse Assistant','Picker Packer','Delivery Officer','Cleaner','Maintenance Officer'],                                supervisor:['Transport Supervisor','Warehouse Supervisor','Shift Supervisor'],                     manager:['Transport Manager','Logistics Manager','Warehouse Manager'] },
 }
 const getPositionsForIndustry = (industry, role, customPositions=[], customRoles=[]) => {
-  const rk = (role==='super_admin'||role==='manager') ? 'manager' : (role==='supervisor' ? 'supervisor' : (role==='client_admin' ? 'client_admin' : 'worker'))
+  const rk = (role==='super_admin'||role==='manager') ? 'manager' : ((role==='supervisor'||role==='consultant') ? 'supervisor' : (role==='client_admin' ? 'client_admin' : 'worker'))
   if (rk==='client_admin') {
     const base = customPositions.length>0 ? [...customPositions,...CLIENT_ADMIN_POSITIONS] : CLIENT_ADMIN_POSITIONS
     return [...new Set(base)]
@@ -104,7 +104,7 @@ const getInvitableRoles = (inviterRole) => {
   return idx >= 0 ? INVITE_ROLE_HIERARCHY.slice(idx + 1) : ['worker']
 }
 const DEMO_TASKS = []
-const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, supervisor:2, worker:1 }
+const ROLE_LEVEL = { super_admin:5, client_admin:4, manager:3, consultant:2, supervisor:2, worker:1 }
 // Default SLA response times in minutes
 const DEFAULT_SLA = { low:1440, medium:1440, high:1440, critical:60 } // minutes
 const SLA_LABELS = { low:'1 day', medium:'1 day', high:'1 day', critical:'1 hour' }
@@ -160,7 +160,7 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
 
     // Alert 1: Worker hasn't done task on due date — alert supervisor
     if(t.status==='pending'&&t.due_date<today&&t.assigned_role==='worker') {
-      if(['supervisor','manager','client_admin'].includes(user.role)) {
+      if(['supervisor','consultant','manager','client_admin'].includes(user.role)) {
         alerts.push({ type:'overdue_worker', task:t, msg:`Staff Member task overdue: "${t.title}" assigned to ${t.assigned_user_name||'staff member'}`, level:'red' })
       }
     }
@@ -182,7 +182,7 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
     }
 
     // Alert 4: SLA warning — review deadline approaching or breached
-    if(t.status==='awaiting_review'&&t.submitted_at&&['supervisor','manager','client_admin'].includes(user.role)) {
+    if(t.status==='awaiting_review'&&t.submitted_at&&['supervisor','consultant','manager','client_admin'].includes(user.role)) {
       const sla = getSLAStatus(t, null)
       if(sla?.status==='breached') {
         alerts.push({ type:'sla_breach', task:t, msg:`Response time exceeded: "${t.title}" — review overdue (${t.priority} priority)`, level:'red' })
@@ -214,7 +214,7 @@ const generateNotifications = (tasks, user, prevTasks=[]) => {
 
     // Task completed/submitted — notify supervisor/manager
     if(t.status==='awaiting_review' && prev?.status!=='awaiting_review') {
-      if(['supervisor','manager','client_admin'].includes(user.role) &&
+      if(['supervisor','consultant','manager','client_admin'].includes(user.role) &&
         (t.assigned_role==='worker'||t.assigned_role===user.role)) {
         notifs.push({ id:t.id+'_submitted', type:'submitted', title:'Task submitted for review', body:`"${t.title}" submitted by ${t.completed_by||t.assigned_user_name||'staff member'}`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#F59E0B' })
       }
@@ -314,7 +314,7 @@ const clearAuthCache = () => {
   localStorage.clear()
   sessionStorage.clear()
 }
-const SESSION_ROLE_TIMEOUTS = { worker:30, supervisor:60, manager:120, client_admin:240, super_admin:30 }
+const SESSION_ROLE_TIMEOUTS = { worker:30, supervisor:60, consultant:60, manager:120, client_admin:240, super_admin:30 }
 const TAKSYN_LAST_ACTIVITY_KEY = 'taksyn_last_activity'
 const parseSafe = (val, fallback=[]) => {
   if (Array.isArray(val)) return val
@@ -1538,8 +1538,8 @@ function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
     return orgTasks
   }
 
-  if (user.role==='supervisor') {
-    // Supervisors see all tasks in their org for full oversight
+  if (user.role==='supervisor'||user.role==='consultant') {
+    // Supervisors and consultants see all tasks in their org for full oversight
     return orgTasks
   }
 
@@ -1571,7 +1571,7 @@ function computeAwards(tasks) {
 }
 
 function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgSLA=DEFAULT_SLA }) {
-  const isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor', isWkr=user.role==='worker'
+  const isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor'||user.role==='consultant', isWkr=user.role==='worker'
 
   const [pendingInvites, setPendingInvites] = useState([])
   const [orgId, setOrgId] = useState(null)
@@ -2110,7 +2110,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         if(changes.status==='awaiting_review' && task) {
           const supervisors = await supabase.from('profiles').select('email,name,role').eq('org',task.org||user.org)
           if(supervisors.data) {
-            supervisors.data.filter(p=>['supervisor','manager','client_admin'].includes(p.role)&&p.email).forEach(p=>{
+            supervisors.data.filter(p=>['supervisor','consultant','manager','client_admin'].includes(p.role)&&p.email).forEach(p=>{
               sendEmailNotif(p.email, `Task submitted for review: ${task.title}`,
                 `${task.assigned_user_name||'A worker'} has submitted "${task.title}" for your review in ${task.org||user.org}. Please review it in Taksyn.`)
             })
@@ -2370,12 +2370,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     setCreating(false)
   }
 
-  const canCreate = ['client_admin','manager','supervisor'].includes(user.role)
+  const canCreate = ['client_admin','manager','supervisor','consultant'].includes(user.role)
   const canApprove = hasAccess(user.role, 2)
   // Each role can only assign to roles below them
   const assignableRoles = user.role==='client_admin' ? ['manager','supervisor','worker']
     : user.role==='manager' ? ['supervisor','worker']
-    : user.role==='supervisor' ? ['worker']
+    : (user.role==='supervisor'||user.role==='consultant') ? ['worker']
     : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
   const evidenceOpen = sel ? (sel.compliance || evidenceExpandedIds.has(sel.id) || parseSafe(sel.evidence).length > 0) : false
@@ -3197,7 +3197,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     }
 
                     // ── SUPERVISOR VIEW ───────────────────────────────
-                    if(user.role==='supervisor') {
+                    if(user.role==='supervisor'||user.role==='consultant') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
                       const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
@@ -3502,7 +3502,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const [filterProject, setFilterProject] = useState('')
 
   const isClientAdmin = ['client_admin','super_admin'].includes(user.role)
-  const isSupervisorUp = ['supervisor','manager','client_admin','super_admin'].includes(user.role)
+  const isSupervisorUp = ['supervisor','consultant','manager','client_admin','super_admin'].includes(user.role)
 
   const reportOptions = [
     ...(isSupervisorUp ? [{ value:'compliance', label:'📋 Compliance Report' }] : []),
@@ -3613,7 +3613,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const reportWithinWeekPct=pct(reportWithinWeek,filteredPt.length)
 
   // --- Worker performance stats ---
-  const workerRoles = ['worker','supervisor','manager']
+  const workerRoles = ['worker','supervisor','consultant','manager']
   const workerMap = {}
   filteredPt.forEach(t => {
     const key = t.assigned_user_name || t.assigned_user_id || 'Unassigned'
@@ -4982,7 +4982,7 @@ function UsersView({ user, setAuditLog }) {
                       {deactivatedDate&&<div style={{fontSize:10,color:'var(--t3)',marginTop:1}}>Deactivated {deactivatedDate}</div>}
                     </div>
                     <RolePill role={assignment.role||u.role}/>
-                    {['client_admin','super_admin','manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>reactivateUser(u.id)}>↩ Reactivate</button>}
+                    {['client_admin','super_admin','manager','supervisor','consultant'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>reactivateUser(u.id)}>↩ Reactivate</button>}
                     {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>🗑 Delete</button>}
                   </div>
                 )
@@ -5045,8 +5045,8 @@ function UsersView({ user, setAuditLog }) {
                     setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster,regularly_rostered,industry,position').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs); setEditForm(prev=>({...prev,regularly_rostered:!!apData.regularly_rostered,industry:prev.industry||a.industry||apData.industry||'',position:prev.position||a.position||apData.position||''})) } catch(e) {} })()
                   }}>✏️ Edit</button>}
                   {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deactivateUser(u.id)}>Deactivate</button>}
-                  {user.role==='supervisor'&&<button className="btn btn-danger btn-sm" onClick={()=>deactivateUser(u.id)}>Deactivate</button>}
-                  {['manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setRosterOnlyUser(u); setRosterOnlyData([]); setRosterOnlyRegRostered(false); (async()=>{ try { const {data,error}=await supabase.from('profiles').select('roster,regularly_rostered').eq('id',u.id).single(); if(error||!data) return; let rs=[]; try{rs=Array.isArray(data.roster)?data.roster:(JSON.parse(data.roster||'[]'))}catch(e){rs=[]}; setRosterOnlyData(rs); setRosterOnlyRegRostered(!!data.regularly_rostered) } catch(e){} })() }}>📅 Edit Roster</button>}
+                  {(user.role==='supervisor'||user.role==='consultant')&&<button className="btn btn-danger btn-sm" onClick={()=>deactivateUser(u.id)}>Deactivate</button>}
+                  {['manager','supervisor','consultant'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setRosterOnlyUser(u); setRosterOnlyData([]); setRosterOnlyRegRostered(false); (async()=>{ try { const {data,error}=await supabase.from('profiles').select('roster,regularly_rostered').eq('id',u.id).single(); if(error||!data) return; let rs=[]; try{rs=Array.isArray(data.roster)?data.roster:(JSON.parse(data.roster||'[]'))}catch(e){rs=[]}; setRosterOnlyData(rs); setRosterOnlyRegRostered(!!data.regularly_rostered) } catch(e){} })() }}>📅 Edit Roster</button>}
                 </div>
               )
               if (user.role==='super_admin') {
@@ -5194,6 +5194,7 @@ const NAV = {
   client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag']],
+  consultant:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Request','flag']],
 }
 
@@ -9593,7 +9594,7 @@ function TeamsView({ user }) {
                 <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>Members ({(selectedTeam.members||[]).length})</div>
                 <div style={{display:'flex',gap:6}}>
                   {(isCA||user.role==='manager')&&<button className="btn btn-secondary btn-sm" onClick={()=>setShowInviteLink(!showInviteLink)}>💬 Invite Link</button>}
-                  {(isCA||user.role==='manager'||user.role==='supervisor')&&<button className="btn btn-primary btn-sm" onClick={openAddMember}><IC n="plus" s={12}/> Add Member</button>}
+                  {(isCA||user.role==='manager'||user.role==='supervisor'||user.role==='consultant')&&<button className="btn btn-primary btn-sm" onClick={openAddMember}><IC n="plus" s={12}/> Add Member</button>}
                 </div>
               </div>
 
@@ -9685,7 +9686,7 @@ function TeamsView({ user }) {
                               <div style={{fontSize:11,color:'var(--t2)'}}>{m.profile?.position||m.position||'—'}{m.role_in_team?' · '+m.role_in_team:''}</div>
                             </div>
                             <span className="role-pill" style={{color:'var(--brand)',background:'var(--brand-lt)'}}>{m.profile?.position||m.position||ROLE_LABELS[m.profile?.role||m.role||'worker']}</span>
-                            {(isCA||user.role==='manager'||user.role==='supervisor')&&<button className="btn btn-danger btn-sm" onClick={()=>removeMember(m.id)}>Remove</button>}
+                            {(isCA||user.role==='manager'||user.role==='supervisor'||user.role==='consultant')&&<button className="btn btn-danger btn-sm" onClick={()=>removeMember(m.id)}>Remove</button>}
                           </div>
                         ))}
                       </div>
@@ -10255,7 +10256,7 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
     // Get all managers and supervisors in org
     const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
     const orgId = orgRow?.id || user.org
-    const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId).in('role',['manager','supervisor'])
+    const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId).in('role',['manager','supervisor','consultant'])
     if(members?.length) {
       const ids = members.map(m=>m.user_id)
       const {data:profiles} = await supabase.from('profiles').select('id,name').in('id',ids)
@@ -11170,8 +11171,9 @@ const ISSUE_STATUS_CFG = {
   resolved:    { label:'Resolved',    color:'#10B981', bg:'rgba(16,185,129,.12)' },
 }
 const ROLES_ABOVE = {
-  worker:     ['supervisor','manager','client_admin'],
+  worker:     ['supervisor','consultant','manager','client_admin'],
   supervisor: ['manager','client_admin'],
+  consultant: ['manager','client_admin'],
   manager:    ['client_admin'],
 }
 
@@ -12417,7 +12419,7 @@ export default function App() {
                 {page==='roles_departments' && ['client_admin','super_admin'].includes(user.role) && <RolesPositionsView user={user}/>}
                 {page==='platform_settings' && user.role==='super_admin' && <PlatformSettingsView user={user} sessionTimeout={sessionTimeout} setSessionTimeout={setSessionTimeout}/>}
                 {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser} darkMode={darkMode} toggleDarkMode={toggleDarkMode}/>}
-                {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
+                {page==='issue_reports' && ['worker','supervisor','consultant','manager'].includes(user.role) && <ReportIssueView user={user}/>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
               </>
