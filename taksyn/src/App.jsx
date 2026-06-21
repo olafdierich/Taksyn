@@ -282,22 +282,28 @@ const logAuditEvent = (user, action, entityType=null, entityId=null, entityName=
   // secondary log disabled — audit_log inserts handled via mkAuditEntry
 }
 
-const mkAuditEntry = (event_type, user, org, detail={}, task_id=null, task_title=null, old_value=null, new_value=null) => ({
-  id: Date.now()+'-'+Math.random().toString(36).slice(2,5),
-  event_type,
-  taskId: task_id,
-  taskTitle: task_title,
-  task_title,
-  by: user?.name||'',
-  byRole: user?.role||'',
-  org: org||user?.org||'',
-  at: new Date().toISOString(),
-  details: detail ? (typeof detail==='object' ? JSON.stringify(detail) : String(detail)) : null,
-  old_value: old_value!=null ? String(old_value) : null,
-  new_value: new_value!=null ? String(new_value) : null,
-  isIntervention: user?.role==='super_admin',
-  interventionReason: detail?.interventionReason||null,
-})
+const mkAuditEntry = (event_type, user, org, detail={}, task_id=null, task_title=null, old_value=null, new_value=null) => {
+  // The position the actor was working as at the time of the action (compliance trail).
+  const acting_position = user?.acting_position || user?.position || null
+  const _detail = (detail && typeof detail==='object') ? { ...detail } : (detail!=null ? { note: String(detail) } : {})
+  if (acting_position) _detail.acting_position = acting_position
+  return {
+    id: Date.now()+'-'+Math.random().toString(36).slice(2,5),
+    event_type,
+    taskId: task_id,
+    taskTitle: task_title,
+    task_title,
+    by: user?.name||'',
+    byRole: user?.role||'',
+    org: org||user?.org||'',
+    at: new Date().toISOString(),
+    details: Object.keys(_detail).length ? JSON.stringify(_detail) : null,
+    old_value: old_value!=null ? String(old_value) : null,
+    new_value: new_value!=null ? String(new_value) : null,
+    isIntervention: user?.role==='super_admin',
+    interventionReason: detail?.interventionReason||null,
+  }
+}
 
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
 const avatarColor = role => ROLE_COLORS[role] || '#6B7280'
@@ -8357,6 +8363,12 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
 
   const EntryRow = ({ e }) => {
     const cfg = getCfg(e.event_type)
+    // details may be a JSON blob (incl. acting_position) or a plain string
+    const parsedDetails = (() => { if(!e.details) return null; try { const o=JSON.parse(e.details); return (o&&typeof o==='object'&&!Array.isArray(o))?o:null } catch { return null } })()
+    const actingPos = parsedDetails?.acting_position || null
+    const detailText = parsedDetails
+      ? Object.entries(parsedDetails).filter(([k,v])=>k!=='acting_position'&&v!=null&&v!=='').map(([,v])=>typeof v==='object'?JSON.stringify(v):String(v)).join(' · ')
+      : e.details
     return (
       <div style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',alignItems:'flex-start',borderLeft:'3px solid '+cfg.color+'55'}}>
         <div style={{width:28,height:28,borderRadius:'50%',background:cfg.color+'18',color:cfg.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0,marginTop:1}}>{cfg.icon}</div>
@@ -8365,9 +8377,10 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
             <span style={{fontSize:12,fontWeight:700,color:cfg.color}}>{cfg.label}</span>
             {!isSA&&e.task_title&&view!=='bytask'&&<span style={{fontSize:12,color:'var(--t1)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{e.task_title}</span>}
           </div>
-          {!isSA&&e.details&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:2}}>{e.details}</div>}
+          {!isSA&&detailText&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:2}}>{detailText}</div>}
           <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
             {view!=='byperson'&&<span style={{fontSize:11,color:'var(--t2)'}}>{e.by||'—'}</span>}
+            {!isSA&&actingPos&&<span style={{fontSize:10,fontWeight:600,color:'var(--brand)',background:'var(--brand-lt,rgba(0,168,126,.1))',borderRadius:4,padding:'1px 6px'}}>as {actingPos}</span>}
             {isSA&&e.org&&<span style={{fontSize:11,color:'var(--t2)'}}>· {e.org}</span>}
             <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>{fmtTs(e.at)}</span>
           </div>
@@ -11542,6 +11555,7 @@ export default function App() {
   const [profileName, setProfileName] = useState('')
   const [profileMsg, setProfileMsg] = useState('')
   const [profileOrgIndustry, setProfileOrgIndustry] = useState('')
+  const [appointedPositions, setAppointedPositions] = useState([]) // admin-set positions for current user
   const [newEmail, setNewEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -11591,6 +11605,25 @@ export default function App() {
       .then(({data})=>{ setProfileOrgIndustry(data?.industry||'') })
       .catch(()=>{})
   },[showProfile, user?.org])
+  // Load all appointed positions (primary + admin-set additional) for the current user
+  useEffect(()=>{
+    if(!showProfile||!user?.id||!isConfigured()) { setAppointedPositions([user?.position].filter(Boolean)); return }
+    supabase.from('profiles').select('position,additional_positions').eq('id',user.id).maybeSingle()
+      .then(({data})=>{
+        let extra=[]
+        try { extra = data?.additional_positions ? (Array.isArray(data.additional_positions)?data.additional_positions:JSON.parse(data.additional_positions)) : [] } catch { extra=[] }
+        const list = [data?.position||user.position, ...extra.map(p=>p?.position)].filter(Boolean)
+        setAppointedPositions([...new Set(list)])
+      })
+      .catch(()=>{ setAppointedPositions([user?.position].filter(Boolean)) })
+  },[showProfile, user?.id])
+  // Restore the "currently working as" position from the previous session, defaulting to primary
+  useEffect(()=>{
+    if(!user?.id || user.acting_position!=null) return
+    const saved = localStorage.getItem('taksyn_acting_position_'+user.id)
+    const desired = saved || user.position || null
+    if(desired) setUser(prev=> prev ? {...prev, acting_position:desired} : prev)
+  },[user?.id, user?.position])
   const undoTimer = useRef(null)
   const idleTimer = useRef(null)
   const countdownTimer = useRef(null)
@@ -12182,6 +12215,34 @@ export default function App() {
 
                 <div className="form-field"><label className="form-label">Organisation</label><input className="form-input" value={user.org||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
                 <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={profileOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
+
+                {(() => {
+                  const positionsList = appointedPositions.length ? appointedPositions : [user.position].filter(Boolean)
+                  if(!positionsList.length) return null
+                  const current = (user.acting_position && positionsList.includes(user.acting_position)) ? user.acting_position
+                    : (user.position && positionsList.includes(user.position)) ? user.position
+                    : positionsList[0]
+                  return (
+                    <>
+                      <div className="form-field">
+                        <label className="form-label">Appointed Positions</label>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                          {positionsList.map(p=>(
+                            <span key={p} style={{fontSize:11,fontWeight:600,padding:'3px 10px',borderRadius:12,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>{p}{p===user.position&&<span style={{opacity:.7,fontWeight:400}}> · primary</span>}</span>
+                          ))}
+                        </div>
+                        <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>Set by your administrator — contact them to change your appointed positions.</div>
+                      </div>
+                      <div className="form-field">
+                        <label className="form-label">Currently working as</label>
+                        <select className="form-input" value={current} onChange={e=>{ const v=e.target.value; setUser(prev=>({...prev,acting_position:v})); if(user?.id) localStorage.setItem('taksyn_acting_position_'+user.id, v); setProfileMsg('✓ Now working as '+v) }}>
+                          {positionsList.map(p=><option key={p} value={p}>{p}</option>)}
+                        </select>
+                        <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Recorded on tasks you complete, checklist actions, and the activity log for compliance.</div>
+                      </div>
+                    </>
+                  )
+                })()}
 
                 <div style={{background:'var(--s3)',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
