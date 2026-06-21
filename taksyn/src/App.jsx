@@ -11605,17 +11605,26 @@ export default function App() {
       .then(({data})=>{ setProfileOrgIndustry(data?.industry||'') })
       .catch(()=>{})
   },[showProfile, user?.org])
-  // Load all appointed positions (primary + admin-set additional) for the current user
+  // Load all appointed positions (primary from org_members + admin-set additional) for the current user
   useEffect(()=>{
     if(!showProfile||!user?.id||!isConfigured()) { setAppointedPositions([user?.position].filter(Boolean)); return }
-    supabase.from('profiles').select('position,additional_positions').eq('id',user.id).maybeSingle()
-      .then(({data})=>{
+    ;(async()=>{
+      try {
+        // org_members.org may be stored as the org id or the org name — resolve both
+        let orgId = null
+        try { const {data:org} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); orgId = org?.id } catch {}
+        const {data:members} = await supabase.from('org_members').select('org,position').eq('user_id',user.id)
+        const memberRows = (members||[]).filter(m=>m.position)
+        const matchOrg = m => !user.org || m.org===user.org || (orgId && m.org===orgId)
+        const currentOrgPositions = memberRows.filter(matchOrg).map(m=>m.position)
+        const otherOrgPositions = memberRows.filter(m=>!matchOrg(m)).map(m=>m.position)
+        const {data:prof} = await supabase.from('profiles').select('position,additional_positions').eq('id',user.id).maybeSingle()
         let extra=[]
-        try { extra = data?.additional_positions ? (Array.isArray(data.additional_positions)?data.additional_positions:JSON.parse(data.additional_positions)) : [] } catch { extra=[] }
-        const list = [data?.position||user.position, ...extra.map(p=>p?.position)].filter(Boolean)
+        try { extra = prof?.additional_positions ? (Array.isArray(prof.additional_positions)?prof.additional_positions:JSON.parse(prof.additional_positions)) : [] } catch { extra=[] }
+        const list = [...currentOrgPositions, prof?.position||user.position, ...extra.map(p=>p?.position), ...otherOrgPositions].filter(Boolean)
         setAppointedPositions([...new Set(list)])
-      })
-      .catch(()=>{ setAppointedPositions([user?.position].filter(Boolean)) })
+      } catch { setAppointedPositions([user?.position].filter(Boolean)) }
+    })()
   },[showProfile, user?.id])
   // Restore the "currently working as" position from the previous session, defaulting to primary
   useEffect(()=>{
@@ -12219,16 +12228,15 @@ export default function App() {
                 {(() => {
                   const positionsList = appointedPositions.length ? appointedPositions : [user.position].filter(Boolean)
                   if(!positionsList.length) return null
-                  const current = (user.acting_position && positionsList.includes(user.acting_position)) ? user.acting_position
-                    : (user.position && positionsList.includes(user.position)) ? user.position
-                    : positionsList[0]
+                  const primary = positionsList[0]
+                  const current = (user.acting_position && positionsList.includes(user.acting_position)) ? user.acting_position : primary
                   return (
                     <>
                       <div className="form-field">
                         <label className="form-label">Appointed Positions</label>
                         <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
                           {positionsList.map(p=>(
-                            <span key={p} style={{fontSize:11,fontWeight:600,padding:'3px 10px',borderRadius:12,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>{p}{p===user.position&&<span style={{opacity:.7,fontWeight:400}}> · primary</span>}</span>
+                            <span key={p} style={{fontSize:11,fontWeight:600,padding:'3px 10px',borderRadius:12,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>{p}{p===primary&&<span style={{opacity:.7,fontWeight:400}}> · primary</span>}</span>
                           ))}
                         </div>
                         <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>Set by your administrator — contact them to change your appointed positions.</div>
