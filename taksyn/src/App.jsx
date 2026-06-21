@@ -8,7 +8,7 @@ import html2canvas from 'html2canvas'
 const pendingInviteAcceptRef = { current: null }
 
 const ROLES = ['super_admin','client_admin','manager','supervisor','worker']
-const ROLE_LABELS = { super_admin:'Super Admin', client_admin:'Client Admin', manager:'Manager', supervisor:'Supervisor', worker:'Staff Member' }
+const ROLE_LABELS = { super_admin:'Super Admin', client_admin:'Client Admin', manager:'Manager', consultant:'Consultant', supervisor:'Supervisor', worker:'Staff Member' }
 const ROLE_COLORS = { super_admin:'#F59E0B', client_admin:'#8B5CF6', manager:'#3B82F6', supervisor:'#10B981', worker:'#6B7280' }
 const TIERS = {
   Personal:     { color:'#6B7280', base:'$4',   perUser:'$2', users:'Max 4',    storage:'0.5GB', images:'—',     retention:'30 days',  features:['Basic task tracking','Simple checklists','Reminders'], locked:['Photo evidence','Escalation','Compliance reporting'] },
@@ -97,7 +97,7 @@ const parseTplPositions = (pos) => {
   try { const a = JSON.parse(pos); if (Array.isArray(a)) return a } catch(e) {}
   return [pos]
 }
-const INVITE_ROLE_HIERARCHY = ['client_admin','manager','supervisor','worker']
+const INVITE_ROLE_HIERARCHY = ['client_admin','manager','consultant','supervisor','worker']
 const getInvitableRoles = (inviterRole) => {
   if (inviterRole==='super_admin') return INVITE_ROLE_HIERARCHY
   const idx = INVITE_ROLE_HIERARCHY.indexOf(inviterRole)
