@@ -2356,8 +2356,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         })
         if (escErr) console.warn('escalations insert error:', escErr.message)
       }
-      // 2. One audit_log entry (camelCase columns) with action 'escalated', including the reason
-      const escEntry = mkAuditEntry('escalated', user, orgId, { reason }, task.id, task.title, null, reason)
+      // 2. One audit_log entry via the same mkAuditEntry mechanism the rest of the app uses.
+      //    event_type='escalated'; reason carried in the details JSON object. No 'action'/old_value/new_value.
+      const escEntry = mkAuditEntry('escalated', user, orgId, { reason }, task.id, task.title)
       setAuditLog(prev=>[escEntry,...prev])
       if (isConfigured()) supabase.from('audit_log').insert(escEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
       // 3. Notify the org's client_admin(s) using the same mechanism as team-add / roster notifications
