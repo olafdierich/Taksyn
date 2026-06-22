@@ -3442,6 +3442,138 @@ function EscalationsView({ tasks, setTasks, user, setAuditLog }) {
   )
 }
 
+// Client-admin escalations backed by the `escalations` table (open -> resolved -> archived).
+function OrgEscalationsView({ user, setAuditLog }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [orgId, setOrgId] = useState(null)
+  const [showArchived, setShowArchived] = useState(false)
+  const [busyId, setBusyId] = useState(null)
+
+  const fmt = (d) => d ? new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
+
+  // Auth user id from the session — the same proven source the app uses elsewhere, never the profile object.
+  const resolveAuthId = async () => {
+    let id = null
+    try { const { data: { session } } = await supabase.auth.getSession(); if (session?.user?.id) id = session.user.id } catch {}
+    if (!id) { try { const { data: { user: authUser } } = await supabase.auth.getUser(); if (authUser?.id) id = authUser.id } catch {} }
+    return id
+  }
+
+  const load = async () => {
+    if (!isConfigured()) { setRows([]); return }
+    setLoading(true)
+    try {
+      // Resolve the client_admin's org ID in ORG... format from org_members.org — never the org name.
+      let oid = orgId
+      if (!oid) {
+        const authId = await resolveAuthId()
+        if (authId) {
+          try {
+            const { data: members } = await supabase.from('org_members').select('org').eq('user_id', authId)
+            oid = (members||[]).map(m=>m.org).find(o=>o && String(o).startsWith('ORG')) || (members && members[0]?.org) || null
+          } catch {}
+        }
+        setOrgId(oid)
+      }
+      if (!oid) { setRows([]); return }
+      const { data } = await supabase.from('escalations').select('*').eq('org', oid)
+      setRows(data||[])
+    } catch { setRows([]) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(()=>{ load() },[])
+
+  const sortNewest = (a,b) => new Date(b.escalated_at||b.created_at||0) - new Date(a.escalated_at||a.created_at||0)
+
+  const markDone = async (row) => {
+    if (busyId) return
+    setBusyId(row.id)
+    try {
+      const authId = await resolveAuthId()
+      if (!authId) { alert('Could not verify your account. Please sign in again, then retry.'); return }
+      const now = new Date().toISOString()
+      const { error } = await supabase.from('escalations').update({ status:'resolved', resolved_by:authId, resolved_by_name:user.name, resolved_at:now }).eq('id', row.id)
+      if (error) { alert('Could not mark as done: '+error.message); return }
+      const rEntry = mkAuditEntry('resolved', user, row.org, { reason:row.reason, task_title:row.task_title, escalated_by_name:row.escalated_by_name }, row.task_id, row.task_title)
+      if (setAuditLog) setAuditLog(prev=>[rEntry,...prev])
+      supabase.from('audit_log').insert(rEntry).then(({error:e})=>{ if(e) console.warn('audit_log insert error:', e.message) })
+      await load()
+    } finally { setBusyId(null) }
+  }
+
+  const archive = async (row) => {
+    if (busyId) return
+    setBusyId(row.id)
+    try {
+      const { error } = await supabase.from('escalations').update({ status:'archived', archived_at:new Date().toISOString() }).eq('id', row.id)
+      if (error) { alert('Could not archive: '+error.message); return }
+      await load()
+    } finally { setBusyId(null) }
+  }
+
+  const active = rows.filter(r=>r.status==='open'||r.status==='resolved')
+    .sort((a,b)=>{ if(a.status!==b.status) return a.status==='open'?-1:1; return sortNewest(a,b) })
+  const archived = rows.filter(r=>r.status==='archived').sort(sortNewest)
+
+  return (
+    <div className="anim">
+      <div className="ph" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+        <div>
+          <div className="ph-title">{showArchived?'Archived Escalations':'Escalations'}</div>
+          <div className="ph-sub">{showArchived?archived.length+' archived':active.length+' active · '+active.filter(r=>r.status==='open').length+' open'}</div>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={()=>setShowArchived(v=>!v)}>{showArchived?'← Back to active':'🗄 Archive'}</button>
+      </div>
+      {loading ? (
+        <div className="empty"><div className="empty-text">Loading…</div></div>
+      ) : showArchived ? (
+        archived.length===0
+          ? <div className="empty"><div className="empty-icon">🗄</div><div className="empty-text">No archived escalations</div></div>
+          : archived.map(r=>(
+            <div key={r.id} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:10}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
+                <div style={{fontSize:14,fontWeight:700}}>{r.task_title||'—'}</div>
+                <span className="badge" style={{background:'var(--border)',color:'var(--t2)',flexShrink:0}}>Archived</span>
+              </div>
+              <div style={{fontSize:13,color:'var(--t1)',marginTop:6}}>{r.reason}</div>
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:8,lineHeight:1.7}}>
+                <div>Escalated by {r.escalated_by_name} ({ROLE_LABELS[r.escalated_by_role]||r.escalated_by_role}) · {fmt(r.escalated_at||r.created_at)}</div>
+                {r.resolved_by_name&&<div>Resolved by {r.resolved_by_name} · {fmt(r.resolved_at)}</div>}
+                <div>Archived · {fmt(r.archived_at)}</div>
+              </div>
+            </div>
+          ))
+      ) : (
+        active.length===0
+          ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No active escalations</div></div>
+          : active.map(r=>{
+            const isOpen = r.status==='open'
+            return (
+              <div key={r.id} style={{background:isOpen?'rgba(239,68,68,.04)':'rgba(16,185,129,.04)',border:'1px solid '+(isOpen?'rgba(239,68,68,.15)':'rgba(16,185,129,.2)'),borderRadius:10,padding:14,marginBottom:10}}>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
+                  <div style={{fontSize:14,fontWeight:700}}>{r.task_title||'—'}</div>
+                  <span className="badge" style={{background:isOpen?'rgba(239,68,68,.1)':'rgba(16,185,129,.12)',color:isOpen?'var(--red)':'var(--green)',flexShrink:0}}>{isOpen?'🚨 Open':'✓ Resolved'}</span>
+                </div>
+                <div style={{fontSize:13,color:'var(--t1)',marginTop:6}}>{r.reason}</div>
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:8,lineHeight:1.7}}>
+                  <div>Escalated by {r.escalated_by_name} ({ROLE_LABELS[r.escalated_by_role]||r.escalated_by_role}) · {fmt(r.escalated_at||r.created_at)}</div>
+                  {!isOpen&&r.resolved_by_name&&<div>Resolved by {r.resolved_by_name} · {fmt(r.resolved_at)}</div>}
+                </div>
+                <div style={{marginTop:10,display:'flex',gap:8}}>
+                  {isOpen
+                    ? <button className="btn btn-primary btn-sm" disabled={busyId===r.id} onClick={()=>markDone(r)}>{busyId===r.id?'…':'✓ Mark as done'}</button>
+                    : <button className="btn btn-secondary btn-sm" disabled={busyId===r.id} onClick={()=>archive(r)}>{busyId===r.id?'…':'🗄 Archive'}</button>}
+                </div>
+              </div>
+            )
+          })
+      )}
+    </div>
+  )
+}
+
 function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
   const relevant = tasks.filter(t=>t.evidence?.length>0||t.status==='awaiting_review')
   const approve = async (id) => {
@@ -5294,7 +5426,7 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['org_escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag']],
   worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Request','flag']],
@@ -12573,6 +12705,7 @@ export default function App() {
                 {page==='tasks'       && user.role!=='super_admin' && <TasksView {...pageProps}/>}
                 {page==='evidence'    && user.role!=='super_admin' && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
                 {page==='escalations' && user.role!=='super_admin' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
+                {page==='org_escalations' && user.role==='client_admin' && <OrgEscalationsView {...pageProps}/>}
                 {page==='reports'     && user.role!=='super_admin' && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
                 {page==='audit'       && hasAccess(user.role,2) && <AuditLogView   {...pageProps}/>}
                 {page==='orgs'        && user.role==='super_admin' && <OrganisationsView {...pageProps}/>}
