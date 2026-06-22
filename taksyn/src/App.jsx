@@ -2335,13 +2335,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     setEscalating(true)
     try {
       // escalated_by MUST be the authenticated auth.users id (uuid). Source it from the Supabase
-      // session/auth — the same proven source the app uses on session restore — never from the
-      // display/profile object, which may not carry the auth id.
+      // auth session — the same proven source the app uses on session restore — then fall back to
+      // getUser(), and finally to the stored user-state id (profiles.id === auth.users.id, used by
+      // the app's other writes). Validate it is a real uuid before inserting; never trust a value
+      // that isn't a uuid.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
       let escalatedById = null
       if (isConfigured()) {
-        try { const { data: { session } } = await supabase.auth.getSession(); escalatedById = session?.user?.id || null } catch {}
-        if (!escalatedById) { try { const { data: { user: authUser } } = await supabase.auth.getUser(); escalatedById = authUser?.id || null } catch {} }
-        if (!escalatedById) { alert('Could not verify your account. Please sign in again, then retry the escalation.'); return }
+        try { const { data: { session } } = await supabase.auth.getSession(); if (session?.user?.id) escalatedById = session.user.id } catch {}
+        if (!escalatedById) { try { const { data: { user: authUser } } = await supabase.auth.getUser(); if (authUser?.id) escalatedById = authUser.id } catch {} }
+        if (!escalatedById && UUID_RE.test(String(user?.id || ''))) escalatedById = user.id
+        if (!escalatedById || !UUID_RE.test(String(escalatedById))) {
+          alert('Could not verify your account. Please sign in again, then retry the escalation.')
+          return
+        }
       }
       // Resolve the org ID in ORG... format — never the org name
       let orgId = (task.org && String(task.org).startsWith('ORG')) ? task.org : null
