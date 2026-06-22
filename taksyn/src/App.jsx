@@ -2334,11 +2334,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     if (!task || !reason || escalating) return
     setEscalating(true)
     try {
+      // escalated_by MUST be the authenticated auth.users id (uuid). Source it from the Supabase
+      // session/auth — the same proven source the app uses on session restore — never from the
+      // display/profile object, which may not carry the auth id.
+      let escalatedById = null
+      if (isConfigured()) {
+        try { const { data: { session } } = await supabase.auth.getSession(); escalatedById = session?.user?.id || null } catch {}
+        if (!escalatedById) { try { const { data: { user: authUser } } = await supabase.auth.getUser(); escalatedById = authUser?.id || null } catch {} }
+        if (!escalatedById) { alert('Could not verify your account. Please sign in again, then retry the escalation.'); return }
+      }
       // Resolve the org ID in ORG... format — never the org name
       let orgId = (task.org && String(task.org).startsWith('ORG')) ? task.org : null
       if (!orgId && isConfigured()) {
         try {
-          const { data: members } = await supabase.from('org_members').select('org').eq('user_id', user.id)
+          const { data: members } = await supabase.from('org_members').select('org').eq('user_id', escalatedById)
           orgId = (members||[]).map(m=>m.org).find(o=>o && String(o).startsWith('ORG')) || (members&&members[0]?.org) || null
         } catch {}
       }
@@ -2350,7 +2359,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           task_title: task.title,
           org: orgId,
           reason,
-          escalated_by: user.id,
+          escalated_by: escalatedById,
           escalated_by_name: user.name,
           escalated_by_role: user.role,
         })
