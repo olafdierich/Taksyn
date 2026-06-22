@@ -1944,6 +1944,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [editTask, setEditTask] = useState({})
   const [showReject, setShowReject] = useState(null)
   const [rejectNote, setRejectNote] = useState('')
+  const [showEscalate, setShowEscalate] = useState(null)
+  const [escalateReason, setEscalateReason] = useState('')
+  const [escalating, setEscalating] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteScope, setDeleteScope] = useState('')
   const [celebration, setCelebration] = useState(false)
@@ -2324,6 +2327,64 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     setComment('')
   }
 
+  // Escalate runs alongside the review — it raises an alert and does NOT change task status.
+  const submitEscalation = async () => {
+    const task = tasks.find(t=>t.id===showEscalate)
+    const reason = escalateReason.trim()
+    if (!task || !reason || escalating) return
+    setEscalating(true)
+    try {
+      // Resolve the org ID in ORG... format — never the org name
+      let orgId = (task.org && String(task.org).startsWith('ORG')) ? task.org : null
+      if (!orgId && isConfigured()) {
+        try {
+          const { data: members } = await supabase.from('org_members').select('org').eq('user_id', user.id)
+          orgId = (members||[]).map(m=>m.org).find(o=>o && String(o).startsWith('ORG')) || (members&&members[0]?.org) || null
+        } catch {}
+      }
+      if (!orgId) orgId = task.org || user.org || ''
+      // 1. Insert one escalations row (status defaults to 'open')
+      if (isConfigured()) {
+        const { error: escErr } = await supabase.from('escalations').insert({
+          task_id: task.id,
+          task_title: task.title,
+          org: orgId,
+          reason,
+          escalated_by: user.id,
+          escalated_by_name: user.name,
+          escalated_by_role: user.role,
+        })
+        if (escErr) console.warn('escalations insert error:', escErr.message)
+      }
+      // 2. One audit_log entry (camelCase columns) with action 'escalated', including the reason
+      const escEntry = mkAuditEntry('escalated', user, orgId, { reason }, task.id, task.title, null, reason)
+      setAuditLog(prev=>[escEntry,...prev])
+      if (isConfigured()) supabase.from('audit_log').insert(escEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
+      // 3. Notify the org's client_admin(s) using the same mechanism as team-add / roster notifications
+      if (isConfigured()) {
+        try {
+          const { data: admins } = await supabase.from('org_members').select('user_id').eq('org', orgId).eq('role', 'client_admin')
+          if (admins?.length) {
+            const db = supabaseAdmin || supabase
+            const notifs = admins.map(a=>({
+              user_id: a.user_id,
+              title: 'Task escalated',
+              message: `${user.name} escalated "${task.title}" — needs your attention: ${reason}`,
+              org: orgId,
+              created_at: new Date().toISOString(),
+              read: false,
+            }))
+            db.from('user_notifications').insert(notifs).then(()=>{}).catch(()=>{})
+          }
+        } catch {}
+      }
+      // 4. Leave the task exactly as it was — close the modal only
+      setShowEscalate(null); setEscalateReason('')
+    } finally {
+      setEscalating(false)
+    }
+  }
+
   const createTask = async () => {
     if (!newTask.title.trim() || creating) return
     setCreating(true)
@@ -2469,6 +2530,22 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   update(showReject,{status:'rejected',reviewed_at:new Date().toISOString(),comments:[...parseSafe(task.comments,[]),rejectEntry]})
                   setShowReject(null); setRejectNote('')
                 }}>Reject Task</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEscalate&&(
+        <div className="modal-overlay" onClick={()=>{ if(!escalating){setShowEscalate(null);setEscalateReason('')} }}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr"><div className="modal-title">⚠️ Escalate Task</div><button className="modal-close" onClick={()=>{setShowEscalate(null);setEscalateReason('')}}>×</button></div>
+            <div className="modal-body">
+              <div style={{fontSize:13,color:'var(--t2)',marginBottom:14}}>This raises an alert to the Client Admin. It does <strong>not</strong> change the task status — you can still Approve or Send Back afterwards.</div>
+              <div className="form-field"><label className="form-label">Reason <span style={{color:'var(--red)'}}>*</span></label><textarea className="comment-box" style={{minHeight:90}} placeholder="e.g. Repair needed; risk of harm to a worker or client…" value={escalateReason} onChange={e=>setEscalateReason(e.target.value)}/></div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" disabled={escalating} onClick={()=>{setShowEscalate(null);setEscalateReason('')}}>Cancel</button>
+                <button className="btn btn-amber" disabled={!escalateReason.trim()||escalating} onClick={submitEscalation}>{escalating?'Escalating…':'⚠️ Escalate'}</button>
               </div>
             </div>
           </div>
@@ -2940,7 +3017,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           <div className="btn-row">
             {canApprove&&sel.status!=='approved'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit</button>}
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
-            {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<button className="btn btn-amber" onClick={()=>update(sel.id,{escalation:true,status:'escalated'})}>⚠️ Escalate</button>}
+            {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
+              <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
+              <button className="btn btn-amber" onClick={()=>{setShowEscalate(sel.id);setEscalateReason('')}}>⚠️ Escalate</button>
+            </>}
             {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve</button>}
             {canApprove&&(
               <div style={{marginLeft:'auto'}}>
