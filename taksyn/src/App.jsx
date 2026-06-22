@@ -3056,7 +3056,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             </div>
           </div>
           <div className="btn-row">
-            {canApprove&&sel.status!=='approved'&&sel.status!=='completed'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit</button>}
+            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit</button>}
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
