@@ -2104,9 +2104,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
         const editableFields = ['title','priority','due_date','category','department','description']
         const changesMap = {}
         editableFields.filter(f=>f in changes && changes[f]!==prev?.[f]).forEach(f=>{changesMap[f]=changes[f]})
-        if (Object.keys(changesMap).length>0) {
-          const edEntry = mkAuditEntry('task_edited', user, task?.org||user?.org, { changes:changesMap }, id, prev?.title||id,
-            Object.keys(changesMap).join(','), Object.values(changesMap).join(','))
+        // Also audit checklist/instruction, compliance and schedule edits (summary only — no array dump)
+        const edited = Object.keys(changesMap)
+        if ('subtasks' in changes && JSON.stringify(parseSafe(changes.subtasks)) !== JSON.stringify(parseSafe(prev?.subtasks))) edited.push('checklist/instructions')
+        if ('compliance' in changes && !!changes.compliance !== !!prev?.compliance) edited.push('compliance')
+        if ('recurrence' in changes && changes.recurrence !== prev?.recurrence) edited.push('schedule')
+        if (edited.length>0) {
+          const edEntry = mkAuditEntry('task_edited', user, task?.org||user?.org, { changes:changesMap, fields:edited }, id, prev?.title||id,
+            null, edited.join(', '))
           setAuditLog(log=>[edEntry,...log])
           if (isConfigured()) {
             const {error} = await supabase.from('audit_log').insert(edEntry)
@@ -2522,7 +2527,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     <button type="button" className="cl-flag-btn" title="Require photo" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
                     <button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x)})}>🕐</button>
                     <button type="button" className="cl-flag-btn" title="Add instruction for the worker" style={{border:'1px solid #10B981',background:(s.instruction&&s.instruction.trim())?'#10B981':'rgba(16,185,129,.08)',color:(s.instruction&&s.instruction.trim())?'#fff':'#10B981'}} onClick={()=>setClInstrOpenEdit(clInstrOpenEdit===(s.id||i)?null:(s.id||i))}>💬</button>
-                    <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).filter((_,j)=>j!==i)})}>×</button>
+                    <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>{ const itemId=s.id||String(i); const comps=(clCompletions[sel.id]||{})[itemId]||[]; if(comps.length){ alert("This item has already been completed by a worker and can't be removed. You can edit its text or instruction instead."); return } setEditTask({...editTask,subtasks:(editTask.subtasks||[]).filter((_,j)=>j!==i)}) }}>×</button>
                     </div>
                     {clInstrOpenEdit===(s.id||i)&&(
                       <textarea className="comment-box" style={{width:'100%',marginTop:6,minHeight:54,fontSize:12,border:'1px solid #10B981',background:'rgba(16,185,129,.05)'}} placeholder="Instruction for the worker (optional) — e.g. Only use Sparkle products" value={s.instruction||''} onChange={e=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,instruction:e.target.value}:x)})}/>
@@ -3051,7 +3056,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             </div>
           </div>
           <div className="btn-row">
-            {canApprove&&sel.status!=='approved'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit</button>}
+            {canApprove&&sel.status!=='approved'&&sel.status!=='completed'&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit</button>}
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
