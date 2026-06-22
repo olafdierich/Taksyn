@@ -1949,6 +1949,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [escalating, setEscalating] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteScope, setDeleteScope] = useState('')
+  const [clInstrOpen, setClInstrOpen] = useState(null)       // Create form: id of item whose instruction editor is open
+  const [clInstrOpenEdit, setClInstrOpenEdit] = useState(null) // Edit form: id of item whose instruction editor is open
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
@@ -2510,15 +2512,21 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               <div className="form-field">
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                   <label className="form-label" style={{margin:0}}>Checklist</label>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setEditTask({...editTask,subtasks:[...(editTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,requireTimestamp:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setEditTask({...editTask,subtasks:[...(editTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,requireTimestamp:false,note:'',instruction:'',photo:null,history:[]}]})}>+ Add Item</button>
                 </div>
                 {(editTask.subtasks||[]).map((s,i)=>(
-                  <div key={s.id||i} className="cl-build-item">
+                  <div key={s.id||i} style={{marginBottom:6}}>
+                    <div className="cl-build-item" style={{marginBottom:0}}>
                     <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
                     <button type="button" className="cl-flag-btn" title="Mandatory" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.08)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}><strong>*</strong></button>
                     <button type="button" className="cl-flag-btn" title="Require photo" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
                     <button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x)})}>🕐</button>
+                    <button type="button" className="cl-flag-btn" title="Add instruction for the worker" style={{border:'1px solid #10B981',background:(s.instruction&&s.instruction.trim())?'#10B981':'rgba(16,185,129,.08)',color:(s.instruction&&s.instruction.trim())?'#fff':'#10B981'}} onClick={()=>setClInstrOpenEdit(clInstrOpenEdit===(s.id||i)?null:(s.id||i))}>💬</button>
                     <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).filter((_,j)=>j!==i)})}>×</button>
+                    </div>
+                    {clInstrOpenEdit===(s.id||i)&&(
+                      <textarea className="comment-box" style={{width:'100%',marginTop:6,minHeight:54,fontSize:12,border:'1px solid #10B981',background:'rgba(16,185,129,.05)'}} placeholder="Instruction for the worker (optional) — e.g. Only use Sparkle products" value={s.instruction||''} onChange={e=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,instruction:e.target.value}:x)})}/>
+                    )}
                   </div>
                 ))}
                 {!(editTask.subtasks||[]).length&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items</div>}
@@ -2689,7 +2697,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 })()}
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                   <span style={{fontSize:12,color:'var(--t2)'}}>Checklist Items</span>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setNewTask({...newTask,subtasks:[...(newTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,requireTimestamp:false,note:'',photo:null,history:[]}]})}>+ Add Item</button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setNewTask({...newTask,subtasks:[...(newTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,requireTimestamp:false,note:'',instruction:'',photo:null,history:[]}]})}>+ Add Item</button>
                 </div>
                 {pendingDelete&&(
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6,padding:'6px 10px',marginBottom:6,fontSize:12}}>
@@ -2697,12 +2705,18 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   </div>
                 )}
                 {(newTask.subtasks||[]).map((s,i)=>(
-                  <div key={s.id||i} className="cl-build-item">
+                  <div key={s.id||i} style={{marginBottom:6}}>
+                    <div className="cl-build-item" style={{marginBottom:0}}>
                     <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
                     <button type="button" className="cl-flag-btn cl-flag-btn-req" title="Mandatory — blocks submit" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.12)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}>{s.mandatory?'★':'*'}</button>
                     <button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
                     <button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x)})}>🕐</button>
+                    <button type="button" className="cl-flag-btn" title="Add instruction for the worker" style={{border:'1px solid #10B981',background:(s.instruction&&s.instruction.trim())?'#10B981':'rgba(16,185,129,.08)',color:(s.instruction&&s.instruction.trim())?'#fff':'#10B981'}} onClick={()=>setClInstrOpen(clInstrOpen===(s.id||i)?null:(s.id||i))}>💬</button>
                     <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>{ const removed=(newTask.subtasks||[])[i]; setNewTask({...newTask,subtasks:(newTask.subtasks||[]).filter((_,j)=>j!==i)}); setPendingDelete({idx:i,item:removed}) }}>✕</button>
+                    </div>
+                    {clInstrOpen===(s.id||i)&&(
+                      <textarea className="comment-box" style={{width:'100%',marginTop:6,minHeight:54,fontSize:12,border:'1px solid #10B981',background:'rgba(16,185,129,.05)'}} placeholder="Instruction for the worker (optional) — e.g. Only use Sparkle products" value={s.instruction||''} onChange={e=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,instruction:e.target.value}:x)})}/>
+                    )}
                   </div>
                 ))}
                 {!(newTask.subtasks||[]).length&&!pendingDelete&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
@@ -2855,6 +2869,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                             </span>
                           )}
                         </div>
+                        {s.instruction&&s.instruction.trim()&&(
+                          <div style={{marginTop:4,fontSize:12,color:'#0B6E4F',background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.3)',borderRadius:6,padding:'6px 9px',lineHeight:1.4}}>
+                            <span style={{fontWeight:700}}>💬 Instruction:</span> {s.instruction}
+                          </div>
+                        )}
                         {todayCount>0&&(
                           <div style={{marginTop:4,borderLeft:'2px solid rgba(16,185,129,.3)',paddingLeft:8}}>
                             {todayRows.map((r,ri)=>(
