@@ -1135,6 +1135,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 .update({ used_at: new Date().toISOString(), used_by: newUserId, is_active: false })
                 .eq('organisation_id', inviteOrgId)
                 .eq('invited_email', inviteEmail.trim().toLowerCase())
+                .is('used_at', null)
               if (fallbackErr) console.error('[invite-reg] invite_links email+org fallback FAILED:', fallbackErr.message, fallbackErr)
             }
 
@@ -12380,7 +12381,8 @@ export default function App() {
                   ;(supabaseAdmin || supabase).from('invite_links')
                     .update({ used_at: new Date().toISOString(), used_by: session.user.id, is_active: false })
                     .eq('organisation_id', pending.linkOrgId)
-                    .eq('invited_email', fallbackEmail).then(()=>{}).catch(()=>{})
+                    .eq('invited_email', fallbackEmail)
+                    .is('used_at', null).then(()=>{}).catch(()=>{})
                 }
               }
             }
