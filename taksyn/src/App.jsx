@@ -5714,7 +5714,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     const orgId = editingMember.orgId || orgs.find(o=>o.name===editingMember.org)?.id || editingMember.org
     if (isConfigured()) {
       await supabase.from('profiles').update(profileUpdates).eq('id', editingMember.id)
-      await supabase.from('org_members').update({ role:memberEditForm.role, industry:memberEditForm.industry||'', position:memberEditForm.position||'' }).eq('user_id', editingMember.id).eq('org', orgId)
+      await (supabaseAdmin || supabase).from('org_members').update({ role:memberEditForm.role, industry:memberEditForm.industry||'', position:memberEditForm.position||'' }).eq('user_id', editingMember.id).eq('org', orgId)
     }
     setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...profileUpdates,role:memberEditForm.role,industry:memberEditForm.industry||'',position:memberEditForm.position||''}:m))
     setViewingMember(null)
@@ -5757,6 +5757,11 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     setEditOrgCustomRoles(cr.data||[])
     setEditOrgCustomPositions(cp.data?.map(p=>p.position_name)||[])
     setEditMemberPositions(up.data?.map(p=>({...p}))||[])
+    // Pre-fill role/industry/position from org_members for this user + org (current values)
+    if (orgId) {
+      const { data: omRow } = await (supabaseAdmin || supabase).from('org_members').select('role,industry,position').eq('user_id', member.id).eq('org', orgId).maybeSingle()
+      if (omRow) setMemberEditForm(prev=>({...prev, role: omRow.role||prev.role, industry: omRow.industry||'', position: omRow.position||''}))
+    }
   }
 
   const enterOrgContext = async (org) => {
