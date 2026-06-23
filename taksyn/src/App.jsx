@@ -1284,6 +1284,25 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
     )
   }
 
+  // ── Existing user invited: clean "sign in to accept" screen (no registration form) ──
+  if (inviteSignInPrompt) {
+    const orgName = inviteParams?.orgName || inviteUrlRef.current?.orgName || ''
+    return (
+      <div className="auth-bg">
+        <style>{CSS}</style>
+        <div className="auth-card" style={{maxWidth:480,textAlign:'center'}}>
+          <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:44,objectFit:'contain'}} /></div>
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:13,color:'var(--t2)',marginBottom:4}}>You've been invited to join</div>
+            <div style={{fontSize:22,fontWeight:800,color:'var(--text)',lineHeight:1.2}}>{orgName||<span style={{color:'var(--t3)',fontStyle:'italic',fontWeight:400,fontSize:16}}>your organisation</span>}</div>
+          </div>
+          <div style={{fontSize:14,color:'var(--text)',lineHeight:1.6,marginBottom:24}}>You already have a Taksyn account. Sign in below and you'll be added to {orgName||'your organisation'} automatically.</div>
+          <button className="auth-btn" style={{background:'#10B981'}} onClick={()=>{ setInviteSignInPrompt(false); setMode('login'); setError(''); setSuccess('') }}>Sign In</button>
+        </div>
+      </div>
+    )
+  }
+
   // ── Dedicated invite registration page ──
   if (inviteParams && mode === 'register') {
     const hasName = !!(inviteParams.name || name)
