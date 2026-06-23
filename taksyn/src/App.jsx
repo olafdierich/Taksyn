@@ -5692,7 +5692,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       .eq('org', orgId)
     if (members?.length) {
       const ids = [...new Set(members.map(m=>m.user_id))]
-      const { data: profiles } = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', ids)
+      const { data: profiles } = await supabase.from('profiles').select('id,name,first_name,last_name,email,org,role,position,phone').in('id', ids)
       const seen = new Set()
       setOrgMembers(
         members
@@ -5734,7 +5734,10 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
 
   const openEditMember = async (member) => {
     setEditingMember(member)
-    setMemberEditForm({first_name:member.first_name||member.name?.split(' ')[0]||'',last_name:member.last_name||member.name?.split(' ').slice(1).join(' ')||'',role:member.role,industry:member.industry||'',position:member.position||'',phone:member.phone||'',notes:member.notes||'',email:member.email||''})
+    const nameParts = (member.name||'').trim().split(/\s+/).filter(Boolean)
+    const firstName = member.first_name || nameParts[0] || ''
+    const lastName = member.last_name || nameParts.slice(1).join(' ') || ''
+    setMemberEditForm({first_name:firstName,last_name:lastName,role:member.role,industry:member.industry||'',position:member.position||'',phone:member.phone||'',notes:member.notes||'',email:member.email||''})
     setEditMemberPositions([])
     setEditMemberNewPos({industry:'',role:'',position:''})
     setEditOrgIndustries([])
@@ -6227,7 +6230,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                 </div>
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
                   <button className="btn btn-secondary" onClick={closeEdit}>Cancel</button>
-                  <button className="btn btn-primary" disabled={!memberEditForm.first_name?.trim()} onClick={saveMemberEdit}>Save Changes</button>
+                  <button className="btn btn-primary" disabled={!(memberEditForm.first_name?.trim()||editingMember?.name?.trim())} onClick={saveMemberEdit}>Save Changes</button>
                 </div>
               </div>
             </div>
