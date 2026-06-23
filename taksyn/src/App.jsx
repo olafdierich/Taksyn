@@ -5711,6 +5711,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     const lastName = memberEditForm.last_name?.trim() || ''
     const fullName = [firstName, lastName].filter(Boolean).join(' ')
     // Extra ("+ Add Position") rows → additional_positions (shape {role,industry,position}); drop rows with no position; [] when none
+    console.log('[saveMemberEdit] editMemberPositions raw:', JSON.stringify(editMemberPositions))
     const additionalPositions = (editMemberPositions||[]).filter(p=>p.position&&p.position.trim()).map(p=>({role:p.role||'',industry:p.industry||'',position:p.position||''}))
     const profileUpdates = { name:fullName, first_name:firstName, last_name:lastName, phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'', additional_positions:additionalPositions }
     const orgId = editingMember.orgId || orgs.find(o=>o.name===editingMember.org)?.id || editingMember.org
