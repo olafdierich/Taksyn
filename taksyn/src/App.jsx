@@ -5898,6 +5898,12 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             .update({ used_at: new Date().toISOString(), used_by: existingProfile.id, is_active: false })
             .eq('organisation_id', showInvite.id).eq('invited_email', inviteEmail.trim().toLowerCase()).is('used_at', null)
         } catch (_) {}
+        // Notify the existing user by email via the existing send-notification (Resend) mechanism
+        sendEmailNotif(
+          inviteEmail.trim(),
+          `You've been added to ${showInvite.name} on Taksyn`,
+          `Hi ${inviteFirstName.trim()}, you have been added to ${showInvite.name} as ${ROLE_LABELS[memberRole] || memberRole} on Taksyn. Sign in at taksyn.vercel.app to get started. No further action is needed.`
+        )
         alert((existingProfile.name || fullName) + ' has been added to ' + showInvite.name + ' as ' + (ROLE_LABELS[memberRole] || memberRole))
         loadOrgMembers(showInvite.id, showInvite.name)
         resetInviteState()
