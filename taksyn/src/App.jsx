@@ -11919,18 +11919,22 @@ export default function App() {
       .then(({data})=>{ setProfileOrgIndustry(data?.industry||'') })
       .catch(()=>{})
   },[showProfile, user?.org])
-  // Load all appointed positions for the current user from every source an admin may have used:
-  // org_members (primary, per-org), profiles (primary + additional), and the accepted invite link.
+  // Load appointed positions for the current user, scoped to the organisation they are signed into.
+  // Sources: org_members (current org only), profiles (primary + additional), and the accepted invite link (current org only).
   useEffect(()=>{
     if(!showProfile||!user?.id||!isConfigured()) { setAppointedPositions([user?.position].filter(Boolean)); return }
     ;(async()=>{
+      // Resolve the current org id so positions can be filtered to this org (org_members.org may be an id or a name)
+      let orgId = null
+      try { const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); orgId = orgRow?.id || null } catch {}
+      const inCurrentOrg = (o) => o!=null && o!=='' && (o===orgId || o===user.org)
       const collected = []
-      // 1. org_members positions (set when an admin edits the member)
+      // 1. org_members positions for the CURRENT org only
       try {
         const {data:members} = await supabase.from('org_members').select('org,position').eq('user_id',user.id)
-        ;(members||[]).forEach(m=>{ if(m.position) collected.push(m.position) })
+        ;(members||[]).forEach(m=>{ if(m.position && inCurrentOrg(m.org)) collected.push(m.position) })
       } catch {}
-      // 2. profile primary + admin-set additional positions
+      // 2. profile primary + admin-set additional positions (single profile = current org context)
       try {
         const {data:prof} = await supabase.from('profiles').select('position,additional_positions').eq('id',user.id).maybeSingle()
         if(prof?.position) collected.push(prof.position)
@@ -11938,12 +11942,12 @@ export default function App() {
         try { extra = prof?.additional_positions ? (Array.isArray(prof.additional_positions)?prof.additional_positions:JSON.parse(prof.additional_positions)) : [] } catch { extra=[] }
         extra.forEach(p=>{ if(p?.position) collected.push(p.position) })
       } catch {}
-      // 3. position from the invite the user accepted (workers' position often lives only here)
+      // 3. position from the invite the user accepted into the CURRENT org only
       try {
-        let q = supabase.from('invite_links').select('position,invited_position')
+        let q = supabase.from('invite_links').select('position,invited_position,organisation_id,org')
         q = user.email ? q.or(`used_by.eq.${user.id},invited_email.eq.${user.email}`) : q.eq('used_by', user.id)
         const {data:invites} = await q
-        ;(invites||[]).forEach(iv=>{ const p = iv.invited_position||iv.position; if(p) collected.push(p) })
+        ;(invites||[]).forEach(iv=>{ if(!inCurrentOrg(iv.organisation_id) && !inCurrentOrg(iv.org)) return; const p = iv.invited_position||iv.position; if(p) collected.push(p) })
       } catch {}
       if(user?.position) collected.push(user.position)
       const list = [...new Set(collected.filter(Boolean))]
