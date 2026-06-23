@@ -6085,7 +6085,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                         {m.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {m.industry}</div>}
                       </div>
                       <RolePill role={m.role}/>
-                      <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setEditingMember(m);setMemberEditForm({name:m.name,role:m.role,industry:m.industry||'',position:m.position||'',phone:m.phone||'',notes:m.notes||'',email:m.email||''})}}>✏️ Edit</button>
+                      <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();openEditMember(m)}}>✏️ Edit</button>
                       <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();removeMemberFromOrg(m)}}>Remove</button>
                     </div>
                   ))}
