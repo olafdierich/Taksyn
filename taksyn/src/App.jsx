@@ -5291,9 +5291,9 @@ function UsersView({ user, setAuditLog }) {
                     </div>
                     <div className="user-email">{u.email||'—'}</div>
                     {user.role==='super_admin' && allOrgMemberships[u.id]?.length > 0 ? (
-                      <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:4,marginTop:3}}>
                         {allOrgMemberships[u.id].map((m,mi)=>(
-                          <span key={mi} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>{m.orgName} · {ROLE_LABELS[m.role]||m.role}{m.industry ? ' · '+m.industry : ''}{m.position ? ' · '+m.position : ''}</span>
+                          <span key={mi} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>{m.orgName} · {ROLE_LABELS[m.role]||m.role}{m.position ? ' · '+m.position : ''}</span>
                         ))}
                       </div>
                     ) : orgAssignments[u.id]?.length > 0 ? (
