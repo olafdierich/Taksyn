@@ -5594,6 +5594,8 @@ function OrganisationsView({ user }) {
 const [existingUserSearch, setExistingUserSearch] = useState('')
 const [existingUserRole, setExistingUserRole] = useState('client_admin')
 const [existingUserMsg, setExistingUserMsg] = useState('')
+const [existingUserResults, setExistingUserResults] = useState([])
+const [existingSearching, setExistingSearching] = useState(false)
 const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   const [selectedOrgView, setSelectedOrgView] = useState(null) // org being viewed in context
   const [orgContextTab, setOrgContextTab] = useState('members')
@@ -5856,22 +5858,24 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       const validPos = inviteOrgPositions.filter(p=>p.role||p.industry||p.position)
       const rolesSummary = validPos.map(p=>[p.industry,p.position,p.role].filter(Boolean).join(' / ')).join('; ')
       const firstIndustry = validPos.find(p=>p.industry)?.industry || ''
+      const inviteRoleSel = validPos[0]?.role || 'client_admin'
+      const inviteRoleLabel = ROLE_LABELS[inviteRoleSel] || 'Client Admin'
 
       if (inviteMethod === 'whatsapp') {
         const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
         try {
           await supabase.from('invite_links').insert({
-            organisation_id: showInvite.id, team_id: null, role: 'client_admin', secret: linkId,
+            organisation_id: showInvite.id, team_id: null, role: inviteRoleSel, secret: linkId,
             created_by: user.id, created_at: new Date().toISOString(),
             expires_at: new Date(Date.now() + 7*24*60*60*1000).toISOString(), is_active: true,
             invited_name: fullName||null, invited_email: inviteEmail.trim()||null,
-            invited_role: 'client_admin',
+            invited_role: inviteRoleSel,
             invited_industry: firstIndustry||null
           })
         } catch(err) { console.error('Invite link insert error:', err) }
-        const params = new URLSearchParams({ invite:'true', org:showInvite.id, orgname:showInvite.name, firstname:inviteFirstName.trim(), lastname:inviteLastName.trim(), email:inviteEmail.trim(), phone:invitePhone.trim(), role:'client_admin', secret:'taksyn-secret-2024', link:linkId })
+        const params = new URLSearchParams({ invite:'true', org:showInvite.id, orgname:showInvite.name, firstname:inviteFirstName.trim(), lastname:inviteLastName.trim(), email:inviteEmail.trim(), phone:invitePhone.trim(), role:inviteRoleSel, secret:'taksyn-secret-2024', link:linkId })
         const inviteUrl = window.location.origin + window.location.pathname + '?' + params.toString()
-        const msg = encodeURIComponent(`Hi ${inviteFirstName.trim()}, ${showInvite.name} has invited you to join Taksyn as Client Admin. Tap the link to set up your account: ${inviteUrl}`)
+        const msg = encodeURIComponent(`Hi ${inviteFirstName.trim()}, ${showInvite.name} has invited you to join Taksyn as ${inviteRoleLabel}. Tap the link to set up your account: ${inviteUrl}`)
         window.open('https://wa.me/?text='+msg, '_blank')
         resetInviteState(); setLoading(false); return
       }
@@ -5911,7 +5915,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
         return
       }
 
-      const invitePayload = { email:inviteEmail.trim(), name:fullName, role:'client_admin', org:showInvite.name, orgId:showInvite.id, industry:firstIndustry, positions:rolesSummary, secret:inviteSecret }
+      const invitePayload = { email:inviteEmail.trim(), name:fullName, role:inviteRoleSel, org:showInvite.name, orgId:showInvite.id, industry:firstIndustry, positions:rolesSummary, secret:inviteSecret }
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
@@ -5919,10 +5923,13 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error||result.message||'Invite failed ('+res.status+')')
-      await supabase.from('organisations').update({admin_email:inviteEmail.trim(),admin_name:fullName}).eq('id',showInvite.id)
-      setOrgs(prev=>prev.map(o=>o.id===showInvite.id?{...o,admin_email:inviteEmail.trim(),admin_name:fullName}:o))
+      // Only update the org's admin contact when the invited person is the Client Admin
+      if (inviteRoleSel === 'client_admin') {
+        await supabase.from('organisations').update({admin_email:inviteEmail.trim(),admin_name:fullName}).eq('id',showInvite.id)
+        setOrgs(prev=>prev.map(o=>o.id===showInvite.id?{...o,admin_email:inviteEmail.trim(),admin_name:fullName}:o))
+      }
       if (result.alreadyExisted) {
-        alert('This user already exists — they have been added to ' + showInvite.name + ' as Client Admin')
+        alert('This user already exists — they have been added to ' + showInvite.name + ' as ' + inviteRoleLabel)
       } else {
         alert('Invite sent to ' + inviteEmail + '!')
       }
@@ -5933,19 +5940,39 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     setLoading(false)
   }
 
-  const addExistingUserToOrg = async () => {
-    if (!existingUserSearch.trim()) { setExistingUserMsg('Please enter an email address'); return }
-    if (!showInvite) return
-    setLoading(true)
-    setExistingUserMsg('')
+  // Search ALL profiles (across every org) by name or email, excluding anyone already in this org
+  const searchExistingUsers = async () => {
+    const raw = existingUserSearch.trim()
+    if (!raw) { setExistingUserResults([]); return }
+    if (!showInvite || !isConfigured()) return
+    setExistingSearching(true); setExistingUserMsg('')
     try {
-      const { data: profile, error } = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('email', existingUserSearch.trim().toLowerCase()).single()
-      if (error || !profile) { setExistingUserMsg('No user found with that email address'); setLoading(false); return }
-      const { error: memberError } = await supabase.from('org_members').upsert({ user_id: profile.id, org: showInvite.id, role: existingUserRole }, { onConflict: 'user_id,org' })
+      const { data: members } = await supabase.from('org_members').select('user_id').eq('org', showInvite.id)
+      const memberIds = new Set((members||[]).map(m=>m.user_id))
+      const term = raw.replace(/[,()%]/g,' ').trim()
+      const { data: profiles } = await supabase.from('profiles')
+        .select('id,name,email,org')
+        .or(`name.ilike.%${term}%,email.ilike.%${term}%`)
+        .order('name')
+        .limit(25)
+      setExistingUserResults((profiles||[]).filter(p=>!memberIds.has(p.id)))
+    } catch(e) {
+      setExistingUserMsg('Error: ' + e.message)
+      setExistingUserResults([])
+    }
+    setExistingSearching(false)
+  }
+
+  const addExistingUserToOrg = async (profile) => {
+    if (!showInvite || !profile) return
+    setLoading(true); setExistingUserMsg('')
+    try {
+      const dbAdmin = supabaseAdmin || supabase
+      const { error: memberError } = await dbAdmin.from('org_members').upsert({ user_id: profile.id, org: showInvite.id, role: existingUserRole }, { onConflict: 'user_id,org' })
       if (memberError) throw new Error(memberError.message)
-      await supabase.from('profiles').update({ org: showInvite.name, role: existingUserRole }).eq('id', profile.id)
-      setExistingUserMsg('✅ ' + (profile.name || existingUserSearch) + ' added to ' + showInvite.name)
-      setExistingUserSearch('')
+      setExistingUserMsg('✅ ' + (profile.name || profile.email || 'User') + ' added to ' + showInvite.name)
+      setExistingUserResults(prev=>prev.filter(p=>p.id!==profile.id))
+      loadOrgMembers(showInvite.id, showInvite.name)
     } catch(e) {
       setExistingUserMsg('Error: ' + e.message)
     }
@@ -6367,6 +6394,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
         <div className="tabs" style={{marginBottom:14}}>
           <button className={'tab '+(inviteTab==='invite'?'active':'')} onClick={()=>setInviteTab('invite')}>✉️ Invite New User</button>
           <button className={'tab '+(inviteTab==='existing'?'active':'')} onClick={()=>setInviteTab('existing')}>👤 Add Existing User</button>
+          <button className="tab" disabled title="Coming soon" style={{opacity:.5,cursor:'not-allowed'}}>📋 Bulk Upload</button>
         </div>
 
         {inviteTab==='invite' && (
@@ -6382,13 +6410,17 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             {inviteEmailExistsMsg&&<div style={{fontSize:13,padding:'8px 12px',borderRadius:6,background:'rgba(99,102,241,.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,.3)'}}>{inviteEmailExistsMsg}</div>}
             <input className="form-input" type="tel" placeholder="Phone (for WhatsApp invite)" value={invitePhone} onChange={e=>setInvitePhone(e.target.value)} style={{fontSize:13}}/>
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Industry</div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Role</div>
+              <select className="form-select" style={{fontSize:13}} value={inviteOrgPositions[0]?.role||'client_admin'} onChange={e=>setInviteOrgPositions([{...inviteOrgPositions[0],role:e.target.value,position:''}])}>
+                {['client_admin','manager','supervisor','worker'].map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',margin:'8px 0 6px'}}>Industry</div>
               <input className="form-input" style={{fontSize:13,background:'var(--s3)',cursor:'default'}} value={showInvite?.industry||'—'} readOnly/>
               <div style={{marginTop:8}}>
                 <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Position <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0}}>— optional</span></div>
                 <select className="form-select" style={{fontSize:13}} value={inviteOrgPositions[0]?.position||''} onChange={e=>setInviteOrgPositions([{...inviteOrgPositions[0],position:e.target.value}])}>
                   <option value="">— Select Position —</option>
-                  {getPositionsForIndustry(inviteOrgPositions[0]?.industry||'', 'client_admin', [], []).map(p=><option key={p} value={p}>{p}</option>)}
+                  {getPositionsForIndustry(inviteOrgPositions[0]?.industry||showInvite?.industry||'', inviteOrgPositions[0]?.role||'client_admin', [], []).map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
             </div>
@@ -6408,27 +6440,48 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
 
         {inviteTab==='existing' && (
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
-            <input
-              className="form-input"
-              type="email"
-              placeholder="Search by email address..."
-              value={existingUserSearch}
-              onChange={e=>{setExistingUserSearch(e.target.value);setExistingUserMsg('')}}
-              style={{fontSize:13}}
-            />
-            <select className="form-input" value={existingUserRole} onChange={e=>setExistingUserRole(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
-              <option value="client_admin">Client Admin</option>
-              <option value="client_user">Client User</option>
-              <option value="staff">Staff</option>
-            </select>
+            <div style={{display:'flex',gap:8}}>
+              <input
+                className="form-input"
+                placeholder="Search all users by name or email..."
+                value={existingUserSearch}
+                onChange={e=>{setExistingUserSearch(e.target.value);setExistingUserMsg('')}}
+                onKeyDown={e=>{ if(e.key==='Enter') searchExistingUsers() }}
+                style={{fontSize:13,flex:1}}
+              />
+              <button className="btn btn-secondary" onClick={searchExistingUsers} disabled={existingSearching||!existingUserSearch.trim()}>{existingSearching?'Searching…':'Search'}</button>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Role to assign</div>
+              <select className="form-input" value={existingUserRole} onChange={e=>setExistingUserRole(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
+                <option value="client_admin">Client Admin</option>
+                <option value="client_user">Client User</option>
+                <option value="staff">Staff</option>
+              </select>
+            </div>
             {existingUserMsg && (
               <div style={{fontSize:13,padding:'8px 12px',borderRadius:6,background:existingUserMsg.startsWith('✅')?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)',color:existingUserMsg.startsWith('✅')?'var(--green)':'#EF4444',border:'1px solid '+(existingUserMsg.startsWith('✅')?'var(--green)':'#EF4444')+'44'}}>
                 {existingUserMsg}
               </div>
             )}
+            {existingUserResults.length>0 && (
+              <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:260,overflowY:'auto'}}>
+                {existingUserResults.map(p=>(
+                  <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',border:'1px solid var(--border)',borderRadius:8,background:'var(--s3)'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name||'—'}</div>
+                      <div style={{fontSize:11,color:'var(--t2)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.email||'—'}{p.org?' · '+p.org:''}</div>
+                    </div>
+                    <button className="btn btn-primary btn-sm" onClick={()=>addExistingUserToOrg(p)} disabled={loading}>Add</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!existingSearching && existingUserSearch.trim() && existingUserResults.length===0 && !existingUserMsg && (
+              <div style={{fontSize:12,color:'var(--t2)'}}>No matching users found, or all matches are already in this organisation.</div>
+            )}
             <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
-              <button className="btn btn-ghost" onClick={()=>setShowInvite(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={addExistingUserToOrg} disabled={loading}>{loading?'Adding...':'Add to Org'}</button>
+              <button className="btn btn-ghost" onClick={()=>{ setShowInvite(null); setExistingUserResults([]); setExistingUserSearch(''); setExistingUserMsg('') }}>Close</button>
             </div>
           </div>
         )}
