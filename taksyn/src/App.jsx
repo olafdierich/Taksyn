@@ -5712,9 +5712,12 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     const fullName = [firstName, lastName].filter(Boolean).join(' ')
     const profileUpdates = { name:fullName, first_name:firstName, last_name:lastName, phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'' }
     const orgId = editingMember.orgId || orgs.find(o=>o.name===editingMember.org)?.id || editingMember.org
+    console.log('[saveMemberEdit] orgId:', orgId)
+    console.log('[saveMemberEdit] editingMember.id:', editingMember.id)
     if (isConfigured()) {
       await supabase.from('profiles').update(profileUpdates).eq('id', editingMember.id)
-      await (supabaseAdmin || supabase).from('org_members').update({ role:memberEditForm.role, industry:memberEditForm.industry||'', position:memberEditForm.position||'' }).eq('user_id', editingMember.id).eq('org', orgId)
+      const orgMemberRes = await (supabaseAdmin || supabase).from('org_members').update({ role:memberEditForm.role, industry:memberEditForm.industry||'', position:memberEditForm.position||'' }).eq('user_id', editingMember.id).eq('org', orgId)
+      console.log('[saveMemberEdit] org_members update response:', orgMemberRes)
     }
     setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...profileUpdates,role:memberEditForm.role,industry:memberEditForm.industry||'',position:memberEditForm.position||''}:m))
     setViewingMember(null)
