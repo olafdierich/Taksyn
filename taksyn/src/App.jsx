@@ -5857,6 +5857,35 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
         resetInviteState(); setLoading(false); return
       }
 
+      // Existing user — add them straight to the org instead of calling the invite Edge Function
+      const { data: existingProfile } = await supabase.from('profiles').select('id,name,email,role').eq('email', inviteEmail.trim().toLowerCase()).maybeSingle()
+      if (existingProfile) {
+        const dbAdmin = supabaseAdmin || supabase
+        const memberRole = validPos[0]?.role || 'client_admin'
+        const memberIndustry = firstIndustry || showInvite.industry || ''
+        const memberPosition = validPos[0]?.position || ''
+        const { error: memberError } = await dbAdmin.from('org_members').upsert({
+          user_id: existingProfile.id,
+          org: showInvite.id,
+          role: memberRole,
+          industry: memberIndustry,
+          position: memberPosition,
+          is_active: true
+        }, { onConflict: 'user_id,org' })
+        if (memberError) throw new Error(memberError.message)
+        // Mark any matching invite link as used (if one exists for this email + org)
+        try {
+          await dbAdmin.from('invite_links')
+            .update({ used_at: new Date().toISOString(), used_by: existingProfile.id, is_active: false })
+            .eq('organisation_id', showInvite.id).eq('invited_email', inviteEmail.trim().toLowerCase()).is('used_at', null)
+        } catch (_) {}
+        alert((existingProfile.name || fullName) + ' has been added to ' + showInvite.name + ' as ' + (ROLE_LABELS[memberRole] || memberRole))
+        loadOrgMembers(showInvite.id, showInvite.name)
+        resetInviteState()
+        setLoading(false)
+        return
+      }
+
       const invitePayload = { email:inviteEmail.trim(), name:fullName, role:'client_admin', org:showInvite.name, orgId:showInvite.id, industry:firstIndustry, positions:rolesSummary, secret:inviteSecret }
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
