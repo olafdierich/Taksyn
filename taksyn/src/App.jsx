@@ -1126,6 +1126,17 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 .eq('secret', inviteLinkId)
               if (markUsedErr) console.error('[invite-reg] invite_links mark-used FAILED:', markUsedErr.message, markUsedErr)
             }
+            // Fallback: clear EVERY still-open invite link for this person by org + email,
+            // in case the secret didn't match (duplicate invites, or a path that lost the secret).
+            // Without this the row stays is_active:true/used_at:null and the user shows as Pending forever.
+            if (inviteEmail) {
+              const dbAdmin = supabaseAdmin || supabase
+              const { error: fallbackErr } = await dbAdmin.from('invite_links')
+                .update({ used_at: new Date().toISOString(), used_by: newUserId, is_active: false })
+                .eq('organisation_id', inviteOrgId)
+                .eq('invited_email', inviteEmail.trim().toLowerCase())
+              if (fallbackErr) console.error('[invite-reg] invite_links email+org fallback FAILED:', fallbackErr.message, fallbackErr)
+            }
 
             window.__taksyn_registering = false
             window.__taksyn_invite_registration = false
@@ -12360,6 +12371,17 @@ export default function App() {
                 supabase.from('invite_links')
                   .update({ used_at: new Date().toISOString(), used_by: session.user.id, is_active: false })
                   .eq('secret', pending.inviteLinkId).then(()=>{}).catch(()=>{})
+              }
+              // Fallback: clear EVERY still-open invite link for this person by org + email,
+              // in case the secret didn't match (duplicate invites, or a path that lost the secret).
+              if (pending.linkOrgId) {
+                const fallbackEmail = (data?.email || session.user.email || '').trim().toLowerCase()
+                if (fallbackEmail) {
+                  ;(supabaseAdmin || supabase).from('invite_links')
+                    .update({ used_at: new Date().toISOString(), used_by: session.user.id, is_active: false })
+                    .eq('organisation_id', pending.linkOrgId)
+                    .eq('invited_email', fallbackEmail).then(()=>{}).catch(()=>{})
+                }
               }
             }
             const savedOrgName = sessionStorage.getItem('currentOrgName')
