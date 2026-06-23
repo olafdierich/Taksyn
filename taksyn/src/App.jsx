@@ -11920,7 +11920,8 @@ export default function App() {
       .catch(()=>{})
   },[showProfile, user?.org])
   // Load appointed positions for the current user, scoped to the organisation they are signed into.
-  // Sources: org_members (current org only), profiles (primary + additional), and the accepted invite link (current org only).
+  // Only org_members and invite_links are used (both filtered to the current org). profiles.additional_positions
+  // is intentionally excluded — it is not org-scoped (no org field) so it leaks positions from other orgs.
   useEffect(()=>{
     if(!showProfile||!user?.id||!isConfigured()) { setAppointedPositions([user?.position].filter(Boolean)); return }
     ;(async()=>{
@@ -11934,24 +11935,15 @@ export default function App() {
         const {data:members} = await supabase.from('org_members').select('org,position').eq('user_id',user.id)
         ;(members||[]).forEach(m=>{ if(m.position && inCurrentOrg(m.org)) collected.push(m.position) })
       } catch {}
-      // 2. profile primary + admin-set additional positions (single profile = current org context)
-      try {
-        const {data:prof} = await supabase.from('profiles').select('position,additional_positions').eq('id',user.id).maybeSingle()
-        if(prof?.position) collected.push(prof.position)
-        let extra=[]
-        try { extra = prof?.additional_positions ? (Array.isArray(prof.additional_positions)?prof.additional_positions:JSON.parse(prof.additional_positions)) : [] } catch { extra=[] }
-        extra.forEach(p=>{ if(p?.position) collected.push(p.position) })
-      } catch {}
-      // 3. position from the invite the user accepted into the CURRENT org only
+      // 2. position from the invite the user accepted into the CURRENT org only
       try {
         let q = supabase.from('invite_links').select('position,invited_position,organisation_id,org')
         q = user.email ? q.or(`used_by.eq.${user.id},invited_email.eq.${user.email}`) : q.eq('used_by', user.id)
         const {data:invites} = await q
         ;(invites||[]).forEach(iv=>{ if(!inCurrentOrg(iv.organisation_id) && !inCurrentOrg(iv.org)) return; const p = iv.invited_position||iv.position; if(p) collected.push(p) })
       } catch {}
-      if(user?.position) collected.push(user.position)
       const list = [...new Set(collected.filter(Boolean))]
-      setAppointedPositions(list.length ? list : [user?.position].filter(Boolean))
+      setAppointedPositions(list)
     })()
   },[showProfile, user?.id])
   // Restore the "currently working as" position from the previous session, defaulting to primary
