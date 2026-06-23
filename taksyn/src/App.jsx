@@ -7268,6 +7268,7 @@ function CompanySettingsView({ user }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [savedToast, setSavedToast] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [orgPlan, setOrgPlan] = useState('')
   const [orgRetentionExtended, setOrgRetentionExtended] = useState(false)
@@ -7658,6 +7659,8 @@ function CompanySettingsView({ user }) {
       if (error) { setMsg('✗ '+error.message); setSaving(false); return }
     }
     setMsg('✓ Settings saved')
+    setSavedToast(true)
+    setTimeout(()=>setSavedToast(false), 3000)
     setSaving(false)
   }
 
@@ -7708,6 +7711,11 @@ function CompanySettingsView({ user }) {
 
   return (
     <div className="anim">
+      {savedToast&&(
+        <div style={{position:'fixed',top:20,left:'50%',transform:'translateX(-50%)',background:'#10B981',color:'#fff',borderRadius:10,padding:'12px 22px',fontSize:14,fontWeight:600,zIndex:9999,boxShadow:'0 8px 32px rgba(16,185,129,.35)',display:'flex',alignItems:'center',gap:8,animation:'fadeUp .25s ease',pointerEvents:'none'}}>
+          <span style={{fontSize:16}}>✓</span> Settings saved successfully
+        </div>
+      )}
       <div className="ph">
         <div><div className="ph-title">Company Settings</div><div className="ph-sub">Configure your organisation, workflows and compliance</div></div>
         {activeTab!=='data'&&activeTab!=='templates'&&activeTab!=='team'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
