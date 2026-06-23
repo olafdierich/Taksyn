@@ -12165,6 +12165,40 @@ export default function App() {
                   if (tmErr) console.error('pending invite team_members insert error:', tmErr.message)
                 })
               }
+              if (pending.linkOrgId) {
+                const dbAdmin = supabaseAdmin || supabase
+                // inviteUrlRef is scoped to AuthView and unavailable here — source invite industry/position
+                // from the invite_links record, falling back to the user's existing profile data.
+                let invIndustry = '', invPosition = ''
+                if (pending.inviteLinkId) {
+                  try {
+                    const { data: lk } = await dbAdmin.from('invite_links').select('invited_industry, invited_position, position').eq('secret', pending.inviteLinkId).maybeSingle()
+                    if (lk) { invIndustry = lk.invited_industry || ''; invPosition = lk.invited_position || lk.position || '' }
+                  } catch (_) {}
+                }
+                await dbAdmin.from('org_members').upsert({
+                  user_id: session.user.id,
+                  org: pending.linkOrgId,
+                  role: pending.assignedRole || data.role || 'worker',
+                  industry: invIndustry || data.industry || '',
+                  position: invPosition || data.position || '',
+                  is_active: true
+                }, { onConflict: 'user_id,org' })
+                // Ensure a profiles record exists for this user; create from existing profile data if missing (bypass RLS)
+                const { data: existingProfile } = await dbAdmin.from('profiles').select('id').eq('id', session.user.id).maybeSingle()
+                if (!existingProfile) {
+                  await dbAdmin.from('profiles').upsert({
+                    id: session.user.id,
+                    name: data.name || pending.userName,
+                    email: data.email || session.user.email,
+                    org: pending.linkOrgId || data.org,
+                    role: pending.assignedRole || data.role || 'worker',
+                    industry: invIndustry || data.industry || '',
+                    position: invPosition || data.position || '',
+                    phone: data.phone || ''
+                  }, { onConflict: 'id' })
+                }
+              }
               if (pending.inviteLinkId) {
                 supabase.from('invite_links')
                   .update({ used_at: new Date().toISOString(), used_by: session.user.id, is_active: false })
