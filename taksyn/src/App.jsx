@@ -5692,7 +5692,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       .eq('org', orgId)
     if (members?.length) {
       const ids = [...new Set(members.map(m=>m.user_id))]
-      const { data: profiles } = await supabase.from('profiles').select('id,name,first_name,last_name,email,org,role,position,phone').in('id', ids)
+      const { data: profiles } = await supabase.from('profiles').select('id,name,first_name,last_name,email,org,role,position,phone,additional_positions').in('id', ids)
       const seen = new Set()
       setOrgMembers(
         members
@@ -5710,7 +5710,9 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     const firstName = memberEditForm.first_name.trim()
     const lastName = memberEditForm.last_name?.trim() || ''
     const fullName = [firstName, lastName].filter(Boolean).join(' ')
-    const profileUpdates = { name:fullName, first_name:firstName, last_name:lastName, phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'' }
+    // Extra ("+ Add Position") rows → additional_positions (shape {role,industry,position}); drop rows with no position; [] when none
+    const additionalPositions = (editMemberPositions||[]).filter(p=>p.position&&p.position.trim()).map(p=>({role:p.role||'',industry:p.industry||'',position:p.position||''}))
+    const profileUpdates = { name:fullName, first_name:firstName, last_name:lastName, phone:memberEditForm.phone||'', notes:memberEditForm.notes||'', email:memberEditForm.email||'', additional_positions:additionalPositions }
     const orgId = editingMember.orgId || orgs.find(o=>o.name===editingMember.org)?.id || editingMember.org
     console.log('[saveMemberEdit] orgId:', orgId)
     console.log('[saveMemberEdit] editingMember.id:', editingMember.id)
@@ -5762,7 +5764,10 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     setEditOrgIndustries([...baseInds,...orgNames.filter(n=>!baseInds.includes(n))])
     setEditOrgCustomRoles(cr.data||[])
     setEditOrgCustomPositions(cp.data?.map(p=>p.position_name)||[])
-    setEditMemberPositions(up.data?.map(p=>({...p}))||[])
+    // Load the member's extra positions from profiles.additional_positions ([] when none)
+    let extraPos = []
+    try { const ap = member.additional_positions; extraPos = Array.isArray(ap) ? ap : (ap ? JSON.parse(ap) : []) } catch { extraPos = [] }
+    setEditMemberPositions(extraPos.map(p=>({role:p.role||'',industry:p.industry||'',position:p.position||''})))
     // Pre-fill role/industry/position from org_members for this user + org (current values)
     if (orgId) {
       const { data: omRow } = await (supabaseAdmin || supabase).from('org_members').select('role,industry,position').eq('user_id', member.id).eq('org', orgId).maybeSingle()
@@ -6225,6 +6230,34 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                   </div>
                 </div>
                 <div style={{fontSize:10,color:'var(--t2)',marginBottom:10}}>Permission level, industry and job title are saved for <strong>{editingMember?.org}</strong> only</div>
+                {editMemberPositions.length>0&&(
+                  <div style={{borderTop:'1px solid var(--border)',paddingTop:10,marginBottom:6}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:6}}>Additional Positions</div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:4,padding:'0 2px'}}>
+                      {['Industry','Permission Level','Job Title',''].map((h,hi)=><div key={hi} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
+                    </div>
+                    {editMemberPositions.map((pos,i)=>(
+                      <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
+                        <select className="form-select" style={{fontSize:11}} value={pos.industry||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,industry:e.target.value,position:''}:p))}>
+                          <option value="">— Industry —</option>
+                          {industryList.map(k=><option key={k} value={k}>{k}</option>)}
+                        </select>
+                        <select className="form-select" style={{fontSize:11}} value={pos.role||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
+                          <option value="">— Role —</option>
+                          {getInvitableRoles('super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                        </select>
+                        <select className="form-select" style={{fontSize:11}} value={pos.position||''} onChange={e=>setEditMemberPositions(prev=>prev.map((p,j)=>j===i?{...p,position:e.target.value}:p))}>
+                          <option value="">— Position —</option>
+                          {getPositionsForIndustry(pos.industry||'', pos.role||'worker', editOrgCustomPositions, editOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
+                        </select>
+                        <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:18,padding:'0 4px',lineHeight:1}} onClick={()=>setEditMemberPositions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{marginBottom:10}}>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>setEditMemberPositions(prev=>[...prev,{industry:'',role:'worker',position:''}])}>+ Add Position</button>
+                </div>
                 <div className="form-field"><label className="form-label">Notes</label>
                   <textarea className="comment-box" style={{minHeight:60}} value={memberEditForm.notes||''} onChange={e=>setMemberEditForm({...memberEditForm,notes:e.target.value})} placeholder="Notes about this member..."/>
                 </div>
