@@ -5706,6 +5706,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   }
 
   const saveMemberEdit = async () => {
+    console.log('[saveMemberEdit] ENTRY first_name:', JSON.stringify(memberEditForm.first_name), 'form:', JSON.stringify(memberEditForm))
     if (!memberEditForm.first_name?.trim()) return
     const firstName = memberEditForm.first_name.trim()
     const lastName = memberEditForm.last_name?.trim() || ''
