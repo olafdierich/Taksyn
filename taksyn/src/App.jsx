@@ -130,6 +130,12 @@ const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
 // Optional time-of-day suffix for a task's due date (compliance tasks only). '' when no due_time set.
 const dueTimeSuffix = t => t?.due_time ? ' · ' + String(t.due_time).slice(0,5) : ''
+// Real auth-session user id for evidence attribution — the app's canonical source (session, then getUser). Never the user state object.
+const authUserId = async () => {
+  try { const { data: { session } } = await supabase.auth.getSession(); if (session?.user?.id) return session.user.id } catch {}
+  try { const { data: { user: authUser } } = await supabase.auth.getUser(); if (authUser?.id) return authUser.id } catch {}
+  return null
+}
 const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:2, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1, issue_reports:1 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const workingDaysBetween = (start, end) => {
@@ -3010,8 +3016,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                   <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('cam-inp').click()}>📷 Take Photo</button>
                   <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('gal-inp').click()}>🖼 Gallery</button>
                 </div>
-                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name}]}); setPhotoWarn(false) }; r.readAsDataURL(f); e.target.value='' }}/>
-                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name}]}); setPhotoWarn(false) }; r.readAsDataURL(f); e.target.value='' }}/>
+                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name,by_id:await authUserId(),role:user.role}]}); setPhotoWarn(false) }; r.readAsDataURL(f); e.target.value='' }}/>
+                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name,by_id:await authUserId(),role:user.role}]}); setPhotoWarn(false) }; r.readAsDataURL(f); e.target.value='' }}/>
                 {parseSafe(sel.evidence).length===0&&(
                   <div className="evidence-zone" onClick={()=>document.getElementById('cam-inp').click()}>
                     <div style={{fontSize:24,marginBottom:5}}>📷</div>
@@ -3669,11 +3675,11 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
                 <div style={{display:'flex',gap:5,marginTop:7,flexWrap:'wrap'}}><StatusBadge status={t.status}/>{t.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒 Compliance</span>}</div>
               </div>
               <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                {parseSafe(t.evidence).length>0 ? parseSafe(t.evidence).map((e,i)=>(
+                {parseSafe(t.evidence).length>0 ? parseSafe(t.evidence).map((e,i)=>{ const url=typeof e==='object'?e.url:e; return (
                   <div key={i} className="ev-thumb" style={{width:48,height:48}}>
-                    {e.startsWith('data:image')||e.startsWith('http') ? <img src={e} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:16}}>📷</span>}
+                    {typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http')) ? <img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:16}}>📷</span>}
                   </div>
-                )) : <span style={{fontSize:11,color:'var(--t2)'}}>No photos</span>}
+                )}) : <span style={{fontSize:11,color:'var(--t2)'}}>No photos</span>}
               </div>
             </div>
             {hasAccess(user.role,2)&&t.status==='awaiting_review'&&(
@@ -3746,7 +3752,7 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
             r.onload=async ev=>{
               const curr=parseSafe(sel.evidence)
               if(curr.length>=5){ alert('Maximum 5 images reached'); return }
-              await update(sel.id,{evidence:[...curr,ev.target.result]})
+              await update(sel.id,{evidence:[...curr,{url:ev.target.result,ts:new Date().toISOString(),by:user.name,by_id:await authUserId(),role:user.role}]})
               const photoEntry={ id: Date.now()+'', author: user.name, authorId: user.id, text:'📎 Amendment photo attached', timestamp: new Date().toISOString(), edits:[], isAmendment:true }
               update(sel.id,{comments:[...(parseSafe(sel.comments)||[]),photoEntry]})
               setHasAmendment(true)
