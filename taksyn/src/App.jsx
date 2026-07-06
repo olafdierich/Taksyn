@@ -128,6 +128,8 @@ const getSLAStatus = (task, orgSLA) => {
 const isRecurring = t => t.recurrence && t.recurrence !== '' && t.recurrence !== 'once' && t.recurrence !== null
 const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
+// Optional time-of-day suffix for a task's due date (compliance tasks only). '' when no due_time set.
+const dueTimeSuffix = t => t?.due_time ? ' · ' + String(t.due_time).slice(0,5) : ''
 const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:2, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1, issue_reports:1 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const workingDaysBetween = (start, end) => {
@@ -730,7 +732,7 @@ const TaskCard = ({ task, onClick }) => {
       </div>
       <div className="tc-meta">
         <PriBadge priority={task.priority} />
-        <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}</span>
+        <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}{dueTimeSuffix(task)}</span>
         {task.assigned_user_name&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {task.assigned_user_name}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance&&!task.evidence?.length&&!['awaiting_review','approved','completed'].includes(task.status)&&<span style={{fontSize:11,color:'#8B5CF6',background:'rgba(139,92,246,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>📷 required</span>}
@@ -1986,7 +1988,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'' })
+  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', due_time:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'' })
   const [selectedTplId, setSelectedTplId] = useState('')
   const [taskGlobalIndustries, setTaskGlobalIndustries] = useState([])
   const [taskOrgIndustries, setTaskOrgIndustries] = useState([])
@@ -2446,7 +2448,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     setCreating(true)
     setCreateError('')
     const taskData = {...newTask}
-    const t = { id:'T'+Date.now(), ...taskData, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
+    const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
       const { data, error } = await supabase.from('tasks').insert(payload).select().single()
@@ -2538,6 +2540,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={editTask.due_date||''} onChange={e=>setEditTask({...editTask,due_date:e.target.value})}/></div>
                 <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={editTask.recurrence||'once'} onChange={e=>setEditTask({...editTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               </div>
+              {editTask.compliance&&<div className="form-field"><label className="form-label">Due Time <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label><input className="form-input" type="time" value={editTask.due_time||''} onChange={e=>setEditTask({...editTask,due_time:e.target.value})}/></div>}
               <div className="form-field"><label className="form-label">Assign To</label>
                 {teamUsers.length>0 ? <select className="form-select" value={editTask.assigned_user_id||''} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setEditTask({...editTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_role:u.role}) }}><option value="">— Select —</option>{teamUsers.map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}</select>
                 : <select className="form-select" value={editTask.assigned_role||'worker'} onChange={e=>setEditTask({...editTask,assigned_role:e.target.value})}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>}
@@ -2570,7 +2573,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowEdit(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={()=>{ update(sel.id,editTask); setShowEdit(false) }}>Save Changes</button>
+                <button className="btn btn-primary" onClick={()=>{ update(sel.id,{...editTask,due_time:(editTask.compliance&&editTask.due_time)?editTask.due_time:null}); setShowEdit(false) }}>Save Changes</button>
               </div>
             </div>
           </div>
@@ -2647,6 +2650,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
               <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={newTask.due_date} onChange={e=>setNewTask({...newTask,due_date:e.target.value})}/></div>
+              {newTask.compliance&&<div className="form-field"><label className="form-label">Due Time <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label><input className="form-input" type="time" value={newTask.due_time||''} onChange={e=>setNewTask({...newTask,due_time:e.target.value})}/></div>}
               {taskOrgTeams.length>0&&(
                 <div className="form-field">
                   <label className="form-label">Assign to Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
@@ -2785,7 +2789,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                 {sel.recurrence&&sel.recurrence!=='once'&&<span className="recurrence-tag">🔁 {RECURRENCE_LABELS[sel.recurrence]}</span>}
               </div>
               <div style={{fontSize:17,fontWeight:800,letterSpacing:'-.5px'}}>{sel.title}</div>
-              <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>{sel.id} · Due {sel.due_date}{sel.created_by&&' · Created by '+sel.created_by}</div>
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>{sel.id} · Due {sel.due_date}{dueTimeSuffix(sel)}{sel.created_by&&' · Created by '+sel.created_by}</div>
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end'}}><StatusBadge status={sel.status}/><PriBadge priority={sel.priority}/></div>
           </div>
@@ -3068,7 +3072,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
           <div className="section">
             <div className="section-title">Details</div>
             <div className="two-col">
-              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Due:</span> {sel.due_date}</div>
+              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Due:</span> {sel.due_date}{dueTimeSuffix(sel)}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Compliance:</span> {sel.compliance?'🔒 Yes':'—'}</div>
               {(()=>{
                 const isOrphaned = !!sel.assigned_user_id && !teamUsers.find(u=>u.id===sel.assigned_user_id)
@@ -3660,7 +3664,7 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
             <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
               <div style={{flex:1}}>
                 <div style={{fontSize:14,fontWeight:600}}>{t.title}</div>
-                <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>{t.assigned_user_name||ROLE_LABELS[t.assigned_role]} · {t.due_date}</div>
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>{t.assigned_user_name||ROLE_LABELS[t.assigned_role]} · {t.due_date}{dueTimeSuffix(t)}</div>
                 {fmtDuration(t.started_at,t.completed_at)&&<div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>⏱ Duration: {fmtDuration(t.started_at,t.completed_at)}</div>}
                 <div style={{display:'flex',gap:5,marginTop:7,flexWrap:'wrap'}}><StatusBadge status={t.status}/>{t.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒 Compliance</span>}</div>
               </div>
