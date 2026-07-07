@@ -336,6 +336,17 @@ const parseSafe = (val, fallback=[]) => {
   return fallback
 }
 
+// Read-only consolidated photo index for a task: checklist-item photos (subtasks[].photo)
+// plus legacy standalone evidence (tasks.evidence). Each entry normalized to { url, ts, by, source, label }.
+// Null-safe for legacy bare-string photos/evidence (ts/by come back null → thumbnail only).
+const taskPhotoIndex = (task) => {
+  const norm = p => (p && typeof p === 'object') ? { url:p.url, ts:p.ts||null, by:p.by||null } : { url:p, ts:null, by:null }
+  const out = []
+  parseSafe(task?.subtasks).forEach(s => { if (s && s.photo) out.push({ ...norm(s.photo), source:'checklist', label:s.text||'' }) })
+  parseSafe(task?.evidence).forEach(e => { if (e) out.push({ ...norm(e), source:'evidence', label:'' }) })
+  return out.filter(p => p.url)
+}
+
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;touch-action:manipulation}
@@ -741,7 +752,7 @@ const TaskCard = ({ task, onClick }) => {
         <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}{dueTimeSuffix(task)}</span>
         {task.assigned_user_name&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {task.assigned_user_name}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
-        {task.compliance&&!task.evidence?.length&&!['awaiting_review','approved','completed'].includes(task.status)&&<span style={{fontSize:11,color:'#8B5CF6',background:'rgba(139,92,246,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>📷 required</span>}
+        {task.compliance&&taskPhotoIndex(task).length===0&&!['awaiting_review','approved','completed'].includes(task.status)&&<span style={{fontSize:11,color:'#8B5CF6',background:'rgba(139,92,246,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>📷 required</span>}
         {task.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
         {task.project&&<span style={{fontSize:11,color:'#3B82F6',background:'rgba(59,130,246,.08)',padding:'2px 7px',borderRadius:4}}>📁 {task.project}</span>}
 
@@ -2004,7 +2015,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [clNoteText, setClNoteText] = useState('')
   const [mandatoryWarn, setMandatoryWarn] = useState(null)
   const [photoWarn, setPhotoWarn] = useState(false)
-  const [evidenceExpandedIds, setEvidenceExpandedIds] = useState(new Set())
   // Multi-completion checklist state
   const [clCompletions, setClCompletions] = useState({}) // {taskId: {itemId: [rows]}}
   const [clExpanded, setClExpanded] = useState(new Set()) // keys 'taskId::itemId'
@@ -2345,7 +2355,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     const missing = checkMandatory(tid)
     if (missing.length > 0) { setMandatoryWarn(missing); return }
     const task = tasks.find(t=>t.id===tid)
-    if (task.compliance && parseSafe(task.evidence).length === 0) { setPhotoWarn(true); return }
+    if (task.compliance && taskPhotoIndex(task).length === 0) { setPhotoWarn(true); return }
     const updatedComments = comment.trim() ? [...(task.comments||[]), user.name+': '+comment.trim()] : task.comments||[]
     const doSubmit = (extra={}) => {
       update(tid, { status:'awaiting_review', completed_by:user.name, submitted_at:new Date().toISOString(), comments:updatedComments, ...extra })
@@ -2511,7 +2521,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     : user.role==='supervisor' ? ['worker']
     : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
-  const evidenceOpen = sel ? (sel.compliance || evidenceExpandedIds.has(sel.id) || parseSafe(sel.evidence).length > 0) : false
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
@@ -2829,10 +2838,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
                 <button
                   className="btn btn-primary"
-                  style={{width:'100%',opacity:(sel.compliance&&parseSafe(sel.evidence).length===0)?0.55:1}}
+                  style={{width:'100%',opacity:(sel.compliance&&taskPhotoIndex(sel).length===0)?0.55:1}}
                   onClick={()=>submitTask(sel.id)}
                 >
-                  {sel.compliance&&parseSafe(sel.evidence).length===0?'📷 Add Photo to Submit':'✅ Submit'}
+                  {sel.compliance&&taskPhotoIndex(sel).length===0?'📷 Add a checklist photo to submit':'✅ Submit'}
                 </button>
               )}
               {sel.status==='awaiting_review'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Done — awaiting manager review</div>}
@@ -2975,63 +2984,30 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
               </div>
             )
           })()}
+          {(()=>{ const photos = taskPhotoIndex(sel); return (
           <div className="section">
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:evidenceOpen?8:0,gap:8,flexWrap:'wrap'}}>
-              <div className="section-title" style={{marginBottom:0}}>
-                Evidence {parseSafe(sel.evidence).length>0?'('+parseSafe(sel.evidence).length+'/5)':''}
-              </div>
-              {sel.compliance
-                ? <span style={{fontSize:11,fontWeight:700,color:'#8B5CF6',background:'rgba(139,92,246,.1)',border:'1px solid rgba(139,92,246,.25)',borderRadius:4,padding:'2px 8px'}}>🔒 Required for compliance</span>
-                : user.role==='worker' && (evidenceOpen
-                  ? <button onClick={()=>setEvidenceExpandedIds(prev=>{const n=new Set(prev);n.delete(sel.id);return n})} style={{fontSize:11,color:'var(--t2)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:'2px 4px'}}>Hide ↑</button>
-                  : <button onClick={()=>setEvidenceExpandedIds(prev=>new Set([...prev,sel.id]))} style={{fontSize:11,fontWeight:600,color:'var(--brand)',background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.25)',borderRadius:5,cursor:'pointer',fontFamily:'inherit',padding:'3px 10px'}}>+ Add Photo</button>)
-              }
+            <div className="section-title" style={{marginBottom:photos.length>0?8:0}}>
+              Evidence {photos.length>0?'('+photos.length+')':''}
+              {sel.compliance&&<span style={{fontSize:11,fontWeight:700,color:'#8B5CF6',background:'rgba(139,92,246,.1)',border:'1px solid rgba(139,92,246,.25)',borderRadius:4,padding:'2px 8px',marginLeft:8}}>🔒 Compliance</span>}
             </div>
-            {evidenceOpen&&sel.compliance&&parseSafe(sel.evidence).length===0&&user.role==='worker'&&(
-              <div style={{background:'rgba(139,92,246,.06)',border:'1px solid rgba(139,92,246,.2)',borderRadius:8,padding:'10px 12px',marginBottom:10,fontSize:12,color:'#7C3AED'}}>
-                📷 This is a compliance task — at least 1 photo is required before you can submit for review.
-              </div>
-            )}
-            {evidenceOpen&&photoWarn&&parseSafe(sel.evidence).length===0&&(
-              <div className="cl-warn" style={{marginBottom:10}}>
-                ⚠️ <strong>Cannot submit — photo evidence is required for compliance tasks.</strong> Add at least one photo below.
-                <button className="cl-action-btn" style={{marginLeft:8}} onClick={()=>setPhotoWarn(false)}>Dismiss</button>
-              </div>
-            )}
-            {parseSafe(sel.evidence).length>0&&<div className="ev-thumbs" style={{marginBottom:10}}>
-              {parseSafe(sel.evidence).map((e,i)=>{
-                const url=typeof e==='object'?e.url:e
-                const ts=typeof e==='object'?e.ts:null
-                return (
-                  <div key={i} style={{position:'relative',marginBottom:4}}>
-                    <div className="ev-thumb" onClick={()=>{ if(typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http'))) setLightboxUrl(url) }} style={{cursor:'zoom-in'}}>{typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http'))?<img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18}}>📷</span>}
-                      {user.role==='worker'&&<div className="ev-rm" onClick={e=>{e.stopPropagation();update(sel.id,{evidence:parseSafe(sel.evidence).filter((_,j)=>j!==i)})}}>×</div>}
+            {photos.length>0 ? (
+              <div className="ev-thumbs">
+                {photos.map((p,i)=>{
+                  const isImg=typeof p.url==='string'&&(p.url.startsWith('data:image')||p.url.startsWith('http'))
+                  const cap=[p.ts&&new Date(p.ts).toLocaleDateString('en-AU'),p.ts&&new Date(p.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),p.by].filter(Boolean).join(' · ')
+                  return (
+                    <div key={i} style={{position:'relative',marginBottom:4}}>
+                      <div className="ev-thumb" onClick={()=>{ if(isImg) setLightboxUrl(p.url) }} style={{cursor:isImg?'zoom-in':'default'}}>{isImg?<img src={p.url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18}}>📷</span>}</div>
+                      {cap&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2,maxWidth:64,lineHeight:1.3}}>{cap}</div>}
                     </div>
-                    {ts&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2}}>{new Date(ts).toLocaleDateString('en-AU')}</div>}
-                  </div>
-                )
-              })}
-            </div>}
-            {evidenceOpen&&user.role==='worker'&&parseSafe(sel.evidence).length<5&&(
-              <div>
-                <div style={{display:'flex',gap:8,marginBottom:10}}>
-                  <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('cam-inp').click()}>📷 Take Photo</button>
-                  <button className="btn btn-secondary" style={{flex:1}} onClick={()=>document.getElementById('gal-inp').click()}>🖼 Gallery</button>
-                </div>
-                <input id="cam-inp" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name,by_id:await authUserId(),role:user.role}]}); setPhotoWarn(false) }; r.readAsDataURL(f); e.target.value='' }}/>
-                <input id="gal-inp" type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=async ev=>{ await update(sel.id,{evidence:[...parseSafe(sel.evidence),{url:ev.target.result,ts:new Date().toISOString(),by:user.name,by_id:await authUserId(),role:user.role}]}); setPhotoWarn(false) }; r.readAsDataURL(f); e.target.value='' }}/>
-                {parseSafe(sel.evidence).length===0&&(
-                  <div className="evidence-zone" onClick={()=>document.getElementById('cam-inp').click()}>
-                    <div style={{fontSize:24,marginBottom:5}}>📷</div>
-                    <div style={{fontSize:13,color:'var(--t2)'}}>{sel.compliance?'Tap to add required photo evidence':'Tap to add photo (optional)'}</div>
-                  </div>
-                )}
+                  )
+                })}
               </div>
-            )}
-            {evidenceOpen&&user.role!=='worker'&&!parseSafe(sel.evidence).length&&sel.compliance&&(
-              <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--red)'}}>⚠️ No photos attached — this is a compliance task and evidence should be required.</div>
+            ) : (
+              <div style={{fontSize:12,color:'var(--t2)',padding:'4px 0'}}>{sel.compliance?'📷 No photos yet — add via checklist items.':'No photos.'}</div>
             )}
           </div>
+          ) })()}
           <div className="section">
             <div className="section-title">Comments & Notes</div>
             {parseSafe(sel.comments,[]).map((c,i)=>{
@@ -3677,11 +3653,11 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
                 <div style={{display:'flex',gap:5,marginTop:7,flexWrap:'wrap'}}><StatusBadge status={t.status}/>{t.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒 Compliance</span>}</div>
               </div>
               <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                {parseSafe(t.evidence).length>0 ? parseSafe(t.evidence).map((e,i)=>{ const url=typeof e==='object'?e.url:e; return (
+                {(()=>{ const photos=taskPhotoIndex(t); return photos.length>0 ? photos.map((p,i)=>{ const isImg=typeof p.url==='string'&&(p.url.startsWith('data:image')||p.url.startsWith('http')); return (
                   <div key={i} className="ev-thumb" style={{width:48,height:48}}>
-                    {typeof url==='string'&&(url.startsWith('data:image')||url.startsWith('http')) ? <img src={url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:16}}>📷</span>}
+                    {isImg ? <img src={p.url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:16}}>📷</span>}
                   </div>
-                )}) : <span style={{fontSize:11,color:'var(--t2)'}}>No photos</span>}
+                )}) : <span style={{fontSize:11,color:'var(--t2)'}}>No photos</span> })()}
               </div>
             </div>
             {hasAccess(user.role,2)&&t.status==='awaiting_review'&&(
