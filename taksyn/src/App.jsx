@@ -2251,8 +2251,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const addSubPhoto = async (tid, idx, photoUrl) => {
     const task = tasks.find(t=>t.id===tid)
     const subs = parseSafe(task.subtasks)
-    const photoObj = { url:photoUrl, ts:new Date().toISOString(), by:user.name, by_id:await authUserId(), role:user.role }
-    const histEntry = { action:'photo_added', by:user.name, byId:await authUserId(), at:new Date().toISOString() }
+    const uid = await authUserId()
+    const photoObj = { url:photoUrl, ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
+    const histEntry = { action:'photo_added', by:user.name, byId:uid, at:new Date().toISOString() }
     update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,photo:photoObj,history:[...(x.history||[]),histEntry]}:x) })
   }
 
