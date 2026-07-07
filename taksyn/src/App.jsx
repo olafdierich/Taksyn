@@ -2248,11 +2248,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
     update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,note,history:[...(x.history||[]),histEntry]}:x) })
   }
 
-  const addSubPhoto = (tid, idx, photoUrl) => {
+  const addSubPhoto = async (tid, idx, photoUrl) => {
     const task = tasks.find(t=>t.id===tid)
     const subs = parseSafe(task.subtasks)
-    const histEntry = { action:'photo_added', by:user.name, byId:user.id, at:new Date().toISOString() }
-    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,photo:photoUrl,history:[...(x.history||[]),histEntry]}:x) })
+    const photoObj = { url:photoUrl, ts:new Date().toISOString(), by:user.name, by_id:await authUserId(), role:user.role }
+    const histEntry = { action:'photo_added', by:user.name, byId:await authUserId(), at:new Date().toISOString() }
+    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,photo:photoObj,history:[...(x.history||[]),histEntry]}:x) })
   }
 
   const checkMandatory = (tid) => {
@@ -2936,7 +2937,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                           </div>
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
-                        {s.photo&&<img src={s.photo} alt="evidence" className="cl-photo-thumb" style={{marginTop:4,cursor:'zoom-in'}} onClick={()=>setLightboxUrl(s.photo)}/>}
+                        {s.photo&&(()=>{ const pu=typeof s.photo==='object'?s.photo.url:s.photo; return <img src={pu} alt="evidence" className="cl-photo-thumb" style={{marginTop:4,cursor:'zoom-in'}} onClick={()=>setLightboxUrl(pu)}/> })()}
                         {isWorker&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
