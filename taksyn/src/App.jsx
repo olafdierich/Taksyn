@@ -3348,7 +3348,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                       return (
                         <div>
                           <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔴 Action Needed — Sent Back ({actionNeeded.length})</div>
+                            <div style={{fontSize:11,fontWeight:700,color:actionNeeded.length>0?'var(--red)':'var(--text)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>{actionNeeded.length>0?'🔴 ':''}Action Needed — Sent Back ({actionNeeded.length})</div>
                             {actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
                           </div>
                           <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
