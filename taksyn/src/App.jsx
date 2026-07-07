@@ -347,6 +347,36 @@ const taskPhotoIndex = (task) => {
   return out.filter(p => p.url)
 }
 
+// Client-side image compression for captured photos: resize longest edge to <= MAX_EDGE (never upscale),
+// re-encode as JPEG at QUALITY. EXIF-orientation-aware (createImageBitmap from-image, with <img> fallback).
+// Never throws — on ANY failure returns the ORIGINAL uncompressed data URL so the worker is never blocked.
+const compressImage = async (file) => {
+  const MAX_EDGE = 1600, QUALITY = 0.8
+  const readAsDataURL = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('read failed')); r.readAsDataURL(f) })
+  let objUrl = null, bitmap = null
+  try {
+    try {
+      bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    } catch {
+      objUrl = URL.createObjectURL(file)
+      bitmap = await new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error('img load failed')); img.src = objUrl })
+    }
+    const w0 = bitmap.width, h0 = bitmap.height
+    if (!w0 || !h0) throw new Error('no dimensions')
+    const scale = Math.min(1, MAX_EDGE / Math.max(w0, h0))
+    const w = Math.round(w0 * scale), h = Math.round(h0 * scale)
+    const canvas = document.createElement('canvas')
+    canvas.width = w; canvas.height = h
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h)
+    return canvas.toDataURL('image/jpeg', QUALITY)
+  } catch {
+    try { return await readAsDataURL(file) } catch { return '' }
+  } finally {
+    if (bitmap && bitmap.close) bitmap.close()
+    if (objUrl) URL.revokeObjectURL(objUrl)
+  }
+}
+
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;touch-action:manipulation}
@@ -2963,7 +2993,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                             {s.requirePhoto&&!s.photo&&(
                               <>
                                 <button className="cl-action-btn" style={{color:'#3B82F6',borderColor:'rgba(59,130,246,.3)'}} onClick={()=>document.getElementById('cl-cam-'+sel.id+'-'+idx).click()}>📷 Add Photo</button>
-                                <input id={'cl-cam-'+sel.id+'-'+idx} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>addSubPhoto(sel.id,idx,ev.target.result); r.readAsDataURL(f); e.target.value='' }}/>
+                                <input id={'cl-cam-'+sel.id+'-'+idx} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const inp=e.target; const f=inp.files[0]; if(!f) return; const compressed=await compressImage(f); addSubPhoto(sel.id,idx,compressed); inp.value='' }}/>
                               </>
                             )}
                           </div>
@@ -3725,17 +3755,15 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
           </div>
           {hasAmendment&&<div style={{marginTop:8,fontSize:11,color:'var(--green)',fontWeight:600}}>✓ Amendment saved — press Resubmit to notify supervisor</div>}
           <input id={'amend-img-'+sel.id} type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{
-            const f=e.target.files[0]; if(!f) return
-            const r=new FileReader()
-            r.onload=async ev=>{
-              const curr=parseSafe(sel.evidence)
-              if(curr.length>=5){ alert('Maximum 5 images reached'); return }
-              await update(sel.id,{evidence:[...curr,{url:ev.target.result,ts:new Date().toISOString(),by:user.name,by_id:await authUserId(),role:user.role}]})
-              const photoEntry={ id: Date.now()+'', author: user.name, authorId: user.id, text:'📎 Amendment photo attached', timestamp: new Date().toISOString(), edits:[], isAmendment:true }
-              update(sel.id,{comments:[...(parseSafe(sel.comments)||[]),photoEntry]})
-              setHasAmendment(true)
-            }
-            r.readAsDataURL(f); e.target.value=''
+            const inp=e.target; const f=inp.files[0]; if(!f) return
+            const compressed=await compressImage(f)
+            const curr=parseSafe(sel.evidence)
+            if(curr.length>=5){ alert('Maximum 5 images reached'); inp.value=''; return }
+            await update(sel.id,{evidence:[...curr,{url:compressed,ts:new Date().toISOString(),by:user.name,by_id:await authUserId(),role:user.role}]})
+            const photoEntry={ id: Date.now()+'', author: user.name, authorId: user.id, text:'📎 Amendment photo attached', timestamp: new Date().toISOString(), edits:[], isAmendment:true }
+            update(sel.id,{comments:[...(parseSafe(sel.comments)||[]),photoEntry]})
+            setHasAmendment(true)
+            inp.value=''
           }}/>
         </div>
       )}
