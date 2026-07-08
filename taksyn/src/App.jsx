@@ -385,14 +385,22 @@ function EvidenceThumb({ entry, className, containerStyle, imgStyle, onImgClick,
     return () => { alive = false }
   }, [direct, path])
   const src = direct || signed
-  const isImg = typeof src === 'string' && (src.startsWith('data:image') || src.startsWith('http'))
+  // Detect non-image (PDF) from the STORED path/url, not the signed URL (which is always http).
+  const ref = (path || (typeof direct === 'string' ? direct : '')).toLowerCase()
+  const isPdf = /\.pdf(\?|$)/.test(ref) || (typeof direct === 'string' && direct.startsWith('data:application/pdf'))
+  const isImg = !isPdf && typeof src === 'string' && (src.startsWith('data:image') || src.startsWith('http'))
   const resolving = !direct && path && !signed && !failed
+  const fileName = (path ? path.split('/').pop() : '') || 'document'
   return (
     <div className={className} title={title || undefined}
          style={{ ...(containerStyle || {}), cursor: (isImg && onImgClick) ? 'zoom-in' : 'default' }}
          onClick={() => { if (isImg && onImgClick) onImgClick(src) }}>
       {resolving ? <span style={{fontSize:14,opacity:0.6}}>⏳</span>
         : failed ? <span style={{fontSize:16}} title="Could not load evidence">⚠️</span>
+        : isPdf ? (src
+            ? <a href={src} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} title={fileName}
+                 style={{display:'flex',alignItems:'center',justifyContent:'center',width:'100%',height:'100%',textDecoration:'none',fontSize:18}}>📄</a>
+            : <span style={{fontSize:18}}>📄</span>)
         : isImg ? <img src={src} alt="evidence" style={imgStyle}/>
         : <span style={{fontSize:18}}>📷</span>}
     </div>
@@ -405,7 +413,8 @@ function EvidenceThumb({ entry, className, containerStyle, imgStyle, onImgClick,
 function ReviewerAttachEvidence({ task, user, update }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
-  const inputRef = useRef(null)
+  const cameraRef = useRef(null)
+  const fileRef = useRef(null)
   const onPick = async (e) => {
     const file = e.target.files && e.target.files[0]
     if (e.target) e.target.value = ''
@@ -430,11 +439,15 @@ function ReviewerAttachEvidence({ task, user, update }) {
   }
   return (
     <div style={{marginTop:10}}>
-      <input ref={inputRef} type="file" accept="image/*" style={{display:'none'}} onChange={onPick}/>
-      <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>inputRef.current&&inputRef.current.click()}>
-        {busy ? 'Uploading…' : '📎 Attach evidence'}
-      </button>
-      {msg && <span style={{marginLeft:8,fontSize:11,color:msg.startsWith('Error')?'var(--red)':'var(--green)'}}>{msg}</span>}
+      {/* 📷 Take photo — rear camera on mobile (capture), graceful file-picker fallback on desktop. Images only. */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={onPick}/>
+      {/* 📎 Choose file — an existing image OR a PDF document (e.g. a received lab report). */}
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{display:'none'}} onChange={onPick}/>
+      <div style={{display:'flex',gap:6}}>
+        <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>cameraRef.current&&cameraRef.current.click()}>{busy?'Uploading…':'📷 Take photo'}</button>
+        <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>fileRef.current&&fileRef.current.click()}>{busy?'Uploading…':'📎 Choose file'}</button>
+      </div>
+      {msg && <div style={{marginTop:6,fontSize:11,color:msg.startsWith('Error')?'var(--red)':'var(--green)'}}>{msg}</div>}
     </div>
   )
 }
