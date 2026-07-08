@@ -12451,11 +12451,16 @@ export default function App() {
           console.warn('onAuthStateChange profile fetch error (ignored):', e.message)
         }
       } else if(event==='TOKEN_REFRESHED') {
-        // Token refreshed (e.g. on tab regain focus) — reapply saved org context
+        // Token refreshed (e.g. on tab regain focus) — reapply saved org context.
+        // Return prev UNCHANGED when nothing differs, so we don't mint a new user object and re-fire
+        // user-keyed effects (loadTasks/realtime) on every refresh. Mirrors the visibility handler below.
         const savedOrgName = sessionStorage.getItem('currentOrgName')
         const savedRole = sessionStorage.getItem('currentRole')
         if (savedOrgName && savedRole) {
-          setUser(prev => prev ? {...prev, org:savedOrgName, role:savedRole} : prev)
+          setUser(prev => {
+            if (!prev || (prev.org === savedOrgName && prev.role === savedRole)) return prev
+            return {...prev, org:savedOrgName, role:savedRole}
+          })
         }
       }
     })
@@ -12529,7 +12534,10 @@ export default function App() {
         .subscribe()
       return ()=>{ clearTimeout(reloadTimer); supabase.removeChannel(channel) }
     }
-  },[user])
+  // Key on identity primitives, NOT the `user` object. A TOKEN_REFRESHED/visibility setUser mints a new
+  // but equivalent object; keying on the object would re-run this effect (full loadTasks() + realtime
+  // re-subscribe) on every refresh. This effect only depends on who the user is + their org/role.
+  },[user?.id, user?.org, user?.role])
 
   const [showOrgSwitch, setShowOrgSwitch] = useState(false)
   const [orgSwitchChoices, setOrgSwitchChoices] = useState([])
