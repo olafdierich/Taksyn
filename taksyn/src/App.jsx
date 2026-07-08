@@ -316,6 +316,11 @@ const mkAuditEntry = (event_type, user, org, detail={}, task_id=null, task_title
 const initials = name => name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '??'
 const avatarColor = role => ROLE_COLORS[role] || '#6B7280'
 const isConfigured = () => { const u = import.meta.env.VITE_SUPABASE_URL; return u && !u.includes('placeholder') }
+// Ids this client has just written to `tasks`. The realtime handler skips these (self-echo) so our own
+// PATCH/insert never triggers a refetch. Cleared on reconcile (echo received) or a ~5s fallback timeout
+// so a dropped realtime event can't leave an id permanently ignored. In-memory, per-tab.
+const recentlyWrittenIds = new Set()
+const markRecentlyWritten = id => { if(!id) return; recentlyWrittenIds.add(id); setTimeout(()=>recentlyWrittenIds.delete(id), 5000) }
 const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—'
 const fmtDuration = (start, end) => {
   if (!start || !end) return null
@@ -1997,7 +2002,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{} }) {
+function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{} }) {
   const [filter, setFilter] = useState('all')
   const [selectedOrg, setSelectedOrg] = useState('all')
   const [orgSearch, setOrgSearch] = useState('')
@@ -2014,6 +2019,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
   const [calPicking, setCalPicking] = useState('from') // 'from' | 'to' | null
   const [orgsList, setOrgsList] = useState([])
   const [selected, setSelected] = useState(null)
+  // Open-hydration: opening a task detail refetches its full row (evidence/subtasks) as ONE single-row select.
+  // `selected` is always a scalar task id (never bulk), so this fires exactly one refetch per open.
+  useEffect(()=>{ if(selected) loadTaskById(selected) }, [selected])
   const [comment, setComment] = useState('')
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
   const [interventionModal, setInterventionModal] = useState(null) // {action, label, changes, taskId}
@@ -2263,6 +2271,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
       if (changes.subtasks) payload.subtasks = JSON.stringify(changes.subtasks)
       if (changes.evidence) payload.evidence = JSON.stringify(changes.evidence)
       if (changes.comments) payload.comments = JSON.stringify(changes.comments)
+      markRecentlyWritten(id)  // suppress the realtime self-echo for our own write
       await supabase.from('tasks').update(payload).eq('id', id)
     }
   }
@@ -3096,7 +3105,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                     <span style={isOrphaned?{color:'var(--t2)',textDecoration:'line-through'}:{}}>{sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</span>
                     {isOrphaned&&<div style={{marginTop:4,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                       <span style={{fontSize:11,color:'var(--red)',fontWeight:600}}>⚠️ Assigned user no longer in organisation</span>
-                      {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>Reassign</button>}
+                      {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setShowEdit(true) }}>Reassign</button>}
                     </div>}
                   </div>
                 )
@@ -3106,7 +3115,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
             </div>
           </div>
           <div className="btn-row">
-            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={()=>{setEditTask({...sel,subtasks:parseSafe(sel.subtasks)});setShowEdit(true)}}>✏️ Edit</button>}
+            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setShowEdit(true) }}>✏️ Edit</button>}
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
@@ -3133,9 +3142,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, search, pushUndo, setAudi
                         if(isConfigured()) supabase.from('audit_log').insert(dEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
                         logAuditEvent(user, 'task.deleted', 'task', sel.id, sel.title, 'Deleted (scope: '+deleteScope+')')
                         setTasks(prev=>prev.filter(t=>t.id!==sel.id))
+                        markRecentlyWritten(sel.id)  // suppress our own delete echo
                         if(isConfigured()) await supabase.from('tasks').delete().eq('id',sel.id)
                         setShowDeleteConfirm(false); setDeleteScope(''); setSelected(null)
-                        if(isConfigured()) await loadTasks()
+                        // No full reload: the optimistic filter above already removed the row (delete is single-id);
+                        // other clients reconcile via the realtime DELETE branch.
                       }}>Confirm</button>
                     </div>
                   </div>
@@ -12250,6 +12261,19 @@ export default function App() {
     }
   }
 
+  // Fetch ONE task by id (full row incl. evidence/subtasks) and splice it into tasks state.
+  // Used for open-hydration, Edit/Reassign seeding, post-action reconcile, and realtime single-row updates.
+  // RLS is enforced by the session JWT the client already holds — no identity is read from user state.
+  const loadTaskById = async (id) => {
+    if(!isConfigured() || !id) return null
+    if(user?.role==='super_admin') return null  // super_admin never loads task content
+    const { data, error } = await supabase.from('tasks').select('*').eq('id', id).single()
+    if(error || !data) return null
+    const hydrated = {...data, subtasks:parseSafe(data.subtasks), evidence:parseSafe(data.evidence), comments:parseSafe(data.comments,[])}
+    setTasks(prev => prev.some(t=>t.id===hydrated.id) ? prev.map(t=>t.id===hydrated.id?hydrated:t) : [hydrated, ...prev])
+    return hydrated
+  }
+
   // keep topbar fixed on mobile
 
   useEffect(()=>{
@@ -12472,15 +12496,27 @@ export default function App() {
           .then(({data})=>{ if(data) setLeaveRecords(data) }).catch(()=>{})
       }
       let reloadTimer = null
+      const pendingIds = new Set()
       const channel = supabase
         .channel('tasks-realtime')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, ()=>{
-          // Debounce to avoid wiping optimistic updates
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload)=>{
+          const row = (payload.new && Object.keys(payload.new).length) ? payload.new : payload.old
+          const id = row?.id
+          if(!id) return
+          // Self-echo: this client just wrote this row — state is already optimistic. Skip and reconcile.
+          if(recentlyWrittenIds.has(id)) { recentlyWrittenIds.delete(id); return }
+          // A row deleted elsewhere — drop it locally, no fetch needed.
+          if(payload.eventType==='DELETE') { setTasks(prev=>prev.filter(t=>t.id!==id)); return }
+          // Changed elsewhere — refetch ONLY that row. Dedupe within a 1.5s settle window.
+          pendingIds.add(id)
           clearTimeout(reloadTimer)
-          reloadTimer = setTimeout(()=>loadTasks(), 1500)
+          reloadTimer = setTimeout(()=>{
+            const ids = [...pendingIds]; pendingIds.clear()
+            ids.forEach(tid=>loadTaskById(tid))
+          }, 1500)
         })
         .subscribe()
-      return ()=>{ supabase.removeChannel(channel) }
+      return ()=>{ clearTimeout(reloadTimer); supabase.removeChannel(channel) }
     }
   },[user])
 
@@ -12553,7 +12589,7 @@ export default function App() {
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
