@@ -2,9 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
-// ===== TEMP STORAGE TEST — REMOVE AFTER PHASE 0 =====
 import { uploadEvidence, signedEvidenceUrl } from './lib/evidenceStorage'
-// ===== END TEMP STORAGE TEST =====
 
 // Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
 // Declared here (outside all components) so it is always in scope everywhere in this file.
@@ -12098,185 +12096,6 @@ function SupportView({ user, tickets=[], setTickets }) {
   )
 }
 
-
-
-// ===== TEMP STORAGE TEST — REMOVE AFTER PHASE 0 =====
-// Throwaway harness to prove taksyn/src/lib/evidenceStorage.js works end to end
-// against the SANDBOX bucket. Isolated, self-contained state — not wired into any
-// real task flow. Delete this whole component AND its <TempStorageTestPanel/> mount
-// (search "TEMP STORAGE TEST") after Phase 0 sign-off.
-function TempStorageTestPanel({ user }) {
-  const [file, setFile] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState('')
-  const [path, setPath] = useState('')
-  const [url, setUrl] = useState('')
-  const [migBusy, setMigBusy] = useState(false)
-  const [migReport, setMigReport] = useState('')
-  // Test constants: 'ORG_SANDBOX' is the sandbox org id our bucket RLS policy checks.
-  // This is a hardcoded TEST value, NOT a real org lookup.
-  const TEST_ORG_ID = 'ORG_SANDBOX'
-  const TEST_TASK_ID = 'SANDBOX_TASK_1'
-  const run = async () => {
-    setStatus(''); setPath(''); setUrl('')
-    if (!file) { setStatus('Pick an image first.'); return }
-    setBusy(true)
-    try {
-      const { path: p } = await uploadEvidence(file, TEST_ORG_ID, TEST_TASK_ID)
-      setPath(p)
-      const signed = await signedEvidenceUrl(p)
-      setUrl(signed)
-      setStatus('OK — uploaded + signed URL resolved.')
-    } catch (e) {
-      // Display the error verbatim so RLS / bucket-policy rejections are visible.
-      setStatus('ERROR: ' + (e?.message || JSON.stringify(e)))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // --- base64 → Storage migration helpers (throwaway) ---
-  const isB64 = (v) => typeof v === 'string' && v.startsWith('data:image')
-  // Approx decoded byte size of a base64 data URL, without decoding.
-  const b64Bytes = (dataUrl) => {
-    const c = (dataUrl.split(',')[1]) || ''
-    const pad = c.endsWith('==') ? 2 : c.endsWith('=') ? 1 : 0
-    return Math.max(0, Math.floor(c.length * 3 / 4) - pad)
-  }
-  const mimeOf = (dataUrl) => ((dataUrl.split(',')[0].match(/data:([^;]+)/) || [])[1]) || 'image/jpeg'
-  const extOf = (mime) => mime === 'image/jpeg' ? 'jpg' : mime === 'image/svg+xml' ? 'svg' : (mime.split('/')[1] || 'bin')
-  const dataUrlToFile = (dataUrl, filename) => {
-    const [meta, b64] = dataUrl.split(',')
-    const mime = (meta.match(/data:([^;]+)/) || [])[1] || 'image/jpeg'
-    const bin = atob(b64)
-    const bytes = new Uint8Array(bin.length)
-    for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k)
-    return new File([new Blob([bytes], { type: mime })], filename, { type: mime })
-  }
-
-  // Migrate base64 image data in tasks.evidence[] and tasks.subtasks[].photo to Storage.
-  // Idempotent: entries already carrying a `path` (and no base64) are skipped. Column-scoped
-  // DB writes only ({ evidence, subtasks }). Errors are reported per task; the loop continues.
-  const migrateBase64Evidence = async ({ dryRun }) => {
-    setMigBusy(true)
-    setMigReport('')
-    const lines = []
-    let gFound = 0, gMig = 0, gSkip = 0, gBytes = 0, gErr = 0
-    try {
-      if (!user?.org) { setMigReport('No user.org in scope — sign in first.'); setMigBusy(false); return }
-      // Fetch this org's tasks (column-scoped select). Reuses the app's authenticated supabase client.
-      const { data: tasks, error } = await supabase
-        .from('tasks').select('id, org, evidence, subtasks').eq('org', user.org)
-      if (error) throw error
-      lines.push(dryRun ? 'DRY RUN — no changes written' : 'REAL RUN — writing to Storage + DB')
-      lines.push(`Org: ${user.org} · ${tasks?.length || 0} task(s)`)
-      lines.push('')
-      for (const task of (tasks || [])) {
-        let tFound = 0, tMig = 0, tSkip = 0, tBytes = 0
-        try {
-          const evidence = parseSafe(task.evidence)
-          const subtasks = parseSafe(task.subtasks)
-          const newEvidence = [...evidence]
-          const newSubtasks = [...subtasks]
-          let changed = false
-
-          // evidence[] — base64 lives in a `url` field (or a legacy bare string)
-          for (let i = 0; i < newEvidence.length; i++) {
-            const e = newEvidence[i]
-            const b64 = isB64(e) ? e : (e && typeof e === 'object' && isB64(e.url) ? e.url : null)
-            const hasPath = e && typeof e === 'object' && !!e.path
-            if (!b64) { if (hasPath) tSkip++; continue }          // already migrated → skip
-            tFound++
-            const bytes = b64Bytes(b64); tBytes += bytes
-            const filename = `migrated_${Date.now()}_${i}.${extOf(mimeOf(b64))}`
-            const plannedPath = `${task.org}/${task.id}/${filename}`
-            if (dryRun) {
-              lines.push(`  · evidence[${i}] ~${bytes}B → ${plannedPath}`)
-            } else {
-              const { path: p } = await uploadEvidence(dataUrlToFile(b64, filename), task.org, task.id)
-              const base = (e && typeof e === 'object') ? { ...e } : {}
-              delete base.url                                     // drop base64, keep ts/by/by_id/role
-              newEvidence[i] = { ...base, path: p }
-              tMig++; changed = true
-              lines.push(`  · evidence[${i}] ~${bytes}B → ${p} ✓`)
-            }
-          }
-
-          // subtasks[].photo — base64 lives in photo (object.url or a legacy bare string)
-          for (let j = 0; j < newSubtasks.length; j++) {
-            const s = newSubtasks[j]
-            if (!s || typeof s !== 'object') continue
-            const photo = s.photo
-            const b64 = isB64(photo) ? photo : (photo && typeof photo === 'object' && isB64(photo.url) ? photo.url : null)
-            const hasPath = photo && typeof photo === 'object' && !!photo.path
-            if (!b64) { if (hasPath) tSkip++; continue }          // already migrated → skip
-            tFound++
-            const bytes = b64Bytes(b64); tBytes += bytes
-            const filename = `migrated_${Date.now()}_sub${j}.${extOf(mimeOf(b64))}`
-            const plannedPath = `${task.org}/${task.id}/${filename}`
-            if (dryRun) {
-              lines.push(`  · subtasks[${j}].photo ~${bytes}B → ${plannedPath}`)
-            } else {
-              const { path: p } = await uploadEvidence(dataUrlToFile(b64, filename), task.org, task.id)
-              const basePhoto = (photo && typeof photo === 'object') ? { ...photo } : {}
-              delete basePhoto.url                                // drop base64, keep ts/by/by_id/role
-              newSubtasks[j] = { ...s, photo: { ...basePhoto, path: p } }
-              tMig++; changed = true
-              lines.push(`  · subtasks[${j}].photo ~${bytes}B → ${p} ✓`)
-            }
-          }
-
-          // Real run only: one column-scoped update per task, only if something changed.
-          if (!dryRun && changed) {
-            const { error: upErr } = await supabase
-              .from('tasks').update({ evidence: newEvidence, subtasks: newSubtasks }).eq('id', task.id)
-            if (upErr) throw upErr
-          }
-          lines.push(`Task ${task.id}: ${tFound} found, ${tMig} migrated, ${tSkip} skipped, ~${tBytes}B`)
-          lines.push('')
-          gFound += tFound; gMig += tMig; gSkip += tSkip; gBytes += tBytes
-        } catch (te) {
-          // Show decode / bucket-policy / DB errors verbatim, then continue to next task.
-          gErr++
-          lines.push(`Task ${task.id}: ERROR — ${te?.message || JSON.stringify(te)}`)
-          lines.push('')
-        }
-      }
-      lines.push(`GRAND TOTAL: ${gFound} found, ${gMig} migrated, ${gSkip} skipped, ${gErr} task-error(s), ~${gBytes}B`)
-      if (dryRun) lines.push('(planned paths are approximate — uploadEvidence prepends its own timestamp on real run)')
-      setMigReport(lines.join('\n'))
-    } catch (e) {
-      setMigReport((lines.length ? lines.join('\n') + '\n' : '') + 'FATAL: ' + (e?.message || JSON.stringify(e)))
-    } finally {
-      setMigBusy(false)
-    }
-  }
-
-  const anyBusy = busy || migBusy
-  return (
-    <div style={{position:'fixed',bottom:16,right:16,zIndex:2147483000,width:320,maxWidth:'92vw',maxHeight:'80vh',overflowY:'auto',background:'#0f172a',color:'#e2e8f0',border:'2px solid #f59e0b',borderRadius:10,padding:12,fontFamily:'ui-monospace,Menlo,monospace',fontSize:12,lineHeight:1.45,boxShadow:'0 8px 32px rgba(0,0,0,.4)'}}>
-      <div style={{fontWeight:700,marginBottom:8,color:'#f59e0b'}}>⚠ TEMP STORAGE TEST — remove after Phase 0</div>
-      <input type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0]||null)} style={{width:'100%',marginBottom:8,color:'#e2e8f0',fontSize:11}}/>
-      <button onClick={run} disabled={anyBusy} style={{width:'100%',background:'#2563eb',color:'#fff',border:'none',borderRadius:6,padding:'8px 0',fontWeight:600,cursor:anyBusy?'default':'pointer',opacity:anyBusy?0.6:1}}>{busy?'Uploading…':'Upload test'}</button>
-      <div style={{marginTop:8,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
-        {status && <div style={{color:status.startsWith('ERROR')?'#f87171':'#4ade80'}}>{status}</div>}
-        {path && <div style={{marginTop:4,opacity:0.85}}>path: {path}</div>}
-        {url && <div style={{marginTop:4,opacity:0.85}}>url: {url}</div>}
-        {url && <img src={url} alt="signed evidence" style={{marginTop:8,maxWidth:'100%',borderRadius:6,border:'1px solid #334155'}}/>}
-      </div>
-
-      <div style={{borderTop:'1px solid #334155',margin:'12px 0 8px'}}/>
-      <div style={{fontWeight:700,marginBottom:6}}>base64 → Storage migration</div>
-      <div style={{display:'flex',gap:6}}>
-        <button onClick={()=>migrateBase64Evidence({dryRun:true})} disabled={anyBusy} style={{flex:1,background:'#334155',color:'#fff',border:'none',borderRadius:6,padding:'8px 0',fontWeight:600,cursor:anyBusy?'default':'pointer',opacity:anyBusy?0.6:1}}>{migBusy?'…':'Migrate — DRY RUN'}</button>
-        <button onClick={()=>{ if(window.confirm('REAL RUN: upload base64 evidence to Storage and rewrite task rows. Proceed?')) migrateBase64Evidence({dryRun:false}) }} disabled={anyBusy} style={{flex:1,background:'#b91c1c',color:'#fff',border:'none',borderRadius:6,padding:'8px 0',fontWeight:600,cursor:anyBusy?'default':'pointer',opacity:anyBusy?0.6:1}}>{migBusy?'…':'Migrate — REAL RUN'}</button>
-      </div>
-      {migReport && <div style={{marginTop:8,whiteSpace:'pre-wrap',wordBreak:'break-all',fontSize:11,background:'#111827',borderRadius:6,padding:8,color:migReport.includes('ERROR')||migReport.startsWith('FATAL')?'#fca5a5':'#cbd5e1'}}>{migReport}</div>}
-    </div>
-  )
-}
-// ===== END TEMP STORAGE TEST =====
-
 export default function App() {
   const [user, setUser] = useState(null)
   const [deactivatedMsg, setDeactivatedMsg] = useState('')
@@ -12886,9 +12705,6 @@ export default function App() {
   return (
     <>
       <style>{CSS}</style>
-      {/* ===== TEMP STORAGE TEST — REMOVE AFTER PHASE 0 ===== */}
-      <TempStorageTestPanel user={user}/>
-      {/* ===== END TEMP STORAGE TEST ===== */}
       <div className="app">
         {showUndo&&undoStack.length>0&&(
           <div className="undo-toast">
