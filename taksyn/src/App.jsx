@@ -320,7 +320,15 @@ const isConfigured = () => { const u = import.meta.env.VITE_SUPABASE_URL; return
 // PATCH/insert never triggers a refetch. Cleared on reconcile (echo received) or a ~5s fallback timeout
 // so a dropped realtime event can't leave an id permanently ignored. In-memory, per-tab.
 const recentlyWrittenIds = new Set()
-const markRecentlyWritten = id => { if(!id) return; recentlyWrittenIds.add(id); setTimeout(()=>recentlyWrittenIds.delete(id), 5000) }
+const recentWriteTimers = {}
+// Re-armable per-id guard. Each call resets the 5s fallback window, so calling it again *after* a slow
+// (multi-second) write completes keeps the id suppressed until that write's echo actually arrives.
+const markRecentlyWritten = id => {
+  if(!id) return
+  recentlyWrittenIds.add(id)
+  clearTimeout(recentWriteTimers[id])
+  recentWriteTimers[id] = setTimeout(()=>{ recentlyWrittenIds.delete(id); delete recentWriteTimers[id] }, 5000)
+}
 const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—'
 const fmtDuration = (start, end) => {
   if (!start || !end) return null
@@ -2273,6 +2281,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       if (changes.comments) payload.comments = JSON.stringify(changes.comments)
       markRecentlyWritten(id)  // suppress the realtime self-echo for our own write
       await supabase.from('tasks').update(payload).eq('id', id)
+      markRecentlyWritten(id)  // re-arm: a large/slow write's echo may still be in flight past the first window
     }
   }
 
@@ -2629,7 +2638,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowEdit(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={()=>{ update(sel.id,{...editTask,due_time:(editTask.compliance&&editTask.due_time)?editTask.due_time:null}); setShowEdit(false) }}>Save Changes</button>
+                <button className="btn btn-primary" onClick={()=>{ const {evidence, comments, ...editable}=editTask; update(sel.id,{...editable,due_time:(editable.compliance&&editable.due_time)?editable.due_time:null}); setShowEdit(false) }}>Save Changes</button>
               </div>
             </div>
           </div>
@@ -3498,7 +3507,7 @@ function EscalationsView({ tasks, setTasks, user, setAuditLog }) {
   const resolve = async (id) => {
     const t = tasks.find(t=>t.id===id)
     setTasks(prev=>prev.map(t=>t.id===id?{...t,escalation:false,status:'in_progress'}:t))
-    if(isConfigured()) await supabase.from('tasks').update({escalation:false,status:'in_progress'}).eq('id',id)
+    if(isConfigured()) { markRecentlyWritten(id); await supabase.from('tasks').update({escalation:false,status:'in_progress'}).eq('id',id); markRecentlyWritten(id) }
     const rEntry = mkAuditEntry('status_change', user, t?.org||user.org, {}, id, t?.title||id, t?.status||'escalated', 'in_progress')
     if(setAuditLog) setAuditLog(prev=>[rEntry,...prev])
     if(isConfigured()) supabase.from('audit_log').insert(rEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
@@ -3664,7 +3673,7 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
   const approve = async (id) => {
     const t = tasks.find(t=>t.id===id)
     setTasks(prev=>prev.map(t=>t.id===id?{...t,status:'approved',reviewed_at:new Date().toISOString()}:t))
-    if(isConfigured()) await supabase.from('tasks').update({status:'approved',reviewed_at:new Date().toISOString()}).eq('id',id)
+    if(isConfigured()) { markRecentlyWritten(id); await supabase.from('tasks').update({status:'approved',reviewed_at:new Date().toISOString()}).eq('id',id); markRecentlyWritten(id) }
     const aEntry = mkAuditEntry('task_approved', user, t?.org||user.org, {}, id, t?.title||id, 'awaiting_review', 'approved')
     if(setAuditLog) setAuditLog(prev=>[aEntry,...prev])
     if(isConfigured()) supabase.from('audit_log').insert(aEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
@@ -3673,7 +3682,7 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
   const reject = async (id) => {
     const t = tasks.find(t=>t.id===id)
     setTasks(prev=>prev.map(t=>t.id===id?{...t,status:'rejected',reviewed_at:new Date().toISOString()}:t))
-    if(isConfigured()) await supabase.from('tasks').update({status:'rejected',reviewed_at:new Date().toISOString()}).eq('id',id)
+    if(isConfigured()) { markRecentlyWritten(id); await supabase.from('tasks').update({status:'rejected',reviewed_at:new Date().toISOString()}).eq('id',id); markRecentlyWritten(id) }
     const rEntry = mkAuditEntry('task_rejected', user, t?.org||user.org, {}, id, t?.title||id, 'awaiting_review', 'rejected')
     if(setAuditLog) setAuditLog(prev=>[rEntry,...prev])
     if(isConfigured()) supabase.from('audit_log').insert(rEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
@@ -9068,7 +9077,9 @@ function SuperAdminTaskStats({ tasks, setTasks, loadTasks }) {
                       <td style={{padding:'8px 10px',color:'var(--t2)'}}>{t.due_date}</td>
                       <td style={{padding:'8px 10px'}}>
                         <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={async()=>{
+                          markRecentlyWritten(t.id)
                           await supabase.from('tasks').update({assigned_user_id:null}).eq('id',t.id)
+                          markRecentlyWritten(t.id)
                           if(setTasks) setTasks(prev=>prev.map(x=>x.id===t.id?{...x,assigned_user_id:null}:x))
                           setOrphanedTasks(prev=>prev.filter(x=>x.id!==t.id))
                         }}>Unassign</button>
