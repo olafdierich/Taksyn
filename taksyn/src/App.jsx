@@ -356,11 +356,87 @@ const parseSafe = (val, fallback=[]) => {
 // plus legacy standalone evidence (tasks.evidence). Each entry normalized to { url, ts, by, source, label }.
 // Null-safe for legacy bare-string photos/evidence (ts/by come back null → thumbnail only).
 const taskPhotoIndex = (task) => {
-  const norm = p => (p && typeof p === 'object') ? { url:p.url, ts:p.ts||null, by:p.by||null } : { url:p, ts:null, by:null }
+  // Entries may carry a base64/legacy `url` OR a private-Storage `path` (post-migration).
+  // Preserve both plus attribution (by/by_id/role) so callers can sign paths + show who added it.
+  const norm = p => (p && typeof p === 'object')
+    ? { url:p.url||null, path:p.path||null, ts:p.ts||null, by:p.by||null, by_id:p.by_id||null, role:p.role||null }
+    : { url:p, path:null, ts:null, by:null, by_id:null, role:null }
   const out = []
   parseSafe(task?.subtasks).forEach(s => { if (s && s.photo) out.push({ ...norm(s.photo), source:'checklist', label:s.text||'' }) })
   parseSafe(task?.evidence).forEach(e => { if (e) out.push({ ...norm(e), source:'evidence', label:'' }) })
-  return out.filter(p => p.url)
+  return out.filter(p => p.url || p.path)
+}
+
+// Renders one evidence entry, supporting BOTH shapes:
+//   - `url` (base64 / legacy / http) → render directly (unchanged behaviour)
+//   - `path` (private Storage object key) → sign lazily via signedEvidenceUrl, placeholder while resolving
+// Nothing breaks for un-migrated tasks; migrated (path-only) entries render once signed.
+function EvidenceThumb({ entry, className, containerStyle, imgStyle, onImgClick, title }) {
+  const direct = (entry && typeof entry === 'object') ? (entry.url || null) : entry
+  const path = (entry && typeof entry === 'object') ? (entry.path || null) : null
+  const [signed, setSigned] = useState(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let alive = true
+    if (!direct && path) {
+      setSigned(null); setFailed(false)
+      signedEvidenceUrl(path).then(u => { if (alive) setSigned(u) }).catch(() => { if (alive) setFailed(true) })
+    }
+    return () => { alive = false }
+  }, [direct, path])
+  const src = direct || signed
+  const isImg = typeof src === 'string' && (src.startsWith('data:image') || src.startsWith('http'))
+  const resolving = !direct && path && !signed && !failed
+  return (
+    <div className={className} title={title || undefined}
+         style={{ ...(containerStyle || {}), cursor: (isImg && onImgClick) ? 'zoom-in' : 'default' }}
+         onClick={() => { if (isImg && onImgClick) onImgClick(src) }}>
+      {resolving ? <span style={{fontSize:14,opacity:0.6}}>⏳</span>
+        : failed ? <span style={{fontSize:16}} title="Could not load evidence">⚠️</span>
+        : isImg ? <img src={src} alt="evidence" style={imgStyle}/>
+        : <span style={{fontSize:18}}>📷</span>}
+    </div>
+  )
+}
+
+// Reviewer-attached evidence: lets manager/supervisor/client_admin attach evidence to a task
+// they are reviewing. Uploads to Storage via uploadEvidence and appends a { path, ts, by, by_id, role }
+// entry with a COLUMN-SCOPED { evidence } update (reuses the parent `update` helper — no whole-object write).
+function ReviewerAttachEvidence({ task, user, update }) {
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const inputRef = useRef(null)
+  const onPick = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    if (e.target) e.target.value = ''
+    if (!file) return
+    setBusy(true); setMsg('')
+    try {
+      // NOTE(live): task.org holds the org NAME on live data, while the bucket RLS policy checks the
+      // path's first folder against org_members.org (an ID). Sandbox is aligned to ORG_SANDBOX so
+      // task.org works here; live will need org name→ID resolution before this upload.
+      const { path } = await uploadEvidence(file, task.org, task.id)
+      // Acting user's auth id MUST come from the session, never the user-state object.
+      const by_id = await authUserId()
+      const entry = { path, ts: new Date().toISOString(), by: user.name, by_id, role: user.role }
+      const newEvidence = [...parseSafe(task.evidence), entry]
+      await update(task.id, { evidence: newEvidence }) // column-scoped { evidence } + local state sync
+      setMsg('✓ Evidence attached')
+    } catch (err) {
+      setMsg('Error: ' + (err?.message || JSON.stringify(err)))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div style={{marginTop:10}}>
+      <input ref={inputRef} type="file" accept="image/*" style={{display:'none'}} onChange={onPick}/>
+      <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>inputRef.current&&inputRef.current.click()}>
+        {busy ? 'Uploading…' : '📎 Attach evidence'}
+      </button>
+      {msg && <span style={{marginLeft:8,fontSize:11,color:msg.startsWith('Error')?'var(--red)':'var(--green)'}}>{msg}</span>}
+    </div>
+  )
 }
 
 // Client-side image compression for captured photos: resize longest edge to <= MAX_EDGE (never upscale),
@@ -2998,7 +3074,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           </div>
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
-                        {s.photo&&(()=>{ const pu=typeof s.photo==='object'?s.photo.url:s.photo; return <img src={pu} alt="evidence" className="cl-photo-thumb" style={{marginTop:4,cursor:'zoom-in'}} onClick={()=>setLightboxUrl(pu)}/> })()}
+                        {s.photo&&<EvidenceThumb entry={s.photo} className="cl-photo-thumb" containerStyle={{marginTop:4,overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>}
                         {isWorker&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
@@ -3044,11 +3120,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             {photos.length>0 ? (
               <div className="ev-thumbs">
                 {photos.map((p,i)=>{
-                  const isImg=typeof p.url==='string'&&(p.url.startsWith('data:image')||p.url.startsWith('http'))
-                  const cap=[p.ts&&new Date(p.ts).toLocaleDateString('en-AU'),p.ts&&new Date(p.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),p.by].filter(Boolean).join(' · ')
+                  // Attribution: "Added by {by} ({role}) · {ts}" — makes reviewer-added items distinguishable.
+                  const tsStr=[p.ts&&new Date(p.ts).toLocaleDateString('en-AU'),p.ts&&new Date(p.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})].filter(Boolean).join(' ')
+                  const roleLbl=p.role?(ROLE_LABELS[p.role]||p.role):''
+                  const cap=p.by?`Added by ${p.by}${roleLbl?' ('+roleLbl+')':''}${tsStr?' · '+tsStr:''}`:tsStr
                   return (
                     <div key={i} style={{position:'relative',marginBottom:4}}>
-                      <div className="ev-thumb" onClick={()=>{ if(isImg) setLightboxUrl(p.url) }} style={{cursor:isImg?'zoom-in':'default'}}>{isImg?<img src={p.url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18}}>📷</span>}</div>
+                      <EvidenceThumb entry={p} className="ev-thumb" imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>
                       {cap&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2,maxWidth:64,lineHeight:1.3}}>{cap}</div>}
                     </div>
                   )
@@ -3056,6 +3134,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               </div>
             ) : (
               <div style={{fontSize:12,color:'var(--t2)',padding:'4px 0'}}>{sel.compliance?'📷 No photos yet — add via checklist items.':'No photos.'}</div>
+            )}
+            {['manager','supervisor','client_admin'].includes(user.role) && (
+              <ReviewerAttachEvidence task={sel} user={user} update={update}/>
             )}
           </div>
           ) })()}
@@ -3706,11 +3787,9 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
                 <div style={{display:'flex',gap:5,marginTop:7,flexWrap:'wrap'}}><StatusBadge status={t.status}/>{t.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒 Compliance</span>}</div>
               </div>
               <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                {(()=>{ const photos=taskPhotoIndex(t); return photos.length>0 ? photos.map((p,i)=>{ const isImg=typeof p.url==='string'&&(p.url.startsWith('data:image')||p.url.startsWith('http')); return (
-                  <div key={i} className="ev-thumb" style={{width:48,height:48}}>
-                    {isImg ? <img src={p.url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:16}}>📷</span>}
-                  </div>
-                )}) : <span style={{fontSize:11,color:'var(--t2)'}}>No photos</span> })()}
+                {(()=>{ const photos=taskPhotoIndex(t); return photos.length>0 ? photos.map((p,i)=>(
+                  <EvidenceThumb key={i} entry={p} className="ev-thumb" containerStyle={{width:48,height:48}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} title={p.by?`Added by ${p.by}${p.role?' ('+(ROLE_LABELS[p.role]||p.role)+')':''}`:undefined}/>
+                )) : <span style={{fontSize:11,color:'var(--t2)'}}>No photos</span> })()}
               </div>
             </div>
             {hasAccess(user.role,2)&&t.status==='awaiting_review'&&(
