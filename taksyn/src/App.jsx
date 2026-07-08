@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
+// ===== TEMP STORAGE TEST — REMOVE AFTER PHASE 0 =====
+import { uploadEvidence, signedEvidenceUrl } from './lib/evidenceStorage'
+// ===== END TEMP STORAGE TEST =====
 
 // Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
 // Declared here (outside all components) so it is always in scope everywhere in this file.
@@ -12005,6 +12008,54 @@ function SupportView({ user, tickets=[], setTickets }) {
 
 
 
+// ===== TEMP STORAGE TEST — REMOVE AFTER PHASE 0 =====
+// Throwaway harness to prove taksyn/src/lib/evidenceStorage.js works end to end
+// against the SANDBOX bucket. Isolated, self-contained state — not wired into any
+// real task flow. Delete this whole component AND its <TempStorageTestPanel/> mount
+// (search "TEMP STORAGE TEST") after Phase 0 sign-off.
+function TempStorageTestPanel() {
+  const [file, setFile] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState('')
+  const [path, setPath] = useState('')
+  const [url, setUrl] = useState('')
+  // Test constants: 'ORG_SANDBOX' is the sandbox org id our bucket RLS policy checks.
+  // This is a hardcoded TEST value, NOT a real org lookup.
+  const TEST_ORG_ID = 'ORG_SANDBOX'
+  const TEST_TASK_ID = 'SANDBOX_TASK_1'
+  const run = async () => {
+    setStatus(''); setPath(''); setUrl('')
+    if (!file) { setStatus('Pick an image first.'); return }
+    setBusy(true)
+    try {
+      const { path: p } = await uploadEvidence(file, TEST_ORG_ID, TEST_TASK_ID)
+      setPath(p)
+      const signed = await signedEvidenceUrl(p)
+      setUrl(signed)
+      setStatus('OK — uploaded + signed URL resolved.')
+    } catch (e) {
+      // Display the error verbatim so RLS / bucket-policy rejections are visible.
+      setStatus('ERROR: ' + (e?.message || JSON.stringify(e)))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div style={{position:'fixed',bottom:16,right:16,zIndex:2147483000,width:300,maxWidth:'90vw',background:'#0f172a',color:'#e2e8f0',border:'2px solid #f59e0b',borderRadius:10,padding:12,fontFamily:'ui-monospace,Menlo,monospace',fontSize:12,lineHeight:1.45,boxShadow:'0 8px 32px rgba(0,0,0,.4)'}}>
+      <div style={{fontWeight:700,marginBottom:8,color:'#f59e0b'}}>⚠ TEMP STORAGE TEST — remove after Phase 0</div>
+      <input type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0]||null)} style={{width:'100%',marginBottom:8,color:'#e2e8f0',fontSize:11}}/>
+      <button onClick={run} disabled={busy} style={{width:'100%',background:'#2563eb',color:'#fff',border:'none',borderRadius:6,padding:'8px 0',fontWeight:600,cursor:busy?'default':'pointer',opacity:busy?0.6:1}}>{busy?'Uploading…':'Upload test'}</button>
+      <div style={{marginTop:8,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
+        {status && <div style={{color:status.startsWith('ERROR')?'#f87171':'#4ade80'}}>{status}</div>}
+        {path && <div style={{marginTop:4,opacity:0.85}}>path: {path}</div>}
+        {url && <div style={{marginTop:4,opacity:0.85}}>url: {url}</div>}
+        {url && <img src={url} alt="signed evidence" style={{marginTop:8,maxWidth:'100%',borderRadius:6,border:'1px solid #334155'}}/>}
+      </div>
+    </div>
+  )
+}
+// ===== END TEMP STORAGE TEST =====
+
 export default function App() {
   const [user, setUser] = useState(null)
   const [deactivatedMsg, setDeactivatedMsg] = useState('')
@@ -12614,6 +12665,9 @@ export default function App() {
   return (
     <>
       <style>{CSS}</style>
+      {/* ===== TEMP STORAGE TEST — REMOVE AFTER PHASE 0 ===== */}
+      <TempStorageTestPanel/>
+      {/* ===== END TEMP STORAGE TEST ===== */}
       <div className="app">
         {showUndo&&undoStack.length>0&&(
           <div className="undo-toast">
