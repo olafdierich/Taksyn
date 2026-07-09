@@ -3,6 +3,7 @@ import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import { uploadEvidence, signedEvidenceUrl } from './lib/evidenceStorage'
+import { isSameOrgDay } from './lib/orgTime'
 
 // Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
 // Declared here (outside all components) so it is always in scope everywhere in this file.
@@ -2161,6 +2162,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // Current user's AUTH id (from the session, never the user-state object) — gates same-day evidence deletion.
   const [myAuthId, setMyAuthId] = useState(null)
   useEffect(()=>{ let alive=true; authUserId().then(v=>{ if(alive) setMyAuthId(v) }); return ()=>{ alive=false } },[])
+  // Current org's IANA timezone — used for same-org-day evidence deletion. Defaults to UTC until loaded.
+  const [orgTimezone, setOrgTimezone] = useState('UTC')
   const [taskOrgIndustry, setTaskOrgIndustry] = useState('')
   const [taskOrgCustomPositions, setTaskOrgCustomPositions] = useState([])
   const [taskOrgCustomRoles, setTaskOrgCustomRoles] = useState([])
@@ -2172,8 +2175,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
-    supabase.from('organisations').select('id,industry').eq('name',user.org).maybeSingle()
+    supabase.from('organisations').select('id,industry,timezone').eq('name',user.org).maybeSingle()
       .then(({data:orgRow})=>{
+        setOrgTimezone(orgRow?.timezone||'UTC')
         const orgId = orgRow?.id; if(!orgId) return
         if(orgRow?.industry) setTaskOrgIndustry(orgRow.industry)
         supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
@@ -2381,21 +2385,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // ===== Compliance-governed same-day evidence deletion (deliberately restrictive) =====
   // A delete is allowed on an evidence[] item ONLY when BOTH hold:
   //   1. adder-only  — item.by_id === the acting user's AUTH id (from the session, never user-state)
-  //   2. same-day    — within 24h of when the item was added (now - item.ts <= 24h)
-  // Interim rule: "same day" == a rolling 24h window. TODO: upgrade to an org-local CALENDAR day
-  // once an org-timezone setting exists. If either rule fails, no delete control is shown/enabled.
-  const EVIDENCE_DELETE_WINDOW_MS = 24*60*60*1000
+  //   2. same-day    — item.ts falls on the same CALENDAR day as now in the org's timezone
+  //                    (isSameOrgDay, Intl-based / DST-safe — not a rolling 24h window)
+  // If either rule fails, no delete control is shown/enabled.
   const canDeleteEvidence = (p) => {
     if (!p || p.source !== 'evidence') return false                  // only evidence[] items (not checklist photos)
     if (!p.by_id || !myAuthId || p.by_id !== myAuthId) return false  // adder-only, session identity
     if (!p.ts) return false
-    return (Date.now() - new Date(p.ts).getTime()) <= EVIDENCE_DELETE_WINDOW_MS
+    return isSameOrgDay(p.ts, orgTimezone)                           // same calendar day in the org's timezone
   }
   const deleteEvidenceItem = async (task, p) => {
-    // Defense-in-depth: re-verify adder + window against a FRESH session id before mutating anything.
+    // Defense-in-depth: re-verify adder + same-org-day against a FRESH session id before mutating anything.
     const myId = await authUserId()
     if (!p.by_id || p.by_id !== myId) { alert('You can only delete evidence you added.'); return }
-    if (!p.ts || (Date.now() - new Date(p.ts).getTime()) > EVIDENCE_DELETE_WINDOW_MS) { alert('Evidence can only be deleted within 24 hours of adding it.'); return }
+    if (!p.ts || !isSameOrgDay(p.ts, orgTimezone)) { alert('Evidence can only be deleted on the same day it was added (organisation timezone).'); return }
     const reason = window.prompt('Reason for deleting this evidence (required):')
     if (reason == null || !reason.trim()) return  // cancelled or empty reason → abort, no deletion
     const evidence = parseSafe(task.evidence)
@@ -5645,7 +5648,7 @@ const TIMEZONES = [
   'Europe/London','Europe/Paris','Europe/Berlin','Europe/Amsterdam',
   'America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
   'America/Toronto','America/Vancouver','America/Sao_Paulo',
-  'Africa/Johannesburg','UTC',
+  'Africa/Johannesburg','Africa/Kampala','Africa/Nairobi','UTC',
 ]
 
 const COMPANY_COMPLETENESS_FIELDS = [
@@ -8059,7 +8062,7 @@ function CompanySettingsView({ user }) {
                 <div className="form-field"><label className="form-label">Industry</label><select className="form-input" {...fld('industry')}><option value="">— Select industry —</option>{PRESET_INDUSTRIES.map(k=><option key={k} value={k}>{k}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Website</label><input className="form-input" placeholder="https://example.com" {...fld('website')}/></div>
               </div>
-              <div className="form-field"><label className="form-label">Timezone</label><select className="form-input" {...fld('timezone')}><option value="">— Select timezone —</option>{TIMEZONES.map(tz=><option key={tz} value={tz}>{tz.replace(/_/g,' ')}</option>)}</select></div>
+              <div className="form-field"><label className="form-label">Timezone</label><select className="form-input" {...fld('timezone')}><option value="">— Select timezone —</option>{TIMEZONES.map(tz=><option key={tz} value={tz}>{tz==='UTC'?'UTC (Coordinated Universal Time)':tz.split('/').pop().replace(/_/g,' ')+' — '+tz}</option>)}</select></div>
             </div>
           </div>
         </div>
