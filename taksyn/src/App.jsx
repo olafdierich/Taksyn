@@ -384,21 +384,30 @@ function EvidenceThumb({ entry, className, containerStyle, imgStyle, onImgClick,
     return () => { alive = false }
   }, [direct, path])
   const src = direct || signed
-  // Detect non-image (PDF) from the STORED path/url, not the signed URL (which is always http).
+  // Detect the file KIND. Prefer an explicit mime/type field on the entry if present; otherwise use the
+  // STORED path/url extension (NOT the signed URL, which is always http). Anything clearly not an image
+  // (.pdf, .doc/.docx, …) renders as a document tile, never an <img>.
+  const typeHint = ((entry && typeof entry === 'object') ? (entry.type || entry.mime || '') : '').toLowerCase()
   const ref = (path || (typeof direct === 'string' ? direct : '')).toLowerCase()
-  const isPdf = /\.pdf(\?|$)/.test(ref) || (typeof direct === 'string' && direct.startsWith('data:application/pdf'))
-  const isImg = !isPdf && typeof src === 'string' && (src.startsWith('data:image') || src.startsWith('http'))
+  const isPdf = typeHint.includes('pdf') || /\.pdf(\?|$)/.test(ref) || (typeof direct === 'string' && direct.startsWith('data:application/pdf'))
+  const isOtherDoc = /\.docx?(\?|$)/.test(ref) || typeHint.includes('word') || typeHint.includes('msword') || typeHint.includes('officedocument')
+  const isDoc = isPdf || isOtherDoc
+  const isImg = !isDoc && typeof src === 'string' && (src.startsWith('data:image') || src.startsWith('http'))
   const resolving = !direct && path && !signed && !failed
-  const fileName = (path ? path.split('/').pop() : '') || 'document'
+  const fileName = (path ? path.split('/').pop() : (typeof direct === 'string' ? direct.split('/').pop() : '')) || 'document'
+  const docLabel = isPdf ? 'View PDF' : 'View document'
   return (
     <div className={className} title={title || undefined}
          style={{ ...(containerStyle || {}), cursor: (isImg && onImgClick) ? 'zoom-in' : 'default' }}
          onClick={() => { if (isImg && onImgClick) onImgClick(src) }}>
       {resolving ? <span style={{fontSize:14,opacity:0.6}}>⏳</span>
         : failed ? <span style={{fontSize:16}} title="Could not load evidence">⚠️</span>
-        : isPdf ? (src
+        : isDoc ? (src
             ? <a href={src} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} title={fileName}
-                 style={{display:'flex',alignItems:'center',justifyContent:'center',width:'100%',height:'100%',textDecoration:'none',fontSize:18}}>📄</a>
+                 style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,width:'100%',height:'100%',textDecoration:'none',color:'var(--t2)',padding:2,boxSizing:'border-box'}}>
+                <span style={{fontSize:20,lineHeight:1}}>📄</span>
+                <span style={{fontSize:9,fontWeight:600,textAlign:'center',lineHeight:1.1}}>{docLabel}</span>
+              </a>
             : <span style={{fontSize:18}}>📄</span>)
         : isImg ? <img src={src} alt="evidence" style={imgStyle}/>
         : <span style={{fontSize:18}}>📷</span>}
