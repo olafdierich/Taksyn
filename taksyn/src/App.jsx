@@ -2158,6 +2158,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [clMarkNote, setClMarkNote] = useState('')
   const [clFlash, setClFlash] = useState(null) // 'taskId::itemId' — brief ✓ flash
   const [lightboxUrl, setLightboxUrl] = useState(null)
+  // Current user's AUTH id (from the session, never the user-state object) — gates same-day evidence deletion.
+  const [myAuthId, setMyAuthId] = useState(null)
+  useEffect(()=>{ let alive=true; authUserId().then(v=>{ if(alive) setMyAuthId(v) }); return ()=>{ alive=false } },[])
   const [taskOrgIndustry, setTaskOrgIndustry] = useState('')
   const [taskOrgCustomPositions, setTaskOrgCustomPositions] = useState([])
   const [taskOrgCustomRoles, setTaskOrgCustomRoles] = useState([])
@@ -2373,6 +2376,59 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       await supabase.from('tasks').update(payload).eq('id', id)
       markRecentlyWritten(id)  // re-arm: a large/slow write's echo may still be in flight past the first window
     }
+  }
+
+  // ===== Compliance-governed same-day evidence deletion (deliberately restrictive) =====
+  // A delete is allowed on an evidence[] item ONLY when BOTH hold:
+  //   1. adder-only  — item.by_id === the acting user's AUTH id (from the session, never user-state)
+  //   2. same-day    — within 24h of when the item was added (now - item.ts <= 24h)
+  // Interim rule: "same day" == a rolling 24h window. TODO: upgrade to an org-local CALENDAR day
+  // once an org-timezone setting exists. If either rule fails, no delete control is shown/enabled.
+  const EVIDENCE_DELETE_WINDOW_MS = 24*60*60*1000
+  const canDeleteEvidence = (p) => {
+    if (!p || p.source !== 'evidence') return false                  // only evidence[] items (not checklist photos)
+    if (!p.by_id || !myAuthId || p.by_id !== myAuthId) return false  // adder-only, session identity
+    if (!p.ts) return false
+    return (Date.now() - new Date(p.ts).getTime()) <= EVIDENCE_DELETE_WINDOW_MS
+  }
+  const deleteEvidenceItem = async (task, p) => {
+    // Defense-in-depth: re-verify adder + window against a FRESH session id before mutating anything.
+    const myId = await authUserId()
+    if (!p.by_id || p.by_id !== myId) { alert('You can only delete evidence you added.'); return }
+    if (!p.ts || (Date.now() - new Date(p.ts).getTime()) > EVIDENCE_DELETE_WINDOW_MS) { alert('Evidence can only be deleted within 24 hours of adding it.'); return }
+    const reason = window.prompt('Reason for deleting this evidence (required):')
+    if (reason == null || !reason.trim()) return  // cancelled or empty reason → abort, no deletion
+    const evidence = parseSafe(task.evidence)
+    const idx = evidence.findIndex(e => {
+      if (!e || typeof e !== 'object') return false
+      if (p.path) return e.path === p.path
+      if (p.url) return e.url === p.url && (p.ts ? e.ts === p.ts : true)
+      return false
+    })
+    if (idx === -1) { alert('Could not locate this evidence item.'); return }
+    const removed = evidence[idx]
+    const newEvidence = evidence.filter((_, i) => i !== idx)
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, evidence: newEvidence } : t))  // reflect immediately
+    // COLUMN-SCOPED persist — write ONLY the evidence column, never the whole task object.
+    if (isConfigured()) {
+      markRecentlyWritten(task.id)
+      const { error } = await supabase.from('tasks').update({ evidence: JSON.stringify(newEvidence) }).eq('id', task.id)
+      markRecentlyWritten(task.id)
+      if (error) { alert('Delete failed: ' + error.message); return }
+    }
+    // Audit log — same mkAuditEntry / audit_log pattern used elsewhere. Never store the path/base64 itself,
+    // only that an item was deleted, by whom, and the reason.
+    const auditEntry = mkAuditEntry('evidence_deleted', user, task.org || user.org, {
+      reason: reason.trim(),
+      deleted_item: { ts: removed?.ts || p.ts || null, by: removed?.by || p.by || null, role: removed?.role || p.role || null, path_or_url_present: !!(removed?.path || removed?.url) }
+    }, task.id, task.title, '1 evidence item', 'deleted')
+    setAuditLog(log => [auditEntry, ...log])
+    if (isConfigured()) {
+      const { error } = await supabase.from('audit_log').insert(auditEntry)
+      if (error) console.warn('audit_log insert error:', error.message)
+    }
+    // NOTE: the underlying Storage object is intentionally LEFT in place (more audit-defensible than a hard
+    // delete). A future archive step could move the file to an archive/ prefix instead of removing it.
   }
 
   const toggleSub = (tid, idx) => {
@@ -3138,6 +3194,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   return (
                     <div key={i} style={{position:'relative',marginBottom:4}}>
                       <EvidenceThumb entry={p} className="ev-thumb" imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>
+                      {canDeleteEvidence(p)&&(
+                        <button title="Delete evidence (you added it, within 24h) — reason required" onClick={()=>deleteEvidenceItem(sel,p)}
+                          style={{position:'absolute',top:2,right:2,width:18,height:18,padding:0,lineHeight:'16px',borderRadius:4,border:'none',background:'rgba(239,68,68,.92)',color:'#fff',fontSize:10,cursor:'pointer'}}>🗑</button>
+                      )}
                       {cap&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2,maxWidth:64,lineHeight:1.3}}>{cap}</div>}
                     </div>
                   )
