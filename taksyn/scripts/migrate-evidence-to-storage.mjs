@@ -97,8 +97,11 @@ async function main() {
   console.log('')
 
   let gFound = 0, gMig = 0, gSkip = 0, gErr = 0, gBytes = 0
-  let gUnresolved = 0, gOrgFromName = 0, gOrgAsIs = 0
+  let gUnresolved = 0, gOrgFromName = 0, gOrgAsIs = 0, gDupSkipped = 0
   const seenIds = new Set()
+  // Task ids we have already run a DB update for this run. The tasks table has no PK, so a duplicate
+  // id would make .update().eq('id', tid) hit BOTH rows — we refuse to update an id twice (clobber guard).
+  const migratedIds = new Set()
 
   for (const task of (tasks || [])) {
     const tid = task?.id
@@ -190,10 +193,17 @@ async function main() {
       // Written JSON.stringify'd to match how the app persists these JSONB columns (its reader
       // parseSafe accepts both, so migrated rows stay identical in shape to app-written rows).
       if (!DRY && changed) {
-        const { error: updErr } = await supabase.from('tasks')
-          .update({ evidence: JSON.stringify(newEvidence), subtasks: JSON.stringify(newSubtasks) })
-          .eq('id', tid)
-        if (updErr) throw new Error(`db update: ${updErr.message}`)
+        if (migratedIds.has(tid)) {
+          // Never update an id twice — on a PK-less table .eq('id', tid) would clobber both rows.
+          gDupSkipped++
+          console.log(`TASK ${tid} DUPLICATE ID — DB UPDATE SKIPPED (no PK, refusing to clobber)`)
+        } else {
+          const { error: updErr } = await supabase.from('tasks')
+            .update({ evidence: JSON.stringify(newEvidence), subtasks: JSON.stringify(newSubtasks) })
+            .eq('id', tid)
+          if (updErr) throw new Error(`db update: ${updErr.message}`)
+          migratedIds.add(tid)
+        }
       }
 
       if (tFound > 0 || tSkip > 0) {
@@ -211,7 +221,7 @@ async function main() {
   console.log('')
   console.log('── GRAND TOTAL ──')
   console.log(`tasks: ${tasks?.length || 0}  ·  org as-is: ${gOrgAsIs}  ·  org from NAME: ${gOrgFromName}  ·  UNRESOLVED ORG: ${gUnresolved}`)
-  console.log(`images found: ${gFound}  ·  migrated: ${gMig}  ·  skipped(already): ${gSkip}  ·  task errors: ${gErr}  ·  ~${gBytes}B`)
+  console.log(`images found: ${gFound}  ·  migrated: ${gMig}  ·  skipped(already): ${gSkip}  ·  duplicate-id updates skipped: ${gDupSkipped}  ·  task errors: ${gErr}  ·  ~${gBytes}B`)
   console.log(DRY
     ? '(DRY RUN — nothing was written. Inspect the output, then re-run with --real to apply.)'
     : '(REAL RUN complete.)')
