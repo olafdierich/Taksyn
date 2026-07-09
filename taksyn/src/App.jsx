@@ -332,6 +332,16 @@ const markRecentlyWritten = id => {
   recentWriteTimers[id] = setTimeout(()=>{ recentlyWrittenIds.delete(id); delete recentWriteTimers[id] }, 5000)
 }
 const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—'
+// Display-only: format a full timestamptz as LOCAL-timezone date + time, e.g. "9 Jul 2026, 3:51 pm".
+// Falsy/invalid → placeholder (never crashes). Purely cosmetic — does not touch stored data.
+// Future option: pass organisations.timezone as a { timeZone } param to render stamps in the org's zone
+// instead of the viewer's local zone.
+const fmtDateTime = (ts, placeholder='—') => {
+  if (!ts) return placeholder
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return placeholder
+  return d.toLocaleString(undefined, { day:'numeric', month:'short', year:'numeric', hour:'numeric', minute:'2-digit' })
+}
 const fmtDuration = (start, end) => {
   if (!start || !end) return null
   const mins = Math.round((new Date(end) - new Date(start)) / 60000)
@@ -3020,11 +3030,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
               <div style={{flex:1,minWidth:100,background: sel.started_at?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(sel.started_at?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time In</div>
-                <div style={{fontSize:15,fontWeight:800,color:sel.started_at?'var(--green)':'var(--t3)'}}>{sel.started_at?fmtTime(sel.started_at):'—'}</div>
+                <div style={{fontSize:15,fontWeight:800,color:sel.started_at?'var(--green)':'var(--t3)'}}>{fmtDateTime(sel.started_at)}</div>
               </div>
               <div style={{flex:1,minWidth:100,background: sel.completed_at?'rgba(245,158,11,.1)':'var(--s3)',border:'1px solid '+(sel.completed_at?'rgba(245,158,11,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time Out</div>
-                <div style={{fontSize:15,fontWeight:800,color:sel.completed_at?'var(--amber)':'var(--t3)'}}>{sel.completed_at?fmtTime(sel.completed_at):'—'}</div>
+                <div style={{fontSize:15,fontWeight:800,color:sel.completed_at?'var(--amber)':'var(--t3)'}}>{fmtDateTime(sel.completed_at)}</div>
               </div>
               {fmtDuration(sel.started_at,sel.completed_at)&&(
                 <div style={{flex:1,minWidth:100,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px'}}>
@@ -3056,8 +3066,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
           )}
           {(user.role!=='worker'||(sel.gps_start||sel.gps_end))&&(
             <div className="timing-bar">
-              {user.role!=='worker'&&<div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {sel.started_at?fmtTime(sel.started_at):'—'}</div>}
-              {user.role!=='worker'&&<div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {sel.completed_at?fmtTime(sel.completed_at):'—'}</div>}
+              {user.role!=='worker'&&<div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {fmtDateTime(sel.started_at)}</div>}
+              {user.role!=='worker'&&<div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {fmtDateTime(sel.completed_at)}</div>}
               {user.role!=='worker'&&fmtDuration(sel.started_at,sel.completed_at)&&<div className="timing-chip active">⏱ {fmtDuration(sel.started_at,sel.completed_at)}</div>}
               {sel.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_start)}>📍 Start</span>}
               {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
@@ -3122,7 +3132,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {s.mandatory&&<span className="cl-mandatory" title="Mandatory">*</span>}
                           {s.requirePhoto&&<span style={{fontSize:10,color:'#3B82F6',fontWeight:600}} title="Photo required">📷</span>}
                           {s.requireTimestamp&&todayCount>0&&todayRows[todayRows.length-1]&&(
-                            <span style={{fontSize:10,color:'#F59E0B',fontWeight:600}} title="Completion timestamp">🕐 {new Date(todayRows[todayRows.length-1].completed_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                            <span style={{fontSize:10,color:'#F59E0B',fontWeight:600}} title="Completion timestamp">🕐 {fmtDateTime(todayRows[todayRows.length-1].completed_at)}</span>
                           )}
                           {s.requireTimestamp&&todayCount===0&&(
                             <span style={{fontSize:10,color:'var(--t3)'}} title="Timestamp will be recorded on completion">🕐</span>
@@ -3142,7 +3152,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <div style={{marginTop:4,borderLeft:'2px solid rgba(16,185,129,.3)',paddingLeft:8}}>
                             {todayRows.map((r,ri)=>(
                               <div key={r.id||ri} style={{fontSize:11,color:'var(--t2)',marginBottom:2}}>
-                                <span style={{color:'var(--t3)'}}>{new Date(r.completed_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                                <span style={{color:'var(--t3)'}}>{fmtDateTime(r.completed_at)}</span>
                                 {' '}<span style={{fontWeight:600}}>{r.completed_by_name}</span>
                                 {r.note&&<span style={{color:'var(--t2)'}}> — {r.note}</span>}
                               </div>
@@ -3200,7 +3210,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               <div className="ev-thumbs">
                 {photos.map((p,i)=>{
                   // Attribution: "Added by {by} ({role}) · {ts}" — makes reviewer-added items distinguishable.
-                  const tsStr=[p.ts&&new Date(p.ts).toLocaleDateString('en-AU'),p.ts&&new Date(p.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})].filter(Boolean).join(' ')
+                  const tsStr=p.ts?fmtDateTime(p.ts,''):''
                   const roleLbl=p.role?(ROLE_LABELS[p.role]||p.role):''
                   const cap=p.by?`Added by ${p.by}${roleLbl?' ('+roleLbl+')':''}${tsStr?' · '+tsStr:''}`:tsStr
                   return (
@@ -3475,7 +3485,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
                           <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
                             <span>👤 {t.assigned_user_name||'—'}</span>
-                            {t.completed_at&&<span>✅ {new Date(t.completed_at).toLocaleDateString('en-AU')}</span>}
+                            {t.completed_at&&<span>✅ {fmtDateTime(t.completed_at)}</span>}
                             {t.due_date&&<span>📅 {t.due_date}</span>}
                             {t.recurrence&&t.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[t.recurrence]}</span>}
                           </div>
