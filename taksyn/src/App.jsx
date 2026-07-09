@@ -2183,9 +2183,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   useEffect(()=>{ let alive=true; authUserId().then(v=>{ if(alive) setMyAuthId(v) }); return ()=>{ alive=false } },[])
   // Current org's IANA timezone — used for same-org-day evidence deletion. Defaults to UTC until loaded.
   const [orgTimezone, setOrgTimezone] = useState('UTC')
-  // Collapsible task-list section groups. SESSION-ONLY React state (no browser storage) — an empty set
-  // means every group starts COLLAPSED on load; toggling adds/removes a section key. Resets on reload.
-  const [expandedSections, setExpandedSections] = useState(() => new Set())
+  // Collapsible task-list section groups. SESSION-ONLY React state (no browser storage); resets on reload.
+  // Seed the action-priority section of each role EXPANDED (rest collapsed): worker→Action Needed,
+  // supervisor/manager/client_admin→Needs My Review, plus client_admin→Needs Attention (only rendered
+  // when >0). Keys are unique per role, so listing all is safe — only the current role's sections exist.
+  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','sv-review','mg-review','ca-review','ca-attention']))
   const toggleSection = (sk) => setExpandedSections(prev => { const n = new Set(prev); n.has(sk) ? n.delete(sk) : n.add(sk); return n })
   // Render one task-list section with a clickable, keyboard-activatable header (▸ collapsed / ▾ expanded,
   // plus label + count). The count always shows; the body renders only when expanded. Display-only — this
