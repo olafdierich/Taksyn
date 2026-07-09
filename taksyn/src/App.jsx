@@ -7715,9 +7715,31 @@ function CompanySettingsView({ user }) {
     )
   }
 
+  // Resolve the caller's organisations row RELIABLY. profiles.org holds only the org NAME, which is
+  // fragile to match on (whitespace/case/duplicate names, or a renamed org). org_members.org holds the
+  // organisations.id (set by the handle_new_user trigger), so resolve via the session user's membership
+  // id first, then fall back to a name match. organisations.id is TEXT, so .eq('id',…) never type-throws.
+  const resolveOrgRow = async () => {
+    const uid = await authUserId()
+    if (uid) {
+      const { data: members } = await supabase.from('org_members').select('org').eq('user_id', uid)
+      const ids = [...new Set((members || []).map(m => m?.org).filter(Boolean))]
+      if (ids.length) {
+        const { data: orgs } = await supabase.from('organisations').select('*').in('id', ids)
+        if (orgs && orgs.length) {
+          // Multi-org users: prefer the row whose name matches the profile's org; else the first.
+          return orgs.find(o => o.name === user.org) || orgs[0]
+        }
+      }
+    }
+    // Fallback: legacy name match.
+    const { data } = await supabase.from('organisations').select('*').eq('name', user.org).maybeSingle()
+    return data || null
+  }
+
   useEffect(() => {
     if (!isConfigured()) { setLoading(false); return }
-    supabase.from('organisations').select('*').eq('name', user.org).maybeSingle().then(({ data }) => {
+    resolveOrgRow().then((data) => {
       if (data) {
         setOrgId(data.id)
         if(data.auto_logout_minutes!=null) setAutoLogoutMinutes(data.auto_logout_minutes)
@@ -7964,9 +7986,17 @@ function CompanySettingsView({ user }) {
     } : {
       org_settings:JSON.stringify(settings)
     }
-    if (isConfigured() && orgId) {
-      const { error } = await supabase.from('organisations').update(updates).eq('id', orgId)
+    if (isConfigured()) {
+      // Never report success without a persisted row. Require a resolved org id, then confirm the UPDATE
+      // actually matched a row via .select() — an update matching 0 rows (wrong id, or an RLS policy
+      // silently blocking the write) returns { error: null } and must NOT be treated as success.
+      if (!orgId) { setMsg('✗ Could not save — organisation not identified. Reload and try again.'); setSaving(false); return }
+      const { data, error } = await supabase.from('organisations').update(updates).eq('id', orgId).select()
       if (error) { setMsg('✗ '+error.message); setSaving(false); return }
+      if (!data || data.length === 0) {
+        setMsg('✗ Save did not persist — no matching organisation row (you may not have permission to edit it).')
+        setSaving(false); return
+      }
     }
     setMsg('✓ Settings saved')
     setSavedToast(true)
