@@ -20,19 +20,25 @@ you have dry-run + real-run proven in the sandbox.
 
 ## How to run
 
-Always from the `taksyn/` directory (so `@supabase/supabase-js` resolves):
+This lives at the repo root `scripts/` but `@supabase/supabase-js` is only installed
+under `taksyn/node_modules`. This dir carries its own `package.json` so it can resolve
+the dependency locally — install it once here first:
 
 ```bash
+cd scripts
+npm install                                  # installs @supabase/supabase-js into scripts/node_modules
+
 # 1) DRY RUN (default — writes NOTHING). Inspect every planned path first.
 export SUPABASE_URL="https://hbsexcighvjeryumodsn.supabase.co"
 export SUPABASE_SERVICE_ROLE_KEY="…sandbox service role key…"
-node scripts/migrate-evidence-to-storage.mjs            # or: --dry-run
+node migrate-evidence-to-storage.mjs         # or: --dry-run
 
 # 2) REAL RUN — only after the dry-run output looks correct.
-node scripts/migrate-evidence-to-storage.mjs --real
+node migrate-evidence-to-storage.mjs --real
 ```
 
-Anything other than an explicit `--real` is treated as a dry run.
+Anything other than an explicit `--real` is treated as a dry run. (`scripts/node_modules`
+is gitignored.)
 
 ## Safety guarantees
 
