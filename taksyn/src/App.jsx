@@ -2171,7 +2171,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', due_time:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'' })
+  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', due_time:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'', assigned_user_ids:[], assigned_user_names:[] })
   const [selectedTplId, setSelectedTplId] = useState('')
   const [taskGlobalIndustries, setTaskGlobalIndustries] = useState([])
   const [taskOrgIndustries, setTaskOrgIndustries] = useState([])
@@ -2727,16 +2727,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       }
       const saved = { ...data, subtasks:parseSafe(data.subtasks), evidence:parseSafe(data.evidence), comments:parseSafe(data.comments,[]) }
       setTasks(prev=>[...prev,saved])
-      // Send notifications to all team members when a team task is created
+      // Notify: if a subset was ticked, notify only those members; otherwise notify the whole team
       if (t.team_id) {
+        const chosen = t.assigned_user_ids || []
+        const notifyOnly = chosen.length > 0
         supabase.from('team_members').select('user_id').eq('team_id', t.team_id)
           .then(({data:members})=>{
             if(!members?.length) return
+            const targets = notifyOnly ? members.filter(m=>chosen.includes(m.user_id)) : members
+            if(!targets.length) return
             const db = supabaseAdmin || supabase
-            const notifs = members.map(m=>({
+            const notifs = targets.map(m=>({
               user_id: m.user_id,
-              title: 'New team task assigned',
-              message: `${t.title} has been assigned to your team`,
+              title: notifyOnly ? 'New task assigned to you' : 'New team task assigned',
+              message: notifyOnly ? `${t.title} has been assigned to you` : `${t.title} has been assigned to your team`,
               org: t.org,
               created_at: new Date().toISOString(),
               read: false
@@ -2922,7 +2926,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   <label className="form-label">Assign to Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
                   <select className="form-select" value={newTask.team_id} onChange={e=>{
                     const team = taskOrgTeams.find(t=>t.id===e.target.value)
-                    setNewTask(prev=>({...prev,team_id:team?.id||'',team_name:team?.name||'',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}))
+                    setNewTask(prev=>({...prev,team_id:team?.id||'',team_name:team?.name||'',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',assigned_user_ids:[],assigned_user_names:[]}))
                     setTaskTeamMembers([])
                     if(team?.id && isConfigured()) {
                       supabase.from('team_members').select('user_id,user_name,role').eq('team_id',team.id)
@@ -2940,19 +2944,43 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   {newTask.team_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>📋 Task will be visible to all members of {newTask.team_name}</div>}
                 </div>
               )}
-              <div className="form-field"><label className="form-label">Assign To {newTask.team_id&&<span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— pick from team or leave blank for all team members</span>}</label>
-                {(newTask.team_id ? taskTeamMembers : teamUsers).length>0 ? (
-                  <div>
-                    {!newTask.team_id&&<input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>}
-                    <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const pool=newTask.team_id?taskTeamMembers:teamUsers; const u=pool.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
-                      <option value="">{newTask.team_id ? '— All team members —' : '— Select a staff member —'}</option>
-                      {(newTask.team_id?taskTeamMembers:teamUsers).filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position||newTask.team_id)&&(!userSearch||newTask.team_id||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
-                    </select>
-                    {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
-                    {!newTask.team_id&&teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
-                  </div>
+              <div className="form-field"><label className="form-label">Assign To {newTask.team_id&&<span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— tick members, or leave all unticked for the whole team</span>}</label>
+                {newTask.team_id ? (
+                  taskTeamMembers.length>0 ? (
+                    <div>
+                      <div style={{fontSize:11,color:'var(--t2)',marginBottom:6}}>Tick who's responsible — leave all unticked to assign the whole team.</div>
+                      {taskTeamMembers.filter(u=>assignableRoles.includes(u.role)).map(u=>{
+                        const checked=(newTask.assigned_user_ids||[]).includes(u.id)
+                        return (
+                          <label key={u.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0',cursor:'pointer',fontSize:13}}>
+                            <input type="checkbox" checked={checked} onChange={e=>setNewTask(prev=>{
+                              const ids=e.target.checked?[...(prev.assigned_user_ids||[]),u.id]:(prev.assigned_user_ids||[]).filter(x=>x!==u.id)
+                              const names=ids.map(id=>taskTeamMembers.find(m=>m.id===id)?.name).filter(Boolean)
+                              return {...prev,assigned_user_ids:ids,assigned_user_names:names,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}
+                            })}/>
+                            <span>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</span>
+                          </label>
+                        )
+                      })}
+                      {(newTask.assigned_user_ids?.length>0)
+                        ? <div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_ids.length} assignee(s): {newTask.assigned_user_names.join(', ')}</div>
+                        : <div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>👥 Whole team: all members of {newTask.team_name}</div>}
+                    </div>
+                  ) : <div style={{fontSize:11,color:'var(--t2)'}}>Loading team members…</div>
                 ) : (
-                  <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
+                  teamUsers.length>0 ? (
+                    <div>
+                      <input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>
+                      <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
+                        <option value="">— Select a staff member —</option>
+                        {teamUsers.filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position)&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
+                      </select>
+                      {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
+                      {teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
+                    </div>
+                  ) : (
+                    <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
+                  )
                 )}
               </div>
               {orgProjects.length>0&&(
