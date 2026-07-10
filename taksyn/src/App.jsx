@@ -1732,6 +1732,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
 }
 
 const assigneeNames = t => (t?.assigned_user_names?.length ? t.assigned_user_names.join(', ') : (t?.assigned_user_name||''))
+const assigneeFull = t => { const n=assigneeNames(t); return t?.lead_user_name ? (n ? n+' · ★ Lead: '+t.lead_user_name : '★ Lead: '+t.lead_user_name) : n }
 function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
   // Super admin sees NO task content — privacy/confidentiality
   if (user.role==='super_admin') return []
@@ -3603,7 +3604,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         <div style={{flex:1}}>
                           <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
                           <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
-                            <span>👤 {assigneeNames(t)||'—'}</span>
+                            <span>👤 {assigneeFull(t)||'—'}</span>
                             {t.completed_at&&<span>✅ {fmtDateTime(t.completed_at)}</span>}
                             {t.due_date&&<span>📅 {t.due_date}</span>}
                             {t.recurrence&&t.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[t.recurrence]}</span>}
@@ -4310,7 +4311,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
 
   const exportOrgPDF = () => {
     const roleRows = workerRoles.map(r => '<tr><td><strong>'+ROLE_LABELS[r]+'</strong></td><td>'+byRole[r].tasks+'</td><td>'+byRole[r].done+'</td><td style="color:'+(pct(byRole[r].done,byRole[r].tasks)>=80?'#10B981':pct(byRole[r].done,byRole[r].tasks)>=50?'#F59E0B':'#EF4444')+'">'+pct(byRole[r].done,byRole[r].tasks)+'%</td><td style="color:'+(byRole[r].compRate>=80?'#10B981':byRole[r].compRate>=50?'#F59E0B':'#EF4444')+'">'+byRole[r].compRate+'%</td></tr>').join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${filteredPt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(assigneeNames(t)||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${filteredPt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(assigneeFull(t)||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
     openReport(html)
   }
 
@@ -4344,7 +4345,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
             {reportOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <button className="btn btn-primary btn-sm" onClick={handleExport}>📄 Generate PDF</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"','"'+assigneeNames(t)+'"'].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"','"'+assigneeFull(t)+'"'].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
         </div>
       </div>
 
@@ -4550,7 +4551,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
                         <td style={{padding:'8px 10px',textAlign:'center'}}>{(t.gps_start||t.gps_end)?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
                         <td style={{padding:'8px 10px',textAlign:'center'}}>{parseSafe(t.evidence).length>0?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
                         <td style={{padding:'8px 10px',color:'var(--t2)',fontSize:10,maxWidth:200}}>{clTs.length>0?clTs.join(', '):<span style={{color:'var(--t3)'}}>—</span>}</td>
-                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{assigneeNames(t)||'—'}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{assigneeFull(t)||'—'}</td>
                       </tr>
                     )
                   })}
