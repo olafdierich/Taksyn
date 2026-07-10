@@ -1764,6 +1764,7 @@ function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
   if (user.role==='worker') {
     const myTasks = orgTasks.filter(t =>
       t.assigned_user_id===user.id ||
+      t.assigned_user_ids?.includes(user.id) ||
       t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase() ||
       (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='worker') ||
       (t.team_id && userTeamIds.includes(t.team_id))
@@ -3602,7 +3603,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── SUPERVISOR VIEW ───────────────────────────────
                     if(user.role==='supervisor') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
@@ -3627,7 +3628,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── MANAGER VIEW ──────────────────────────────────
                     if(user.role==='manager') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
@@ -9775,7 +9776,7 @@ function LeaveView({ user, tasks, setAuditLog }) {
     }
   })
   const orgTasks = tasks.filter(t=>t.org===user.org)
-  const myTasks = orgTasks.filter(t=>t.assigned_user_id===user.id||t.assigned_user_name===user.name)
+  const myTasks = orgTasks.filter(t=>t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||t.assigned_user_name===user.name)
   const leaveExcluded = myTasks.filter(t=>t.due_date&&leaveDays.has(t.due_date))
 
   const fmtDate = d => d ? new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : '—'
