@@ -5,23 +5,22 @@
 // into the Supabase Storage `task-evidence` bucket, rewriting each entry from an
 // inline base64 `url`/`photo` to a Storage `path`.
 //
-// SAFETY MODEL (read scripts/README.md before running):
+// SAFETY MODEL:
 //   • DRY RUN by default — writes NOTHING unless you pass --real.
 //   • Idempotent — entries already carrying a `path` (and no base64) are skipped.
 //   • Org NAME→ID resolution — the bucket path's first folder MUST be the org id;
-//     tasks whose org can't be resolved to a real organisations.id are SKIPPED
-//     (never guessed).
-//   • Never deletes anything from Storage or the DB — only adds files + rewrites
-//     evidence/subtasks base64 → path.
+//     tasks whose org can't be resolved to a real organisations.id are SKIPPED.
+//   • Duplicate-id safety — the tasks table has NO primary key. Any task id that
+//     appears more than once is skipped ENTIRELY (both modes) so a later
+//     .eq('id', id) update can never clobber sibling rows.
+//   • Never deletes anything — only adds files + rewrites base64 → path.
 //   • Per-task try/catch — one bad task never aborts the whole run.
 //
 // Config comes from env vars (NEVER hardcode keys):
-//   SUPABASE_URL                 e.g. https://hbsexcighvjeryumodsn.supabase.co
-//   SUPABASE_SERVICE_ROLE_KEY    service role key (bypasses RLS → sees all tasks)
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (service role → bypasses RLS)
 //
 // Usage:
 //   node scripts/migrate-evidence-to-storage.mjs            # dry run (default)
-//   node scripts/migrate-evidence-to-storage.mjs --dry-run  # dry run (explicit)
 //   node scripts/migrate-evidence-to-storage.mjs --real     # actually write
 // -----------------------------------------------------------------------------
 
@@ -79,7 +78,7 @@ async function main() {
   console.log(`URL: ${SUPABASE_URL}  ·  bucket: ${BUCKET}`)
   console.log('')
 
-  // 1) organisations → name→id map + id set (loaded once, for resolution below)
+  // Load organisations once → id Set + name→id Map (for resolution below).
   const { data: orgs, error: orgErr } = await supabase.from('organisations').select('id, name')
   if (orgErr) { console.error('FATAL: could not load organisations:', orgErr.message); process.exit(1) }
   const orgIds = new Set()
@@ -90,29 +89,42 @@ async function main() {
   }
   console.log(`Loaded ${orgs?.length || 0} organisations.`)
 
-  // Fetch all tasks
+  // Load all tasks.
   const { data: tasks, error: taskErr } = await supabase.from('tasks').select('id, org, evidence, subtasks')
   if (taskErr) { console.error('FATAL: could not load tasks:', taskErr.message); process.exit(1) }
   console.log(`Loaded ${tasks?.length || 0} tasks.`)
+
+  // DUPLICATE-ID PRE-SCAN (tasks table has no PK). Any id seen more than once is quarantined and
+  // skipped ENTIRELY in both modes — we never touch a task whose id could match sibling rows.
+  const idCounts = new Map()
+  for (const t of (tasks || [])) {
+    const id = t?.id
+    idCounts.set(id, (idCounts.get(id) || 0) + 1)
+  }
+  const dupIds = new Set([...idCounts.entries()].filter(([, c]) => c > 1).map(([id]) => id))
+  if (dupIds.size) {
+    console.log('')
+    console.log(`⚠️  DUPLICATE TASK IDS DETECTED (no PK): ${[...dupIds].join(', ')}`)
+    console.log('⚠️  Every row with a duplicate id is SKIPPED ENTIRELY (both modes) — refusing to clobber siblings.')
+  }
   console.log('')
 
   let gFound = 0, gMig = 0, gSkip = 0, gErr = 0, gBytes = 0
   let gUnresolved = 0, gOrgFromName = 0, gOrgAsIs = 0, gDupSkipped = 0
-  const seenIds = new Set()
-  // Task ids we have already run a DB update for this run. The tasks table has no PK, so a duplicate
-  // id would make .update().eq('id', tid) hit BOTH rows — we refuse to update an id twice (clobber guard).
-  const migratedIds = new Set()
 
   for (const task of (tasks || [])) {
     const tid = task?.id
-    if (seenIds.has(tid)) {
-      console.warn(`WARNING: duplicate task id seen: ${tid} (table lacks a PK? processing again defensively)`)
+
+    // Duplicate-id quarantine: skip every occurrence, both modes, loudly.
+    if (dupIds.has(tid)) {
+      gDupSkipped++
+      console.log(`TASK ${tid} DUPLICATE ID — SKIPPED ENTIRELY (no PK, refusing to touch)`)
+      continue
     }
-    seenIds.add(tid)
 
     let tFound = 0, tMig = 0, tSkip = 0, tBytes = 0
     try {
-      // 2) ORG NAME→ID RESOLUTION — never guess. Unresolved orgs are a safety stop.
+      // ORG NAME→ID RESOLUTION — never guess. Unresolved orgs are a safety stop.
       const rawOrg = task.org == null ? '' : String(task.org)
       let resolvedOrgId = null
       let orgWasName = false
@@ -133,7 +145,7 @@ async function main() {
       const newSubtasks = parseSafe(task.subtasks)
       let changed = false
 
-      // 3a) evidence[] — base64 in a `url` field (or a legacy bare string)
+      // evidence[] — base64 in a `url` field (or a legacy bare string)
       if (Array.isArray(newEvidence)) {
         for (let i = 0; i < newEvidence.length; i++) {
           const e = newEvidence[i]
@@ -160,7 +172,7 @@ async function main() {
         }
       }
 
-      // 3b) subtasks[].photo — base64 in photo (object.url or a legacy bare string)
+      // subtasks[].photo — base64 in photo (object.url or a legacy bare string)
       if (Array.isArray(newSubtasks)) {
         for (let j = 0; j < newSubtasks.length; j++) {
           const s = newSubtasks[j]
@@ -189,21 +201,15 @@ async function main() {
         }
       }
 
-      // 4) REAL RUN only: one COLUMN-SCOPED update per task, only if something changed.
-      // Written JSON.stringify'd to match how the app persists these JSONB columns (its reader
-      // parseSafe accepts both, so migrated rows stay identical in shape to app-written rows).
+      // REAL RUN only: one COLUMN-SCOPED update per task, only if something changed.
+      // JSON.stringify'd to match how the app persists these JSONB columns (its parseSafe reader accepts
+      // both, so migrated rows stay identical in shape to app-written rows). id is unique here (dups were
+      // pre-filtered), so .eq('id', tid) affects exactly one row.
       if (!DRY && changed) {
-        if (migratedIds.has(tid)) {
-          // Never update an id twice — on a PK-less table .eq('id', tid) would clobber both rows.
-          gDupSkipped++
-          console.log(`TASK ${tid} DUPLICATE ID — DB UPDATE SKIPPED (no PK, refusing to clobber)`)
-        } else {
-          const { error: updErr } = await supabase.from('tasks')
-            .update({ evidence: JSON.stringify(newEvidence), subtasks: JSON.stringify(newSubtasks) })
-            .eq('id', tid)
-          if (updErr) throw new Error(`db update: ${updErr.message}`)
-          migratedIds.add(tid)
-        }
+        const { error: updErr } = await supabase.from('tasks')
+          .update({ evidence: JSON.stringify(newEvidence), subtasks: JSON.stringify(newSubtasks) })
+          .eq('id', tid)
+        if (updErr) throw new Error(`db update: ${updErr.message}`)
       }
 
       if (tFound > 0 || tSkip > 0) {
@@ -211,17 +217,17 @@ async function main() {
       }
       gFound += tFound; gMig += tMig; gSkip += tSkip; gBytes += tBytes
     } catch (e) {
-      // 6) robustness: log and continue to the next task.
+      // robustness: log and continue to the next task.
       gErr++
       console.log(`TASK ${tid} ERROR: ${e?.message || e}`)
     }
   }
 
-  // 7) report
+  // report
   console.log('')
   console.log('── GRAND TOTAL ──')
-  console.log(`tasks: ${tasks?.length || 0}  ·  org as-is: ${gOrgAsIs}  ·  org from NAME: ${gOrgFromName}  ·  UNRESOLVED ORG: ${gUnresolved}`)
-  console.log(`images found: ${gFound}  ·  migrated: ${gMig}  ·  skipped(already): ${gSkip}  ·  duplicate-id updates skipped: ${gDupSkipped}  ·  task errors: ${gErr}  ·  ~${gBytes}B`)
+  console.log(`tasks: ${tasks?.length || 0}  ·  org as-is: ${gOrgAsIs}  ·  org from NAME: ${gOrgFromName}  ·  UNRESOLVED ORG: ${gUnresolved}  ·  duplicate-id skipped: ${gDupSkipped}`)
+  console.log(`images found: ${gFound}  ·  migrated: ${gMig}  ·  skipped(already): ${gSkip}  ·  task errors: ${gErr}  ·  ~${gBytes}B`)
   console.log(DRY
     ? '(DRY RUN — nothing was written. Inspect the output, then re-run with --real to apply.)'
     : '(REAL RUN complete.)')

@@ -1,9 +1,0 @@
-{
-  "name": "taksyn-migration-scripts",
-  "private": true,
-  "type": "module",
-  "description": "Standalone one-off migration/ops scripts (run manually; not part of the app build).",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.39.0"
-  }
-}
