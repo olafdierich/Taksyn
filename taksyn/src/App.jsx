@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
+import { uploadEvidence, signedEvidenceUrl } from './lib/evidenceStorage'
+import { isSameOrgDay } from './lib/orgTime'
 
 // Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
 // Declared here (outside all components) so it is always in scope everywhere in this file.
@@ -330,6 +332,16 @@ const markRecentlyWritten = id => {
   recentWriteTimers[id] = setTimeout(()=>{ recentlyWrittenIds.delete(id); delete recentWriteTimers[id] }, 5000)
 }
 const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—'
+// Display-only: format a full timestamptz as LOCAL-timezone date + time, e.g. "9 Jul 2026, 3:51 pm".
+// Falsy/invalid → placeholder (never crashes). Purely cosmetic — does not touch stored data.
+// Future option: pass organisations.timezone as a { timeZone } param to render stamps in the org's zone
+// instead of the viewer's local zone.
+const fmtDateTime = (ts, placeholder='—') => {
+  if (!ts) return placeholder
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return placeholder
+  return d.toLocaleString(undefined, { day:'numeric', month:'short', year:'numeric', hour:'numeric', minute:'2-digit' })
+}
 const fmtDuration = (start, end) => {
   if (!start || !end) return null
   const mins = Math.round((new Date(end) - new Date(start)) / 60000)
@@ -353,11 +365,109 @@ const parseSafe = (val, fallback=[]) => {
 // plus legacy standalone evidence (tasks.evidence). Each entry normalized to { url, ts, by, source, label }.
 // Null-safe for legacy bare-string photos/evidence (ts/by come back null → thumbnail only).
 const taskPhotoIndex = (task) => {
-  const norm = p => (p && typeof p === 'object') ? { url:p.url, ts:p.ts||null, by:p.by||null } : { url:p, ts:null, by:null }
+  // Entries may carry a base64/legacy `url` OR a private-Storage `path` (post-migration).
+  // Preserve both plus attribution (by/by_id/role) so callers can sign paths + show who added it.
+  const norm = p => (p && typeof p === 'object')
+    ? { url:p.url||null, path:p.path||null, ts:p.ts||null, by:p.by||null, by_id:p.by_id||null, role:p.role||null }
+    : { url:p, path:null, ts:null, by:null, by_id:null, role:null }
   const out = []
   parseSafe(task?.subtasks).forEach(s => { if (s && s.photo) out.push({ ...norm(s.photo), source:'checklist', label:s.text||'' }) })
   parseSafe(task?.evidence).forEach(e => { if (e) out.push({ ...norm(e), source:'evidence', label:'' }) })
-  return out.filter(p => p.url)
+  return out.filter(p => p.url || p.path)
+}
+
+// Renders one evidence entry, supporting BOTH shapes:
+//   - `url` (base64 / legacy / http) → render directly (unchanged behaviour)
+//   - `path` (private Storage object key) → sign lazily via signedEvidenceUrl, placeholder while resolving
+// Nothing breaks for un-migrated tasks; migrated (path-only) entries render once signed.
+function EvidenceThumb({ entry, className, containerStyle, imgStyle, onImgClick, title }) {
+  const direct = (entry && typeof entry === 'object') ? (entry.url || null) : entry
+  const path = (entry && typeof entry === 'object') ? (entry.path || null) : null
+  const [signed, setSigned] = useState(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let alive = true
+    if (!direct && path) {
+      setSigned(null); setFailed(false)
+      signedEvidenceUrl(path).then(u => { if (alive) setSigned(u) }).catch(() => { if (alive) setFailed(true) })
+    }
+    return () => { alive = false }
+  }, [direct, path])
+  const src = direct || signed
+  // Detect the file KIND. Prefer an explicit mime/type field on the entry if present; otherwise use the
+  // STORED path/url extension (NOT the signed URL, which is always http). Anything clearly not an image
+  // (.pdf, .doc/.docx, …) renders as a document tile, never an <img>.
+  const typeHint = ((entry && typeof entry === 'object') ? (entry.type || entry.mime || '') : '').toLowerCase()
+  const ref = (path || (typeof direct === 'string' ? direct : '')).toLowerCase()
+  const isPdf = typeHint.includes('pdf') || /\.pdf(\?|$)/.test(ref) || (typeof direct === 'string' && direct.startsWith('data:application/pdf'))
+  const isOtherDoc = /\.docx?(\?|$)/.test(ref) || typeHint.includes('word') || typeHint.includes('msword') || typeHint.includes('officedocument')
+  const isDoc = isPdf || isOtherDoc
+  const isImg = !isDoc && typeof src === 'string' && (src.startsWith('data:image') || src.startsWith('http'))
+  const resolving = !direct && path && !signed && !failed
+  const fileName = (path ? path.split('/').pop() : (typeof direct === 'string' ? direct.split('/').pop() : '')) || 'document'
+  const docLabel = isPdf ? 'View PDF' : 'View document'
+  return (
+    <div className={className} title={title || undefined}
+         style={{ ...(containerStyle || {}), cursor: (isImg && onImgClick) ? 'zoom-in' : 'default' }}
+         onClick={() => { if (isImg && onImgClick) onImgClick(src) }}>
+      {resolving ? <span style={{fontSize:14,opacity:0.6}}>⏳</span>
+        : failed ? <span style={{fontSize:16}} title="Could not load evidence">⚠️</span>
+        : isDoc ? (src
+            ? <a href={src} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} title={fileName}
+                 style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,width:'100%',height:'100%',textDecoration:'none',color:'var(--t2)',padding:2,boxSizing:'border-box'}}>
+                <span style={{fontSize:20,lineHeight:1}}>📄</span>
+                <span style={{fontSize:9,fontWeight:600,textAlign:'center',lineHeight:1.1}}>{docLabel}</span>
+              </a>
+            : <span style={{fontSize:18}}>📄</span>)
+        : isImg ? <img src={src} alt="evidence" style={imgStyle}/>
+        : <span style={{fontSize:18}}>📷</span>}
+    </div>
+  )
+}
+
+// Reviewer-attached evidence: lets manager/supervisor/client_admin attach evidence to a task
+// they are reviewing. Uploads to Storage via uploadEvidence and appends a { path, ts, by, by_id, role }
+// entry with a COLUMN-SCOPED { evidence } update (reuses the parent `update` helper — no whole-object write).
+function ReviewerAttachEvidence({ task, user, update }) {
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const cameraRef = useRef(null)
+  const fileRef = useRef(null)
+  const onPick = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    if (e.target) e.target.value = ''
+    if (!file) return
+    setBusy(true); setMsg('')
+    try {
+      // NOTE(live): task.org holds the org NAME on live data, while the bucket RLS policy checks the
+      // path's first folder against org_members.org (an ID). Sandbox is aligned to ORG_SANDBOX so
+      // task.org works here; live will need org name→ID resolution before this upload.
+      const { path } = await uploadEvidence(file, task.org, task.id)
+      // Acting user's auth id MUST come from the session, never the user-state object.
+      const by_id = await authUserId()
+      const entry = { path, ts: new Date().toISOString(), by: user.name, by_id, role: user.role }
+      const newEvidence = [...parseSafe(task.evidence), entry]
+      await update(task.id, { evidence: newEvidence }) // column-scoped { evidence } + local state sync
+      setMsg('✓ Evidence attached')
+    } catch (err) {
+      setMsg('Error: ' + (err?.message || JSON.stringify(err)))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div style={{marginTop:10}}>
+      {/* 📷 Take photo — rear camera on mobile (capture), graceful file-picker fallback on desktop. Images only. */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={onPick}/>
+      {/* 📎 Choose file — an existing image OR a PDF document (e.g. a received lab report). */}
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{display:'none'}} onChange={onPick}/>
+      <div style={{display:'flex',gap:6}}>
+        <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>cameraRef.current&&cameraRef.current.click()}>{busy?'Uploading…':'📷 Take photo'}</button>
+        <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>fileRef.current&&fileRef.current.click()}>{busy?'Uploading…':'📎 Choose file'}</button>
+      </div>
+      {msg && <div style={{marginTop:6,fontSize:11,color:msg.startsWith('Error')?'var(--red)':'var(--green)'}}>{msg}</div>}
+    </div>
+  )
 }
 
 // Client-side image compression for captured photos: resize longest edge to <= MAX_EDGE (never upscale),
@@ -2068,6 +2178,34 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [clMarkNote, setClMarkNote] = useState('')
   const [clFlash, setClFlash] = useState(null) // 'taskId::itemId' — brief ✓ flash
   const [lightboxUrl, setLightboxUrl] = useState(null)
+  // Current user's AUTH id (from the session, never the user-state object) — gates same-day evidence deletion.
+  const [myAuthId, setMyAuthId] = useState(null)
+  useEffect(()=>{ let alive=true; authUserId().then(v=>{ if(alive) setMyAuthId(v) }); return ()=>{ alive=false } },[])
+  // Current org's IANA timezone — used for same-org-day evidence deletion. Defaults to UTC until loaded.
+  const [orgTimezone, setOrgTimezone] = useState('UTC')
+  // Collapsible task-list section groups. SESSION-ONLY React state (no browser storage); resets on reload.
+  // Seed the action-priority section of each role EXPANDED (rest collapsed): worker→Action Needed,
+  // supervisor/manager/client_admin→Needs My Review, plus client_admin→Needs Attention (only rendered
+  // when >0). Keys are unique per role, so listing all is safe — only the current role's sections exist.
+  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','sv-review','mg-review','ca-review','ca-attention']))
+  const toggleSection = (sk) => setExpandedSections(prev => { const n = new Set(prev); n.has(sk) ? n.delete(sk) : n.add(sk); return n })
+  // Render one task-list section with a clickable, keyboard-activatable header (▸ collapsed / ▾ expanded,
+  // plus label + count). The count always shows; the body renders only when expanded. Display-only — this
+  // changes visibility only, never which tasks exist, their order, or filtering.
+  const renderSection = (sk, label, count, containerStyle, labelColor, bodyWhenOpen) => {
+    const open = expandedSections.has(sk)
+    return (
+      <div style={containerStyle}>
+        <div role="button" tabIndex={0} aria-expanded={open} onClick={()=>toggleSection(sk)}
+             onKeyDown={e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleSection(sk) } }}
+             style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',userSelect:'none',fontSize:11,fontWeight:700,color:labelColor||'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:open?10:0}}>
+          <span style={{display:'inline-block',width:10,fontSize:9,opacity:.8}}>{open?'▾':'▸'}</span>
+          <span>{label} ({count})</span>
+        </div>
+        {open && bodyWhenOpen}
+      </div>
+    )
+  }
   const [taskOrgIndustry, setTaskOrgIndustry] = useState('')
   const [taskOrgCustomPositions, setTaskOrgCustomPositions] = useState([])
   const [taskOrgCustomRoles, setTaskOrgCustomRoles] = useState([])
@@ -2079,8 +2217,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
-    supabase.from('organisations').select('id,industry').eq('name',user.org).maybeSingle()
+    supabase.from('organisations').select('id,industry,timezone').eq('name',user.org).maybeSingle()
       .then(({data:orgRow})=>{
+        setOrgTimezone(orgRow?.timezone||'UTC')
         const orgId = orgRow?.id; if(!orgId) return
         if(orgRow?.industry) setTaskOrgIndustry(orgRow.industry)
         supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
@@ -2283,6 +2422,58 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       await supabase.from('tasks').update(payload).eq('id', id)
       markRecentlyWritten(id)  // re-arm: a large/slow write's echo may still be in flight past the first window
     }
+  }
+
+  // ===== Compliance-governed same-day evidence deletion (deliberately restrictive) =====
+  // A delete is allowed on an evidence[] item ONLY when BOTH hold:
+  //   1. adder-only  — item.by_id === the acting user's AUTH id (from the session, never user-state)
+  //   2. same-day    — item.ts falls on the same CALENDAR day as now in the org's timezone
+  //                    (isSameOrgDay, Intl-based / DST-safe — not a rolling 24h window)
+  // If either rule fails, no delete control is shown/enabled.
+  const canDeleteEvidence = (p) => {
+    if (!p || p.source !== 'evidence') return false                  // only evidence[] items (not checklist photos)
+    if (!p.by_id || !myAuthId || p.by_id !== myAuthId) return false  // adder-only, session identity
+    if (!p.ts) return false
+    return isSameOrgDay(p.ts, orgTimezone)                           // same calendar day in the org's timezone
+  }
+  const deleteEvidenceItem = async (task, p) => {
+    // Defense-in-depth: re-verify adder + same-org-day against a FRESH session id before mutating anything.
+    const myId = await authUserId()
+    if (!p.by_id || p.by_id !== myId) { alert('You can only delete evidence you added.'); return }
+    if (!p.ts || !isSameOrgDay(p.ts, orgTimezone)) { alert('Evidence can only be deleted on the same day it was added (organisation timezone).'); return }
+    const reason = window.prompt('Reason for deleting this evidence (required):')
+    if (reason == null || !reason.trim()) return  // cancelled or empty reason → abort, no deletion
+    const evidence = parseSafe(task.evidence)
+    const idx = evidence.findIndex(e => {
+      if (!e || typeof e !== 'object') return false
+      if (p.path) return e.path === p.path
+      if (p.url) return e.url === p.url && (p.ts ? e.ts === p.ts : true)
+      return false
+    })
+    if (idx === -1) { alert('Could not locate this evidence item.'); return }
+    const removed = evidence[idx]
+    const newEvidence = evidence.filter((_, i) => i !== idx)
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, evidence: newEvidence } : t))  // reflect immediately
+    // COLUMN-SCOPED persist — write ONLY the evidence column, never the whole task object.
+    if (isConfigured()) {
+      markRecentlyWritten(task.id)
+      const { error } = await supabase.from('tasks').update({ evidence: JSON.stringify(newEvidence) }).eq('id', task.id)
+      markRecentlyWritten(task.id)
+      if (error) { alert('Delete failed: ' + error.message); return }
+    }
+    // Audit log — same mkAuditEntry / audit_log pattern used elsewhere. Never store the path/base64 itself,
+    // only that an item was deleted, by whom, and the reason.
+    const auditEntry = mkAuditEntry('evidence_deleted', user, task.org || user.org, {
+      reason: reason.trim(),
+      deleted_item: { ts: removed?.ts || p.ts || null, by: removed?.by || p.by || null, role: removed?.role || p.role || null, path_or_url_present: !!(removed?.path || removed?.url) }
+    }, task.id, task.title, '1 evidence item', 'deleted')
+    setAuditLog(log => [auditEntry, ...log])
+    if (isConfigured()) {
+      const { error } = await supabase.from('audit_log').insert(auditEntry)
+      if (error) console.warn('audit_log insert error:', error.message)
+    }
+    // NOTE: the underlying Storage object is intentionally LEFT in place (more audit-defensible than a hard
+    // delete). A future archive step could move the file to an archive/ prefix instead of removing it.
   }
 
   const toggleSub = (tid, idx) => {
@@ -2862,11 +3053,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
               <div style={{flex:1,minWidth:100,background: sel.started_at?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(sel.started_at?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time In</div>
-                <div style={{fontSize:15,fontWeight:800,color:sel.started_at?'var(--green)':'var(--t3)'}}>{sel.started_at?fmtTime(sel.started_at):'—'}</div>
+                <div style={{fontSize:15,fontWeight:800,color:sel.started_at?'var(--green)':'var(--t3)'}}>{fmtDateTime(sel.started_at)}</div>
               </div>
               <div style={{flex:1,minWidth:100,background: sel.completed_at?'rgba(245,158,11,.1)':'var(--s3)',border:'1px solid '+(sel.completed_at?'rgba(245,158,11,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time Out</div>
-                <div style={{fontSize:15,fontWeight:800,color:sel.completed_at?'var(--amber)':'var(--t3)'}}>{sel.completed_at?fmtTime(sel.completed_at):'—'}</div>
+                <div style={{fontSize:15,fontWeight:800,color:sel.completed_at?'var(--amber)':'var(--t3)'}}>{fmtDateTime(sel.completed_at)}</div>
               </div>
               {fmtDuration(sel.started_at,sel.completed_at)&&(
                 <div style={{flex:1,minWidth:100,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px'}}>
@@ -2898,8 +3089,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
           )}
           {(user.role!=='worker'||(sel.gps_start||sel.gps_end))&&(
             <div className="timing-bar">
-              {user.role!=='worker'&&<div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {sel.started_at?fmtTime(sel.started_at):'—'}</div>}
-              {user.role!=='worker'&&<div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {sel.completed_at?fmtTime(sel.completed_at):'—'}</div>}
+              {user.role!=='worker'&&<div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {fmtDateTime(sel.started_at)}</div>}
+              {user.role!=='worker'&&<div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {fmtDateTime(sel.completed_at)}</div>}
               {user.role!=='worker'&&fmtDuration(sel.started_at,sel.completed_at)&&<div className="timing-chip active">⏱ {fmtDuration(sel.started_at,sel.completed_at)}</div>}
               {sel.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_start)}>📍 Start</span>}
               {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
@@ -2964,7 +3155,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {s.mandatory&&<span className="cl-mandatory" title="Mandatory">*</span>}
                           {s.requirePhoto&&<span style={{fontSize:10,color:'#3B82F6',fontWeight:600}} title="Photo required">📷</span>}
                           {s.requireTimestamp&&todayCount>0&&todayRows[todayRows.length-1]&&(
-                            <span style={{fontSize:10,color:'#F59E0B',fontWeight:600}} title="Completion timestamp">🕐 {new Date(todayRows[todayRows.length-1].completed_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                            <span style={{fontSize:10,color:'#F59E0B',fontWeight:600}} title="Completion timestamp">🕐 {fmtDateTime(todayRows[todayRows.length-1].completed_at)}</span>
                           )}
                           {s.requireTimestamp&&todayCount===0&&(
                             <span style={{fontSize:10,color:'var(--t3)'}} title="Timestamp will be recorded on completion">🕐</span>
@@ -2984,7 +3175,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <div style={{marginTop:4,borderLeft:'2px solid rgba(16,185,129,.3)',paddingLeft:8}}>
                             {todayRows.map((r,ri)=>(
                               <div key={r.id||ri} style={{fontSize:11,color:'var(--t2)',marginBottom:2}}>
-                                <span style={{color:'var(--t3)'}}>{new Date(r.completed_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                                <span style={{color:'var(--t3)'}}>{fmtDateTime(r.completed_at)}</span>
                                 {' '}<span style={{fontWeight:600}}>{r.completed_by_name}</span>
                                 {r.note&&<span style={{color:'var(--t2)'}}> — {r.note}</span>}
                               </div>
@@ -2995,7 +3186,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           </div>
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
-                        {s.photo&&(()=>{ const pu=typeof s.photo==='object'?s.photo.url:s.photo; return <img src={pu} alt="evidence" className="cl-photo-thumb" style={{marginTop:4,cursor:'zoom-in'}} onClick={()=>setLightboxUrl(pu)}/> })()}
+                        {s.photo&&<EvidenceThumb entry={s.photo} className="cl-photo-thumb" containerStyle={{marginTop:4,overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>}
                         {isWorker&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
@@ -3041,11 +3232,17 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             {photos.length>0 ? (
               <div className="ev-thumbs">
                 {photos.map((p,i)=>{
-                  const isImg=typeof p.url==='string'&&(p.url.startsWith('data:image')||p.url.startsWith('http'))
-                  const cap=[p.ts&&new Date(p.ts).toLocaleDateString('en-AU'),p.ts&&new Date(p.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),p.by].filter(Boolean).join(' · ')
+                  // Attribution: "Added by {by} ({role}) · {ts}" — makes reviewer-added items distinguishable.
+                  const tsStr=p.ts?fmtDateTime(p.ts,''):''
+                  const roleLbl=p.role?(ROLE_LABELS[p.role]||p.role):''
+                  const cap=p.by?`Added by ${p.by}${roleLbl?' ('+roleLbl+')':''}${tsStr?' · '+tsStr:''}`:tsStr
                   return (
                     <div key={i} style={{position:'relative',marginBottom:4}}>
-                      <div className="ev-thumb" onClick={()=>{ if(isImg) setLightboxUrl(p.url) }} style={{cursor:isImg?'zoom-in':'default'}}>{isImg?<img src={p.url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18}}>📷</span>}</div>
+                      <EvidenceThumb entry={p} className="ev-thumb" imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>
+                      {canDeleteEvidence(p)&&(
+                        <button title="Delete evidence (you added it, within 24h) — reason required" onClick={()=>deleteEvidenceItem(sel,p)}
+                          style={{position:'absolute',top:2,right:2,width:18,height:18,padding:0,lineHeight:'16px',borderRadius:4,border:'none',background:'rgba(239,68,68,.92)',color:'#fff',fontSize:10,cursor:'pointer'}}>🗑</button>
+                      )}
                       {cap&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2,maxWidth:64,lineHeight:1.3}}>{cap}</div>}
                     </div>
                   )
@@ -3053,6 +3250,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               </div>
             ) : (
               <div style={{fontSize:12,color:'var(--t2)',padding:'4px 0'}}>{sel.compliance?'📷 No photos yet — add via checklist items.':'No photos.'}</div>
+            )}
+            {['manager','supervisor','client_admin'].includes(user.role) && (
+              <ReviewerAttachEvidence task={sel} user={user} update={update}/>
             )}
           </div>
           ) })()}
@@ -3308,7 +3508,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
                           <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
                             <span>👤 {t.assigned_user_name||'—'}</span>
-                            {t.completed_at&&<span>✅ {new Date(t.completed_at).toLocaleDateString('en-AU')}</span>}
+                            {t.completed_at&&<span>✅ {fmtDateTime(t.completed_at)}</span>}
                             {t.due_date&&<span>📅 {t.due_date}</span>}
                             {t.recurrence&&t.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[t.recurrence]}</span>}
                           </div>
@@ -3373,22 +3573,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
                       return (
                         <div>
-                          <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:actionNeeded.length>0?'var(--red)':'var(--text)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>{actionNeeded.length>0?'🔴 ':''}Action Needed — Sent Back ({actionNeeded.length})</div>
-                            {actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 To Do ({toDo.length})</div>
-                            {toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                          <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks ({recurring.length})</div>
-                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                          <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>⏳ Submitted — Awaiting Review ({submitted.length})</div>
-                            {submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
+                          {renderSection('wk-action', (actionNeeded.length>0?'🔴 ':'')+'Action Needed — Sent Back', actionNeeded.length,
+                            {background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12},
+                            actionNeeded.length>0?'var(--red)':'var(--text)',
+                            (actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('wk-todo', '📋 To Do', toDo.length,
+                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            (toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('wk-recurring', '🔁 Recurring Tasks', recurring.length,
+                            {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
+                            (recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('wk-submitted', '⏳ Submitted — Awaiting Review', submitted.length,
+                            {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
+                            (submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                         </div>
                       )
                     }
@@ -3402,22 +3599,18 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
                       return (
                         <div>
-                          <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
-                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 My Own Tasks ({myTasks.length})</div>
-                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 One-off Tasks I Assigned ({oneOff.length})</div>
-                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                          <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks I Assigned ({recurring.length})</div>
-                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
+                          {renderSection('sv-review', '🔍 Needs My Review', needsReview.length,
+                            {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
+                            (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('sv-mine', '📋 My Own Tasks', myTasks.length,
+                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            (myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('sv-oneoff', '📤 One-off Tasks I Assigned', oneOff.length,
+                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('sv-recurring', '🔁 Recurring Tasks I Assigned', recurring.length,
+                            {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
+                            (recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                         </div>
                       )
                     }
@@ -3431,22 +3624,18 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
                       return (
                         <div>
-                          <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
-                            {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 My Own Tasks ({myTasks.length})</div>
-                            {myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 One-off Tasks I Assigned ({oneOff.length})</div>
-                            {oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                          <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks I Assigned ({recurring.length})</div>
-                            {recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
+                          {renderSection('mg-review', '🔍 Needs My Review', needsReview.length,
+                            {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
+                            (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('mg-mine', '📋 My Own Tasks', myTasks.length,
+                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            (myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('mg-oneoff', '📤 One-off Tasks I Assigned', oneOff.length,
+                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('mg-recurring', '🔁 Recurring Tasks I Assigned', recurring.length,
+                            {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
+                            (recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                         </div>
                       )
                     }
@@ -3462,34 +3651,27 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     const recurringAll = activeFiltered.filter(t=>isRecurring(t)).filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation).sort(byDate)
                     return (
                       <div>
-                        <div style={{background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}}>
-                          <div style={{fontSize:11,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Needs My Review ({needsReview.length})</div>
-                          {needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                        </div>
-                        {attention.length>0&&(
-                          <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>⚠️ Needs Attention — Overdue & Escalated ({attention.length})</div>
-                            {attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                          </div>
-                        )}
-                        <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
-                          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📤 Tasks I Assigned ({iAssigned.length})</div>
-                          {iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
+                        {renderSection('ca-review', '🔍 Needs My Review', needsReview.length,
+                          {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
+                          (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                        {attention.length>0&&renderSection('ca-attention', '⚠️ Needs Attention — Overdue & Escalated', attention.length,
+                          {background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}, 'var(--red)',
+                          attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
+                        {renderSection('ca-assigned', '📤 Tasks I Assigned', iAssigned.length,
+                          {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                          (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
                             <div>
                               {assignedToMgr.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3B82F6',display:'inline-block'}}/> To Managers ({assignedToMgr.length})</div>{assignedToMgr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
                               {assignedToSup.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#10B981',display:'inline-block'}}/> To Supervisors ({assignedToSup.length})</div>{assignedToSup.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
                               {assignedToWkr.length>0&&<div><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#6B7280',display:'inline-block'}}/> To Staff ({assignedToWkr.length})</div>{assignedToWkr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
                             </div>
-                          )}
-                        </div>
-                        <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}}>
-                          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 One-off Tasks ({oneOffAll.length})</div>
-                          {oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                        </div>
-                        <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}}>
-                          <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔁 Recurring Tasks ({recurringAll.length})</div>
-                          {recurringAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks</div>:recurringAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}
-                        </div>
+                          )))}
+                        {renderSection('ca-oneoff', '📋 One-off Tasks', oneOffAll.length,
+                          {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                          (oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                        {renderSection('ca-recurring', '🔁 Recurring Tasks', recurringAll.length,
+                          {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
+                          (recurringAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks</div>:recurringAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                       </div>
                     )
                   })()}
@@ -3703,11 +3885,9 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
                 <div style={{display:'flex',gap:5,marginTop:7,flexWrap:'wrap'}}><StatusBadge status={t.status}/>{t.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒 Compliance</span>}</div>
               </div>
               <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                {(()=>{ const photos=taskPhotoIndex(t); return photos.length>0 ? photos.map((p,i)=>{ const isImg=typeof p.url==='string'&&(p.url.startsWith('data:image')||p.url.startsWith('http')); return (
-                  <div key={i} className="ev-thumb" style={{width:48,height:48}}>
-                    {isImg ? <img src={p.url} alt="evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <span style={{fontSize:16}}>📷</span>}
-                  </div>
-                )}) : <span style={{fontSize:11,color:'var(--t2)'}}>No photos</span> })()}
+                {(()=>{ const photos=taskPhotoIndex(t); return photos.length>0 ? photos.map((p,i)=>(
+                  <EvidenceThumb key={i} entry={p} className="ev-thumb" containerStyle={{width:48,height:48}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} title={p.by?`Added by ${p.by}${p.role?' ('+(ROLE_LABELS[p.role]||p.role)+')':''}`:undefined}/>
+                )) : <span style={{fontSize:11,color:'var(--t2)'}}>No photos</span> })()}
               </div>
             </div>
             {hasAccess(user.role,2)&&t.status==='awaiting_review'&&(
@@ -5492,7 +5672,7 @@ const TIMEZONES = [
   'Europe/London','Europe/Paris','Europe/Berlin','Europe/Amsterdam',
   'America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
   'America/Toronto','America/Vancouver','America/Sao_Paulo',
-  'Africa/Johannesburg','UTC',
+  'Africa/Johannesburg','Africa/Kampala','Africa/Nairobi','UTC',
 ]
 
 const COMPANY_COMPLETENESS_FIELDS = [
@@ -7559,9 +7739,31 @@ function CompanySettingsView({ user }) {
     )
   }
 
+  // Resolve the caller's organisations row RELIABLY. profiles.org holds only the org NAME, which is
+  // fragile to match on (whitespace/case/duplicate names, or a renamed org). org_members.org holds the
+  // organisations.id (set by the handle_new_user trigger), so resolve via the session user's membership
+  // id first, then fall back to a name match. organisations.id is TEXT, so .eq('id',…) never type-throws.
+  const resolveOrgRow = async () => {
+    const uid = await authUserId()
+    if (uid) {
+      const { data: members } = await supabase.from('org_members').select('org').eq('user_id', uid)
+      const ids = [...new Set((members || []).map(m => m?.org).filter(Boolean))]
+      if (ids.length) {
+        const { data: orgs } = await supabase.from('organisations').select('*').in('id', ids)
+        if (orgs && orgs.length) {
+          // Multi-org users: prefer the row whose name matches the profile's org; else the first.
+          return orgs.find(o => o.name === user.org) || orgs[0]
+        }
+      }
+    }
+    // Fallback: legacy name match.
+    const { data } = await supabase.from('organisations').select('*').eq('name', user.org).maybeSingle()
+    return data || null
+  }
+
   useEffect(() => {
     if (!isConfigured()) { setLoading(false); return }
-    supabase.from('organisations').select('*').eq('name', user.org).maybeSingle().then(({ data }) => {
+    resolveOrgRow().then((data) => {
       if (data) {
         setOrgId(data.id)
         if(data.auto_logout_minutes!=null) setAutoLogoutMinutes(data.auto_logout_minutes)
@@ -7808,9 +8010,17 @@ function CompanySettingsView({ user }) {
     } : {
       org_settings:JSON.stringify(settings)
     }
-    if (isConfigured() && orgId) {
-      const { error } = await supabase.from('organisations').update(updates).eq('id', orgId)
+    if (isConfigured()) {
+      // Never report success without a persisted row. Require a resolved org id, then confirm the UPDATE
+      // actually matched a row via .select() — an update matching 0 rows (wrong id, or an RLS policy
+      // silently blocking the write) returns { error: null } and must NOT be treated as success.
+      if (!orgId) { setMsg('✗ Could not save — organisation not identified. Reload and try again.'); setSaving(false); return }
+      const { data, error } = await supabase.from('organisations').update(updates).eq('id', orgId).select()
       if (error) { setMsg('✗ '+error.message); setSaving(false); return }
+      if (!data || data.length === 0) {
+        setMsg('✗ Save did not persist — no matching organisation row (you may not have permission to edit it).')
+        setSaving(false); return
+      }
     }
     setMsg('✓ Settings saved')
     setSavedToast(true)
@@ -7906,7 +8116,7 @@ function CompanySettingsView({ user }) {
                 <div className="form-field"><label className="form-label">Industry</label><select className="form-input" {...fld('industry')}><option value="">— Select industry —</option>{PRESET_INDUSTRIES.map(k=><option key={k} value={k}>{k}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Website</label><input className="form-input" placeholder="https://example.com" {...fld('website')}/></div>
               </div>
-              <div className="form-field"><label className="form-label">Timezone</label><select className="form-input" {...fld('timezone')}><option value="">— Select timezone —</option>{TIMEZONES.map(tz=><option key={tz} value={tz}>{tz.replace(/_/g,' ')}</option>)}</select></div>
+              <div className="form-field"><label className="form-label">Timezone</label><select className="form-input" {...fld('timezone')}><option value="">— Select timezone —</option>{TIMEZONES.map(tz=><option key={tz} value={tz}>{tz==='UTC'?'UTC (Coordinated Universal Time)':tz.split('/').pop().replace(/_/g,' ')+' — '+tz}</option>)}</select></div>
             </div>
           </div>
         </div>
@@ -12002,8 +12212,6 @@ function SupportView({ user, tickets=[], setTickets }) {
     </div>
   )
 }
-
-
 
 export default function App() {
   const [user, setUser] = useState(null)
