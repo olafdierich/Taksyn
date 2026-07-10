@@ -439,10 +439,19 @@ function ReviewerAttachEvidence({ task, user, update }) {
     if (!file) return
     setBusy(true); setMsg('')
     try {
-      // NOTE(live): task.org holds the org NAME on live data, while the bucket RLS policy checks the
-      // path's first folder against org_members.org (an ID). Sandbox is aligned to ORG_SANDBOX so
-      // task.org works here; live will need org name→ID resolution before this upload.
-      const { path } = await uploadEvidence(file, task.org, task.id)
+      // Resolve task.org to the org ID before uploading. On live, task.org holds the org NAME
+      // (e.g. "Kemrose") but the task-evidence bucket RLS policy — and every migrated file — keys on
+      // the org ID (e.g. ORG1780482520610). Uploading under the name violates RLS ("new row violates
+      // row-level security policy") and evidence silently falls back to base64. Same resolution used
+      // elsewhere in this file: ids already start with 'ORG'; otherwise look up organisations.id by name.
+      let orgId = (task.org && String(task.org).startsWith('ORG')) ? task.org : null
+      if (!orgId) {
+        const { data: orgRow } = await supabase.from('organisations').select('id').eq('name', task.org).maybeSingle()
+        orgId = orgRow?.id || null
+      }
+      // Never upload under an unresolved org — throw so it surfaces instead of failing RLS silently.
+      if (!orgId) throw new Error(`Could not resolve organisation id for "${task.org}" — evidence not uploaded.`)
+      const { path } = await uploadEvidence(file, orgId, task.id)
       // Acting user's auth id MUST come from the session, never the user-state object.
       const by_id = await authUserId()
       const entry = { path, ts: new Date().toISOString(), by: user.name, by_id, role: user.role }
