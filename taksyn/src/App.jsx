@@ -912,7 +912,7 @@ const TaskCard = ({ task, onClick }) => {
       <div className="tc-meta">
         <PriBadge priority={task.priority} />
         <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}{dueTimeSuffix(task)}</span>
-        {task.assigned_user_name&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {task.assigned_user_name}</span>}
+        {assigneeNames(task)&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {assigneeNames(task)}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance&&taskPhotoIndex(task).length===0&&!['awaiting_review','approved','completed'].includes(task.status)&&<span style={{fontSize:11,color:'#8B5CF6',background:'rgba(139,92,246,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>📷 required</span>}
         {task.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
@@ -1731,6 +1731,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   )
 }
 
+const assigneeNames = t => (t?.assigned_user_names?.length ? t.assigned_user_names.join(', ') : (t?.assigned_user_name||''))
 function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
   // Super admin sees NO task content — privacy/confidentiality
   if (user.role==='super_admin') return []
@@ -2171,7 +2172,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', due_time:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'', assigned_user_ids:[], assigned_user_names:[] })
+  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', due_time:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'', assigned_user_ids:[], assigned_user_names:[], lead_user_id:'', lead_user_name:'' })
   const [selectedTplId, setSelectedTplId] = useState('')
   const [taskGlobalIndustries, setTaskGlobalIndustries] = useState([])
   const [taskOrgIndustries, setTaskOrgIndustries] = useState([])
@@ -2223,6 +2224,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [pendingDelete, setPendingDelete] = useState(null)
   const [taskOrgTeams, setTaskOrgTeams] = useState([]) // teams for the create-task selector
   const [taskTeamMembers, setTaskTeamMembers] = useState([]) // members of the selected team
+  const [assignAll, setAssignAll] = useState(true)
   const [userTeamIds, setUserTeamIds] = useState([]) // team IDs the logged-in user belongs to
 
   useEffect(()=>{
@@ -2944,29 +2946,42 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   {newTask.team_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>📋 Task will be visible to all members of {newTask.team_name}</div>}
                 </div>
               )}
-              <div className="form-field"><label className="form-label">Assign To {newTask.team_id&&<span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— tick members, or leave all unticked for the whole team</span>}</label>
+              <div className="form-field"><label className="form-label">Assign To {newTask.team_id&&<span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— all members, or pick specific ones</span>}</label>
                 {newTask.team_id ? (
-                  taskTeamMembers.length>0 ? (
-                    <div>
-                      <div style={{fontSize:11,color:'var(--t2)',marginBottom:6}}>Tick who's responsible — leave all unticked to assign the whole team.</div>
-                      {taskTeamMembers.filter(u=>assignableRoles.includes(u.role)).map(u=>{
-                        const checked=(newTask.assigned_user_ids||[]).includes(u.id)
-                        return (
-                          <label key={u.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0',cursor:'pointer',fontSize:13}}>
-                            <input type="checkbox" checked={checked} onChange={e=>setNewTask(prev=>{
-                              const ids=e.target.checked?[...(prev.assigned_user_ids||[]),u.id]:(prev.assigned_user_ids||[]).filter(x=>x!==u.id)
-                              const names=ids.map(id=>taskTeamMembers.find(m=>m.id===id)?.name).filter(Boolean)
-                              return {...prev,assigned_user_ids:ids,assigned_user_names:names,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}
-                            })}/>
-                            <span>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</span>
-                          </label>
-                        )
-                      })}
-                      {(newTask.assigned_user_ids?.length>0)
-                        ? <div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_ids.length} assignee(s): {newTask.assigned_user_names.join(', ')}</div>
-                        : <div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>👥 Whole team: all members of {newTask.team_name}</div>}
-                    </div>
-                  ) : <div style={{fontSize:11,color:'var(--t2)'}}>Loading team members…</div>
+                  <div>
+                    <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,marginBottom:6,fontWeight:600}}>
+                      <input type="checkbox" checked={assignAll} onChange={e=>{setAssignAll(e.target.checked); setNewTask(prev=>({...prev,assigned_user_ids:[],assigned_user_names:[],lead_user_id:'',lead_user_name:''}))}}/>
+                      <span>Assign to all team members</span>
+                    </label>
+                    {assignAll ? (
+                      <div style={{fontSize:11,color:'var(--brand)',fontWeight:600}}>👥 Everyone in {newTask.team_name}</div>
+                    ) : (
+                      taskTeamMembers.length>0 ? (
+                        <div style={{paddingLeft:8,borderLeft:'2px solid var(--line)'}}>
+                          <div style={{fontSize:11,color:'var(--t2)',marginBottom:6}}>Tick the members assigned to this task. Optionally set one as ★ team leader.</div>
+                          {taskTeamMembers.filter(u=>assignableRoles.includes(u.role)).map(u=>{
+                            const checked=(newTask.assigned_user_ids||[]).includes(u.id)
+                            const isLead=newTask.lead_user_id===u.id
+                            return (
+                              <div key={u.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
+                                <input type="checkbox" checked={checked} onChange={e=>setNewTask(prev=>{
+                                  const ids=e.target.checked?[...(prev.assigned_user_ids||[]),u.id]:(prev.assigned_user_ids||[]).filter(x=>x!==u.id)
+                                  const names=ids.map(id=>taskTeamMembers.find(m=>m.id===id)?.name).filter(Boolean)
+                                  const clr=(!e.target.checked&&prev.lead_user_id===u.id)
+                                  return {...prev,assigned_user_ids:ids,assigned_user_names:names,assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',lead_user_id:clr?'':prev.lead_user_id,lead_user_name:clr?'':prev.lead_user_name}
+                                })}/>
+                                <span style={{flex:1,fontSize:13}}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</span>
+                                {checked&&<button type="button" onClick={()=>setNewTask(prev=>({...prev,lead_user_id:isLead?'':u.id,lead_user_name:isLead?'':u.name}))} style={{fontSize:11,padding:'2px 8px',borderRadius:6,border:'1px solid var(--line)',background:isLead?'var(--brand)':'transparent',color:isLead?'#fff':'var(--t2)',cursor:'pointer'}}>{isLead?'★ Lead':'☆ Lead'}</button>}
+                              </div>
+                            )
+                          })}
+                          {(newTask.assigned_user_ids?.length>0)
+                            ? <div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_ids.length} assigned: {newTask.assigned_user_names.join(', ')}{newTask.lead_user_name&&<span> · ★ Lead: {newTask.lead_user_name}</span>}</div>
+                            : <div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Tick at least one member, or re-check "all"</div>}
+                        </div>
+                      ) : <div style={{fontSize:11,color:'var(--t2)'}}>Loading team members…</div>
+                    )}
+                  </div>
                 ) : (
                   teamUsers.length>0 ? (
                     <div>
@@ -3545,7 +3560,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         <div style={{flex:1}}>
                           <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
                           <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
-                            <span>👤 {t.assigned_user_name||'—'}</span>
+                            <span>👤 {assigneeNames(t)||'—'}</span>
                             {t.completed_at&&<span>✅ {fmtDateTime(t.completed_at)}</span>}
                             {t.due_date&&<span>📅 {t.due_date}</span>}
                             {t.recurrence&&t.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[t.recurrence]}</span>}
@@ -4252,7 +4267,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
 
   const exportOrgPDF = () => {
     const roleRows = workerRoles.map(r => '<tr><td><strong>'+ROLE_LABELS[r]+'</strong></td><td>'+byRole[r].tasks+'</td><td>'+byRole[r].done+'</td><td style="color:'+(pct(byRole[r].done,byRole[r].tasks)>=80?'#10B981':pct(byRole[r].done,byRole[r].tasks)>=50?'#F59E0B':'#EF4444')+'">'+pct(byRole[r].done,byRole[r].tasks)+'%</td><td style="color:'+(byRole[r].compRate>=80?'#10B981':byRole[r].compRate>=50?'#F59E0B':'#EF4444')+'">'+byRole[r].compRate+'%</td></tr>').join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${filteredPt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(t.assigned_user_name||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${filteredPt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(assigneeNames(t)||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
     openReport(html)
   }
 
@@ -4286,7 +4301,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
             {reportOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <button className="btn btn-primary btn-sm" onClick={handleExport}>📄 Generate PDF</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"',t.assigned_user_name||''].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"','"'+assigneeNames(t)+'"'].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
         </div>
       </div>
 
@@ -4492,7 +4507,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
                         <td style={{padding:'8px 10px',textAlign:'center'}}>{(t.gps_start||t.gps_end)?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
                         <td style={{padding:'8px 10px',textAlign:'center'}}>{parseSafe(t.evidence).length>0?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
                         <td style={{padding:'8px 10px',color:'var(--t2)',fontSize:10,maxWidth:200}}>{clTs.length>0?clTs.join(', '):<span style={{color:'var(--t3)'}}>—</span>}</td>
-                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{t.assigned_user_name||'—'}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{assigneeNames(t)||'—'}</td>
                       </tr>
                     )
                   })}
@@ -9320,7 +9335,7 @@ function SuperAdminTaskStats({ tasks, setTasks, loadTasks }) {
                     <tr key={t.id} style={{borderBottom:'1px solid var(--border)'}}>
                       <td style={{padding:'8px 10px',fontWeight:600,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</td>
                       <td style={{padding:'8px 10px',color:'var(--t2)'}}>{t.org}</td>
-                      <td style={{padding:'8px 10px',color:'var(--red)',textDecoration:'line-through'}}>{t.assigned_user_name||t.assigned_user_id}</td>
+                      <td style={{padding:'8px 10px',color:'var(--red)',textDecoration:'line-through'}}>{assigneeNames(t)||t.assigned_user_id}</td>
                       <td style={{padding:'8px 10px'}}><StatusBadge status={t.status}/></td>
                       <td style={{padding:'8px 10px',color:'var(--t2)'}}>{t.due_date}</td>
                       <td style={{padding:'8px 10px'}}>
