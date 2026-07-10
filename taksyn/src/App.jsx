@@ -912,7 +912,7 @@ const TaskCard = ({ task, onClick }) => {
       <div className="tc-meta">
         <PriBadge priority={task.priority} />
         <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}{dueTimeSuffix(task)}</span>
-        {assigneeNames(task)&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {assigneeNames(task)}</span>}
+        {assigneeNames(task)&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {assigneeNames(task)}</span>}{task.lead_user_name&&<span style={{fontSize:11,color:'var(--brand)',fontWeight:600,marginLeft:6}}>★ {task.lead_user_name}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance&&taskPhotoIndex(task).length===0&&!['awaiting_review','approved','completed'].includes(task.status)&&<span style={{fontSize:11,color:'#8B5CF6',background:'rgba(139,92,246,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>📷 required</span>}
         {task.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
@@ -2813,9 +2813,52 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={editTask.recurrence||'once'} onChange={e=>setEditTask({...editTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               </div>
               {editTask.compliance&&<div className="form-field"><label className="form-label">Due Time <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label><input className="form-input" type="time" value={editTask.due_time||''} onChange={e=>setEditTask({...editTask,due_time:e.target.value})}/></div>}
+              <div className="form-field"><label className="form-label">Assign to Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
+                <select className="form-select" value={editTask.team_id||''} onChange={e=>{ const team=taskOrgTeams.find(t=>t.id===e.target.value); setEditTask({...editTask,team_id:team?.id||'',team_name:team?.name||'',assigned_user_ids:[],assigned_user_names:[],lead_user_id:'',lead_user_name:''}); setTaskTeamMembers([]); setAssignAll(true); if(team?.id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',team.id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } }}>
+                  <option value="">— No team —</option>
+                  {taskOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
               <div className="form-field"><label className="form-label">Assign To</label>
-                {teamUsers.length>0 ? <select className="form-select" value={editTask.assigned_user_id||''} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setEditTask({...editTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_role:u.role}) }}><option value="">— Select —</option>{teamUsers.map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}</select>
-                : <select className="form-select" value={editTask.assigned_role||'worker'} onChange={e=>setEditTask({...editTask,assigned_role:e.target.value})}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>}
+                {editTask.team_id ? (
+                  <div>
+                    <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,marginBottom:6,fontWeight:600}}>
+                      <input type="checkbox" checked={assignAll} onChange={e=>{setAssignAll(e.target.checked); setEditTask(prev=>({...prev,assigned_user_ids:[],assigned_user_names:[],lead_user_id:'',lead_user_name:''}))}}/>
+                      <span>Assign to all team members</span>
+                    </label>
+                    {assignAll ? (
+                      <div style={{fontSize:11,color:'var(--brand)',fontWeight:600}}>👥 Everyone in {editTask.team_name}</div>
+                    ) : (
+                      taskTeamMembers.length>0 ? (
+                        <div style={{paddingLeft:8,borderLeft:'2px solid var(--line)'}}>
+                          <div style={{fontSize:11,color:'var(--t2)',marginBottom:6}}>Tick the members assigned to this task. Optionally set one as ★ team leader.</div>
+                          {taskTeamMembers.filter(u=>assignableRoles.includes(u.role)).map(u=>{
+                            const checked=(editTask.assigned_user_ids||[]).includes(u.id)
+                            const isLead=editTask.lead_user_id===u.id
+                            return (
+                              <div key={u.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
+                                <input type="checkbox" checked={checked} onChange={e=>setEditTask(prev=>{
+                                  const ids=e.target.checked?[...(prev.assigned_user_ids||[]),u.id]:(prev.assigned_user_ids||[]).filter(x=>x!==u.id)
+                                  const names=ids.map(id=>taskTeamMembers.find(m=>m.id===id)?.name).filter(Boolean)
+                                  const clr=(!e.target.checked&&prev.lead_user_id===u.id)
+                                  return {...prev,assigned_user_ids:ids,assigned_user_names:names,assigned_user_id:'',assigned_user_name:'',lead_user_id:clr?'':prev.lead_user_id,lead_user_name:clr?'':prev.lead_user_name}
+                                })}/>
+                                <span style={{flex:1,fontSize:13}}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</span>
+                                {checked&&<button type="button" onClick={()=>setEditTask(prev=>({...prev,lead_user_id:isLead?'':u.id,lead_user_name:isLead?'':u.name}))} style={{fontSize:11,padding:'2px 8px',borderRadius:6,border:'1px solid var(--line)',background:isLead?'var(--brand)':'transparent',color:isLead?'#fff':'var(--t2)',cursor:'pointer'}}>{isLead?'★ Lead':'☆ Lead'}</button>}
+                              </div>
+                            )
+                          })}
+                          {(editTask.assigned_user_ids?.length>0)
+                            ? <div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {editTask.assigned_user_ids.length} assigned: {editTask.assigned_user_names.join(', ')}{editTask.lead_user_name&&<span> · ★ Lead: {editTask.lead_user_name}</span>}</div>
+                            : <div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Tick at least one member, or re-check "all"</div>}
+                        </div>
+                      ) : <div style={{fontSize:11,color:'var(--t2)'}}>Loading team members…</div>
+                    )}
+                  </div>
+                ) : (
+                  teamUsers.length>0 ? <select className="form-select" value={editTask.assigned_user_id||''} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setEditTask({...editTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_role:u.role}) }}><option value="">— Select —</option>{teamUsers.map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}</select>
+                  : <select className="form-select" value={editTask.assigned_role||'worker'} onChange={e=>setEditTask({...editTask,assigned_role:e.target.value})}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
+                )}
               </div>
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
                 <input type="checkbox" id="edit-comp" checked={editTask.compliance||false} onChange={e=>setEditTask({...editTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
@@ -3367,7 +3410,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     <span style={isOrphaned?{color:'var(--t2)',textDecoration:'line-through'}:{}}>{sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</span>
                     {isOrphaned&&<div style={{marginTop:4,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                       <span style={{fontSize:11,color:'var(--red)',fontWeight:600}}>⚠️ Assigned user no longer in organisation</span>
-                      {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setShowEdit(true) }}>Reassign</button>}
+                      {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>Reassign</button>}
                     </div>}
                   </div>
                 )
@@ -3377,7 +3420,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             </div>
           </div>
           <div className="btn-row">
-            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setShowEdit(true) }}>✏️ Edit</button>}
+            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>✏️ Edit</button>}
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
