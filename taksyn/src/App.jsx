@@ -3216,7 +3216,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Approved</div>}
             </div>
           )}
-          {(user.role!=='worker'&&!amAssigned)&&(
+          {(sel.created_by===user.name||user.role==='client_admin'||user.role==='super_admin')&&(
             <div className="timing-bar">
               {user.role!=='worker'&&<div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {fmtDateTime(sel.started_at)}</div>}
               {user.role!=='worker'&&<div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {fmtDateTime(sel.completed_at)}</div>}
@@ -3225,7 +3225,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
             </div>
           )}
-          {user.role!=='worker'&&!amAssigned&&workerTimes.length>0&&(
+          {(sel.created_by===user.name||user.role==='client_admin'||user.role==='super_admin')&&workerTimes.length>0&&(
             <div style={{marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:6}}>Per-worker times</div>
               <div style={{display:'flex',flexDirection:'column',gap:6}}>
