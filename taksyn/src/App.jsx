@@ -2200,7 +2200,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // Seed the action-priority section of each role EXPANDED (rest collapsed): worker→Action Needed + To Do,
   // supervisor/manager/client_admin→Needs My Review, plus client_admin→Needs Attention (only rendered
   // when >0). Keys are unique per role, so listing all is safe — only the current role's sections exist.
-  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','wk-todo','sv-review','mg-review','ca-review','ca-attention']))
+  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','wk-todo','sv-review','sv-mine','mg-review','mg-mine','ca-review','ca-attention']))
   const toggleSection = (sk) => setExpandedSections(prev => { const n = new Set(prev); n.has(sk) ? n.delete(sk) : n.add(sk); return n })
   // Render one task-list section with a clickable, keyboard-activatable header (▸ collapsed / ▾ expanded,
   // plus label + count). The count always shows; the body renders only when expanded. Display-only — this
