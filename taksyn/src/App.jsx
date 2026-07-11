@@ -3224,6 +3224,23 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
             </div>
           )}
+          {user.role!=='worker'&&workerTimes.length>0&&(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:6}}>Per-worker times</div>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {workerTimes.slice().sort((a,b)=>(a.started_at||'').localeCompare(b.started_at||'')).map(w=>(
+                  <div key={w.user_id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:12,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'8px 10px'}}>
+                    <span style={{fontWeight:700,minWidth:120}}>{w.user_name||'Worker'}{sel.lead_user_id===w.user_id&&<span style={{color:'var(--brand)'}}> ★</span>}</span>
+                    <span style={{color:'var(--green)'}}>In: {fmtDateTime(w.started_at)}</span>
+                    <span style={{color:'#F59E0B'}}>Out: {fmtDateTime(w.completed_at)}</span>
+                    {fmtDuration(w.started_at,w.completed_at)&&<span style={{color:'var(--t1)',fontWeight:600}}>⏱ {fmtDuration(w.started_at,w.completed_at)}</span>}
+                    {w.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+w.gps_start)}>📍 In</span>}
+                    {w.gps_end&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+w.gps_end)}>📍 Out</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {sel.status==='rejected'&&(
             <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back</div>
