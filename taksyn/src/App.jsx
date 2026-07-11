@@ -2153,6 +2153,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // `selected` is always a scalar task id (never bulk), so this fires exactly one refetch per open.
   useEffect(()=>{ if(selected) loadTaskById(selected) }, [selected])
   const [comment, setComment] = useState('')
+  const [workerTimes, setWorkerTimes] = useState([])
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
   const [interventionModal, setInterventionModal] = useState(null) // {action, label, changes, taskId}
   const [interventionReason, setInterventionReason] = useState('')
@@ -2588,6 +2589,35 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       }).catch(()=>{})
   },[selected])
 
+  const loadWorkerTimes = (tid) => { if(!tid||!isConfigured()){ setWorkerTimes([]); return } supabase.from('task_worker_times').select('*').eq('task_id',tid).then(({data})=>{ setWorkerTimes(data||[]) }).catch(()=>{}) }
+  useEffect(()=>{ loadWorkerTimes(selected) },[selected])
+  const workerTimeIn = (tid) => {
+    const now=new Date().toISOString()
+    const setRow=async(gps)=>{
+      await supabase.from('task_worker_times').upsert({task_id:tid,user_id:user.id,user_name:user.name,org:user.org,started_at:now,gps_start:gps||null,updated_at:now},{onConflict:'task_id,user_id'})
+      const {data:rows}=await supabase.from('task_worker_times').select('started_at,gps_start').eq('task_id',tid)
+      const ws=(rows||[]).filter(r=>r.started_at).sort((a,b)=>a.started_at<b.started_at?-1:1)
+      const env=ws[0]||{}
+      const t=tasks.find(x=>x.id===tid)
+      const patch={started_at:env.started_at||now,gps_start:env.gps_start||gps||null}
+      if(t&&['pending','overdue','escalated','rejected'].includes(t.status)) patch.status='in_progress'
+      update(tid,patch); loadWorkerTimes(tid)
+    }
+    if(gpsEnabled===false||!navigator.geolocation){setRow();return}
+    navigator.geolocation.getCurrentPosition(pos=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','true');setGpsEnabled(true)} setRow(pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)) },()=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false)} setRow() })
+  }
+  const workerTimeOut = (tid) => {
+    const now=new Date().toISOString()
+    const setRow=async(gps)=>{
+      await supabase.from('task_worker_times').upsert({task_id:tid,user_id:user.id,user_name:user.name,org:user.org,completed_at:now,gps_end:gps||null,updated_at:now},{onConflict:'task_id,user_id'})
+      const {data:rows}=await supabase.from('task_worker_times').select('completed_at,gps_end').eq('task_id',tid)
+      const we=(rows||[]).filter(r=>r.completed_at).sort((a,b)=>a.completed_at<b.completed_at?1:-1)
+      const env=we[0]||{}
+      update(tid,{completed_at:env.completed_at||now,gps_end:env.gps_end||gps||null}); loadWorkerTimes(tid)
+    }
+    if(gpsEnabled===false||!navigator.geolocation){setRow();return}
+    navigator.geolocation.getCurrentPosition(pos=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','true');setGpsEnabled(true)} setRow(pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)) },()=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false)} setRow() })
+  }
   const startTask = (tid) => {
     const doStart = (extra={}) => update(tid, { status:"in_progress", started_at:new Date().toISOString(), ...extra })
     if (gpsEnabled === false || !navigator.geolocation) { doStart(); return }
@@ -2777,6 +2807,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     : user.role==='supervisor' ? ['worker']
     : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
+  const myTime = workerTimes.find(r=>r.user_id===user.id) || null
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
@@ -3148,18 +3179,18 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
           </div>
           {user.role==='worker'&&(
             <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
-              <div style={{flex:1,minWidth:100,background: sel.started_at?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(sel.started_at?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
+              <div style={{flex:1,minWidth:100,background: myTime?.started_at?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(myTime?.started_at?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time In</div>
-                <div style={{fontSize:15,fontWeight:800,color:sel.started_at?'var(--green)':'var(--t3)'}}>{fmtDateTime(sel.started_at)}</div>
+                <div style={{fontSize:15,fontWeight:800,color:myTime?.started_at?'var(--green)':'var(--t3)'}}>{fmtDateTime(myTime?.started_at)}</div>
               </div>
-              <div style={{flex:1,minWidth:100,background: sel.completed_at?'rgba(245,158,11,.1)':'var(--s3)',border:'1px solid '+(sel.completed_at?'rgba(245,158,11,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
+              <div style={{flex:1,minWidth:100,background: myTime?.completed_at?'rgba(245,158,11,.1)':'var(--s3)',border:'1px solid '+(myTime?.completed_at?'rgba(245,158,11,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time Out</div>
-                <div style={{fontSize:15,fontWeight:800,color:sel.completed_at?'var(--amber)':'var(--t3)'}}>{fmtDateTime(sel.completed_at)}</div>
+                <div style={{fontSize:15,fontWeight:800,color:myTime?.completed_at?'var(--amber)':'var(--t3)'}}>{fmtDateTime(myTime?.completed_at)}</div>
               </div>
-              {fmtDuration(sel.started_at,sel.completed_at)&&(
+              {fmtDuration(myTime?.started_at,myTime?.completed_at)&&(
                 <div style={{flex:1,minWidth:100,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px'}}>
                   <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Duration</div>
-                  <div style={{fontSize:15,fontWeight:800,color:'var(--t1)'}}>{fmtDuration(sel.started_at,sel.completed_at)}</div>
+                  <div style={{fontSize:15,fontWeight:800,color:'var(--t1)'}}>{fmtDuration(myTime?.started_at,myTime?.completed_at)}</div>
                 </div>
               )}
             </div>
@@ -3168,10 +3199,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
-                {!sel.started_at&&<button className="btn btn-green" style={{flex:1}} onClick={()=>startTask(sel.id)}>▶ Time In</button>}
-                {sel.started_at&&!sel.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>{ if(gpsEnabled===false||!navigator.geolocation){update(sel.id,{completed_at:new Date().toISOString()});return} navigator.geolocation.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>}
+                {!myTime?.started_at&&<button className="btn btn-green" style={{flex:1}} onClick={()=>workerTimeIn(sel.id)}>▶ Time In</button>}
+                {myTime?.started_at&&!myTime?.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>workerTimeOut(sel.id)}>⏹ Time Out</button>}
               </div>
-              {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
+              {myTime?.started_at&&myTime?.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
                 <button
                   className="btn btn-primary"
                   style={{width:'100%',opacity:(sel.compliance&&taskPhotoIndex(sel).length===0)?0.55:1}}
