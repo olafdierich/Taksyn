@@ -9577,6 +9577,8 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
   const [orgMembers, setOrgMembers] = useState([]) // [{id, name, role}]
+  const [occurrences, setOccurrences] = useState([])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
@@ -9611,6 +9613,11 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [rs,re] = getRange()
   const orgTasks = tasks.filter(t=>t.org===user.org)
   const pt = orgTasks.filter(t=>{ if(isRecurring(t)) return true; const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
+  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push(o.occurrence_date) })
+  const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
+  const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10)
+  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):1
+  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(d=>d>=_rsStr&&d<=_reStr).length
 
   // Build leave day lookup per user
   const leaveDaysByUser = {}
@@ -9660,6 +9667,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
     const p = peopleMap[resolvedId]
     if (!p) return
+    if (isRecurring(t)) { const exp=expectedFor(t.recurrence); p.total+=exp; p.done+=Math.min(doneDaysFor(t.id),exp); return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
