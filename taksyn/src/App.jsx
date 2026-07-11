@@ -4121,6 +4121,8 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
 function ReportsView({ tasks, user, setAuditLog }) {
   const [reportType, setReportType] = useState('compliance')
   const [period, setPeriod] = useState('weekly')
+  const [occurrences, setOccurrences] = useState([])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [orgLogo, setOrgLogo] = useState(null)
@@ -4267,11 +4269,17 @@ function ReportsView({ tasks, user, setAuditLog }) {
 
   // --- Worker performance stats ---
   const workerRoles = ['worker','supervisor','manager']
+  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push(o.occurrence_date) })
+  const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
+  const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10)
+  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):1
+  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(d=>d>=_rsStr&&d<=_reStr).length
   const workerMap = {}
   filteredPt.forEach(t => {
     const key = t.assigned_user_name || t.assigned_user_id || 'Unassigned'
     const role = t.assigned_role || 'worker'
     if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
+    if (isRecurring(t)) { const exp=expectedFor(t.recurrence); workerMap[key].total+=exp; workerMap[key].done+=Math.min(doneDaysFor(t.id),exp); return }
     workerMap[key].total++
     if (['completed','approved'].includes(t.status)) {
       workerMap[key].done++
@@ -9577,6 +9585,8 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
   const [orgMembers, setOrgMembers] = useState([]) // [{id, name, role}]
+  const [occurrences, setOccurrences] = useState([])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
@@ -9611,6 +9621,11 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [rs,re] = getRange()
   const orgTasks = tasks.filter(t=>t.org===user.org)
   const pt = orgTasks.filter(t=>{ if(isRecurring(t)) return true; const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
+  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push(o.occurrence_date) })
+  const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
+  const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10)
+  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):1
+  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(d=>d>=_rsStr&&d<=_reStr).length
 
   // Build leave day lookup per user
   const leaveDaysByUser = {}
@@ -9660,6 +9675,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
     const p = peopleMap[resolvedId]
     if (!p) return
+    if (isRecurring(t)) { const exp=expectedFor(t.recurrence); p.total+=exp; p.done+=Math.min(doneDaysFor(t.id),exp); return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
@@ -12618,6 +12634,8 @@ export default function App() {
       // Auto-reset completed recurring tasks back to pending
       if(isConfigured()) {
         newTasks.filter(t=>isRecurring(t)&&['approved','completed'].includes(t.status)).forEach(t=>{
+          const occDate=(t.completed_at||t.submitted_at||new Date().toISOString()).slice(0,10)
+          supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence},{onConflict:'task_id,occurrence_date'}).then(()=>{})
           supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
         })
       }
