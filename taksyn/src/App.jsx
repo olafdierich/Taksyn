@@ -912,7 +912,7 @@ const TaskCard = ({ task, onClick }) => {
       <div className="tc-meta">
         <PriBadge priority={task.priority} />
         <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}{dueTimeSuffix(task)}</span>
-        {task.assigned_user_name&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {task.assigned_user_name}</span>}
+        {assigneeNames(task)&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {assigneeNames(task)}</span>}{task.lead_user_name&&<span style={{fontSize:11,color:'var(--brand)',fontWeight:600,marginLeft:6}}>★ {task.lead_user_name}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance&&taskPhotoIndex(task).length===0&&!['awaiting_review','approved','completed'].includes(task.status)&&<span style={{fontSize:11,color:'#8B5CF6',background:'rgba(139,92,246,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>📷 required</span>}
         {task.compliance&&<span className="badge" style={{background:'rgba(139,92,246,.1)',color:'#8B5CF6'}}>🔒</span>}
@@ -1731,6 +1731,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   )
 }
 
+const assigneeNames = t => (t?.assigned_user_names?.length ? t.assigned_user_names.join(', ') : (t?.assigned_user_name||''))
+const assigneeFull = t => { const n=assigneeNames(t); return t?.lead_user_name ? (n ? n+' · ★ Lead: '+t.lead_user_name : '★ Lead: '+t.lead_user_name) : n }
 function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
   // Super admin sees NO task content — privacy/confidentiality
   if (user.role==='super_admin') return []
@@ -1764,6 +1766,7 @@ function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
   if (user.role==='worker') {
     const myTasks = orgTasks.filter(t =>
       t.assigned_user_id===user.id ||
+      t.assigned_user_ids?.includes(user.id) ||
       t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase() ||
       (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='worker') ||
       (t.team_id && userTeamIds.includes(t.team_id))
@@ -2150,6 +2153,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // `selected` is always a scalar task id (never bulk), so this fires exactly one refetch per open.
   useEffect(()=>{ if(selected) loadTaskById(selected) }, [selected])
   const [comment, setComment] = useState('')
+  const [workerTimes, setWorkerTimes] = useState([])
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
   const [interventionModal, setInterventionModal] = useState(null) // {action, label, changes, taskId}
   const [interventionReason, setInterventionReason] = useState('')
@@ -2170,7 +2174,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', due_time:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'' })
+  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', due_time:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'', assigned_user_ids:[], assigned_user_names:[], lead_user_id:'', lead_user_name:'' })
   const [selectedTplId, setSelectedTplId] = useState('')
   const [taskGlobalIndustries, setTaskGlobalIndustries] = useState([])
   const [taskOrgIndustries, setTaskOrgIndustries] = useState([])
@@ -2196,7 +2200,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // Seed the action-priority section of each role EXPANDED (rest collapsed): worker→Action Needed + To Do,
   // supervisor/manager/client_admin→Needs My Review, plus client_admin→Needs Attention (only rendered
   // when >0). Keys are unique per role, so listing all is safe — only the current role's sections exist.
-  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','wk-todo','sv-review','mg-review','ca-review','ca-attention']))
+  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','wk-todo','sv-review','sv-mine','mg-review','mg-mine','ca-review','ca-attention']))
   const toggleSection = (sk) => setExpandedSections(prev => { const n = new Set(prev); n.has(sk) ? n.delete(sk) : n.add(sk); return n })
   // Render one task-list section with a clickable, keyboard-activatable header (▸ collapsed / ▾ expanded,
   // plus label + count). The count always shows; the body renders only when expanded. Display-only — this
@@ -2222,6 +2226,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [pendingDelete, setPendingDelete] = useState(null)
   const [taskOrgTeams, setTaskOrgTeams] = useState([]) // teams for the create-task selector
   const [taskTeamMembers, setTaskTeamMembers] = useState([]) // members of the selected team
+  const [assignAll, setAssignAll] = useState(true)
   const [userTeamIds, setUserTeamIds] = useState([]) // team IDs the logged-in user belongs to
 
   useEffect(()=>{
@@ -2584,6 +2589,35 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       }).catch(()=>{})
   },[selected])
 
+  const loadWorkerTimes = (tid) => { if(!tid||!isConfigured()){ setWorkerTimes([]); return } supabase.from('task_worker_times').select('*').eq('task_id',tid).then(({data})=>{ setWorkerTimes(data||[]) }).catch(()=>{}) }
+  useEffect(()=>{ loadWorkerTimes(selected) },[selected])
+  const workerTimeIn = (tid) => {
+    const now=new Date().toISOString()
+    const setRow=async(gps)=>{
+      await supabase.from('task_worker_times').upsert({task_id:tid,user_id:user.id,user_name:user.name,org:user.org,started_at:now,gps_start:gps||null,updated_at:now},{onConflict:'task_id,user_id'})
+      const {data:rows}=await supabase.from('task_worker_times').select('started_at,gps_start').eq('task_id',tid)
+      const ws=(rows||[]).filter(r=>r.started_at).sort((a,b)=>a.started_at<b.started_at?-1:1)
+      const env=ws[0]||{}
+      const t=tasks.find(x=>x.id===tid)
+      const patch={started_at:env.started_at||now,gps_start:env.gps_start||gps||null}
+      if(t&&['pending','overdue','escalated','rejected'].includes(t.status)) patch.status='in_progress'
+      update(tid,patch); loadWorkerTimes(tid)
+    }
+    if(gpsEnabled===false||!navigator.geolocation){setRow();return}
+    navigator.geolocation.getCurrentPosition(pos=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','true');setGpsEnabled(true)} setRow(pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)) },()=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false)} setRow() })
+  }
+  const workerTimeOut = (tid) => {
+    const now=new Date().toISOString()
+    const setRow=async(gps)=>{
+      await supabase.from('task_worker_times').upsert({task_id:tid,user_id:user.id,user_name:user.name,org:user.org,completed_at:now,gps_end:gps||null,updated_at:now},{onConflict:'task_id,user_id'})
+      const {data:rows}=await supabase.from('task_worker_times').select('completed_at,gps_end').eq('task_id',tid)
+      const we=(rows||[]).filter(r=>r.completed_at).sort((a,b)=>a.completed_at<b.completed_at?1:-1)
+      const env=we[0]||{}
+      update(tid,{completed_at:env.completed_at||now,gps_end:env.gps_end||gps||null}); loadWorkerTimes(tid)
+    }
+    if(gpsEnabled===false||!navigator.geolocation){setRow();return}
+    navigator.geolocation.getCurrentPosition(pos=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','true');setGpsEnabled(true)} setRow(pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)) },()=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false)} setRow() })
+  }
   const startTask = (tid) => {
     const doStart = (extra={}) => update(tid, { status:"in_progress", started_at:new Date().toISOString(), ...extra })
     if (gpsEnabled === false || !navigator.geolocation) { doStart(); return }
@@ -2726,16 +2760,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       }
       const saved = { ...data, subtasks:parseSafe(data.subtasks), evidence:parseSafe(data.evidence), comments:parseSafe(data.comments,[]) }
       setTasks(prev=>[...prev,saved])
-      // Send notifications to all team members when a team task is created
+      // Notify: if a subset was ticked, notify only those members; otherwise notify the whole team
       if (t.team_id) {
+        const chosen = t.assigned_user_ids || []
+        const notifyOnly = chosen.length > 0
         supabase.from('team_members').select('user_id').eq('team_id', t.team_id)
           .then(({data:members})=>{
             if(!members?.length) return
+            const targets = notifyOnly ? members.filter(m=>chosen.includes(m.user_id)) : members
+            if(!targets.length) return
             const db = supabaseAdmin || supabase
-            const notifs = members.map(m=>({
+            const notifs = targets.map(m=>({
               user_id: m.user_id,
-              title: 'New team task assigned',
-              message: `${t.title} has been assigned to your team`,
+              title: notifyOnly ? 'New task assigned to you' : 'New team task assigned',
+              message: notifyOnly ? `${t.title} has been assigned to you` : `${t.title} has been assigned to your team`,
               org: t.org,
               created_at: new Date().toISOString(),
               read: false
@@ -2769,6 +2807,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     : user.role==='supervisor' ? ['worker']
     : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
+  const myTime = workerTimes.find(r=>r.user_id===user.id) || null
+  const amAssigned = !!sel && user.role!=='client_admin' && user.role!=='super_admin' && ((Array.isArray(sel.assigned_user_ids)&&sel.assigned_user_ids.includes(user.id)) || sel.assigned_user_id===user.id || (sel.assigned_user_name&&sel.assigned_user_name.toLowerCase()===user.name?.toLowerCase()) || (sel.team_id&&userTeamIds.includes(sel.team_id)))
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
@@ -2806,9 +2846,52 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={editTask.recurrence||'once'} onChange={e=>setEditTask({...editTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               </div>
               {editTask.compliance&&<div className="form-field"><label className="form-label">Due Time <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label><input className="form-input" type="time" value={editTask.due_time||''} onChange={e=>setEditTask({...editTask,due_time:e.target.value})}/></div>}
+              <div className="form-field"><label className="form-label">Assign to Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
+                <select className="form-select" value={editTask.team_id||''} onChange={e=>{ const team=taskOrgTeams.find(t=>t.id===e.target.value); setEditTask({...editTask,team_id:team?.id||'',team_name:team?.name||'',assigned_user_ids:[],assigned_user_names:[],lead_user_id:'',lead_user_name:''}); setTaskTeamMembers([]); setAssignAll(true); if(team?.id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',team.id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } }}>
+                  <option value="">— No team —</option>
+                  {taskOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
               <div className="form-field"><label className="form-label">Assign To</label>
-                {teamUsers.length>0 ? <select className="form-select" value={editTask.assigned_user_id||''} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setEditTask({...editTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_role:u.role}) }}><option value="">— Select —</option>{teamUsers.map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}</select>
-                : <select className="form-select" value={editTask.assigned_role||'worker'} onChange={e=>setEditTask({...editTask,assigned_role:e.target.value})}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>}
+                {editTask.team_id ? (
+                  <div>
+                    <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,marginBottom:6,fontWeight:600}}>
+                      <input type="checkbox" checked={assignAll} onChange={e=>{setAssignAll(e.target.checked); setEditTask(prev=>({...prev,assigned_user_ids:[],assigned_user_names:[],lead_user_id:'',lead_user_name:''}))}}/>
+                      <span>Assign to all team members</span>
+                    </label>
+                    {assignAll ? (
+                      <div style={{fontSize:11,color:'var(--brand)',fontWeight:600}}>👥 Everyone in {editTask.team_name}</div>
+                    ) : (
+                      taskTeamMembers.length>0 ? (
+                        <div style={{paddingLeft:8,borderLeft:'2px solid var(--line)'}}>
+                          <div style={{fontSize:11,color:'var(--t2)',marginBottom:6}}>Tick the members assigned to this task. Optionally set one as ★ team leader.</div>
+                          {taskTeamMembers.filter(u=>assignableRoles.includes(u.role)).map(u=>{
+                            const checked=(editTask.assigned_user_ids||[]).includes(u.id)
+                            const isLead=editTask.lead_user_id===u.id
+                            return (
+                              <div key={u.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
+                                <input type="checkbox" checked={checked} onChange={e=>setEditTask(prev=>{
+                                  const ids=e.target.checked?[...(prev.assigned_user_ids||[]),u.id]:(prev.assigned_user_ids||[]).filter(x=>x!==u.id)
+                                  const names=ids.map(id=>taskTeamMembers.find(m=>m.id===id)?.name).filter(Boolean)
+                                  const clr=(!e.target.checked&&prev.lead_user_id===u.id)
+                                  return {...prev,assigned_user_ids:ids,assigned_user_names:names,assigned_user_id:'',assigned_user_name:'',lead_user_id:clr?'':prev.lead_user_id,lead_user_name:clr?'':prev.lead_user_name}
+                                })}/>
+                                <span style={{flex:1,fontSize:13}}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</span>
+                                {checked&&<button type="button" onClick={()=>setEditTask(prev=>({...prev,lead_user_id:isLead?'':u.id,lead_user_name:isLead?'':u.name}))} style={{fontSize:11,padding:'2px 8px',borderRadius:6,border:'1px solid var(--line)',background:isLead?'var(--brand)':'transparent',color:isLead?'#fff':'var(--t2)',cursor:'pointer'}}>{isLead?'★ Lead':'☆ Lead'}</button>}
+                              </div>
+                            )
+                          })}
+                          {(editTask.assigned_user_ids?.length>0)
+                            ? <div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {editTask.assigned_user_ids.length} assigned: {editTask.assigned_user_names.join(', ')}{editTask.lead_user_name&&<span> · ★ Lead: {editTask.lead_user_name}</span>}</div>
+                            : <div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Tick at least one member, or re-check "all"</div>}
+                        </div>
+                      ) : <div style={{fontSize:11,color:'var(--t2)'}}>Loading team members…</div>
+                    )}
+                  </div>
+                ) : (
+                  teamUsers.length>0 ? <select className="form-select" value={editTask.assigned_user_id||''} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setEditTask({...editTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_role:u.role}) }}><option value="">— Select —</option>{teamUsers.map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}</select>
+                  : <select className="form-select" value={editTask.assigned_role||'worker'} onChange={e=>setEditTask({...editTask,assigned_role:e.target.value})}>{ROLES.filter(r=>r!=='super_admin').map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
+                )}
               </div>
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
                 <input type="checkbox" id="edit-comp" checked={editTask.compliance||false} onChange={e=>setEditTask({...editTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
@@ -2921,7 +3004,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   <label className="form-label">Assign to Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
                   <select className="form-select" value={newTask.team_id} onChange={e=>{
                     const team = taskOrgTeams.find(t=>t.id===e.target.value)
-                    setNewTask(prev=>({...prev,team_id:team?.id||'',team_name:team?.name||'',assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}))
+                    setNewTask(prev=>({...prev,team_id:team?.id||'',team_name:team?.name||'',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',assigned_user_ids:[],assigned_user_names:[]}))
                     setTaskTeamMembers([])
                     if(team?.id && isConfigured()) {
                       supabase.from('team_members').select('user_id,user_name,role').eq('team_id',team.id)
@@ -2939,19 +3022,56 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   {newTask.team_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>📋 Task will be visible to all members of {newTask.team_name}</div>}
                 </div>
               )}
-              <div className="form-field"><label className="form-label">Assign To {newTask.team_id&&<span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— pick from team or leave blank for all team members</span>}</label>
-                {(newTask.team_id ? taskTeamMembers : teamUsers).length>0 ? (
+              <div className="form-field"><label className="form-label">Assign To {newTask.team_id&&<span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— all members, or pick specific ones</span>}</label>
+                {newTask.team_id ? (
                   <div>
-                    {!newTask.team_id&&<input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>}
-                    <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const pool=newTask.team_id?taskTeamMembers:teamUsers; const u=pool.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
-                      <option value="">{newTask.team_id ? '— All team members —' : '— Select a staff member —'}</option>
-                      {(newTask.team_id?taskTeamMembers:teamUsers).filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position||newTask.team_id)&&(!userSearch||newTask.team_id||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
-                    </select>
-                    {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
-                    {!newTask.team_id&&teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
+                    <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,marginBottom:6,fontWeight:600}}>
+                      <input type="checkbox" checked={assignAll} onChange={e=>{setAssignAll(e.target.checked); setNewTask(prev=>({...prev,assigned_user_ids:[],assigned_user_names:[],lead_user_id:'',lead_user_name:''}))}}/>
+                      <span>Assign to all team members</span>
+                    </label>
+                    {assignAll ? (
+                      <div style={{fontSize:11,color:'var(--brand)',fontWeight:600}}>👥 Everyone in {newTask.team_name}</div>
+                    ) : (
+                      taskTeamMembers.length>0 ? (
+                        <div style={{paddingLeft:8,borderLeft:'2px solid var(--line)'}}>
+                          <div style={{fontSize:11,color:'var(--t2)',marginBottom:6}}>Tick the members assigned to this task. Optionally set one as ★ team leader.</div>
+                          {taskTeamMembers.filter(u=>assignableRoles.includes(u.role)).map(u=>{
+                            const checked=(newTask.assigned_user_ids||[]).includes(u.id)
+                            const isLead=newTask.lead_user_id===u.id
+                            return (
+                              <div key={u.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
+                                <input type="checkbox" checked={checked} onChange={e=>setNewTask(prev=>{
+                                  const ids=e.target.checked?[...(prev.assigned_user_ids||[]),u.id]:(prev.assigned_user_ids||[]).filter(x=>x!==u.id)
+                                  const names=ids.map(id=>taskTeamMembers.find(m=>m.id===id)?.name).filter(Boolean)
+                                  const clr=(!e.target.checked&&prev.lead_user_id===u.id)
+                                  return {...prev,assigned_user_ids:ids,assigned_user_names:names,assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',lead_user_id:clr?'':prev.lead_user_id,lead_user_name:clr?'':prev.lead_user_name}
+                                })}/>
+                                <span style={{flex:1,fontSize:13}}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</span>
+                                {checked&&<button type="button" onClick={()=>setNewTask(prev=>({...prev,lead_user_id:isLead?'':u.id,lead_user_name:isLead?'':u.name}))} style={{fontSize:11,padding:'2px 8px',borderRadius:6,border:'1px solid var(--line)',background:isLead?'var(--brand)':'transparent',color:isLead?'#fff':'var(--t2)',cursor:'pointer'}}>{isLead?'★ Lead':'☆ Lead'}</button>}
+                              </div>
+                            )
+                          })}
+                          {(newTask.assigned_user_ids?.length>0)
+                            ? <div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_ids.length} assigned: {newTask.assigned_user_names.join(', ')}{newTask.lead_user_name&&<span> · ★ Lead: {newTask.lead_user_name}</span>}</div>
+                            : <div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Tick at least one member, or re-check "all"</div>}
+                        </div>
+                      ) : <div style={{fontSize:11,color:'var(--t2)'}}>Loading team members…</div>
+                    )}
                   </div>
                 ) : (
-                  <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
+                  teamUsers.length>0 ? (
+                    <div>
+                      <input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>
+                      <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
+                        <option value="">— Select a staff member —</option>
+                        {teamUsers.filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position)&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
+                      </select>
+                      {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
+                      {teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
+                    </div>
+                  ) : (
+                    <select className="form-select" value={newTask.assigned_role} onChange={e=>setNewTask({...newTask,assigned_role:e.target.value})}>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
+                  )
                 )}
               </div>
               {orgProjects.length>0&&(
@@ -3058,32 +3178,32 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end'}}><StatusBadge status={sel.status}/><PriBadge priority={sel.priority}/></div>
           </div>
-          {user.role==='worker'&&(
+          {amAssigned&&(
             <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
-              <div style={{flex:1,minWidth:100,background: sel.started_at?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(sel.started_at?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
+              <div style={{flex:1,minWidth:100,background: myTime?.started_at?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(myTime?.started_at?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time In</div>
-                <div style={{fontSize:15,fontWeight:800,color:sel.started_at?'var(--green)':'var(--t3)'}}>{fmtDateTime(sel.started_at)}</div>
+                <div style={{fontSize:15,fontWeight:800,color:myTime?.started_at?'var(--green)':'var(--t3)'}}>{fmtDateTime(myTime?.started_at)}</div>
               </div>
-              <div style={{flex:1,minWidth:100,background: sel.completed_at?'rgba(245,158,11,.1)':'var(--s3)',border:'1px solid '+(sel.completed_at?'rgba(245,158,11,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
+              <div style={{flex:1,minWidth:100,background: myTime?.completed_at?'rgba(245,158,11,.1)':'var(--s3)',border:'1px solid '+(myTime?.completed_at?'rgba(245,158,11,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time Out</div>
-                <div style={{fontSize:15,fontWeight:800,color:sel.completed_at?'var(--amber)':'var(--t3)'}}>{fmtDateTime(sel.completed_at)}</div>
+                <div style={{fontSize:15,fontWeight:800,color:myTime?.completed_at?'var(--amber)':'var(--t3)'}}>{fmtDateTime(myTime?.completed_at)}</div>
               </div>
-              {fmtDuration(sel.started_at,sel.completed_at)&&(
+              {fmtDuration(myTime?.started_at,myTime?.completed_at)&&(
                 <div style={{flex:1,minWidth:100,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px'}}>
                   <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Duration</div>
-                  <div style={{fontSize:15,fontWeight:800,color:'var(--t1)'}}>{fmtDuration(sel.started_at,sel.completed_at)}</div>
+                  <div style={{fontSize:15,fontWeight:800,color:'var(--t1)'}}>{fmtDuration(myTime?.started_at,myTime?.completed_at)}</div>
                 </div>
               )}
             </div>
           )}
-          {user.role==='worker'&&(
+          {amAssigned&&(
             <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
-                {!sel.started_at&&<button className="btn btn-green" style={{flex:1}} onClick={()=>startTask(sel.id)}>▶ Time In</button>}
-                {sel.started_at&&!sel.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>{ if(gpsEnabled===false||!navigator.geolocation){update(sel.id,{completed_at:new Date().toISOString()});return} navigator.geolocation.getCurrentPosition(pos=>update(sel.id,{completed_at:new Date().toISOString(),gps_end:pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)}),()=>update(sel.id,{completed_at:new Date().toISOString()})) }}>⏹ Time Out</button>}
+                {!myTime?.started_at&&<button className="btn btn-green" style={{flex:1}} onClick={()=>workerTimeIn(sel.id)}>▶ Time In</button>}
+                {myTime?.started_at&&!myTime?.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>workerTimeOut(sel.id)}>⏹ Time Out</button>}
               </div>
-              {sel.started_at&&sel.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
+              {myTime?.started_at&&myTime?.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
                 <button
                   className="btn btn-primary"
                   style={{width:'100%',opacity:(sel.compliance&&taskPhotoIndex(sel).length===0)?0.55:1}}
@@ -3092,17 +3212,34 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   {sel.compliance&&taskPhotoIndex(sel).length===0?'📷 Add a checklist photo to submit':'✅ Submit'}
                 </button>
               )}
-              {sel.status==='awaiting_review'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Done — awaiting manager review</div>}
+              {sel.status==='awaiting_review'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Done — awaiting review</div>}
               {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Approved</div>}
             </div>
           )}
-          {(user.role!=='worker'||(sel.gps_start||sel.gps_end))&&(
+          {(sel.created_by===user.name||user.role==='client_admin'||user.role==='super_admin')&&(
             <div className="timing-bar">
               {user.role!=='worker'&&<div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {fmtDateTime(sel.started_at)}</div>}
               {user.role!=='worker'&&<div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {fmtDateTime(sel.completed_at)}</div>}
               {user.role!=='worker'&&fmtDuration(sel.started_at,sel.completed_at)&&<div className="timing-chip active">⏱ {fmtDuration(sel.started_at,sel.completed_at)}</div>}
               {sel.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_start)}>📍 Start</span>}
               {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
+            </div>
+          )}
+          {(sel.created_by===user.name||user.role==='client_admin'||user.role==='super_admin')&&workerTimes.length>0&&(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:6}}>Per-worker times</div>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {workerTimes.slice().sort((a,b)=>(a.started_at||'').localeCompare(b.started_at||'')).map(w=>(
+                  <div key={w.user_id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:12,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'8px 10px'}}>
+                    <span style={{fontWeight:700,minWidth:120}}>{w.user_name||'Worker'}{sel.lead_user_id===w.user_id&&<span style={{color:'var(--brand)'}}> ★</span>}</span>
+                    <span style={{color:'var(--green)'}}>In: {fmtDateTime(w.started_at)}</span>
+                    <span style={{color:'#F59E0B'}}>Out: {fmtDateTime(w.completed_at)}</span>
+                    {fmtDuration(w.started_at,w.completed_at)&&<span style={{color:'var(--t1)',fontWeight:600}}>⏱ {fmtDuration(w.started_at,w.completed_at)}</span>}
+                    {w.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+w.gps_start)}>📍 In</span>}
+                    {w.gps_end&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+w.gps_end)}>📍 Out</span>}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {sel.status==='rejected'&&(
@@ -3151,7 +3288,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   const isExpandedKey = sel.id+'::'+itemId
                   const isHistExpanded = clExpanded.has(isExpandedKey)
                   const isMarkOpen = clMarkOpen&&clMarkOpen.taskId===sel.id&&clMarkOpen.idx===idx
-                  const canAct = isWorker
+                  const canAct = amAssigned
                   const isNoteOpen = clNoteOpen&&clNoteOpen.taskId===sel.id&&clNoteOpen.idx===idx
                   return (
                     <div key={s.id||idx} className="cl-item">
@@ -3196,7 +3333,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
                         {s.photo&&<EvidenceThumb entry={s.photo} className="cl-photo-thumb" containerStyle={{marginTop:4,overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>}
-                        {isWorker&&(isMarkOpen&&canAct?(
+                        {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
                             <div style={{display:'flex',gap:6,marginTop:4}}>
@@ -3323,7 +3460,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     <span style={isOrphaned?{color:'var(--t2)',textDecoration:'line-through'}:{}}>{sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</span>
                     {isOrphaned&&<div style={{marginTop:4,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                       <span style={{fontSize:11,color:'var(--red)',fontWeight:600}}>⚠️ Assigned user no longer in organisation</span>
-                      {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setShowEdit(true) }}>Reassign</button>}
+                      {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>Reassign</button>}
                     </div>}
                   </div>
                 )
@@ -3333,7 +3470,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             </div>
           </div>
           <div className="btn-row">
-            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setShowEdit(true) }}>✏️ Edit</button>}
+            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>✏️ Edit</button>}
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
@@ -3516,7 +3653,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         <div style={{flex:1}}>
                           <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
                           <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
-                            <span>👤 {t.assigned_user_name||'—'}</span>
+                            <span>👤 {assigneeFull(t)||'—'}</span>
                             {t.completed_at&&<span>✅ {fmtDateTime(t.completed_at)}</span>}
                             {t.due_date&&<span>📅 {t.due_date}</span>}
                             {t.recurrence&&t.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[t.recurrence]}</span>}
@@ -3602,7 +3739,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── SUPERVISOR VIEW ───────────────────────────────
                     if(user.role==='supervisor') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
@@ -3627,7 +3764,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── MANAGER VIEW ──────────────────────────────────
                     if(user.role==='manager') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
@@ -4223,7 +4360,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
 
   const exportOrgPDF = () => {
     const roleRows = workerRoles.map(r => '<tr><td><strong>'+ROLE_LABELS[r]+'</strong></td><td>'+byRole[r].tasks+'</td><td>'+byRole[r].done+'</td><td style="color:'+(pct(byRole[r].done,byRole[r].tasks)>=80?'#10B981':pct(byRole[r].done,byRole[r].tasks)>=50?'#F59E0B':'#EF4444')+'">'+pct(byRole[r].done,byRole[r].tasks)+'%</td><td style="color:'+(byRole[r].compRate>=80?'#10B981':byRole[r].compRate>=50?'#F59E0B':'#EF4444')+'">'+byRole[r].compRate+'%</td></tr>').join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${filteredPt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(t.assigned_user_name||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${filteredPt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(assigneeFull(t)||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
     openReport(html)
   }
 
@@ -4257,7 +4394,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
             {reportOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <button className="btn btn-primary btn-sm" onClick={handleExport}>📄 Generate PDF</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"',t.assigned_user_name||''].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"','"'+assigneeFull(t)+'"'].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
         </div>
       </div>
 
@@ -4463,7 +4600,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
                         <td style={{padding:'8px 10px',textAlign:'center'}}>{(t.gps_start||t.gps_end)?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
                         <td style={{padding:'8px 10px',textAlign:'center'}}>{parseSafe(t.evidence).length>0?<span style={{color:'var(--green)',fontWeight:700}}>Yes</span>:<span style={{color:'var(--t3)'}}>No</span>}</td>
                         <td style={{padding:'8px 10px',color:'var(--t2)',fontSize:10,maxWidth:200}}>{clTs.length>0?clTs.join(', '):<span style={{color:'var(--t3)'}}>—</span>}</td>
-                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{t.assigned_user_name||'—'}</td>
+                        <td style={{padding:'8px 10px',color:'var(--t2)',whiteSpace:'nowrap'}}>{assigneeFull(t)||'—'}</td>
                       </tr>
                     )
                   })}
@@ -9291,7 +9428,7 @@ function SuperAdminTaskStats({ tasks, setTasks, loadTasks }) {
                     <tr key={t.id} style={{borderBottom:'1px solid var(--border)'}}>
                       <td style={{padding:'8px 10px',fontWeight:600,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</td>
                       <td style={{padding:'8px 10px',color:'var(--t2)'}}>{t.org}</td>
-                      <td style={{padding:'8px 10px',color:'var(--red)',textDecoration:'line-through'}}>{t.assigned_user_name||t.assigned_user_id}</td>
+                      <td style={{padding:'8px 10px',color:'var(--red)',textDecoration:'line-through'}}>{assigneeNames(t)||t.assigned_user_id}</td>
                       <td style={{padding:'8px 10px'}}><StatusBadge status={t.status}/></td>
                       <td style={{padding:'8px 10px',color:'var(--t2)'}}>{t.due_date}</td>
                       <td style={{padding:'8px 10px'}}>
@@ -9775,7 +9912,7 @@ function LeaveView({ user, tasks, setAuditLog }) {
     }
   })
   const orgTasks = tasks.filter(t=>t.org===user.org)
-  const myTasks = orgTasks.filter(t=>t.assigned_user_id===user.id||t.assigned_user_name===user.name)
+  const myTasks = orgTasks.filter(t=>t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||t.assigned_user_name===user.name)
   const leaveExcluded = myTasks.filter(t=>t.due_date&&leaveDays.has(t.due_date))
 
   const fmtDate = d => d ? new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : '—'
