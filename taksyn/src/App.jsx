@@ -4275,21 +4275,36 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):1
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(d=>d>=_rsStr&&d<=_reStr).length
   const workerMap = {}
+  const teamMap = {}
   filteredPt.forEach(t => {
-    const key = t.assigned_user_name || t.assigned_user_id || 'Unassigned'
-    const role = t.assigned_role || 'worker'
-    if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
-    if (isRecurring(t)) { const exp=expectedFor(t.recurrence); workerMap[key].total+=exp; workerMap[key].done+=Math.min(doneDaysFor(t.id),exp); return }
-    workerMap[key].total++
-    if (['completed','approved'].includes(t.status)) {
-      workerMap[key].done++
-      if (t.due_date && t.completed_at && new Date(t.completed_at) <= new Date(t.due_date)) workerMap[key].onTime++
-      if (t.started_at && t.completed_at) workerMap[key].avgMins.push((new Date(t.completed_at)-new Date(t.started_at))/60000)
+    if (t.team_id) {
+      const tk = t.team_name || t.team_id
+      if (!teamMap[tk]) teamMap[tk] = { name:tk, total:0, done:0 }
+      if (isRecurring(t)) { const exp=expectedFor(t.recurrence); teamMap[tk].total+=exp; teamMap[tk].done+=Math.min(doneDaysFor(t.id),exp) }
+      else { teamMap[tk].total++; if(['completed','approved'].includes(t.status)) teamMap[tk].done++ }
     }
-    if (['awaiting_review','approved','rejected'].includes(t.status)) workerMap[key].toReview++
-    if (t.reviewed_at && t.submitted_at && (new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) workerMap[key].reviewedInTime++
+    let keys=[]
+    if (Array.isArray(t.assigned_user_names) && t.assigned_user_names.length) keys = t.assigned_user_names
+    else if (t.assigned_user_name) keys = [t.assigned_user_name]
+    else if (t.assigned_user_id) keys = [t.assigned_user_id]
+    else if (t.team_id) return
+    else keys = ['Unassigned']
+    const role = t.assigned_role || 'worker'
+    keys.forEach(key => {
+      if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
+      if (isRecurring(t)) { const exp=expectedFor(t.recurrence); workerMap[key].total+=exp; workerMap[key].done+=Math.min(doneDaysFor(t.id),exp); return }
+      workerMap[key].total++
+      if (['completed','approved'].includes(t.status)) {
+        workerMap[key].done++
+        if (t.due_date && t.completed_at && new Date(t.completed_at) <= new Date(t.due_date)) workerMap[key].onTime++
+        if (t.started_at && t.completed_at) workerMap[key].avgMins.push((new Date(t.completed_at)-new Date(t.started_at))/60000)
+      }
+      if (['awaiting_review','approved','rejected'].includes(t.status)) workerMap[key].toReview++
+      if (t.reviewed_at && t.submitted_at && (new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) workerMap[key].reviewedInTime++
+    })
   })
   const workerRows = Object.values(workerMap).sort((a,b) => b.total-a.total)
+  const teamRows = Object.values(teamMap).sort((a,b)=>b.total-a.total)
 
   // --- Org overview stats ---
   const uniqueWorkers = new Set(filteredPt.map(t=>t.assigned_user_id||t.assigned_user_name).filter(Boolean))
@@ -4619,6 +4634,33 @@ function ReportsView({ tasks, user, setAuditLog }) {
         </>
       )}
 
+      {/* Team Performance Preview */}
+      {reportType==='worker' && isClientAdmin && teamRows.length>0 && (
+        <div className="section">
+          <div className="section-title">👥 Team Performance — {pl}</div>
+          <div style={{overflowX:'auto',marginTop:10}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead>
+                <tr style={{background:'var(--s3)'}}>
+                  {['Team','Tasks','Done','Rate'].map(h=>(
+                    <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {teamRows.map((tm,i)=>{ const cp=pct(tm.done,tm.total); return (
+                  <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
+                    <td style={{padding:'8px 10px',fontWeight:600}}>{tm.name}</td>
+                    <td style={{padding:'8px 10px'}}>{tm.total}</td>
+                    <td style={{padding:'8px 10px'}}>{tm.done}</td>
+                    <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
+                  </tr>
+                )})}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       {/* Staff Performance Preview */}
       {reportType==='worker' && isClientAdmin && (
         <div className="section">
@@ -9708,6 +9750,9 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const people = Object.values(peopleMap)
     .filter(p=>selectedRole==='all'||p.role===selectedRole)
     .sort((a,b)=>b.total-a.total)
+  const teamMap={}
+  pt.forEach(t=>{ if(!t.team_id) return; const k=t.team_name||t.team_id; if(!teamMap[k]) teamMap[k]={name:k,total:0,done:0}; if(isRecurring(t)){ const exp=expectedFor(t.recurrence); teamMap[k].total+=exp; teamMap[k].done+=Math.min(doneDaysFor(t.id),exp) } else { teamMap[k].total++; if(['completed','approved'].includes(t.status)) teamMap[k].done++ } })
+  const teams=Object.values(teamMap).sort((a,b)=>b.total-a.total)
 
   const fmtAvg = mins => {
     if(!mins.length) return '—'
@@ -9763,6 +9808,24 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
             ))}
           </div>
 
+          {teams.length>0 && (
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--t1)',marginBottom:8}}>👥 Team Performance</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
+                {teams.map((tm,i)=>{ const rate=pct(tm.done,tm.total); const g=getGrade(rate); return (
+                  <div key={i} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:14}}>
+                    <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>{tm.name}</div>
+                    <div style={{display:'flex',gap:12,alignItems:'baseline'}}>
+                      <div><span style={{fontSize:20,fontWeight:800}}>{tm.total}</span><span style={{fontSize:10,color:'var(--t2)',marginLeft:3}}>TASKS</span></div>
+                      <div><span style={{fontSize:20,fontWeight:800,color:'#10B981'}}>{tm.done}</span><span style={{fontSize:10,color:'var(--t2)',marginLeft:3}}>DONE</span></div>
+                      <div style={{marginLeft:'auto',fontSize:18,fontWeight:800,color:g.color}}>{rate}%</div>
+                    </div>
+                    <div style={{height:6,background:'var(--s3)',borderRadius:4,marginTop:8,overflow:'hidden'}}><div style={{height:'100%',width:rate+'%',background:g.color}}></div></div>
+                  </div>
+                )})}
+              </div>
+            </div>
+          )}
           {/* Per-person cards */}
           {people.map((p,i)=>{
             const compRate = pct(p.done,p.total)
