@@ -2808,6 +2808,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
   const myTime = workerTimes.find(r=>r.user_id===user.id) || null
+  const amAssigned = !!sel && ((Array.isArray(sel.assigned_user_ids)&&sel.assigned_user_ids.includes(user.id)) || sel.assigned_user_id===user.id || (sel.assigned_user_name&&sel.assigned_user_name.toLowerCase()===user.name?.toLowerCase()) || (sel.team_id&&userTeamIds.includes(sel.team_id)))
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
@@ -3177,7 +3178,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end'}}><StatusBadge status={sel.status}/><PriBadge priority={sel.priority}/></div>
           </div>
-          {user.role==='worker'&&(
+          {amAssigned&&(
             <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
               <div style={{flex:1,minWidth:100,background: myTime?.started_at?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(myTime?.started_at?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Time In</div>
@@ -3195,7 +3196,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               )}
             </div>
           )}
-          {user.role==='worker'&&(
+          {amAssigned&&(
             <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
@@ -3215,7 +3216,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Approved</div>}
             </div>
           )}
-          {(user.role!=='worker'||(sel.gps_start||sel.gps_end))&&(
+          {(user.role!=='worker'&&!amAssigned)&&(
             <div className="timing-bar">
               {user.role!=='worker'&&<div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {fmtDateTime(sel.started_at)}</div>}
               {user.role!=='worker'&&<div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {fmtDateTime(sel.completed_at)}</div>}
@@ -3224,7 +3225,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
             </div>
           )}
-          {user.role!=='worker'&&workerTimes.length>0&&(
+          {user.role!=='worker'&&!amAssigned&&workerTimes.length>0&&(
             <div style={{marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:6}}>Per-worker times</div>
               <div style={{display:'flex',flexDirection:'column',gap:6}}>
