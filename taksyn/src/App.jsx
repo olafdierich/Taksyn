@@ -12618,6 +12618,8 @@ export default function App() {
       // Auto-reset completed recurring tasks back to pending
       if(isConfigured()) {
         newTasks.filter(t=>isRecurring(t)&&['approved','completed'].includes(t.status)).forEach(t=>{
+          const occDate=(t.completed_at||t.submitted_at||new Date().toISOString()).slice(0,10)
+          supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence},{onConflict:'task_id,occurrence_date'}).then(()=>{})
           supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
         })
       }
