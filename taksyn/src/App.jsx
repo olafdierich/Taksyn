@@ -9610,7 +9610,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   }
   const [rs,re] = getRange()
   const orgTasks = tasks.filter(t=>t.org===user.org)
-  const pt = orgTasks.filter(t=>{ const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
+  const pt = orgTasks.filter(t=>{ if(isRecurring(t)) return true; const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
 
   // Build leave day lookup per user
   const leaveDaysByUser = {}
