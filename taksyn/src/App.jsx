@@ -9708,6 +9708,9 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const people = Object.values(peopleMap)
     .filter(p=>selectedRole==='all'||p.role===selectedRole)
     .sort((a,b)=>b.total-a.total)
+  const teamMap={}
+  pt.forEach(t=>{ if(!t.team_id) return; const k=t.team_name||t.team_id; if(!teamMap[k]) teamMap[k]={name:k,total:0,done:0}; if(isRecurring(t)){ const exp=expectedFor(t.recurrence); teamMap[k].total+=exp; teamMap[k].done+=Math.min(doneDaysFor(t.id),exp) } else { teamMap[k].total++; if(['completed','approved'].includes(t.status)) teamMap[k].done++ } })
+  const teams=Object.values(teamMap).sort((a,b)=>b.total-a.total)
 
   const fmtAvg = mins => {
     if(!mins.length) return '—'
@@ -9763,6 +9766,24 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
             ))}
           </div>
 
+          {teams.length>0 && (
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--t1)',marginBottom:8}}>👥 Team Performance</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
+                {teams.map((tm,i)=>{ const rate=pct(tm.done,tm.total); const g=getGrade(rate); return (
+                  <div key={i} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:14}}>
+                    <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>{tm.name}</div>
+                    <div style={{display:'flex',gap:12,alignItems:'baseline'}}>
+                      <div><span style={{fontSize:20,fontWeight:800}}>{tm.total}</span><span style={{fontSize:10,color:'var(--t2)',marginLeft:3}}>TASKS</span></div>
+                      <div><span style={{fontSize:20,fontWeight:800,color:'#10B981'}}>{tm.done}</span><span style={{fontSize:10,color:'var(--t2)',marginLeft:3}}>DONE</span></div>
+                      <div style={{marginLeft:'auto',fontSize:18,fontWeight:800,color:g.color}}>{rate}%</div>
+                    </div>
+                    <div style={{height:6,background:'var(--s3)',borderRadius:4,marginTop:8,overflow:'hidden'}}><div style={{height:'100%',width:rate+'%',background:g.color}}></div></div>
+                  </div>
+                )})}
+              </div>
+            </div>
+          )}
           {/* Per-person cards */}
           {people.map((p,i)=>{
             const compRate = pct(p.done,p.total)
