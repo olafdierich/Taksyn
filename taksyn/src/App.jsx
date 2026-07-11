@@ -2808,7 +2808,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
   const myTime = workerTimes.find(r=>r.user_id===user.id) || null
-  const amAssigned = !!sel && ((Array.isArray(sel.assigned_user_ids)&&sel.assigned_user_ids.includes(user.id)) || sel.assigned_user_id===user.id || (sel.assigned_user_name&&sel.assigned_user_name.toLowerCase()===user.name?.toLowerCase()) || (sel.team_id&&userTeamIds.includes(sel.team_id)))
+  const amAssigned = !!sel && user.role!=='client_admin' && user.role!=='super_admin' && ((Array.isArray(sel.assigned_user_ids)&&sel.assigned_user_ids.includes(user.id)) || sel.assigned_user_id===user.id || (sel.assigned_user_name&&sel.assigned_user_name.toLowerCase()===user.name?.toLowerCase()) || (user.role==='worker'&&sel.team_id&&userTeamIds.includes(sel.team_id)))
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
@@ -3288,7 +3288,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   const isExpandedKey = sel.id+'::'+itemId
                   const isHistExpanded = clExpanded.has(isExpandedKey)
                   const isMarkOpen = clMarkOpen&&clMarkOpen.taskId===sel.id&&clMarkOpen.idx===idx
-                  const canAct = isWorker
+                  const canAct = amAssigned
                   const isNoteOpen = clNoteOpen&&clNoteOpen.taskId===sel.id&&clNoteOpen.idx===idx
                   return (
                     <div key={s.id||idx} className="cl-item">
@@ -3333,7 +3333,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
                         {s.photo&&<EvidenceThumb entry={s.photo} className="cl-photo-thumb" containerStyle={{marginTop:4,overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>}
-                        {isWorker&&(isMarkOpen&&canAct?(
+                        {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
                             <div style={{display:'flex',gap:6,marginTop:4}}>
@@ -3739,7 +3739,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── SUPERVISOR VIEW ───────────────────────────────
                     if(user.role==='supervisor') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
@@ -3764,7 +3764,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── MANAGER VIEW ──────────────────────────────────
                     if(user.role==='manager') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
