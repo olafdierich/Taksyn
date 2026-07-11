@@ -4292,7 +4292,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
     const role = t.assigned_role || 'worker'
     keys.forEach(key => {
       if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
-      if (isRecurring(t)) { const exp=expectedFor(t.recurrence); workerMap[key].total+=exp; workerMap[key].done+=Math.min(doneDaysFor(t.id),exp); return }
+      if (isRecurring(t)) { const exp=expectedFor(t.recurrence); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=dn; return }
       workerMap[key].total++
       if (['completed','approved'].includes(t.status)) {
         workerMap[key].done++
@@ -9717,7 +9717,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
     const p = peopleMap[resolvedId]
     if (!p) return
-    if (isRecurring(t)) { const exp=expectedFor(t.recurrence); p.total+=exp; p.done+=Math.min(doneDaysFor(t.id),exp); return }
+    if (isRecurring(t)) { const exp=expectedFor(t.recurrence); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=dn; return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
