@@ -19,6 +19,10 @@ const TIERS = {
   Professional: { color:'#8B5CF6', base:'$149', perUser:'$7', users:'31-100',   storage:'50GB',  images:'5/task',retention:'24 months',features:['Multi-site support','Advanced escalation','Audit-ready reporting'], locked:[] },
   Enterprise:   { color:'#F59E0B', base:'$399', perUser:'$6', users:'Unlimited',storage:'100GB+',images:'5/task',retention:'Custom',   features:['Full compliance suite','API integrations','White-labelling','Response Time SLAs'], locked:[] },
 }
+function planTier(v){
+  const s=(v||'').toString().trim().toLowerCase()
+  return ({personal:'Personal',starter:'Starter',growth:'Growth',pro:'Professional',professional:'Professional',enterprise:'Enterprise'})[s]||''
+}
 const STATUS_CFG = {
   pending:         { label:'Pending',         color:'#6B7280', bg:'rgba(107,114,128,.15)' },
   in_progress:     { label:'In Progress',     color:'#3B82F6', bg:'rgba(59,130,246,.15)'  },
@@ -2052,7 +2056,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
                     <span style={{fontSize:14}}>🏢</span>
                     <div style={{flex:1}}>
                       <div style={{fontSize:13,fontWeight:600}}>{o.name}</div>
-                      <div style={{fontSize:11,color:'var(--t2)'}}>{o.plan||'—'} plan · {o.status||'active'}</div>
+                      <div style={{fontSize:11,color:'var(--t2)'}}>{planTier(o.plan)||'—'} plan · {o.status||'active'}</div>
                     </div>
                   </div>
                 ))}
@@ -6454,7 +6458,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             {selectedOrgView.logo&&<img src={selectedOrgView.logo} alt={selectedOrgView.name} style={{height:28,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>}
             <div style={{minWidth:0}}>
               <div style={{fontWeight:800,fontSize:16,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedOrgView.name}</div>
-              <div style={{fontSize:11,color:'var(--t2)'}}>{selectedOrgView.industry||'—'} · <span style={{color:TIERS[selectedOrgView.tier]?.color||'var(--t2)',fontWeight:600}}>{selectedOrgView.tier}</span></div>
+              <div style={{fontSize:11,color:'var(--t2)'}}>{selectedOrgView.industry||'—'} · <span style={{color:TIERS[planTier(selectedOrgView.plan)]?.color||'var(--t2)',fontWeight:600}}>{planTier(selectedOrgView.plan)||'—'}</span></div>
             </div>
           </div>
         </div>
@@ -8011,7 +8015,7 @@ function CompanySettingsView({ user }) {
             })
           } catch(e) {}
         }
-        setOrgPlan((data.plan||'').toLowerCase())
+        setOrgPlan(planTier(data.plan).toLowerCase())
         setOrgRetentionExtended(data.retention_extended||false)
         setOrgRetentionYears(data.retention_years||null)
         setRetentionYearsInput(String(data.retention_years||7))
