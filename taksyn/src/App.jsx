@@ -8529,7 +8529,7 @@ function CompanySettingsView({ user }) {
           {tplList.length===0 ? (
             <div style={{fontSize:13,color:'var(--t2)'}}>No templates yet — create one below.</div>
           ) : (()=>{
-            const _g={}; tplList.forEach(t=>{ let _k; if(tplGroupBy==='team'){ _k=[t.team_name||'— No team —'] } else { const _p=parseTplPositions(t.positions||t.position); _k=_p.length?_p:['— No position —'] } _k.forEach(k=>{ (_g[k]=_g[k]||[]).push(t) }) });
+            const _g={}; if(tplGroupBy==='team'){ tmTeams.forEach(tm=>{ _g[tm.name]=[] }) } tplList.forEach(t=>{ let _k; if(tplGroupBy==='team'){ _k=[t.team_name||'— No team —'] } else { const _p=parseTplPositions(t.positions||t.position); _k=_p.length?_p:['— No position —'] } _k.forEach(k=>{ (_g[k]=_g[k]||[]).push(t) }) });
             return Object.keys(_g).sort().map(pos=>{ const _open=openPos.has(pos); return (
               <div key={pos} style={{marginBottom:8}}>
                 <div onClick={()=>setOpenPos(prev=>{ const n=new Set(prev); n.has(pos)?n.delete(pos):n.add(pos); return n })} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 10px',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:8,fontWeight:700,fontSize:13}}>
