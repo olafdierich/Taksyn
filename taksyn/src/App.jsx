@@ -7815,6 +7815,7 @@ function CompanySettingsView({ user }) {
   const [autoLogoutMinutes, setAutoLogoutMinutes] = useState(30)
   const [tplList, setTplList] = useState([])
   const [openPos, setOpenPos] = useState(new Set())
+  const [tplGroupBy, setTplGroupBy] = useState('position')
   const [tplName, setTplName] = useState('')
   const [tplDescription, setTplDescription] = useState('')
   const [tplPriority, setTplPriority] = useState('medium')
@@ -8517,10 +8518,18 @@ function CompanySettingsView({ user }) {
       {activeTab==='templates'&&<>
         <div className="section" style={{marginBottom:14}}>
           <div className="section-title">Checklist Templates ({tplList.length})</div>
+          {tplList.length>0&&(
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10,fontSize:12}}>
+              <span style={{color:'var(--t2)'}}>Group by:</span>
+              {['position','team'].map(g=>(
+                <button key={g} type="button" onClick={()=>setTplGroupBy(g)} style={{fontSize:12,cursor:'pointer',borderRadius:14,padding:'3px 12px',textTransform:'capitalize',border:tplGroupBy===g?'1px solid var(--brand)':'1px solid var(--border)',background:tplGroupBy===g?'var(--brand)':'var(--s3)',color:tplGroupBy===g?'#fff':'var(--t2)',fontWeight:tplGroupBy===g?600:400}}>{g}</button>
+              ))}
+            </div>
+          )}
           {tplList.length===0 ? (
             <div style={{fontSize:13,color:'var(--t2)'}}>No templates yet — create one below.</div>
           ) : (()=>{
-            const _g={}; tplList.forEach(t=>{ const _p=parseTplPositions(t.positions||t.position); const _k=_p.length?_p:['\u2014 No position \u2014']; _k.forEach(k=>{ (_g[k]=_g[k]||[]).push(t) }) });
+            const _g={}; if(tplGroupBy==='team'){ tmTeams.forEach(tm=>{ _g[tm.name]=[] }) } tplList.forEach(t=>{ let _k; if(tplGroupBy==='team'){ _k=[t.team_name||'— No team —'] } else { const _p=parseTplPositions(t.positions||t.position); _k=_p.length?_p:['— No position —'] } _k.forEach(k=>{ (_g[k]=_g[k]||[]).push(t) }) });
             return Object.keys(_g).sort().map(pos=>{ const _open=openPos.has(pos); return (
               <div key={pos} style={{marginBottom:8}}>
                 <div onClick={()=>setOpenPos(prev=>{ const n=new Set(prev); n.has(pos)?n.delete(pos):n.add(pos); return n })} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 10px',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:8,fontWeight:700,fontSize:13}}>
