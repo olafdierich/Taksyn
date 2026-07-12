@@ -7814,6 +7814,7 @@ function CompanySettingsView({ user }) {
   const [savingRetention, setSavingRetention] = useState(false)
   const [autoLogoutMinutes, setAutoLogoutMinutes] = useState(30)
   const [tplList, setTplList] = useState([])
+  const [openPos, setOpenPos] = useState(new Set())
   const [tplName, setTplName] = useState('')
   const [tplDescription, setTplDescription] = useState('')
   const [tplPriority, setTplPriority] = useState('medium')
@@ -8510,7 +8511,16 @@ function CompanySettingsView({ user }) {
           <div className="section-title">Checklist Templates ({tplList.length})</div>
           {tplList.length===0 ? (
             <div style={{fontSize:13,color:'var(--t2)'}}>No templates yet — create one below.</div>
-          ) : tplList.map(t=>(
+          ) : (()=>{
+            const _g={}; tplList.forEach(t=>{ const _p=parseTplPositions(t.positions||t.position); const _k=_p.length?_p:['\u2014 No position \u2014']; _k.forEach(k=>{ (_g[k]=_g[k]||[]).push(t) }) });
+            return Object.keys(_g).sort().map(pos=>{ const _open=openPos.has(pos); return (
+              <div key={pos} style={{marginBottom:8}}>
+                <div onClick={()=>setOpenPos(prev=>{ const n=new Set(prev); n.has(pos)?n.delete(pos):n.add(pos); return n })} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 10px',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:8,fontWeight:700,fontSize:13}}>
+                  <span style={{fontSize:11,color:'var(--t2)'}}>{_open?'\u25bc':'\u25b6'}</span>
+                  <span>{pos}</span>
+                  <span style={{marginLeft:'auto',fontSize:11,color:'var(--t2)',fontWeight:500}}>{_g[pos].length}</span>
+                </div>
+                {_open && <div style={{marginTop:6}}>{_g[pos].map(t=>(
             <div key={t.id} style={{background:'var(--s3)',border:'1px solid '+(editingTpl?.id===t.id?'rgba(99,102,241,.4)':'var(--border)'),borderRadius:10,padding:12,marginBottom:8,transition:'border-color .2s'}}>
               <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
@@ -8538,8 +8548,10 @@ function CompanySettingsView({ user }) {
                   <button className="btn btn-danger btn-sm" onClick={()=>deleteTemplate(t.id)}>🗑</button>
                 </div>
               </div>
-            </div>
-          ))}
+            </div>))}</div>}
+              </div>
+            )})
+          })()}
         </div>
         <div className="section" ref={tplFormRef} style={{marginBottom:20,scrollMarginTop:16}}>
           <div className="section-title">{editingTpl?'Edit Template':'Create New Template'}</div>
