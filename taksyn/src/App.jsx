@@ -3718,6 +3718,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   </button>
                 ))}
               </div>
+              {(()=>{
+                const myReview = activeFiltered.filter(t=>t.status==='awaiting_review' && t.approver_id===user.id)
+                if(myReview.length===0) return null
+                return (
+                  <div onClick={()=>setFilter('awaiting_review')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.35)',borderRadius:10,padding:'10px 14px',marginBottom:12}}>
+                    <span style={{fontSize:18}}>⏳</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'#B45309'}}>{myReview.length} task{myReview.length!==1?'s':''} awaiting your review</div>
+                      <div style={{fontSize:11,color:'var(--t2)'}}>You're the approver — click to review</div>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,color:'#fff',background:'#F59E0B',borderRadius:20,padding:'3px 10px'}}>{myReview.length}</span>
+                  </div>
+                )
+              })()}
               {filter!=='all' ? (
                     // Flat list when specific filter selected
                     <div>{filtered.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>:filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>
