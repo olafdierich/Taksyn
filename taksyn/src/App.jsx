@@ -4121,6 +4121,9 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
 function ReportsView({ tasks, user, setAuditLog }) {
   const [reportType, setReportType] = useState('compliance')
   const [period, setPeriod] = useState('weekly')
+  const [teamsList, setTeamsList] = useState([])
+  const [teamMembers, setTeamMembers] = useState([])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
   const [occurrences, setOccurrences] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
   const [customStart, setCustomStart] = useState('')
@@ -4277,12 +4280,6 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const workerMap = {}
   const teamMap = {}
   filteredPt.forEach(t => {
-    if (t.team_id) {
-      const tk = t.team_name || t.team_id
-      if (!teamMap[tk]) teamMap[tk] = { name:tk, total:0, done:0 }
-      if (isRecurring(t)) { const exp=expectedFor(t.recurrence); teamMap[tk].total+=exp; teamMap[tk].done+=Math.min(doneDaysFor(t.id),exp) }
-      else { teamMap[tk].total++; if(['completed','approved'].includes(t.status)) teamMap[tk].done++ }
-    }
     let keys=[]
     if (Array.isArray(t.assigned_user_names) && t.assigned_user_names.length) keys = t.assigned_user_names
     else if (t.assigned_user_name) keys = [t.assigned_user_name]
@@ -4304,6 +4301,14 @@ function ReportsView({ tasks, user, setAuditLog }) {
     })
   })
   const workerRows = Object.values(workerMap).sort((a,b) => b.total-a.total)
+  const memberTeams={}; teamMembers.forEach(m=>{ (memberTeams[m.user_id]=memberTeams[m.user_id]||[]).push(m.team_id) })
+  teamsList.forEach(t=>{ if(!teamMap[t.id]) teamMap[t.id]={name:t.name,total:0,done:0} })
+  filteredPt.forEach(t=>{
+    const tset=new Set()
+    if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
+    else { let uids=[]; if(Array.isArray(t.assigned_user_ids)&&t.assigned_user_ids.length) uids=t.assigned_user_ids; else if(t.assigned_user_id) uids=[t.assigned_user_id]; uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) })) }
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=expectedFor(t.recurrence); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+  })
   const teamRows = Object.values(teamMap).sort((a,b)=>b.total-a.total)
 
   // --- Org overview stats ---
