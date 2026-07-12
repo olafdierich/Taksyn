@@ -3110,7 +3110,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       {pos&&!keys.length ? (
                         <div style={{fontSize:12,color:'var(--t2)',padding:'10px 12px',background:'var(--s3)',borderRadius:8,border:'1px solid var(--border)'}}>No templates available for this position yet</div>
                       ) : (
-                        <select className="form-select" value={selectedTplId} onChange={e=>{ const tmpl=templates.find(t=>t.id===e.target.value); if(tmpl){ setSelectedTplId(e.target.value); setNewTask({...newTask,title:newTask.title.trim()?newTask.title:(tmpl.name||''),priority:tmpl.priority||newTask.priority,subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,note:'',photo:null,history:[]}))}) } else { setSelectedTplId('') } }}>
+                        <select className="form-select" value={selectedTplId} onChange={e=>{ const tmpl=templates.find(t=>t.id===e.target.value); if(tmpl){ setSelectedTplId(e.target.value); setNewTask({...newTask,title:newTask.title.trim()?newTask.title:(tmpl.name||''),priority:tmpl.priority||newTask.priority,subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,requireTimestamp:!!it.requireTimestamp,note:'',photo:null,history:[]}))}) } else { setSelectedTplId('') } }}>
                           <option value="">— None —</option>
                           {keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>)}
                         </select>
@@ -8039,7 +8039,7 @@ function CompanySettingsView({ user }) {
     setTplIndustry(t.industry||'')
     setTplRole(t.role||'')
     setTplPosition(parseTplPositions(t.positions||t.position))
-    setTplItems((t.items||[]).length ? t.items.map(it=>({label:it.label||it.text||'',required:!!(it.required||it.mandatory)})) : [{label:'',required:false}])
+    setTplItems((t.items||[]).length ? t.items.map(it=>({label:it.label||it.text||'',required:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,requireTimestamp:!!it.requireTimestamp})) : [{label:'',required:false}])
     setMsg('')
     setTimeout(()=>tplFormRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),30)
   }
@@ -8620,7 +8620,7 @@ function CompanySettingsView({ user }) {
             {tplItems.map((s,i)=>(
               <div key={i} className="cl-build-item">
                 <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.label} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,label:e.target.value}:x))}/>
-                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button>
+                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button><button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x))}>📷</button><button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x))}>🕐</button>
                 {tplItems.length>1&&<button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setTplItems(p=>p.filter((_,j)=>j!==i))}>×</button>}
               </div>
             ))}
@@ -8982,7 +8982,7 @@ function TemplatesView({ user }) {
     const validItems = tplItems.filter(i=>(i.label||'').trim())
     if (!tplName.trim()||!validItems.length) { setMsg('✗ Template needs a name and at least one item'); return }
     setTplSaving(true)
-    const items = validItems.map(i=>({label:i.label.trim(),required:!!i.required}))
+    const items = validItems.map(i=>({label:i.label.trim(),required:!!i.required,requirePhoto:!!i.requirePhoto,requireTimestamp:!!i.requireTimestamp}))
     const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
       if (!editingTpl.id) { console.error('checklist_templates update: template id is undefined'); setMsg('✗ Template id is missing — please reload and try again'); setTplSaving(false); return }
@@ -9123,7 +9123,7 @@ function TemplatesView({ user }) {
             {tplItems.map((s,i)=>(
               <div key={i} className="cl-build-item">
                 <input className="form-input" style={{flex:1,fontSize:12}} placeholder={'Item '+(i+1)} value={s.label} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,label:e.target.value}:x))}/>
-                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button>
+                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button><button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x))}>📷</button><button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x))}>🕐</button>
                 {tplItems.length>1&&<button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setTplItems(p=>p.filter((_,j)=>j!==i))}>×</button>}
               </div>
             ))}
