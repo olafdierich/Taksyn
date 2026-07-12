@@ -6113,6 +6113,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       id: 'ORG'+Date.now(),
       name: newOrg.name.trim(),
       industry: newOrg.industry||'Other',
+      plan: (newOrg.tier||'Starter').toLowerCase(),
       tier: newOrg.tier||'Growth',
       notes: newOrg.notes.trim(),
       status: 'active',
@@ -6749,7 +6750,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                 {org.logo&&<img src={org.logo} alt={org.name} style={{height:28,width:'auto',maxWidth:80,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>}
                 <span style={{fontWeight:700,fontSize:14,cursor:'pointer',color:'var(--brand)',textDecoration:'underline',flex:'1 1 120px',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} onClick={()=>enterOrgContext(org)}>{org.name}</span>
                 <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:600,flexShrink:0,background:'rgba(16,185,129,.12)',color:'var(--green)'}}>ACTIVE</span>
-                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[org.tier]?.color||'var(--t2)',fontWeight:600,flexShrink:0}}>{org.tier}</span>
+                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[planTier(org.plan)]?.color||'var(--t2)',fontWeight:600,flexShrink:0}}>{planTier(org.plan)||'—'}</span>
               </div>
               {/* Metadata row */}
               <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}}>
@@ -6800,11 +6801,11 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                         {org.logo&&<img src={org.logo} alt={org.name} style={{height:28,width:'auto',maxWidth:80,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0,filter:'grayscale(1)'}}/>}
                         <span style={{fontWeight:700,fontSize:14,flex:'1 1 120px',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--t2)'}}>{org.name}</span>
                         <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>ARCHIVED</span>
-                        {org.tier&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[org.tier]?.color||'var(--t2)',fontWeight:600}}>{org.tier}</span>}
+                        {planTier(org.plan)&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[planTier(org.plan)]?.color||'var(--t2)',fontWeight:600}}>{planTier(org.plan)}</span>}
                       </div>
                       <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}}>
                         {org.industry&&<span>🏭 {org.industry}</span>}
-                        {org.tier&&<span>📋 {org.tier}</span>}
+                        {planTier(org.plan)&&<span>📋 {planTier(org.plan)}</span>}
                         {org.archived_at&&<span>🗄 Archived {new Date(org.archived_at).toLocaleDateString('en-AU')}</span>}
                       </div>
                       {org.notes&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,fontStyle:'italic'}}>{org.notes}</div>}
