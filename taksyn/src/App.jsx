@@ -8607,12 +8607,14 @@ function CompanySettingsView({ user }) {
             </select>
           </div>
           <div className="form-field">
-            <label className="form-label">Positions <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional, hold Ctrl/Cmd to select multiple</span></label>
+            <label className="form-label">Positions <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional, click to select or deselect</span></label>
             {(tplIndustry||tplRole) ? (
               <>
-                <select multiple className="form-select" value={tplPosition} onChange={e=>setTplPosition(Array.from(e.target.selectedOptions).map(o=>o.value))} style={{height:Math.min(8,getPositionsForIndustry(tplIndustry,tplRole,tmCustomPos.map(p=>p.position_name),tmAllRoles).length)*32+'px',minHeight:80}}>
-                  {getPositionsForIndustry(tplIndustry,tplRole,tmCustomPos.map(p=>p.position_name),tmAllRoles).map(p=><option key={p} value={p}>{p}</option>)}
-                </select>
+                <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
+                  {getPositionsForIndustry(tplIndustry,tplRole,tmCustomPos.map(p=>p.position_name),tmAllRoles).map(p=>{ const on=tplPosition.includes(p); return (
+                    <button key={p} type="button" onClick={()=>setTplPosition(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])} style={{fontSize:12,cursor:'pointer',borderRadius:16,padding:'5px 12px',fontWeight:on?600:400,border:on?'1px solid var(--brand)':'1px solid var(--border)',background:on?'var(--brand)':'var(--s3)',color:on?'#fff':'var(--t2)'}}>{on?'✓ ':''}{p}</button>
+                  )})}
+                </div>
                 {tplPosition.length>0&&(
                   <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
                     {tplPosition.map(p=>(
@@ -9125,12 +9127,14 @@ function TemplatesView({ user }) {
             </select>
           </div>
           <div className="form-field">
-            <label className="form-label">Positions <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional, hold Ctrl/Cmd to select multiple</span></label>
+            <label className="form-label">Positions <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional, click to select or deselect</span></label>
             {(tplIndustry||tplRole) ? (
               <>
-                <select multiple className="form-select" value={tplPosition} onChange={e=>setTplPosition(Array.from(e.target.selectedOptions).map(o=>o.value))} style={{height:Math.min(8,getPositionsForIndustry(tplIndustry,tplRole,tvCustomPositions,tvCustomRoles).length)*32+'px',minHeight:80}}>
-                  {getPositionsForIndustry(tplIndustry,tplRole,tvCustomPositions,tvCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
-                </select>
+                <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
+                  {getPositionsForIndustry(tplIndustry,tplRole,tvCustomPositions,tvCustomRoles).map(p=>{ const on=tplPosition.includes(p); return (
+                    <button key={p} type="button" onClick={()=>setTplPosition(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])} style={{fontSize:12,cursor:'pointer',borderRadius:16,padding:'5px 12px',fontWeight:on?600:400,border:on?'1px solid var(--brand)':'1px solid var(--border)',background:on?'var(--brand)':'var(--s3)',color:on?'#fff':'var(--t2)'}}>{on?'✓ ':''}{p}</button>
+                  )})}
+                </div>
                 {tplPosition.length>0&&(
                   <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
                     {tplPosition.map(p=>(
