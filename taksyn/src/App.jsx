@@ -2174,7 +2174,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [celebration, setCelebration] = useState(false)
   const [teamUsers, setTeamUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
-  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', due_time:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'', assigned_user_ids:[], assigned_user_names:[], lead_user_id:'', lead_user_name:'' })
+  const [newTask, setNewTask] = useState({ title:'', category:'General', department:'', industry:'', position:'', priority:'medium', due_date:'', due_time:'', compliance:false, recurrence:'once', assigned_role:'worker', assigned_user_id:'', assigned_user_name:'', assigned_user_email:'', project:'', subtasks:[], team_id:'', team_name:'', assigned_user_ids:[], assigned_user_names:[], lead_user_id:'', lead_user_name:'', approver_id:(user.role==='manager'||user.role==='supervisor')?user.id:'', approver_name:(user.role==='manager'||user.role==='supervisor')?user.name:'' })
   const [selectedTplId, setSelectedTplId] = useState('')
   const [taskGlobalIndustries, setTaskGlobalIndustries] = useState([])
   const [taskOrgIndustries, setTaskOrgIndustries] = useState([])
@@ -2748,6 +2748,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     setCreating(true)
     setCreateError('')
     const taskData = {...newTask}
+    if(!taskData.approver_id && (user.role==='manager'||user.role==='supervisor')){ taskData.approver_id=user.id; taskData.approver_name=user.name }
     const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
@@ -3083,6 +3084,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   </select>
                 </div>
               )}
+              <div className="form-field">
+                <label className="form-label">Approver <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— reviews the task on completion</span></label>
+                <select className="form-select" value={newTask.approver_id||''} onChange={e=>{ const a=teamUsers.find(u=>u.id===e.target.value); setNewTask({...newTask,approver_id:a?.id||'',approver_name:a?.name||''}) }}>
+                  <option value="">{user.role==='client_admin'?'— Any manager/supervisor —':'— Me —'}</option>
+                  {teamUsers.filter(u=>u.role==='manager'||u.role==='supervisor').map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
+                </select>
+              </div>
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
                 <input type="checkbox" id="comp" checked={newTask.compliance} onChange={e=>setNewTask({...newTask,compliance:e.target.checked})} style={{width:16,height:16,accentColor:'var(--brand)',cursor:'pointer'}}/>
                 <label htmlFor="comp" style={{fontSize:13,cursor:'pointer'}}>Mark as compliance-critical <span style={{color:'var(--red)',fontWeight:700}}>*</span></label>
@@ -3466,6 +3474,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 )
               })()}
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
+              {sel.approver_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Approver:</span> {sel.approver_name}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--brand)'}}>⏳ Awaiting your review</span>}</div>}
               {sel.project&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Project:</span> <span style={{color:'#3B82F6',fontWeight:600}}>📁 {sel.project}</span></div>}
             </div>
           </div>
