@@ -4323,6 +4323,19 @@ function ReportsView({ tasks, user, setAuditLog }) {
     tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=expectedFor(t.recurrence); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const teamRows = Object.values(teamMap).sort((a,b)=>b.total-a.total)
+  // --- Approver (review) performance stats ---
+  const approverMap = {}
+  filteredPt.forEach(t => {
+    const key = t.approver_id || t.approver_name
+    if (!key) return
+    if (!approverMap[key]) approverMap[key] = { name: t.approver_name || key, pending:0, approved:0, sentBack:0, turn:[] }
+    const a = approverMap[key]
+    if (t.status==='awaiting_review') a.pending++
+    if (t.status==='approved') a.approved++
+    if (t.status==='rejected') a.sentBack++
+    if ((t.status==='approved'||t.status==='rejected') && t.reviewed_at && t.submitted_at) a.turn.push((new Date(t.reviewed_at)-new Date(t.submitted_at))/3600000)
+  })
+  const approverRows = Object.values(approverMap).sort((x,y)=>(y.approved+y.sentBack)-(x.approved+x.sentBack))
 
   // --- Org overview stats ---
   const uniqueWorkers = new Set(filteredPt.map(t=>t.assigned_user_id||t.assigned_user_name).filter(Boolean))
@@ -4675,6 +4688,42 @@ function ReportsView({ tasks, user, setAuditLog }) {
                     <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
                   </tr>
                 )})}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {/* Approver Review Performance Preview */}
+      {reportType==='worker' && isClientAdmin && approverRows.length>0 && (
+        <div className="section">
+          <div className="section-title">🔍 Approver Review Performance — {pl}</div>
+          <div style={{overflowX:'auto',marginTop:10}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead>
+                <tr style={{background:'var(--s3)'}}>
+                  {['Approver','Reviewed','Approved','Sent Back','Send-Back %','Avg Turnaround','Pending'].map(h=>(
+                    <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {approverRows.map((a,i)=>{
+                  const reviewed=a.approved+a.sentBack
+                  const sbPct=pct(a.sentBack,reviewed)
+                  const avgH=a.turn.length?a.turn.reduce((x,y)=>x+y,0)/a.turn.length:null
+                  const turnLabel=avgH==null?'—':avgH<24?Math.round(avgH)+'h':(avgH/24).toFixed(1)+'d'
+                  return (
+                    <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
+                      <td style={{padding:'8px 10px',fontWeight:600}}>{a.name}</td>
+                      <td style={{padding:'8px 10px'}}>{reviewed}</td>
+                      <td style={{padding:'8px 10px',color:'var(--green)'}}>{a.approved}</td>
+                      <td style={{padding:'8px 10px',color:a.sentBack>0?'#F59E0B':'var(--t2)'}}>{a.sentBack}</td>
+                      <td style={{padding:'8px 10px'}}>{sbPct}%</td>
+                      <td style={{padding:'8px 10px',color:'var(--t2)'}}>{turnLabel}</td>
+                      <td style={{padding:'8px 10px',fontWeight:700,color:a.pending>0?'#F59E0B':'var(--t2)'}}>{a.pending}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
