@@ -8615,15 +8615,6 @@ function CompanySettingsView({ user }) {
                     <button key={p} type="button" onClick={()=>setTplPosition(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])} style={{fontSize:12,cursor:'pointer',borderRadius:16,padding:'5px 12px',fontWeight:on?600:400,border:on?'1px solid var(--brand)':'1px solid var(--border)',background:on?'var(--brand)':'var(--s3)',color:on?'#fff':'var(--t2)'}}>{on?'✓ ':''}{p}</button>
                   )})}
                 </div>
-                {tplPosition.length>0&&(
-                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
-                    {tplPosition.map(p=>(
-                      <span key={p} style={{fontSize:11,background:'rgba(0,168,126,.1)',color:'var(--brand)',border:'1px solid rgba(0,168,126,.3)',borderRadius:12,padding:'2px 8px',display:'flex',alignItems:'center',gap:4}}>
-                        {p}<button type="button" style={{background:'none',border:'none',cursor:'pointer',color:'inherit',padding:0,fontSize:12,lineHeight:1}} onClick={()=>setTplPosition(prev=>prev.filter(x=>x!==p))}>×</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </>
             ) : (
               <input className="form-input" value="" readOnly placeholder="Select industry or role first" style={{background:'var(--s3)',cursor:'default'}}/>
@@ -9135,15 +9126,6 @@ function TemplatesView({ user }) {
                     <button key={p} type="button" onClick={()=>setTplPosition(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])} style={{fontSize:12,cursor:'pointer',borderRadius:16,padding:'5px 12px',fontWeight:on?600:400,border:on?'1px solid var(--brand)':'1px solid var(--border)',background:on?'var(--brand)':'var(--s3)',color:on?'#fff':'var(--t2)'}}>{on?'✓ ':''}{p}</button>
                   )})}
                 </div>
-                {tplPosition.length>0&&(
-                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
-                    {tplPosition.map(p=>(
-                      <span key={p} style={{fontSize:11,background:'rgba(0,168,126,.1)',color:'var(--brand)',border:'1px solid rgba(0,168,126,.3)',borderRadius:12,padding:'2px 8px',display:'flex',alignItems:'center',gap:4}}>
-                        {p}<button type="button" style={{background:'none',border:'none',cursor:'pointer',color:'inherit',padding:0,fontSize:12,lineHeight:1}} onClick={()=>setTplPosition(prev=>prev.filter(x=>x!==p))}>×</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </>
             ) : (
               <input className="form-input" value="" readOnly placeholder="Select industry or role first" style={{background:'var(--s3)',cursor:'default'}}/>
