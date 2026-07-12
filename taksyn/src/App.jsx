@@ -3110,7 +3110,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       {pos&&!keys.length ? (
                         <div style={{fontSize:12,color:'var(--t2)',padding:'10px 12px',background:'var(--s3)',borderRadius:8,border:'1px solid var(--border)'}}>No templates available for this position yet</div>
                       ) : (
-                        <select className="form-select" value={selectedTplId} onChange={e=>{ const tmpl=templates.find(t=>t.id===e.target.value); if(tmpl){ setSelectedTplId(e.target.value); setNewTask({...newTask,title:newTask.title.trim()?newTask.title:(tmpl.name||''),priority:tmpl.priority||newTask.priority,subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,requireTimestamp:!!it.requireTimestamp,note:'',photo:null,history:[]}))}) } else { setSelectedTplId('') } }}>
+                        <select className="form-select" value={selectedTplId} onChange={e=>{ const tmpl=templates.find(t=>t.id===e.target.value); if(tmpl){ setSelectedTplId(e.target.value); const tplTeam = tmpl.team_id ? (taskOrgTeams.find(t=>t.id===tmpl.team_id)||{id:tmpl.team_id,name:tmpl.team_name||''}) : null; setNewTask(prev=>({...prev,title:prev.title.trim()?prev.title:(tmpl.name||''),priority:tmpl.priority||prev.priority,subtasks:(tmpl.items||[]).map(it=>({id:Date.now()+Math.random()+'',text:it.label||it.text||'',done:false,mandatory:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,requireTimestamp:!!it.requireTimestamp,note:'',photo:null,history:[]})), ...(tplTeam?{team_id:tplTeam.id,team_name:tplTeam.name,assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',assigned_user_ids:[],assigned_user_names:[]}:{})})); if(tplTeam && isConfigured()){ setTaskTeamMembers([]); supabase.from('team_members').select('user_id,user_name,role').eq('team_id',tplTeam.id).then(({data:tms})=>{ if(!tms?.length) return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } } else { setSelectedTplId('') } }}>
                           <option value="">— None —</option>
                           {keys.map(g=><optgroup key={g} label={g}>{grps[g].map(t=><option key={t.id} value={t.id}>{t.name} · {PRIORITY_CFG[t.priority]?.label||'Medium'} · {t.items?.length||0} items</option>)}</optgroup>)}
                         </select>
@@ -7824,6 +7824,13 @@ function CompanySettingsView({ user }) {
   const [tplIndustry, setTplIndustry] = useState('')
   const [tplRole, setTplRole] = useState('')
   const [tplPosition, setTplPosition] = useState([])
+  const [tplTeamId, setTplTeamId] = useState('')
+  const [tplTeamName, setTplTeamName] = useState('')
+  const [tmTeams, setTmTeams] = useState([])
+  useEffect(()=>{
+    if(!isConfigured()||!orgId){ setTmTeams([]); return }
+    supabase.from('teams').select('id,name').eq('org',orgId).then(({data})=>{ if(data) setTmTeams(data) }).catch(()=>{})
+  },[orgId])
   const tplFormRef = useRef(null)
   // Team Management tab state
   const [tmGlobalInds, setTmGlobalInds] = useState([])
@@ -8029,7 +8036,7 @@ function CompanySettingsView({ user }) {
     }).catch(()=>{})
   },[orgId, tmLoaded])
 
-  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setTplIndustry(''); setTplRole(''); setTplPosition([]); setEditingTpl(null) }
+  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setTplIndustry(''); setTplRole(''); setTplPosition([]); setTplTeamId(''); setTplTeamName(''); setEditingTpl(null) }
 
   const startEditTpl = (t) => {
     setEditingTpl(t)
@@ -8039,6 +8046,7 @@ function CompanySettingsView({ user }) {
     setTplIndustry(t.industry||'')
     setTplRole(t.role||'')
     setTplPosition(parseTplPositions(t.positions||t.position))
+    setTplTeamId(t.team_id||''); setTplTeamName(t.team_name||'')
     setTplItems((t.items||[]).length ? t.items.map(it=>({label:it.label||it.text||'',required:!!(it.required||it.mandatory),requirePhoto:!!it.requirePhoto,requireTimestamp:!!it.requireTimestamp})) : [{label:'',required:false}])
     setMsg('')
     setTimeout(()=>tplFormRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),30)
@@ -8052,7 +8060,7 @@ function CompanySettingsView({ user }) {
     const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
       if (!editingTpl.id) { console.error('checklist_templates update: template id is undefined'); setMsg('✗ Template id is missing — please reload and try again'); setTplSaving(false); return }
-      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items) }
+      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), team_id:tplTeamId||null, team_name:tplTeamName||null }
       if (isConfigured()) {
         const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id)
         if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
@@ -8060,7 +8068,7 @@ function CompanySettingsView({ user }) {
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), team_id:tplTeamId||null, team_name:tplTeamName||null, created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) {
         const { data:inserted, error } = await supabase.from('checklist_templates').insert(entry).select().single()
         if (error) { setMsg('✗ '+error.message); setTplSaving(false); return }
@@ -8592,6 +8600,13 @@ function CompanySettingsView({ user }) {
             </div>
           </div>
           <div className="form-field">
+            <label className="form-label">Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional; pre-fills the task's team when used From Template</span></label>
+            <select className="form-select" value={tplTeamId} onChange={e=>{ const tm=tmTeams.find(t=>t.id===e.target.value); setTplTeamId(tm?.id||''); setTplTeamName(tm?.name||'') }}>
+              <option value="">No team</option>
+              {tmTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div className="form-field">
             <label className="form-label">Positions <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional, hold Ctrl/Cmd to select multiple</span></label>
             {(tplIndustry||tplRole) ? (
               <>
@@ -8929,6 +8944,13 @@ function TemplatesView({ user }) {
   const [tplIndustry, setTplIndustry] = useState('')
   const [tplRole, setTplRole] = useState('')
   const [tplPosition, setTplPosition] = useState([])
+  const [tplTeamId, setTplTeamId] = useState('')
+  const [tplTeamName, setTplTeamName] = useState('')
+  const [tmTeams, setTmTeams] = useState([])
+  useEffect(()=>{
+    if(!isConfigured()||!orgId){ setTmTeams([]); return }
+    supabase.from('teams').select('id,name').eq('org',orgId).then(({data})=>{ if(data) setTmTeams(data) }).catch(()=>{})
+  },[orgId])
   const [industryList, setIndustryList] = useState([])
   const [tvCustomPositions, setTvCustomPositions] = useState([])
   const [tvCustomRoles, setTvCustomRoles] = useState([])
@@ -8963,7 +8985,7 @@ function TemplatesView({ user }) {
     }).catch(()=>{})
   },[orgId])
 
-  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setTplIndustry(''); setTplRole(''); setTplPosition([]); setEditingTpl(null) }
+  const resetTplForm = () => { setTplName(''); setTplDescription(''); setTplPriority('medium'); setTplItems([{label:'',required:false}]); setTplIndustry(''); setTplRole(''); setTplPosition([]); setTplTeamId(''); setTplTeamName(''); setEditingTpl(null) }
 
   const startEditTpl = (t) => {
     setEditingTpl(t)
@@ -8973,6 +8995,7 @@ function TemplatesView({ user }) {
     setTplIndustry(t.industry||'')
     setTplRole(t.role||'')
     setTplPosition(parseTplPositions(t.positions||t.position))
+    setTplTeamId(t.team_id||''); setTplTeamName(t.team_name||'')
     const items = parseSafe(t.items)
     setTplItems(items.length?items:[{label:'',required:false}])
     setTimeout(()=>tplFormRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),30)
@@ -8986,12 +9009,12 @@ function TemplatesView({ user }) {
     const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
       if (!editingTpl.id) { console.error('checklist_templates update: template id is undefined'); setMsg('✗ Template id is missing — please reload and try again'); setTplSaving(false); return }
-      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items) }
+      const updates = { name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), team_id:tplTeamId||null, team_name:tplTeamName||null }
       if (isConfigured()) { const { error } = await supabase.from('checklist_templates').update(updates).eq('id',editingTpl.id); if(error){ setMsg('✗ '+error.message); setTplSaving(false); return } }
       setTplList(prev=>prev.map(t=>t.id===editingTpl.id?{...t,...updates,items}:t))
       setMsg('✓ Template updated')
     } else {
-      const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), created_by:user.name, created_at:new Date().toISOString() }
+      const entry = { organisation_id:orgId, name:tplName.trim(), description:tplDescription.trim()||null, priority:tplPriority, industry:tplIndustry||null, role:tplRole||null, positions, items:JSON.stringify(items), team_id:tplTeamId||null, team_name:tplTeamName||null, created_by:user.name, created_at:new Date().toISOString() }
       if (isConfigured()) {
         const { data:inserted, error } = await supabase.from('checklist_templates').insert(entry).select().single()
         if(error){ setMsg('✗ '+error.message); setTplSaving(false); return }
@@ -9093,6 +9116,13 @@ function TemplatesView({ user }) {
                 {['worker','supervisor','manager','client_admin'].map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
             </div>
+          </div>
+          <div className="form-field">
+            <label className="form-label">Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional; pre-fills the task's team when used From Template</span></label>
+            <select className="form-select" value={tplTeamId} onChange={e=>{ const tm=tmTeams.find(t=>t.id===e.target.value); setTplTeamId(tm?.id||''); setTplTeamName(tm?.name||'') }}>
+              <option value="">No team</option>
+              {tmTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
           </div>
           <div className="form-field">
             <label className="form-label">Positions <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>— optional, hold Ctrl/Cmd to select multiple</span></label>
