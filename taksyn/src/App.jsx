@@ -488,6 +488,24 @@ function ReviewerAttachEvidence({ task, user, update }) {
 // Never throws — on ANY failure returns the ORIGINAL uncompressed data URL so the worker is never blocked.
 // Tamper-evident evidence capture: forces a LIVE camera (getUserMedia) so gallery/old photos
 // cannot be used as task evidence. Burns timestamp + GPS + task label into the saved JPEG.
+function AttachDocButton({ onAttach }) {
+  const [busy, setBusy] = useState(false)
+  const inpRef = useRef(null)
+  const pick = async (e) => {
+    const f = e.target.files[0]; e.target.value=''
+    if (!f) return
+    setBusy(true)
+    const url = await compressImage(f)
+    setBusy(false)
+    if (url) onAttach(url, f.name)
+  }
+  return (
+    <>
+      <button className="cl-action-btn" style={{color:'#6B7280',borderColor:'rgba(107,114,128,.3)'}} disabled={busy} onClick={()=>inpRef.current&&inpRef.current.click()}>{busy?'Attaching…':'📎 Attach document'}</button>
+      <input ref={inpRef} type="file" accept="image/*,application/pdf" style={{display:'none'}} onChange={pick}/>
+    </>
+  )
+}
 function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
   const [open, setOpen] = useState(false)
   const [err, setErr] = useState('')
@@ -2597,6 +2615,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,note,history:[...(x.history||[]),histEntry]}:x) })
   }
 
+  const addSubDoc = async (tid, idx, docUrl, docName) => {
+    const task = tasks.find(t=>t.id===tid)
+    const subs = parseSafe(task.subtasks)
+    const uid = await authUserId()
+    const docObj = { url:docUrl, name:docName||'document', ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
+    const histEntry = { action:'doc_added', by:user.name, byId:uid, at:new Date().toISOString(), note:docName||'' }
+    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,attachment:docObj,history:[...(x.history||[]),histEntry]}:x) })
+  }
   const addSubPhoto = async (tid, idx, photoUrl) => {
     const task = tasks.find(t=>t.id===tid)
     const subs = parseSafe(task.subtasks)
@@ -3427,6 +3453,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
                         {s.photo&&<EvidenceThumb entry={s.photo} className="cl-photo-thumb" containerStyle={{marginTop:4,overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>}
+                        {s.attachment&&<div style={{marginTop:4,fontSize:11}}><a href={s.attachment.url} download={s.attachment.name} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {s.attachment.name}</a> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>}
                         {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
@@ -3441,6 +3468,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             <button className="cl-action-btn" onClick={()=>{setClNoteOpen({taskId:sel.id,idx});setClNoteText(s.note||'')}}>{s.note?'✏️ Edit Note':'+ Note'}</button>
                             {s.requirePhoto&&!s.photo&&(
                               <EvidenceCameraButton taskId={sel.id} idx={idx} label={s.text} onCapture={(url)=>addSubPhoto(sel.id,idx,url)}/>
+                            )}
+                            {canAct&&s.requirePhoto&&!s.attachment&&(
+                              <AttachDocButton onAttach={(url,name)=>addSubDoc(sel.id,idx,url,name)}/>
                             )}
                           </div>
                         ))}
