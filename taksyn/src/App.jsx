@@ -8170,7 +8170,7 @@ function CompanySettingsView({ user }) {
 
   const deleteTemplate = async (id) => {
     if (!confirm('Delete this template?')) return
-    if (isConfigured()) await supabase.from('checklist_templates').delete().eq('id',id).catch(()=>{})
+    if (isConfigured()) { const { error } = await supabase.from('checklist_templates').delete().eq('id',id); if(error){ setMsg('✗ '+error.message); return } }
     setTplList(prev=>prev.filter(t=>t.id!==id))
   }
 
@@ -9117,7 +9117,7 @@ function TemplatesView({ user }) {
 
   const deleteTemplate = async (id) => {
     if (!confirm('Delete this template?')) return
-    if (isConfigured()) await supabase.from('checklist_templates').delete().eq('id',id).catch(()=>{})
+    if (isConfigured()) { const { error } = await supabase.from('checklist_templates').delete().eq('id',id); if(error){ setMsg('✗ '+error.message); return } }
     setTplList(prev=>prev.filter(t=>t.id!==id))
   }
 
