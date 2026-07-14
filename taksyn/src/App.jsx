@@ -13301,6 +13301,7 @@ export default function App() {
   const escalationCount = tasks.filter(t=>t.escalation||t.status==='overdue').length
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
+  const myReviewCount = tasks.filter(t=>t.status==='awaiting_review'&&t.approver_id===user.id).length
   const navItems = NAV[user.role]||NAV.worker
   const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
@@ -13671,6 +13672,7 @@ export default function App() {
                     {key==='escalations'&&escalationCount>0&&<span className="nav-badge">{escalationCount}</span>}
                     {key==='evidence'&&reviewCount>0&&<span className="nav-badge amber">{reviewCount}</span>}
                     {key==='tasks'&&rejectedCount>0&&user.role==='worker'&&<span className="nav-badge">{rejectedCount}</span>}
+                    {key==='tasks'&&myReviewCount>0&&<span className="nav-badge amber">{myReviewCount}</span>}
                   </button>
                 ))}
               </div>
