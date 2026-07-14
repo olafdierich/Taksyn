@@ -495,6 +495,7 @@ function AttachDocButton({ onAttach }) {
     const f = e.target.files[0]; e.target.value=''
     if (!f) return
     if (f.size > 5*1024*1024) { alert('File too large — max 5 MB per file. Please attach a smaller file.'); return }
+    if (!['pdf','doc','docx','xls','xlsx','ppt','pptx','pages','numbers','key','odt','ods','odp','csv','txt','rtf'].includes((f.name.split('.').pop()||'').toLowerCase())) { alert('Only documents can be attached here (PDF, Word, Excel, PowerPoint, etc.). Use the Add Photo button for images.'); return }
     setBusy(true)
     const url = await compressImage(f)
     setBusy(false)
