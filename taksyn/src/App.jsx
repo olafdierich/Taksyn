@@ -375,7 +375,7 @@ const taskPhotoIndex = (task) => {
     ? { url:p.url||null, path:p.path||null, ts:p.ts||null, by:p.by||null, by_id:p.by_id||null, role:p.role||null }
     : { url:p, path:null, ts:null, by:null, by_id:null, role:null }
   const out = []
-  parseSafe(task?.subtasks).forEach(s => { if (s && s.photo) out.push({ ...norm(s.photo), source:'checklist', label:s.text||'' }) })
+  parseSafe(task?.subtasks).forEach(s => { if (s) { (s.photos||[]).forEach(ph=>out.push({ ...norm(ph), source:'checklist', label:s.text||'' })); if (s.photo) out.push({ ...norm(s.photo), source:'checklist', label:s.text||'' }) } })
   parseSafe(task?.evidence).forEach(e => { if (e) out.push({ ...norm(e), source:'evidence', label:'' }) })
   return out.filter(p => p.url || p.path)
 }
@@ -494,6 +494,7 @@ function AttachDocButton({ onAttach }) {
   const pick = async (e) => {
     const f = e.target.files[0]; e.target.value=''
     if (!f) return
+    if (f.size > 5*1024*1024) { alert('File too large — max 5 MB per file. Please attach a smaller file.'); return }
     setBusy(true)
     const url = await compressImage(f)
     setBusy(false)
@@ -2622,9 +2623,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const task = tasks.find(t=>t.id===tid)
     const subs = parseSafe(task.subtasks)
     const uid = await authUserId()
+    const _cur = subs[idx]||{}; const _used = [...(_cur.photos||[]),...(_cur.photo?[_cur.photo]:[]),...(_cur.attachments||[]),...(_cur.attachment?[_cur.attachment]:[])].reduce((a,e)=>a+((e&&e.url?e.url.length:0)*0.75),0)
+    if (_used + (docUrl?docUrl.length*0.75:0) > 5*1024*1024) { alert('Attachments for this item would exceed the 5 MB total. Please attach a smaller file or remove one.'); return }
     const docObj = { url:docUrl, name:docName||'document', ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
     const histEntry = { action:'doc_added', by:user.name, byId:uid, at:new Date().toISOString(), note:docName||'' }
-    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,attachment:docObj,history:[...(x.history||[]),histEntry]}:x) })
+    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,attachments:[...(x.attachments||[]),docObj],history:[...(x.history||[]),histEntry]}:x) })
   }
   const addSubPhoto = async (tid, idx, photoUrl) => {
     const task = tasks.find(t=>t.id===tid)
@@ -2632,7 +2635,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const uid = await authUserId()
     const photoObj = { url:photoUrl, ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
     const histEntry = { action:'photo_added', by:user.name, byId:uid, at:new Date().toISOString() }
-    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,photo:photoObj,history:[...(x.history||[]),histEntry]}:x) })
+    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,photos:[...(x.photos||[]),photoObj],history:[...(x.history||[]),histEntry]}:x) })
   }
 
   const checkMandatory = (tid) => {
@@ -3455,8 +3458,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           </div>
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
-                        {s.photo&&<EvidenceThumb entry={s.photo} className="cl-photo-thumb" containerStyle={{marginTop:4,overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>}
-                        {s.attachment&&<div style={{marginTop:4,fontSize:11}}><a href={s.attachment.url} download={s.attachment.name} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {s.attachment.name}</a> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>}
+                        {[...(s.photos||[]),...(s.photo?[s.photo]:[])].map((ph,pi)=><EvidenceThumb key={pi} entry={ph} className="cl-photo-thumb" containerStyle={{marginTop:4,marginRight:6,display:'inline-block',verticalAlign:'top',overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>)}
+                        {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><a href={at.url} download={at.name} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {at.name}</a> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
                         {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
@@ -3469,10 +3472,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <div className="cl-actions">
                             {canAct&&<button className="cl-action-btn" style={{color:'#10B981',borderColor:'rgba(16,185,129,.3)',fontWeight:600}} onClick={()=>{ setClMarkOpen({taskId:sel.id,idx,itemId,label:s.text}); setClMarkNote('') }}>✓ Mark done</button>}
                             <button className="cl-action-btn" onClick={()=>{setClNoteOpen({taskId:sel.id,idx});setClNoteText(s.note||'')}}>{s.note?'✏️ Edit Note':'+ Note'}</button>
-                            {s.requirePhoto&&!s.photo&&(
+                            {s.requirePhoto&&((s.photos||[]).length+(s.photo?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
                               <EvidenceCameraButton taskId={sel.id} idx={idx} label={s.text} onCapture={(url)=>addSubPhoto(sel.id,idx,url)}/>
                             )}
-                            {canAct&&s.requirePhoto&&!s.attachment&&(
+                            {canAct&&s.requirePhoto&&((s.photos||[]).length+(s.photo?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
                               <AttachDocButton onAttach={(url,name)=>addSubDoc(sel.id,idx,url,name)}/>
                             )}
                           </div>
