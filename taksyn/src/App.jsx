@@ -497,12 +497,15 @@ function AttachDocButton({ onAttach }) {
     setBusy(true)
     const url = await compressImage(f)
     setBusy(false)
-    if (url) onAttach(url, f.name)
+    if (url) {
+      const dot=f.name.lastIndexOf('.'); const ext=dot>=0?f.name.slice(dot+1).toLowerCase():''; const base=(dot>=0?f.name.slice(0,dot):f.name).trim(); const words=base.split(/\s+/); const masked=(words.length>1?words[0]+'…':(words[0]||'document'))+(ext?'.'+ext:'')
+      onAttach(url, masked)
+    }
   }
   return (
     <>
       <button className="cl-action-btn" style={{color:'#6B7280',borderColor:'rgba(107,114,128,.3)'}} disabled={busy} onClick={()=>inpRef.current&&inpRef.current.click()}>{busy?'Attaching…':'📎 Attach document'}</button>
-      <input ref={inpRef} type="file" accept="image/*,application/pdf" style={{display:'none'}} onChange={pick}/>
+      <input ref={inpRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pages,.numbers,.key,.odt,.ods,.odp" style={{display:'none'}} onChange={pick}/>
     </>
   )
 }
