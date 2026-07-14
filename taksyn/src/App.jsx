@@ -5007,7 +5007,7 @@ function UsersView({ user, setAuditLog }) {
     setNewIndustry('')
     if (isConfigured()) {
       const orgId = orgsList.find(o=>o.name===user.org)?.id
-      supabase.from('org_industries').insert({ name, organisation_id:orgId||null, created_by: user.name, created_at: new Date().toISOString() }).catch(()=>{})
+      await supabase.from('org_industries').insert({ name, organisation_id:orgId||null, created_by: user.name, created_at: new Date().toISOString() })
     }
   }
 
@@ -5015,7 +5015,7 @@ function UsersView({ user, setAuditLog }) {
     setOrgCustomDepts(prev=>prev.filter(d=>d!==name))
     if (isConfigured()) {
       const orgId = orgsList.find(o=>o.name===user.org)?.id
-      if(orgId) supabase.from('org_industries').delete().eq('name', name).eq('organisation_id', orgId).catch(()=>{})
+      if(orgId) await supabase.from('org_industries').delete().eq('name', name).eq('organisation_id', orgId)
     }
   }
 
@@ -7442,7 +7442,7 @@ function PlatformIndustriesView({ user }) {
 
   const deleteIndustry = async (id) => {
     if(!window.confirm('Delete this industry? This cannot be undone.')) return
-    await supabase.from('global_industries').delete().eq('id',id).catch(()=>{})
+    await supabase.from('global_industries').delete().eq('id',id)
     setIndustries(prev=>prev.filter(i=>i.id!==id))
   }
 
@@ -7450,7 +7450,7 @@ function PlatformIndustriesView({ user }) {
     const name = editName.trim()
     if(!name||!editId) return
     setSaving(true)
-    await supabase.from('global_industries').update({name}).eq('id',editId).catch(()=>{})
+    await supabase.from('global_industries').update({name}).eq('id',editId)
     setIndustries(prev=>prev.map(i=>i.id===editId?{...i,name}:i))
     setEditId(null); setEditName('')
     setSaving(false)
@@ -7600,8 +7600,8 @@ function RolesPositionsView({ user }) {
   }
   const deleteOrgIndustry = async (id,name) => {
     if(!window.confirm(`Delete "${name}"? Roles assigned to this industry will be removed.`)) return
-    await supabase.from('org_industries').delete().eq('id',id).catch(()=>{})
-    await supabase.from('org_custom_roles').delete().eq('industry_name',name).eq('organisation_id',orgId).catch(()=>{})
+    await supabase.from('org_industries').delete().eq('id',id)
+    await supabase.from('org_custom_roles').delete().eq('industry_name',name).eq('organisation_id',orgId)
     setOrgIndustryObjs(prev=>prev.filter(i=>i.id!==id))
     if(selectedIndustry===name) setSelectedIndustry('')
   }
@@ -7609,7 +7609,7 @@ function RolesPositionsView({ user }) {
     const name = editIndName.trim()
     if(!name||!editIndId) return
     setSaving(true)
-    await supabase.from('org_industries').update({name}).eq('id',editIndId).catch(()=>{})
+    await supabase.from('org_industries').update({name}).eq('id',editIndId)
     setOrgIndustryObjs(prev=>prev.map(i=>i.id===editIndId?{...i,name}:i))
     if(selectedIndustry===orgIndustryObjs.find(i=>i.id===editIndId)?.name) setSelectedIndustry(name)
     setEditIndId(null); setEditIndName(''); setSaving(false)
@@ -7635,7 +7635,7 @@ function RolesPositionsView({ user }) {
     }
   }
   const deleteRole = async (id) => {
-    await supabase.from('org_custom_roles').delete().eq('id',id).catch(()=>{})
+    await supabase.from('org_custom_roles').delete().eq('id',id)
     setRoles(prev=>prev.filter(r=>r.id!==id))
   }
   const saveRoleEdit = async () => {
@@ -7669,14 +7669,14 @@ function RolesPositionsView({ user }) {
     setSaving(false)
   }
   const deletePosition = async (id) => {
-    await supabase.from('org_custom_positions').delete().eq('id',id).catch(()=>{})
+    await supabase.from('org_custom_positions').delete().eq('id',id)
     setCustomPositions(prev=>prev.filter(p=>p.id!==id))
   }
   const savePosEdit = async () => {
     const name = editPosName.trim()
     if(!name||!editPosId) return
     setSaving(true)
-    await supabase.from('org_custom_positions').update({position_name:name}).eq('id',editPosId).catch(()=>{})
+    await supabase.from('org_custom_positions').update({position_name:name}).eq('id',editPosId)
     setCustomPositions(prev=>prev.map(p=>p.id===editPosId?{...p,position_name:name}:p))
     setEditPosId(null); setEditPosName(''); setSaving(false)
   }
@@ -7699,13 +7699,13 @@ function RolesPositionsView({ user }) {
   }
   const deleteGlobal = async (id) => {
     if(!window.confirm('Delete this global industry?')) return
-    await supabase.from('global_industries').delete().eq('id',id).catch(()=>{})
+    await supabase.from('global_industries').delete().eq('id',id)
     setGlobalList(prev=>prev.filter(i=>i.id!==id))
   }
   const saveGlobalEdit = async () => {
     const name=editGlobalName.trim(); if(!name||!editGlobalId) return
     setSaving(true)
-    await supabase.from('global_industries').update({name}).eq('id',editGlobalId).catch(()=>{})
+    await supabase.from('global_industries').update({name}).eq('id',editGlobalId)
     setGlobalList(prev=>prev.map(i=>i.id===editGlobalId?{...i,name}:i))
     setEditGlobalId(null);setEditGlobalName('');setSaving(false)
   }
@@ -8306,14 +8306,14 @@ function CompanySettingsView({ user }) {
   }
   const tmDeleteInd = async (id,name) => {
     if(!window.confirm('Delete "'+name+'"? All its roles will also be deleted.')) return
-    await supabase.from('org_custom_roles').delete().eq('organisation_id',orgId).eq('industry_name',name).catch(()=>{})
-    await supabase.from('org_industries').delete().eq('id',id).catch(()=>{})
+    await supabase.from('org_custom_roles').delete().eq('organisation_id',orgId).eq('industry_name',name)
+    await supabase.from('org_industries').delete().eq('id',id)
     setTmOrgInds(prev=>prev.filter(i=>i.id!==id))
     setTmAllRoles(prev=>prev.filter(r=>r.industry_name!==name))
   }
   const tmSaveInd = async () => {
     if(!tmEditInd?.name?.trim()) return; setTmSaving(true)
-    await supabase.from('org_industries').update({name:tmEditInd.name.trim()}).eq('id',tmEditInd.id).catch(()=>{})
+    await supabase.from('org_industries').update({name:tmEditInd.name.trim()}).eq('id',tmEditInd.id)
     setTmOrgInds(prev=>prev.map(i=>i.id===tmEditInd.id?{...i,name:tmEditInd.name.trim()}:i))
     setTmEditInd(null); setTmSaving(false)
   }
@@ -8328,12 +8328,12 @@ function CompanySettingsView({ user }) {
     setTmSaving(false)
   }
   const tmDeleteRole = async (id) => {
-    await supabase.from('org_custom_roles').delete().eq('id',id).catch(()=>{})
+    await supabase.from('org_custom_roles').delete().eq('id',id)
     setTmAllRoles(prev=>prev.filter(r=>r.id!==id))
   }
   const tmSaveRole = async () => {
     if(!tmEditRole?.role_name?.trim()) return; setTmSaving(true)
-    await supabase.from('org_custom_roles').update({role_name:tmEditRole.role_name.trim()}).eq('id',tmEditRole.id).catch(()=>{})
+    await supabase.from('org_custom_roles').update({role_name:tmEditRole.role_name.trim()}).eq('id',tmEditRole.id)
     setTmAllRoles(prev=>prev.map(r=>r.id===tmEditRole.id?{...r,role_name:tmEditRole.role_name.trim()}:r))
     setTmEditRole(null); setTmSaving(false)
   }
@@ -8356,12 +8356,12 @@ function CompanySettingsView({ user }) {
     setTmSaving(false)
   }
   const tmDeletePos = async (id) => {
-    await supabase.from('org_custom_positions').delete().eq('id',id).catch(()=>{})
+    await supabase.from('org_custom_positions').delete().eq('id',id)
     setTmCustomPos(prev=>prev.filter(p=>p.id!==id))
   }
   const tmSavePos = async () => {
     if(!tmEditPos?.position_name?.trim()) return; setTmSaving(true)
-    await supabase.from('org_custom_positions').update({position_name:tmEditPos.position_name.trim()}).eq('id',tmEditPos.id).catch(()=>{})
+    await supabase.from('org_custom_positions').update({position_name:tmEditPos.position_name.trim()}).eq('id',tmEditPos.id)
     setTmCustomPos(prev=>prev.map(p=>p.id===tmEditPos.id?{...p,position_name:tmEditPos.position_name.trim()}:p))
     setTmEditPos(null); setTmSaving(false)
   }
@@ -8384,13 +8384,13 @@ function CompanySettingsView({ user }) {
   }
   const tmDeleteGlobal = async (id) => {
     if(!window.confirm('Delete this global industry? It will no longer appear in any organisation dropdowns.')) return
-    await supabase.from('global_industries').delete().eq('id',id).catch(()=>{})
+    await supabase.from('global_industries').delete().eq('id',id)
     setTmGlobalList(prev=>prev.filter(i=>i.id!==id))
     setTmGlobalInds(prev=>prev.filter(i=>i.id!==id))
   }
   const tmSaveGlobal = async () => {
     if(!tmEditGlobal?.name?.trim()) return; setTmSaving(true)
-    await supabase.from('global_industries').update({name:tmEditGlobal.name.trim()}).eq('id',tmEditGlobal.id).catch(()=>{})
+    await supabase.from('global_industries').update({name:tmEditGlobal.name.trim()}).eq('id',tmEditGlobal.id)
     const updated = (prev) => prev.map(i=>i.id===tmEditGlobal.id?{...i,name:tmEditGlobal.name.trim()}:i)
     setTmGlobalList(updated); setTmGlobalInds(updated)
     setTmEditGlobal(null); setTmSaving(false)
@@ -11080,13 +11080,13 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
   }
   const deleteInd = async (id) => {
     if(!window.confirm('Delete this industry? This cannot be undone.')) return
-    await supabase.from('global_industries').delete().eq('id',id).catch(()=>{})
+    await supabase.from('global_industries').delete().eq('id',id)
     setIndustries(prev=>prev.filter(i=>i.id!==id))
   }
   const saveIndEdit = async () => {
     const name=editIndName.trim(); if(!name||!editIndId) return
     setIndSaving(true)
-    await supabase.from('global_industries').update({name}).eq('id',editIndId).catch(()=>{})
+    await supabase.from('global_industries').update({name}).eq('id',editIndId)
     setIndustries(prev=>prev.map(i=>i.id===editIndId?{...i,name}:i))
     setEditIndId(null); setEditIndName(''); setIndSaving(false)
   }
@@ -11101,7 +11101,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
     const plan=plans.find(p=>p.key===planKey); if(!plan) return
     setPlanSaving(true); setPlanMsg('')
     const row={name:plan.key,price_monthly:plan.price,retention_days:0,features:plan.features,updated_at:new Date().toISOString()}
-    if(isConfigured()) await supabase.from('platform_plans').upsert(row,{onConflict:'name'}).catch(e=>setPlanMsg('✗ '+e.message))
+    if(isConfigured()){ const { error } = await supabase.from('platform_plans').upsert(row,{onConflict:'name'}); if(error) setPlanMsg('✗ '+error.message) }
     setEditPlanKey(null); setPlanMsg('✓ Plan saved'); setPlanSaving(false)
     setTimeout(()=>setPlanMsg(''),3000)
   }
@@ -11289,7 +11289,7 @@ function SuperAdminAccountView({ user, setUser, darkMode, toggleDarkMode }) {
     setSaving(true); setMsg('')
     const updates = {name:form.name.trim(),email:form.email.trim()}
     if(isConfigured()){
-      await supabase.from('profiles').update(updates).eq('id',user.id).catch(e=>setMsg('✗ '+e.message))
+      const { error } = await supabase.from('profiles').update(updates).eq('id',user.id); if(error) setMsg('✗ '+error.message)
       if(form.email!==user.email) await supabase.auth.updateUser({email:form.email}).catch(()=>{})
     }
     if(setUser) setUser(prev=>({...prev,...updates}))
@@ -12500,7 +12500,7 @@ function IssueReportsAdminView({ user }) {
       ? { status, resolved_by: user.name, resolved_at: new Date().toISOString() }
       : { status, resolved_by: null, resolved_at: null }
     setIssues(prev=>prev.map(i=>i.id===id?{...i,...patch}:i))
-    if(isConfigured()) await supabase.from('issue_reports').update(patch).eq('id',id).catch(()=>{})
+    if(isConfigured()) await supabase.from('issue_reports').update(patch).eq('id',id)
   }
 
   const visible = issues.filter(i=> filterStatus==='all' ? true : i.status===filterStatus)
