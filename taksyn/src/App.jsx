@@ -375,7 +375,7 @@ const taskPhotoIndex = (task) => {
     ? { url:p.url||null, path:p.path||null, ts:p.ts||null, by:p.by||null, by_id:p.by_id||null, role:p.role||null }
     : { url:p, path:null, ts:null, by:null, by_id:null, role:null }
   const out = []
-  parseSafe(task?.subtasks).forEach(s => { if (s && s.photo) out.push({ ...norm(s.photo), source:'checklist', label:s.text||'' }) })
+  parseSafe(task?.subtasks).forEach(s => { if (s) { (s.photos||[]).forEach(ph=>out.push({ ...norm(ph), source:'checklist', label:s.text||'' })); if (s.photo) out.push({ ...norm(s.photo), source:'checklist', label:s.text||'' }) } })
   parseSafe(task?.evidence).forEach(e => { if (e) out.push({ ...norm(e), source:'evidence', label:'' }) })
   return out.filter(p => p.url || p.path)
 }
@@ -486,6 +486,111 @@ function ReviewerAttachEvidence({ task, user, update }) {
 // Client-side image compression for captured photos: resize longest edge to <= MAX_EDGE (never upscale),
 // re-encode as JPEG at QUALITY. EXIF-orientation-aware (createImageBitmap from-image, with <img> fallback).
 // Never throws — on ANY failure returns the ORIGINAL uncompressed data URL so the worker is never blocked.
+// Tamper-evident evidence capture: forces a LIVE camera (getUserMedia) so gallery/old photos
+// cannot be used as task evidence. Burns timestamp + GPS + task label into the saved JPEG.
+function AttachDocButton({ onAttach }) {
+  const [busy, setBusy] = useState(false)
+  const inpRef = useRef(null)
+  const pick = async (e) => {
+    const f = e.target.files[0]; e.target.value=''
+    if (!f) return
+    if (f.size > 5*1024*1024) { alert('File too large — max 5 MB per file. Please attach a smaller file.'); return }
+    if (!['pdf','doc','docx','xls','xlsx','ppt','pptx','pages','numbers','key','odt','ods','odp','csv','txt','rtf'].includes((f.name.split('.').pop()||'').toLowerCase())) { alert('Only documents can be attached here (PDF, Word, Excel, PowerPoint, etc.). Use the Add Photo button for images.'); return }
+    setBusy(true)
+    const url = await compressImage(f)
+    setBusy(false)
+    if (url) {
+      const dot=f.name.lastIndexOf('.'); const ext=dot>=0?f.name.slice(dot+1).toLowerCase():''; const base=(dot>=0?f.name.slice(0,dot):f.name).trim(); const words=base.split(/\s+/); const masked=(words.length>1?words[0]+'…':(words[0]||'document'))+(ext?'.'+ext:'')
+      onAttach(url, masked)
+    }
+  }
+  return (
+    <>
+      <button className="cl-action-btn" style={{color:'#6B7280',borderColor:'rgba(107,114,128,.3)'}} disabled={busy} onClick={()=>inpRef.current&&inpRef.current.click()}>{busy?'Attaching…':'📎 Attach document'}</button>
+      <input ref={inpRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pages,.numbers,.key,.odt,.ods,.odp" style={{display:'none'}} onChange={pick}/>
+    </>
+  )
+}
+function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
+  const [open, setOpen] = useState(false)
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [gps, setGps] = useState('')
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const stop = () => { if (streamRef.current) { streamRef.current.getTracks().forEach(t=>t.stop()); streamRef.current=null } }
+  const openCam = async () => {
+    setErr(''); setGps('')
+    if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
+      p => setGps(p.coords.latitude.toFixed(5)+','+p.coords.longitude.toFixed(5)),
+      () => setGps(''), { enableHighAccuracy:true, timeout:8000, maximumAge:0 })
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' } }, audio:false })
+      streamRef.current = s
+      setOpen(true)
+    } catch (e) {
+      setErr('Camera unavailable or permission denied. A live photo is required for this item.')
+      setOpen(true)
+    }
+  }
+  const close = () => { stop(); setOpen(false); setErr(''); setBusy(false) }
+  const capture = async () => {
+    const v = videoRef.current
+    if (!v || !v.videoWidth) { setErr('Camera not ready — please wait a moment and try again.'); return }
+    setBusy(true)
+    const MAX_EDGE = 1600
+    const scale = Math.min(1, MAX_EDGE / Math.max(v.videoWidth, v.videoHeight))
+    const w = Math.round(v.videoWidth*scale), h = Math.round(v.videoHeight*scale)
+    const c = document.createElement('canvas'); c.width=w; c.height=h
+    const ctx = c.getContext('2d')
+    ctx.drawImage(v, 0, 0, w, h)
+    const now = new Date()
+    const lines = [ now.toLocaleString(), 'GPS: '+(gps||'unavailable'), label ? ('Task: '+String(label).slice(0,42)) : '' ].filter(Boolean)
+    const fs = Math.max(13, Math.round(h*0.03)), pad = Math.round(fs*0.5)
+    ctx.font = '600 '+fs+'px system-ui, -apple-system, sans-serif'
+    const boxH = lines.length*(fs+pad) + pad
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, h-boxH, w, boxH)
+    ctx.fillStyle = '#fff'; ctx.textBaseline = 'top'
+    lines.forEach((ln,i)=>ctx.fillText(ln, pad, h-boxH+pad+i*(fs+pad)))
+    const url = c.toDataURL('image/jpeg', 0.8)
+    stop()
+    onCapture(url, { gps, ts: now.toISOString() })
+    close()
+  }
+  useEffect(() => {
+    if (open && streamRef.current && videoRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(()=>{})
+    }
+  }, [open])
+  useEffect(() => () => stop(), [])
+  return (
+    <>
+      <button className="cl-action-btn" style={{color:'#3B82F6',borderColor:'rgba(59,130,246,.3)'}} onClick={openCam}>📷 Add Photo</button>
+      {open && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:9999,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:16}}>
+          {err ? (
+            <div style={{maxWidth:360,textAlign:'center',color:'#fff'}}>
+              <div style={{fontSize:14,lineHeight:1.5,marginBottom:16}}>{err}</div>
+              <button className="btn btn-secondary" onClick={close}>Close</button>
+            </div>
+          ) : (
+            <>
+              <video ref={videoRef} playsInline muted style={{maxWidth:'100%',maxHeight:'68vh',borderRadius:8,background:'#000'}}/>
+              <div style={{color:'#fff',fontSize:12,marginTop:8,opacity:.85}}>📍 {gps||'locating…'} · {new Date().toLocaleDateString()}</div>
+              <div style={{display:'flex',gap:10,marginTop:14}}>
+                <button className="btn btn-primary" disabled={busy} onClick={capture}>{busy?'Saving…':'📸 Capture'}</button>
+                <button className="btn btn-secondary" disabled={busy} onClick={close}>Cancel</button>
+              </div>
+              <div style={{color:'#fff',fontSize:11,marginTop:12,opacity:.6,maxWidth:340,textAlign:'center'}}>Live photo only — existing gallery images can't be used as evidence.</div>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
 const compressImage = async (file) => {
   const MAX_EDGE = 1600, QUALITY = 0.8
   const readAsDataURL = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('read failed')); r.readAsDataURL(f) })
@@ -2515,13 +2620,23 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,note,history:[...(x.history||[]),histEntry]}:x) })
   }
 
+  const addSubDoc = async (tid, idx, docUrl, docName) => {
+    const task = tasks.find(t=>t.id===tid)
+    const subs = parseSafe(task.subtasks)
+    const uid = await authUserId()
+    const _cur = subs[idx]||{}; const _used = [...(_cur.photos||[]),...(_cur.photo?[_cur.photo]:[]),...(_cur.attachments||[]),...(_cur.attachment?[_cur.attachment]:[])].reduce((a,e)=>a+((e&&e.url?e.url.length:0)*0.75),0)
+    if (_used + (docUrl?docUrl.length*0.75:0) > 5*1024*1024) { alert('Attachments for this item would exceed the 5 MB total. Please attach a smaller file or remove one.'); return }
+    const docObj = { url:docUrl, name:docName||'document', ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
+    const histEntry = { action:'doc_added', by:user.name, byId:uid, at:new Date().toISOString(), note:docName||'' }
+    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,attachments:[...(x.attachments||[]),docObj],history:[...(x.history||[]),histEntry]}:x) })
+  }
   const addSubPhoto = async (tid, idx, photoUrl) => {
     const task = tasks.find(t=>t.id===tid)
     const subs = parseSafe(task.subtasks)
     const uid = await authUserId()
     const photoObj = { url:photoUrl, ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
     const histEntry = { action:'photo_added', by:user.name, byId:uid, at:new Date().toISOString() }
-    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,photo:photoObj,history:[...(x.history||[]),histEntry]}:x) })
+    update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,photos:[...(x.photos||[]),photoObj],history:[...(x.history||[]),histEntry]}:x) })
   }
 
   const checkMandatory = (tid) => {
@@ -3344,7 +3459,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           </div>
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
-                        {s.photo&&<EvidenceThumb entry={s.photo} className="cl-photo-thumb" containerStyle={{marginTop:4,overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>}
+                        {[...(s.photos||[]),...(s.photo?[s.photo]:[])].map((ph,pi)=><EvidenceThumb key={pi} entry={ph} className="cl-photo-thumb" containerStyle={{marginTop:4,marginRight:6,display:'inline-block',verticalAlign:'top',overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>)}
+                        {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><a href={at.url} download={at.name} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {at.name}</a> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
                         {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
@@ -3357,11 +3473,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <div className="cl-actions">
                             {canAct&&<button className="cl-action-btn" style={{color:'#10B981',borderColor:'rgba(16,185,129,.3)',fontWeight:600}} onClick={()=>{ setClMarkOpen({taskId:sel.id,idx,itemId,label:s.text}); setClMarkNote('') }}>✓ Mark done</button>}
                             <button className="cl-action-btn" onClick={()=>{setClNoteOpen({taskId:sel.id,idx});setClNoteText(s.note||'')}}>{s.note?'✏️ Edit Note':'+ Note'}</button>
-                            {s.requirePhoto&&!s.photo&&(
-                              <>
-                                <button className="cl-action-btn" style={{color:'#3B82F6',borderColor:'rgba(59,130,246,.3)'}} onClick={()=>document.getElementById('cl-cam-'+sel.id+'-'+idx).click()}>📷 Add Photo</button>
-                                <input id={'cl-cam-'+sel.id+'-'+idx} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={async e=>{ const inp=e.target; const f=inp.files[0]; if(!f) return; const compressed=await compressImage(f); addSubPhoto(sel.id,idx,compressed); inp.value='' }}/>
-                              </>
+                            {s.requirePhoto&&((s.photos||[]).length+(s.photo?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
+                              <EvidenceCameraButton taskId={sel.id} idx={idx} label={s.text} onCapture={(url)=>addSubPhoto(sel.id,idx,url)}/>
+                            )}
+                            {canAct&&s.requirePhoto&&((s.photos||[]).length+(s.photo?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
+                              <AttachDocButton onAttach={(url,name)=>addSubDoc(sel.id,idx,url,name)}/>
                             )}
                           </div>
                         ))}
