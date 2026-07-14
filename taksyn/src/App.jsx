@@ -13301,7 +13301,7 @@ export default function App() {
   const escalationCount = tasks.filter(t=>t.escalation||t.status==='overdue').length
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
-  const myReviewCount = tasks.filter(t=>t.status==='awaiting_review'&&t.approver_id===user.id).length
+  const myReviewCount = ['supervisor','manager','client_admin'].includes(user.role) ? tasks.filter(t=>t.status==='awaiting_review'&&visibleTasks([t],user).length>0).length : 0
   const navItems = NAV[user.role]||NAV.worker
   const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
