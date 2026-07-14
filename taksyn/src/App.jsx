@@ -8258,7 +8258,7 @@ function CompanySettingsView({ user }) {
     const validItems = tplItems.filter(i=>(i.label||'').trim())
     if (!tplName.trim() || !validItems.length) { setMsg('✗ Template needs a name and at least one item'); return }
     setTplSaving(true); setMsg('')
-    const items = validItems.map((it,idx)=>({ id:String(idx+1), label:it.label.trim(), required:!!it.required }))
+    const items = validItems.map((it,idx)=>({ id:String(idx+1), label:it.label.trim(), required:!!it.required, requirePhoto:!!it.requirePhoto, requireTimestamp:!!it.requireTimestamp }))
     const positions = tplPosition.length ? tplPosition : null
     if (editingTpl) {
       if (!editingTpl.id) { console.error('checklist_templates update: template id is undefined'); setMsg('✗ Template id is missing — please reload and try again'); setTplSaving(false); return }
