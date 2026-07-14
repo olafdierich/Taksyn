@@ -2868,6 +2868,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     setCreateError('')
     const taskData = {...newTask}
     if(!taskData.approver_id && (user.role==='manager'||user.role==='supervisor')){ taskData.approver_id=user.id; taskData.approver_name=user.name }
+    if (isConfigured() && taskData.assigned_user_id && !taskData.team_id) {
+      const { data: tmRows } = await supabase.from('team_members').select('team_id').eq('user_id', taskData.assigned_user_id)
+      const teamIds = [...new Set((tmRows||[]).map(r=>r.team_id).filter(Boolean))]
+      if (teamIds.length === 1) { const tm = taskOrgTeams.find(t=>t.id===teamIds[0]); taskData.team_id = teamIds[0]; taskData.team_name = tm?.name || '' }
+    }
     const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
