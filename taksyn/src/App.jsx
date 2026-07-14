@@ -3585,6 +3585,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <div className="two-col">
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Due:</span> {sel.due_date}{dueTimeSuffix(sel)}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Compliance:</span> {sel.compliance?'🔒 Yes':'—'}</div>
+              {sel.team_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Team:</span> {sel.team_name}</div>}
               {(()=>{
                 const isOrphaned = !!sel.assigned_user_id && !teamUsers.find(u=>u.id===sel.assigned_user_id)
                 return (
