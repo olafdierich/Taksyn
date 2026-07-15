@@ -6106,8 +6106,8 @@ const COMPANY_COMPLETENESS_FIELDS = [
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
   client_admin: [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['org_escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard'],['incidents','Incidents','alert']],
-  manager:      [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag']],
-  supervisor:   [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag']],
+  manager:      [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incidents','Incidents','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incidents','Incidents','alert']],
   worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Request','flag']],
 }
 
@@ -12825,6 +12825,8 @@ const INC_EVENT_LABEL = {
 }
 
 function IncidentsAdminView({ user }) {
+  const isAdmin = user.role === 'client_admin'
+  const [currentUid, setCurrentUid] = useState('')
   const [orgId, setOrgId] = useState('')
   const [incidents, setIncidents] = useState([])
   const [names, setNames] = useState({})
@@ -12845,6 +12847,7 @@ function IncidentsAdminView({ user }) {
     const { data: sess } = await supabase.auth.getSession()
     const authId = sess?.session?.user?.id
     if (!authId) return ''
+    if (authId !== currentUid) setCurrentUid(authId)
     const { data: m } = await supabase.from('org_members').select('org').eq('user_id', authId)
     return (m||[]).map(x=>x.org).find(o => /^ORG/i.test(o||'')) || ''
   }
@@ -12923,6 +12926,7 @@ function IncidentsAdminView({ user }) {
         || overdue(i.close_due_at)
   }
   const visible = incidents.filter(i => {
+    if (!isAdmin && !(i.assigned_to===currentUid || i.investigator_id===currentUid)) return false
     if (filterStatus==='open' && !isOpenStatus(i.status)) return false
     if (filterStatus!=='open' && filterStatus!=='all' && i.status!==filterStatus) return false
     if (breachedOnly && !breached(i)) return false
@@ -12964,29 +12968,37 @@ function IncidentsAdminView({ user }) {
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
             <div>
               <div style={{fontSize:12,color:'var(--t3)'}}>Assigned owner</div>
-              <select className="inp" value={sel.assigned_to||''} disabled={busy}
-                onChange={e=>{
-                  const uid=e.target.value; const m=members.find(x=>x.user_id===uid)
-                  patchIncident({ assigned_to:uid||null, assigned_to_name:m?.name||null, assigned_role:m?.role||null, assigned_at:new Date().toISOString() },
-                    sel.assigned_to?'reassigned':'assigned', { from: names[sel.assigned_to]||null, to: m?.name||null })
-                }}
-                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',marginTop:4}}>
-                <option value="">— unassigned —</option>
-                {members.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}
-              </select>
+              {isAdmin ? (
+                <select className="inp" value={sel.assigned_to||''} disabled={busy}
+                  onChange={e=>{
+                    const uid=e.target.value; const m=members.find(x=>x.user_id===uid)
+                    patchIncident({ assigned_to:uid||null, assigned_to_name:m?.name||null, assigned_role:m?.role||null, assigned_at:new Date().toISOString() },
+                      sel.assigned_to?'reassigned':'assigned', { from: names[sel.assigned_to]||null, to: m?.name||null })
+                  }}
+                  style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',marginTop:4}}>
+                  <option value="">— unassigned —</option>
+                  {members.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}
+                </select>
+              ) : (
+                <div style={{marginTop:4,fontSize:14,fontWeight:600}}>{names[sel.assigned_to]||sel.assigned_to_name||'— unassigned —'}</div>
+              )}
             </div>
             <div>
               <div style={{fontSize:12,color:'var(--t3)'}}>Investigator</div>
-              <select value={sel.investigator_id||''} disabled={busy}
-                onChange={e=>{
-                  const uid=e.target.value; const m=members.find(x=>x.user_id===uid)
-                  patchIncident({ investigator_id:uid||null, investigator_name:m?.name||null },
-                    'assigned', { to: m?.name||null, details:{role:'investigator'} })
-                }}
-                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',marginTop:4}}>
-                <option value="">— none —</option>
-                {members.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}
-              </select>
+              {isAdmin ? (
+                <select value={sel.investigator_id||''} disabled={busy}
+                  onChange={e=>{
+                    const uid=e.target.value; const m=members.find(x=>x.user_id===uid)
+                    patchIncident({ investigator_id:uid||null, investigator_name:m?.name||null },
+                      'assigned', { to: m?.name||null, details:{role:'investigator'} })
+                  }}
+                  style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',marginTop:4}}>
+                  <option value="">— none —</option>
+                  {members.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}
+                </select>
+              ) : (
+                <div style={{marginTop:4,fontSize:14,fontWeight:600}}>{names[sel.investigator_id]||sel.investigator_name||'— none —'}</div>
+              )}
             </div>
           </div>
           <div style={{fontSize:11,color:'var(--t3)',marginTop:10}}>
@@ -13094,7 +13106,7 @@ function IncidentsAdminView({ user }) {
                 onClick={()=>patchIncident({ status:s }, s==='investigating'?'investigation_started':'status_changed',
                   { from: sel.status, to: s })}>{l}</button>
             ))}
-            {sel.status!=='closed'
+            {isAdmin && (sel.status!=='closed'
               ? <button className="btn btn-primary btn-sm" disabled={busy} onClick={()=>{
                   const note=prompt('Closure note (what resolved this incident?)')
                   if(note===null) return
@@ -13103,7 +13115,9 @@ function IncidentsAdminView({ user }) {
                 }}>Close incident</button>
               : <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>
                   patchIncident({ status:'review', closed_at:null }, 'reopened', { from:'closed', to:'review' })
-                }>Reopen</button>}
+                }>Reopen</button>)}
+            {!isAdmin && sel.status!=='closed' && <span style={{fontSize:12,color:'var(--t3)',alignSelf:'center'}}>Move to review, then a client admin signs off closure.</span>}
+            {!isAdmin && sel.status==='closed' && <span style={{fontSize:12,color:'var(--t3)',alignSelf:'center'}}>Closed by client admin.</span>}
           </div>
           {sel.closure_note && <div style={{fontSize:13,color:'var(--t2)',marginTop:8}}>Closure: {sel.closure_note}</div>}
         </div>
@@ -14442,7 +14456,7 @@ export default function App() {
                 {page==='platform_settings' && user.role==='super_admin' && <PlatformSettingsView user={user} sessionTimeout={sessionTimeout} setSessionTimeout={setSessionTimeout}/>}
                 {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser} darkMode={darkMode} toggleDarkMode={toggleDarkMode}/>}
                 {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
-                {page==='incidents' && user.role==='client_admin' && <IncidentsAdminView user={user}/>}
+                {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user}/>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='report_incident' && <IncidentReportView user={user}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
