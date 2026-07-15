@@ -3642,7 +3642,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
-              <button className="btn btn-amber" onClick={()=>{setShowEscalate(sel.id);setEscalateReason('')}}>⚠️ Escalate</button>
+              {/* Escalate button hidden (path 2): pathway retained in code, not user-reachable */}
             </>}
             {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve</button>}
             {canApprove&&(
@@ -6138,9 +6138,9 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['org_escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard'],['incident_hub','Incidents','alert']],
-  manager:      [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard'],['incident_hub','Incidents','alert']],
+  manager:      [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
   worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Request','flag']],
 }
 
