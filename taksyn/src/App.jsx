@@ -12405,8 +12405,8 @@ function IncidentHubView({ user, setPage }) {
         <Tile icon="➕" title="Report an incident" color="#DC2626"
           sub="Log a new incident — injury, near miss, damage or other. Takes a couple of minutes."
           onClick={()=>setPage('report_incident')}/>
-        {canReview && <Tile icon="📋" title="Review incidents"
-          sub={isCA?'View, assign, investigate and close incidents across the organisation.':'View and progress the incidents assigned to you.'}
+        {canReview && <Tile icon="📋" title="Active incidents"
+          sub={isCA?'Open incidents currently being handled — assign, investigate and close them. Closed ones move to the register.':'The open incidents assigned to you.'}
           onClick={()=>setPage('incidents')}/>}
         {isCA && <Tile icon="📊" title="Incident register"
           sub="The full compliance record — trends, filters, and CSV / PDF export."
@@ -13409,9 +13409,9 @@ function IncidentsAdminView({ user }) {
   // ============ LIST ============
   return (
     <div className="page-wrap">
-      <div className="ph"><div className="ph-title">Incidents</div><div className="ph-sub">Reported incidents and their resolution</div></div>
+      <div className="ph"><div className="ph-title">Active Incidents</div><div className="ph-sub">Open incidents currently being handled. Closed incidents are in the Register.</div></div>
       <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
-        {[['open','Open'],['reported','Reported'],['investigating','Investigating'],['review','Review'],['closed','Closed'],['all','All']].map(([v,l])=>(
+        {[['open','Open'],['reported','Reported'],['investigating','Investigating'],['review','Review']].map(([v,l])=>(
           <button key={v} onClick={()=>setFilterStatus(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${filterStatus===v?'var(--brand)':'var(--border)'}`,background:filterStatus===v?'var(--brand-lt)':'none',color:filterStatus===v?'var(--brand)':'var(--t2)',fontWeight:filterStatus===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>{l}</button>
         ))}
         <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--t2)',marginLeft:6,cursor:'pointer'}}>
