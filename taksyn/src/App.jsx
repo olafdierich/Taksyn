@@ -6138,9 +6138,9 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['org_escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard'],['incidents','Incidents','alert'],['incident_register','Incident Register','chart']],
-  manager:      [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incidents','Incidents','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incidents','Incidents','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['org_escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard'],['incident_hub','Incidents','alert']],
+  manager:      [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
   worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Request','flag']],
 }
 
@@ -12386,6 +12386,36 @@ const ROLES_ABOVE = {
 }
 
 // ============ INCIDENT REPORTING ============
+function IncidentHubView({ user, setPage }) {
+  const isCA = user.role==='client_admin'
+  const canReview = ['client_admin','manager','supervisor'].includes(user.role)
+  const Tile = ({icon,title,sub,onClick,color}) => (
+    <div onClick={onClick} style={{cursor:'pointer',flex:'1 1 220px',minWidth:220,background:'var(--s1)',border:'1px solid var(--border)',borderRadius:12,padding:'22px 20px',display:'flex',flexDirection:'column',gap:6,transition:'box-shadow .15s',boxShadow:'0 1px 2px rgba(0,0,0,.04)'}}
+      onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,.10)'}
+      onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 2px rgba(0,0,0,.04)'}>
+      <div style={{fontSize:30,lineHeight:1}}>{icon}</div>
+      <div style={{fontWeight:700,fontSize:16,color:color||'var(--text)'}}>{title}</div>
+      <div style={{fontSize:13,color:'var(--t2)',lineHeight:1.4}}>{sub}</div>
+    </div>
+  )
+  return (
+    <div>
+      <div className="ph"><div className="ph-title">Incidents</div><div className="ph-sub">Report a new incident, or review and manage existing ones</div></div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:16,marginTop:8}}>
+        <Tile icon="➕" title="Report an incident" color="#DC2626"
+          sub="Log a new incident — injury, near miss, damage or other. Takes a couple of minutes."
+          onClick={()=>setPage('report_incident')}/>
+        {canReview && <Tile icon="📋" title="Review incidents"
+          sub={isCA?'View, assign, investigate and close incidents across the organisation.':'View and progress the incidents assigned to you.'}
+          onClick={()=>setPage('incidents')}/>}
+        {isCA && <Tile icon="📊" title="Incident register"
+          sub="The full compliance record — trends, filters, and CSV / PDF export."
+          onClick={()=>setPage('incident_register')}/>}
+      </div>
+    </div>
+  )
+}
+
 function IncidentReportView({ user }) {
   const CATEGORIES = [
     ['injury_harm','🩹 Injury / Harm to a person','Someone was hurt — physical, infection/illness, or mental/psychological'],
@@ -14692,6 +14722,7 @@ export default function App() {
                 {page==='incident_register' && user.role==='client_admin' && <IncidentRegisterView user={user} setPage={setPage}/>}
                 {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user}/>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
+                {page==='incident_hub' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentHubView user={user} setPage={setPage}/>}
                 {page==='report_incident' && <IncidentReportView user={user}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
               </>
