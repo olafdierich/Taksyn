@@ -13293,7 +13293,7 @@ function IncidentsAdminView({ user }) {
             patchIncident({ risk_likelihood:l, risk_consequence:c, risk_rating:rating },
               'risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
           }}>Save risk rating</button>
-          {sel.risk_rating && <div style={{marginTop:8,fontSize:13}}>Risk rating: <strong>{sel.risk_rating}</strong> ({sel.risk_likelihood}×{sel.risk_consequence})</div>}
+          {sel.risk_rating && (()=>{ const r=sel.risk_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Risk rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.risk_likelihood}×{sel.risk_consequence})</span></div> })()}
         </div>
 
         {/* corrective actions (display + simple add; task-linking is a later branch) */}
