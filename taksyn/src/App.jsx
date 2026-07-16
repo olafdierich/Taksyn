@@ -13228,7 +13228,7 @@ function IncidentsAdminView({ user }) {
         {/* who is responsible */}
         <div style={card}>
           <span style={lbl}>Who is responsible</span>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr',gap:12}}>
             <div>
               <div style={{fontSize:12,color:'var(--t3)'}}>Assigned owner</div>
               {isAdmin ? (
@@ -13244,23 +13244,6 @@ function IncidentsAdminView({ user }) {
                 </select>
               ) : (
                 <div style={{marginTop:4,fontSize:14,fontWeight:600}}>{names[sel.assigned_to]||sel.assigned_to_name||'— unassigned —'}</div>
-              )}
-            </div>
-            <div>
-              <div style={{fontSize:12,color:'var(--t3)'}}>Investigator</div>
-              {isAdmin ? (
-                <select value={sel.investigator_id||''} disabled={busy}
-                  onChange={e=>{
-                    const uid=e.target.value; const m=members.find(x=>x.user_id===uid)
-                    patchIncident({ investigator_id:uid||null, investigator_name:m?.name||null },
-                      'assigned', { to: m?.name||null, details:{role:'investigator'} })
-                  }}
-                  style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',marginTop:4}}>
-                  <option value="">— none —</option>
-                  {members.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}
-                </select>
-              ) : (
-                <div style={{marginTop:4,fontSize:14,fontWeight:600}}>{names[sel.investigator_id]||sel.investigator_name||'— none —'}</div>
               )}
             </div>
           </div>
