@@ -14331,6 +14331,31 @@ export default function App() {
 
   // Keep sessionStorage in sync so the page is restored after tab eviction or WhatsApp return
   useEffect(()=>{ if(page) sessionStorage.setItem('taksyn-page', page) },[page])
+  // Incident sidebar blob: green=no active, orange=active on-track, red=breached.
+  // Self-contained read (Option A); mirrors the Dashboard breach rule. RLS scopes visibility per role.
+  useEffect(()=>{
+    let cancelled = false
+    ;(async()=>{
+      try {
+        if(!user || !['client_admin','manager','supervisor'].includes(user.role)) { setIncidentBlob('none'); return }
+        const { data: sess } = await supabase.auth.getSession()
+        const authId = sess?.session?.user?.id
+        if(!authId) return
+        const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
+        const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+        if(!oid) return
+        const { data: rows } = await supabase.from('incidents')
+          .select('status,assigned_at,root_cause,assign_due_at,investigate_due_at,close_due_at,closed_at')
+          .eq('org', oid)
+        if(cancelled) return
+        const now = Date.now(); const od=(d)=>d&&new Date(d).getTime()<now
+        const active = (rows||[]).filter(i=>i.status!=='closed')
+        const breached = active.filter(i=>(od(i.assign_due_at)&&!i.assigned_at)||(od(i.investigate_due_at)&&!i.root_cause)||od(i.close_due_at))
+        setIncidentBlob(breached.length>0 ? 'warn' : (active.length>0 ? 'ok' : 'none'))
+      } catch(e) { /* leave blob as-is on error */ }
+    })()
+    return ()=>{ cancelled = true }
+  },[user, page])
 
   // Reset to dashboard only when the role genuinely changes mid-session (e.g. admin role update),
   // NOT on the initial mount/restore — otherwise it would override the sessionStorage page.
@@ -14342,6 +14367,7 @@ export default function App() {
     if(prev !== undefined && prev !== user?.role) setPage('dashboard')
   },[user?.role])
 
+  const [incidentBlob, setIncidentBlob] = useState('none') // 'none'|'ok'|'warn' -> green/orange/red
   if(needsPasswordSetup) return <PasswordSetupView onDone={()=>setNeedsPasswordSetup(false)}/>
   if(needsPasswordReset) return <PasswordResetView onDone={()=>setNeedsPasswordReset(false)}/>
   if(!user) return <AuthView onAuth={handleAuth} deactivatedMsg={deactivatedMsg} onClearDeactivated={()=>setDeactivatedMsg('')}/>
@@ -14721,6 +14747,7 @@ export default function App() {
                     {key==='evidence'&&reviewCount>0&&<span className="nav-badge amber">{reviewCount}</span>}
                     {key==='tasks'&&rejectedCount>0&&user.role==='worker'&&<span className="nav-badge">{rejectedCount}</span>}
                     {key==='tasks'&&myReviewCount>0&&<span className="nav-badge amber">{myReviewCount}</span>}
+                    {key==='incident_hub'&&incidentBlob!=='none'&&<span title={incidentBlob==='warn'?'An incident needs attention':'Active incidents, on track'} style={{marginLeft:'auto',width:9,height:9,borderRadius:'50%',flexShrink:0,background:incidentBlob==='warn'?'#EF4444':'#F59E0B'}}/>}
                   </button>
                 ))}
               </div>
