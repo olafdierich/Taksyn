@@ -1907,6 +1907,9 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   const [orgId, setOrgId] = useState(null)
   const [inviteMsg, setInviteMsg] = useState('')
   const [openIssuesCount, setOpenIssuesCount] = useState(0)
+  const [openIncidents, setOpenIncidents] = useState(0)
+  const [breachedIncidents, setBreachedIncidents] = useState(0)
+  const [myIncidents, setMyIncidents] = useState(0)
 
   const fetchPendingInvites = (oid) => {
     if (!oid || !isConfigured()) return
@@ -1933,6 +1936,36 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
     if (!(isCA||isMgr||isSup) || !isConfigured() || !user?.org) return
     supabase.from('issue_reports').select('id', {count:'exact',head:true}).eq('org',user.org).eq('status','open')
       .then(({count})=>{ if(count!=null) setOpenIssuesCount(count) }).catch(()=>{})
+  }, [user?.org, user?.role])
+  useEffect(()=>{
+    if (!isConfigured()) return
+    ;(async()=>{
+      const { data: sess } = await supabase.auth.getSession()
+      const authId = sess?.session?.user?.id
+      if (!authId) return
+      const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
+      const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+      if (!oid) return
+      if (isCA||isMgr) {
+        // count open incidents + compute breached from minimal columns
+        const { data: rows } = await supabase.from('incidents')
+          .select('status,assigned_at,root_cause,assign_due_at,investigate_due_at,close_due_at,closed_at')
+          .eq('org', oid)
+        const now = Date.now(); const od=(d)=>d&&new Date(d).getTime()<now
+        const open = (rows||[]).filter(i=>i.status!=='closed')
+        setOpenIncidents(open.length)
+        const breached = (rows||[]).filter(i=>{
+          if(i.status==='closed') return i.close_due_at&&i.closed_at&&new Date(i.closed_at)>new Date(i.close_due_at)
+          return (od(i.assign_due_at)&&!i.assigned_at)||(od(i.investigate_due_at)&&!i.root_cause)||od(i.close_due_at)
+        })
+        setBreachedIncidents(breached.length)
+      }
+      if (isMgr||isSup) {
+        // RLS scopes to assigned/investigator, so a plain count is "my incidents"
+        const { count } = await supabase.from('incidents').select('id',{count:'exact',head:true}).eq('org', oid).neq('status','closed')
+        if (count!=null) setMyIncidents(count)
+      }
+    })().catch(()=>{})
   }, [user?.org, user?.role])
 
   const cancelInvite = async (id) => {
@@ -1999,8 +2032,8 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         <div className="ph-sub">{isWkr?'Hello '+user.name.split(' ')[0]+' — your tasks for today':user.org+(user.industry?' · 🏭 '+user.industry:'')+' · '+visible.length+' tasks'}</div>
       </div>
       <div className="stat-grid">
-        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋"/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍"/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Completion" val={rate+"%"} sub={done+" done"} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨"/><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div></>}
-        {isSup&&<><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍"/><Stat label="Approved" val={done} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Escalated" val={esc} sub={esc>0?'Active':'None'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.1)" icon="⚠️"/><Stat label="Overdue" val={overdue} sub="Needs attention" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div></>}
+        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋"/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍"/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Completion" val={rate+"%"} sub={done+" done"} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨"/><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">Open Incidents</span><div className="sc-icon" style={{background:openIncidents>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIncidents>0?'#EF4444':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:openIncidents>0?'#EF4444':'#6B7280'}}>{openIncidents}</div><div className="sc-sub">being handled</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incident_register')}><div className="sc-top"><span className="sc-label">Breached</span><div className="sc-icon" style={{background:breachedIncidents>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)',color:breachedIncidents>0?'#EF4444':'#10B981'}}>⏱</div></div><div className="sc-val" style={{color:breachedIncidents>0?'#EF4444':'#10B981'}}>{breachedIncidents}</div><div className="sc-sub">target missed</div></div></>}
+        {isSup&&<><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍"/><Stat label="Approved" val={done} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Escalated" val={esc} sub={esc>0?'Active':'None'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.1)" icon="⚠️"/><Stat label="Overdue" val={overdue} sub="Needs attention" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">My Incidents</span><div className="sc-icon" style={{background:myIncidents>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)',color:myIncidents>0?'#F59E0B':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:myIncidents>0?'#F59E0B':'#6B7280'}}>{myIncidents}</div><div className="sc-sub">assigned to me</div></div></>}
         {isWkr&&<><Stat label="My Tasks" val={visible.filter(t=>!['awaiting_review','approved','completed'].includes(t.status)||isRecurring(t)).length} sub="remaining to do" icon="📋"/><Stat label="Submitted" val={visible.filter(t=>['awaiting_review','approved','completed'].includes(t.status)).length} sub="done or in review" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅"/><Stat label="Overdue" val={overdue} sub={overdue>0?'Complete soon':'All good'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰"/><Stat label="Rejected" val={rejected} sub={rejected>0?'Action needed':'All good'} color={rejected>0?'#EF4444':'#6B7280'} bg={rejected>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)'} icon="✗"/></>}
       </div>
       {overdue>0&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">{overdue} task{overdue>1?'s':''} overdue</div><div className="esc-banner-sub">Immediate action required</div></div><button className="btn btn-danger btn-sm" onClick={()=>setPage('escalations')}>View</button></div>}
@@ -3609,7 +3642,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
-              <button className="btn btn-amber" onClick={()=>{setShowEscalate(sel.id);setEscalateReason('')}}>⚠️ Escalate</button>
+              {/* Escalate button hidden (path 2): pathway retained in code, not user-reachable */}
             </>}
             {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve</button>}
             {canApprove&&(
@@ -6104,11 +6137,11 @@ const COMPANY_COMPLETENESS_FIELDS = [
 ]
 
 const NAV = {
-  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['org_escalations','Escalations','alert'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['escalations','Escalations','alert'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag']],
-  worker:       [['dashboard','Today','home'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Request','flag']],
+  super_admin:  [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
+  client_admin: [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard'],['incident_hub','Incidents','alert']],
+  manager:      [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['report_incident','Report Incident','alert'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
+  worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Request','flag']],
 }
 
 function PasswordSetupView({ onDone }) {
@@ -12352,6 +12385,350 @@ const ROLES_ABOVE = {
   manager:    ['client_admin'],
 }
 
+// ============ INCIDENT REPORTING ============
+function IncidentHubView({ user, setPage }) {
+  const isCA = user.role==='client_admin'
+  const canReview = ['client_admin','manager','supervisor'].includes(user.role)
+  const Tile = ({icon,title,sub,onClick,color}) => (
+    <div onClick={onClick} style={{cursor:'pointer',flex:'1 1 220px',minWidth:220,background:'var(--s1)',border:'1px solid var(--border)',borderRadius:12,padding:'22px 20px',display:'flex',flexDirection:'column',gap:6,transition:'box-shadow .15s',boxShadow:'0 1px 2px rgba(0,0,0,.04)'}}
+      onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,.10)'}
+      onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 2px rgba(0,0,0,.04)'}>
+      <div style={{fontSize:30,lineHeight:1}}>{icon}</div>
+      <div style={{fontWeight:700,fontSize:16,color:color||'var(--text)'}}>{title}</div>
+      <div style={{fontSize:13,color:'var(--t2)',lineHeight:1.4}}>{sub}</div>
+    </div>
+  )
+  return (
+    <div>
+      <div className="ph"><div className="ph-title">Incidents</div><div className="ph-sub">Report a new incident, or review and manage existing ones</div></div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:16,marginTop:8}}>
+        <Tile icon="➕" title="Report an incident" color="#DC2626"
+          sub="Log a new incident — injury, near miss, damage or other. Takes a couple of minutes."
+          onClick={()=>setPage('report_incident')}/>
+        {canReview && <Tile icon="📋" title="Active incidents"
+          sub={isCA?'Open incidents currently being handled — assign, investigate and close them. Closed ones move to the register.':'The open incidents assigned to you.'}
+          onClick={()=>setPage('incidents')}/>}
+        {isCA && <Tile icon="📊" title="Incident register"
+          sub="The full compliance record — trends, filters, and CSV / PDF export."
+          onClick={()=>setPage('incident_register')}/>}
+      </div>
+    </div>
+  )
+}
+
+function IncidentReportView({ user }) {
+  const CATEGORIES = [
+    ['injury_harm','🩹 Injury / Harm to a person','Someone was hurt — physical, infection/illness, or mental/psychological'],
+    ['near_miss','⚠️ Near miss','No harm or damage occurred, but it could have'],
+    ['property_damage','🔧 Property / equipment damage','Damage to property, equipment, vehicle or environment'],
+    ['other','📋 Other','Complaint, security, service quality or anything else'],
+  ]
+  // outcome ladder -> suggested severity (1-5)
+  const OUTCOMES = [
+    [1,'No treatment needed',1],
+    [2,'First aid only',2],
+    [3,'Seen by GP / clinic, no admission',3],
+    [4,'Antibiotics commenced',3],
+    [5,'Hospital presentation, no admission',3],
+    [6,'Hospital admission',4],
+    [7,'ICU / life-threatening / permanent harm',5],
+    [8,'Death',5],
+  ]
+  const SEVERITY = [
+    [1,'Minor','No injury or negligible impact'],
+    [2,'Moderate','First aid, moderate damage, complaint needing investigation'],
+    [3,'Major','Medical treatment, significant damage, serious disruption'],
+    [4,'Severe','Serious injury, hospitalisation, safeguarding, major breach'],
+    [5,'Critical','Fatality, life-threatening, abuse/neglect, catastrophic'],
+  ]
+  const HARM_TYPES = [
+    ['physical','Physical injury'],
+    ['infection_illness','Infection / illness'],
+    ['mental_psychological','Mental / psychological harm'],
+  ]
+
+  const [orgId, setOrgId] = useState('')
+  const [orgResolved, setOrgResolved] = useState(false)
+  const [category, setCategory] = useState('')
+  const [harmType, setHarmType] = useState('')
+  const [outcome, setOutcome] = useState(0)
+  const [severity, setSeverity] = useState(0)
+  const [overrideReason, setOverrideReason] = useState('')
+  const [affectedType, setAffectedType] = useState('')
+  const [affectedInitials, setAffectedInitials] = useState('')
+  const [occurredAt, setOccurredAt] = useState(() => {
+    const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,16)
+  })
+  const [shift, setShift] = useState('')
+  const [department, setDepartment] = useState('')
+  const [locationText, setLocationText] = useState('')
+  const [gps, setGps] = useState(null)
+  const [facts, setFacts] = useState('')
+  const [immediateActions, setImmediateActions] = useState('')
+  const [hazardPresent, setHazardPresent] = useState(false)
+  const [clinicalNote, setClinicalNote] = useState('')
+  const [evidence, setEvidence] = useState([]) // {kind,url,name}
+  const [submitting, setSubmitting] = useState(false)
+  const [receipt, setReceipt] = useState(null) // {ref}
+  const [error, setError] = useState('')
+
+  // Resolve org ID (ORG...) from org_members — never the org name (gremlin-safe)
+  useEffect(() => {
+    ;(async()=>{
+      try {
+        const { data: sess } = await supabase.auth.getSession()
+        const authId = sess?.session?.user?.id
+        if (!authId) { setOrgResolved(true); return }
+        const { data: members } = await supabase.from('org_members').select('org').eq('user_id', authId)
+        const id = (members||[]).map(m=>m.org).find(o => /^ORG/i.test(o||''))
+        if (id) setOrgId(id)
+      } catch(e) { /* leave blank -> guarded below */ }
+      setOrgResolved(true)
+    })()
+  }, [])
+
+  // suggested severity from the outcome ladder (harm categories only)
+  const suggested = outcome ? (OUTCOMES.find(o=>o[0]===outcome)||[])[2] : 0
+
+  const grabGps = () => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      p => setGps({ lat:+p.coords.latitude.toFixed(5), lng:+p.coords.longitude.toFixed(5) }),
+      () => setGps(null), { enableHighAccuracy:true, timeout:8000, maximumAge:0 })
+  }
+
+  const isHarm = category==='injury_harm'
+  const showLadder = isHarm || category==='near_miss'
+  const effectiveSeverity = severity || suggested
+  const overrideNeeded = severity && suggested && severity !== suggested
+
+  const canSubmit = category && effectiveSeverity && facts.trim() && occurredAt &&
+    (!isHarm || (harmType && affectedType)) &&
+    (!overrideNeeded || overrideReason.trim())
+
+  const submit = async () => {
+    setError('')
+    if (!orgId) { setError('Could not resolve your organisation. Please contact your administrator.'); return }
+    if (!canSubmit) { setError('Please complete the required fields.'); return }
+    setSubmitting(true)
+    const payload = {
+      severity_suggested: suggested || null,
+      severity_override_reason: overrideNeeded ? overrideReason.trim() : null,
+      shift: shift||null, department: department||null, location_text: locationText||null,
+      gps: gps||null, immediate_actions: immediateActions||null, hazard_present: hazardPresent,
+      affected_type: affectedType||null, affected_initials: affectedInitials||null,
+      outcome_level: outcome||null, harm_type: isHarm ? harmType : null,
+      clinical: (isHarm && clinicalNote.trim()) ? { note: clinicalNote.trim() } : null,
+    }
+    try {
+      const { data, error: rpcErr } = await supabase.rpc('create_incident', {
+        p_org: orgId,
+        p_category: category,
+        p_severity: effectiveSeverity,
+        p_occurred_at: new Date(occurredAt).toISOString(),
+        p_facts: facts.trim(),
+        p_payload: payload,
+        p_evidence: evidence.map(e => ({ kind:e.kind, url:e.url, name:e.name||null })),
+      })
+      if (rpcErr) throw rpcErr
+      setReceipt({ ref: data?.ref || 'submitted' })
+    } catch(e) {
+      setError('Could not submit the report: ' + (e.message||'unknown error'))
+    }
+    setSubmitting(false)
+  }
+
+  if (receipt) {
+    return (
+      <div style={{maxWidth:560,margin:'40px auto',textAlign:'center',padding:24}}>
+        <div style={{fontSize:48,marginBottom:12}}>✅</div>
+        <h2 style={{margin:'0 0 8px'}}>Incident reported</h2>
+        <p style={{color:'#6B7280',margin:'0 0 4px'}}>Reference</p>
+        <p style={{fontSize:22,fontWeight:700,letterSpacing:.5,margin:'0 0 16px'}}>{receipt.ref}</p>
+        <p style={{color:'#6B7280',fontSize:14,lineHeight:1.5}}>
+          Your report has been sent to management for review. For confidentiality, incident
+          details are visible only to the people responsible for handling it — you won't see
+          the report after this screen. If you need to add something, tell your supervisor
+          and quote the reference above.
+        </p>
+        <button className="cl-action-btn" style={{marginTop:20}} onClick={()=>{
+          setReceipt(null); setCategory(''); setHarmType(''); setOutcome(0); setSeverity(0)
+          setOverrideReason(''); setAffectedType(''); setAffectedInitials(''); setShift('')
+          setDepartment(''); setLocationText(''); setGps(null); setFacts(''); setImmediateActions('')
+          setHazardPresent(false); setClinicalNote(''); setEvidence([])
+        }}>Report another incident</button>
+      </div>
+    )
+  }
+
+  const card = { background:'var(--card,#fff)', border:'1px solid rgba(0,0,0,.08)', borderRadius:12, padding:16, marginBottom:14 }
+  const lbl = { display:'block', fontSize:13, fontWeight:600, marginBottom:6 }
+  const inp = { width:'100%', padding:'10px 12px', borderRadius:8, border:'1px solid rgba(0,0,0,.15)', fontSize:14, boxSizing:'border-box' }
+
+  return (
+    <div style={{maxWidth:640,margin:'0 auto',padding:'8px 4px 60px'}}>
+      <h2 style={{margin:'4px 0 4px'}}>Report an Incident</h2>
+      <p style={{color:'#6B7280',fontSize:13,margin:'0 0 16px'}}>
+        Report any accident, near miss, damage, complaint or other event. Your report goes
+        straight to management.
+      </p>
+
+      {/* Step 1 — category */}
+      <div style={card}>
+        <span style={lbl}>What happened?</span>
+        {CATEGORIES.map(([k,title,sub]) => (
+          <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcome(0); setSeverity(0)}}
+            style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:8,borderRadius:10,
+              border: category===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.12)',
+              background: category===k ? 'rgba(79,70,229,.06)' : 'transparent', cursor:'pointer'}}>
+            <div style={{fontWeight:600,fontSize:14}}>{title}</div>
+            <div style={{fontSize:12,color:'#6B7280',marginTop:2}}>{sub}</div>
+          </button>
+        ))}
+      </div>
+
+      {category && (<>
+        {/* Harm fork */}
+        {isHarm && (
+          <div style={card}>
+            <span style={lbl}>Type of harm</span>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+              {HARM_TYPES.map(([k,t]) => (
+                <button key={k} onClick={()=>setHarmType(k)}
+                  style={{padding:'8px 12px',borderRadius:20,fontSize:13,cursor:'pointer',
+                    border: harmType===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
+                    background: harmType===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
+              ))}
+            </div>
+            <span style={lbl}>Who was affected?</span>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+              {['staff','client','visitor','contractor'].map(t => (
+                <button key={t} onClick={()=>setAffectedType(t)}
+                  style={{padding:'8px 12px',borderRadius:20,fontSize:13,textTransform:'capitalize',cursor:'pointer',
+                    border: affectedType===t ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
+                    background: affectedType===t ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
+              ))}
+            </div>
+            <span style={lbl}>Person's initials <span style={{fontWeight:400,color:'#9CA3AF'}}>(not full name — confidential)</span></span>
+            <input style={inp} value={affectedInitials} maxLength={6} placeholder="e.g. J.D."
+              onChange={e=>setAffectedInitials(e.target.value)}/>
+          </div>
+        )}
+
+        {/* Outcome ladder */}
+        {showLadder && (
+          <div style={card}>
+            <span style={lbl}>{isHarm ? 'What was the outcome?' : 'What could have happened?'}</span>
+            <select style={inp} value={outcome} onChange={e=>{setOutcome(+e.target.value); setSeverity(0)}}>
+              <option value={0}>— select —</option>
+              {OUTCOMES.map(([v,t]) => <option key={v} value={v}>{t}</option>)}
+            </select>
+            {suggested>0 && (
+              <div style={{marginTop:10,fontSize:13,padding:'8px 12px',borderRadius:8,background:'rgba(79,70,229,.06)'}}>
+                Suggested severity: <strong>{suggested} – {SEVERITY[suggested-1][1]}</strong>
+                {isHarm && ' — you can adjust below if needed.'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Severity (always shown; pre-set from ladder) */}
+        <div style={card}>
+          <span style={lbl}>Severity</span>
+          {SEVERITY.map(([v,name,desc]) => {
+            const sel = effectiveSeverity===v
+            return (
+              <button key={v} onClick={()=>setSeverity(v)}
+                style={{display:'block',width:'100%',textAlign:'left',padding:'10px 12px',marginBottom:6,borderRadius:8,cursor:'pointer',
+                  border: sel ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.12)',
+                  background: sel ? 'rgba(79,70,229,.06)' : 'transparent'}}>
+                <span style={{fontWeight:600}}>{v} – {name}</span>
+                <span style={{fontSize:12,color:'#6B7280',display:'block'}}>{desc}</span>
+              </button>
+            )
+          })}
+          {overrideNeeded && (
+            <div style={{marginTop:8}}>
+              <span style={lbl}>Reason for changing from the suggested severity ({suggested})</span>
+              <input style={inp} value={overrideReason} onChange={e=>setOverrideReason(e.target.value)}
+                placeholder="Why is a different severity appropriate?"/>
+            </div>
+          )}
+        </div>
+
+        {/* Clinical note (harm only) */}
+        {isHarm && (
+          <div style={card}>
+            <span style={lbl}>Clinical details <span style={{fontWeight:400,color:'#9CA3AF'}}>(optional — antibiotics, hospital, organism, etc.)</span></span>
+            <textarea style={{...inp,minHeight:70,resize:'vertical'}} value={clinicalNote}
+              onChange={e=>setClinicalNote(e.target.value)}
+              placeholder="e.g. Amoxicillin commenced, admitted to St X Hospital"/>
+          </div>
+        )}
+
+        {/* Common tail */}
+        <div style={card}>
+          <span style={lbl}>When did it happen?</span>
+          <input type="datetime-local" style={{...inp,marginBottom:12}} value={occurredAt} onChange={e=>setOccurredAt(e.target.value)}/>
+          <span style={lbl}>Shift <span style={{fontWeight:400,color:'#9CA3AF'}}>(optional)</span></span>
+          <input style={{...inp,marginBottom:12}} value={shift} onChange={e=>setShift(e.target.value)} placeholder="e.g. Night"/>
+          <span style={lbl}>Department / area</span>
+          <input style={{...inp,marginBottom:12}} value={department} onChange={e=>setDepartment(e.target.value)} placeholder="e.g. Ward 2"/>
+          <span style={lbl}>Exact place</span>
+          <input style={{...inp,marginBottom:12}} value={locationText} onChange={e=>setLocationText(e.target.value)} placeholder="e.g. Bathroom, room 14"/>
+          <button className="cl-action-btn" onClick={grabGps} style={{marginBottom:4}}>
+            {gps ? `📍 Location captured (${gps.lat}, ${gps.lng})` : '📍 Capture GPS location'}
+          </button>
+        </div>
+
+        <div style={card}>
+          <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(the facts, in order)</span></span>
+          <textarea style={{...inp,minHeight:100,resize:'vertical',marginBottom:12}} value={facts}
+            onChange={e=>setFacts(e.target.value)} placeholder="Describe what happened, step by step…"/>
+          <span style={lbl}>Immediate actions taken to make it safe</span>
+          <textarea style={{...inp,minHeight:70,resize:'vertical',marginBottom:12}} value={immediateActions}
+            onChange={e=>setImmediateActions(e.target.value)} placeholder="What was done right away?"/>
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:14,cursor:'pointer'}}>
+            <input type="checkbox" checked={hazardPresent} onChange={e=>setHazardPresent(e.target.checked)}/>
+            The hazard is still present / not yet made safe
+          </label>
+        </div>
+
+        {/* Evidence */}
+        <div style={card}>
+          <span style={lbl}>Evidence <span style={{fontWeight:400,color:'#9CA3AF'}}>(optional)</span></span>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+            <EvidenceCameraButton taskId="incident" idx={0} label="Incident"
+              onCapture={(url)=>setEvidence(ev=>[...ev,{kind:'photo',url,name:null}])}/>
+            <AttachDocButton onAttach={(url,name)=>setEvidence(ev=>[...ev,{kind:'document',url,name}])}/>
+          </div>
+          {evidence.length>0 && (
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {evidence.map((e,i)=>(
+                <div key={i} style={{position:'relative',width:64,height:64,borderRadius:8,overflow:'hidden',border:'1px solid rgba(0,0,0,.12)'}}>
+                  {e.kind==='photo'
+                    ? <img src={e.url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+                    : <div style={{fontSize:11,padding:4,textAlign:'center'}}>📄<br/>{(e.name||'doc').slice(0,10)}</div>}
+                  <button onClick={()=>setEvidence(ev=>ev.filter((_,j)=>j!==i))}
+                    style={{position:'absolute',top:0,right:0,background:'rgba(0,0,0,.6)',color:'#fff',border:'none',width:18,height:18,borderRadius:'0 0 0 6px',cursor:'pointer',fontSize:12,lineHeight:1}}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {error && <div style={{color:'#DC2626',fontSize:14,marginBottom:12}}>{error}</div>}
+
+        <button onClick={submit} disabled={!canSubmit||submitting}
+          style={{width:'100%',padding:'14px',borderRadius:10,border:'none',fontSize:15,fontWeight:600,cursor:canSubmit&&!submitting?'pointer':'not-allowed',
+            background: canSubmit&&!submitting ? 'var(--brand,#4F46E5)' : 'rgba(0,0,0,.15)', color:'#fff'}}>
+          {submitting ? 'Submitting…' : 'Submit incident report'}
+        </button>
+      </>)}
+    </div>
+  )
+}
+
 function ReportIssueView({ user }) {
   const [title, setTitle] = useState('')
   const [desc, setDesc] = useState('')
@@ -12474,6 +12851,619 @@ function ReportIssueView({ user }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ============ INCIDENT REGISTER (client_admin — compliance artefact) ============
+function IncidentRegisterView({ user, setPage }) {
+  const [orgId, setOrgId] = useState('')
+  const [incidents, setIncidents] = useState([])
+  const [names, setNames] = useState({})
+  const [actionCounts, setActionCounts] = useState({}) // incident_id -> {open, total}
+  const [loading, setLoading] = useState(true)
+  const [fFrom, setFFrom] = useState('')
+  const [fTo, setFTo] = useState('')
+  const [fCategory, setFCategory] = useState('all')
+  const [fSeverity, setFSeverity] = useState('all')
+  const [fStatus, setFStatus] = useState('all')
+  const [breachedOnly, setBreachedOnly] = useState(false)
+
+  const fmtDay = (d) => d ? new Date(d).toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'}) : ''
+  const daysBetween = (a,b) => { if(!a) return null; const end=b?new Date(b):new Date(); return Math.max(0, Math.round((end-new Date(a))/86400000)) }
+
+  const resolveOrg = async () => {
+    const { data: sess } = await supabase.auth.getSession()
+    const authId = sess?.session?.user?.id
+    if (!authId) return ''
+    const { data: m } = await supabase.from('org_members').select('org').eq('user_id', authId)
+    return (m||[]).map(x=>x.org).find(o=>/^ORG/i.test(o||'')) || ''
+  }
+
+  const load = async () => {
+    if (!isConfigured()) { setLoading(false); return }
+    setLoading(true)
+    const id = orgId || await resolveOrg()
+    if (id && id!==orgId) setOrgId(id)
+    if (!id) { setLoading(false); return }
+    const { data } = await supabase.from('incidents').select('*').eq('org', id).order('occurred_at',{ascending:false})
+    const list = data||[]
+    setIncidents(list)
+    const ids=[...new Set(list.map(i=>i.assigned_to).filter(Boolean))]
+    if(ids.length){ const {data:p}=await supabase.from('profiles').select('id,name').in('id',ids); if(p) setNames(Object.fromEntries(p.map(r=>[r.id,r.name]))) }
+    // action counts per incident
+    const { data: acts } = await supabase.from('incident_actions').select('incident_id,status').eq('org', id)
+    const counts={}; (acts||[]).forEach(a=>{ const c=counts[a.incident_id]||{open:0,total:0}; c.total++; if(a.status!=='verified'&&a.status!=='done') c.open++; counts[a.incident_id]=c })
+    setActionCounts(counts)
+    setLoading(false)
+  }
+  useEffect(()=>{ load() },[])
+
+  const targetMet = (i) => {
+    // breached if any stamped due date passed without the corresponding milestone
+    const now=Date.now(); const overdue=(d)=>d&&new Date(d).getTime()<now
+    if(i.status==='closed') {
+      // was it closed on time?
+      return !(i.close_due_at && i.closed_at && new Date(i.closed_at)>new Date(i.close_due_at))
+    }
+    return !(overdue(i.assign_due_at)&&!i.assigned_at) && !(overdue(i.investigate_due_at)&&!i.root_cause) && !overdue(i.close_due_at)
+  }
+
+  const rows = incidents.filter(i=>{
+    if(fFrom && new Date(i.occurred_at) < new Date(fFrom)) return false
+    if(fTo && new Date(i.occurred_at) > new Date(fTo+'T23:59:59')) return false
+    if(fCategory!=='all' && i.category!==fCategory) return false
+    if(fSeverity!=='all' && String(i.severity)!==fSeverity) return false
+    if(fStatus!=='all' && i.status!==fStatus) return false
+    if(breachedOnly && targetMet(i)) return false
+    return true
+  })
+
+  // trend strip
+  const bySev = [1,2,3,4,5].map(s=>({s,n:rows.filter(i=>i.severity===s).length}))
+  const openCount = rows.filter(i=>i.status!=='closed').length
+  const breachedCount = rows.filter(i=>!targetMet(i)).length
+
+  const rowData = (i) => {
+    const ac = actionCounts[i.id]||{open:0,total:0}
+    return {
+      ref:i.ref, date:fmtDay(i.occurred_at), category:(INC_CATEGORY_LABEL[i.category]||i.category),
+      severity:`${i.severity} ${(INC_SEVERITY_CFG[i.severity]||{}).label||''}`.trim(),
+      status:(INC_STATUS_CFG[i.status]||{}).label||i.status,
+      affected:i.affected_type||'', assigned:names[i.assigned_to]||i.assigned_to_name||'',
+      rootCause:i.root_cause?'Yes':'No', actions:`${ac.total-ac.open}/${ac.total}`,
+      closed:i.closed_at?fmtDay(i.closed_at):'', daysOpen:i.status==='closed'?daysBetween(i.occurred_at,i.closed_at):daysBetween(i.occurred_at,null),
+      target:targetMet(i)?'Met':'Breached', regulator:i.external_notification_required?(i.notified_at?'Notified':'Required'):'—',
+    }
+  }
+
+  const exportCSV = () => {
+    const head=['Ref','Date','Category','Severity','Status','Affected','Assigned To','Root Cause','Actions Closed/Total','Date Closed','Days Open','Target','Regulator']
+    const lines=rows.map(i=>{ const r=rowData(i); return [r.ref,r.date,r.category,r.severity,r.status,r.affected,r.assigned,r.rootCause,r.actions,r.closed,r.daysOpen,r.target,r.regulator].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',') })
+    const csv=[head.join(','),...lines].join('\n')
+    const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv)
+    a.download=`incident-register-${new Date().toISOString().slice(0,10)}.csv`; a.click()
+  }
+
+  const exportPDF = () => {
+    const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'})
+    const pw=297, lm=8, top=16
+    pdf.setFontSize(14); pdf.text('Incident Register', lm, 10)
+    pdf.setFontSize(8)
+    pdf.text(`Generated ${new Date().toLocaleString('en-AU')} · ${rows.length} incidents · ${breachedCount} breached`, lm, 14)
+    const cols=[['Ref',22],['Date',18],['Category',30],['Severity',22],['Status',20],['Assigned',30],['Root',12],['Actions',16],['Closed',18],['Days',12],['Target',16],['Reg',14]]
+    let x=lm; pdf.setFont(undefined,'bold')
+    cols.forEach(([h,w])=>{ pdf.text(String(h),x,top); x+=w })
+    pdf.setFont(undefined,'normal')
+    let y=top+5
+    rows.forEach(i=>{
+      if(y>200){ pdf.addPage(); y=top }
+      const r=rowData(i); let cx=lm
+      const cells=[r.ref,r.date,r.category,r.severity,r.status,r.assigned,r.rootCause,r.actions,r.closed,String(r.daysOpen??''),r.target,r.regulator]
+      cells.forEach((c,ci)=>{ const w=cols[ci][1]; pdf.text(String(c??'').slice(0,Math.floor(w/1.6)),cx,y); cx+=w })
+      y+=5
+    })
+    pdf.save(`incident-register-${new Date().toISOString().slice(0,10)}.pdf`)
+  }
+
+  const openIncident = (ref) => { try{ sessionStorage.setItem('taksyn-open-incident', ref) }catch(e){}; if(setPage) setPage('incidents') }
+
+  const card={background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}
+  const th={textAlign:'left',fontSize:11,fontWeight:700,color:'var(--t2)',padding:'6px 8px',textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}
+  const td={fontSize:12,padding:'8px',borderTop:'1px solid var(--border)',whiteSpace:'nowrap'}
+  const sel={padding:'6px 8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',fontSize:12}
+
+  return (
+    <div className="page-wrap">
+      <div className="ph"><div className="ph-title">Incident Register</div><div className="ph-sub">Compliance record of all incidents and their resolution</div></div>
+
+      {/* trend strip */}
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:14}}>
+        <div style={{...card,margin:0,flex:'1 1 120px'}}><div style={{fontSize:11,color:'var(--t2)'}}>Total (filtered)</div><div style={{fontSize:22,fontWeight:800}}>{rows.length}</div></div>
+        <div style={{...card,margin:0,flex:'1 1 120px'}}><div style={{fontSize:11,color:'var(--t2)'}}>Open</div><div style={{fontSize:22,fontWeight:800,color:openCount?'var(--amber)':'var(--t3)'}}>{openCount}</div></div>
+        <div style={{...card,margin:0,flex:'1 1 120px'}}><div style={{fontSize:11,color:'var(--t2)'}}>Target breached</div><div style={{fontSize:22,fontWeight:800,color:breachedCount?'var(--red)':'var(--green)'}}>{breachedCount}</div></div>
+        <div style={{...card,margin:0,flex:'2 1 240px'}}>
+          <div style={{fontSize:11,color:'var(--t2)',marginBottom:6}}>By severity</div>
+          <div style={{display:'flex',gap:6,alignItems:'flex-end',height:36}}>
+            {bySev.map(({s,n})=>{ const mx=Math.max(1,...bySev.map(b=>b.n)); const c=(INC_SEVERITY_CFG[s]||{}).color||'var(--brand)'
+              return <div key={s} style={{flex:1,textAlign:'center'}} title={`Severity ${s}: ${n}`}>
+                <div style={{height:Math.round((n/mx)*28)+2,background:c,borderRadius:3}}/>
+                <div style={{fontSize:9,color:'var(--t3)',marginTop:2}}>{s}·{n}</div>
+              </div> })}
+          </div>
+        </div>
+      </div>
+
+      {/* filters + export */}
+      <div style={{...card,display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+        <div><div style={{fontSize:10,color:'var(--t3)'}}>From</div><input type="date" style={sel} value={fFrom} onChange={e=>setFFrom(e.target.value)}/></div>
+        <div><div style={{fontSize:10,color:'var(--t3)'}}>To</div><input type="date" style={sel} value={fTo} onChange={e=>setFTo(e.target.value)}/></div>
+        <div><div style={{fontSize:10,color:'var(--t3)'}}>Category</div>
+          <select style={sel} value={fCategory} onChange={e=>setFCategory(e.target.value)}>
+            <option value="all">All</option>{Object.entries(INC_CATEGORY_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+          </select></div>
+        <div><div style={{fontSize:10,color:'var(--t3)'}}>Severity</div>
+          <select style={sel} value={fSeverity} onChange={e=>setFSeverity(e.target.value)}>
+            <option value="all">All</option>{[1,2,3,4,5].map(s=><option key={s} value={String(s)}>{s} {(INC_SEVERITY_CFG[s]||{}).label}</option>)}
+          </select></div>
+        <div><div style={{fontSize:10,color:'var(--t3)'}}>Status</div>
+          <select style={sel} value={fStatus} onChange={e=>setFStatus(e.target.value)}>
+            <option value="all">All</option>{Object.entries(INC_STATUS_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+          </select></div>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--t2)',cursor:'pointer',marginTop:12}}>
+          <input type="checkbox" checked={breachedOnly} onChange={e=>setBreachedOnly(e.target.checked)}/> Breached only
+        </label>
+        <div style={{flex:1}}/>
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportCSV}>📥 CSV</button>
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 PDF</button>
+      </div>
+
+      {/* table */}
+      {loading ? <div style={{color:'var(--t2)',fontSize:13}}>Loading…</div> :
+        rows.length===0 ? <div className="empty"><div className="empty-icon">📋</div><div className="empty-text">No incidents match these filters</div></div> :
+        <div style={{overflowX:'auto',border:'1px solid var(--border)',borderRadius:10}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
+            <thead><tr>
+              {['Ref','Date','Category','Severity','Status','Assigned','Root cause','Actions','Closed','Days open','Target','Regulator'].map(h=><th key={h} style={th}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {rows.map(i=>{ const r=rowData(i)
+                return <tr key={i.id} style={{cursor:'pointer'}} onClick={()=>openIncident(i.ref)}>
+                  <td style={{...td,fontWeight:700,color:'var(--brand)'}}>{r.ref}</td>
+                  <td style={td}>{r.date}</td>
+                  <td style={td}>{r.category}</td>
+                  <td style={{...td,color:(INC_SEVERITY_CFG[i.severity]||{}).color}}>{r.severity}</td>
+                  <td style={td}>{r.status}</td>
+                  <td style={td}>{r.assigned||'—'}</td>
+                  <td style={td}>{r.rootCause}</td>
+                  <td style={td}>{r.actions}</td>
+                  <td style={td}>{r.closed||'—'}</td>
+                  <td style={td}>{r.daysOpen??'—'}</td>
+                  <td style={{...td,fontWeight:700,color:r.target==='Met'?'var(--green)':'var(--red)'}}>{r.target}</td>
+                  <td style={td}>{r.regulator}</td>
+                </tr> })}
+            </tbody>
+          </table>
+        </div>}
+    </div>
+  )
+}
+
+// ============ INCIDENT MANAGEMENT (client_admin) ============
+const INC_SEVERITY_CFG = {
+  1: { label:'Minor',    color:'var(--green)', bg:'var(--brand-lt)' },
+  2: { label:'Moderate', color:'var(--blue)',  bg:'var(--brand-lt)' },
+  3: { label:'Major',    color:'var(--amber)', bg:'var(--brand-lt)' },
+  4: { label:'Severe',   color:'var(--red)',   bg:'var(--brand-lt)' },
+  5: { label:'Critical', color:'var(--red)',   bg:'rgba(239,68,68,.14)' },
+}
+const INC_STATUS_CFG = {
+  reported:      { label:'Reported',      color:'var(--amber)' },
+  assessing:     { label:'Assessing',     color:'var(--blue)' },
+  investigating: { label:'Investigating', color:'var(--blue)' },
+  actions_open:  { label:'Actions Open',  color:'var(--blue)' },
+  review:        { label:'In Review',     color:'var(--brand)' },
+  closed:        { label:'Closed',        color:'var(--t3)' },
+}
+const INC_CATEGORY_LABEL = {
+  injury_harm:'Injury / Harm', near_miss:'Near miss', property_damage:'Property damage',
+  complaint:'Complaint', service_quality:'Service quality', clinical_care:'Clinical / Care',
+  behaviour_safeguarding:'Behaviour / Safeguarding', medication:'Medication',
+  infection_control:'Infection control', security:'Security', privacy_breach:'Privacy / Data breach',
+  environmental:'Environmental', equipment_failure:'Equipment failure', vehicle:'Vehicle', other:'Other',
+}
+const INC_EVENT_LABEL = {
+  reported:'Reported', severity_set:'Severity set', severity_overridden:'Severity overridden',
+  assigned:'Assigned', reassigned:'Reassigned', notified:'Notified', assessed:'Assessed',
+  investigation_started:'Investigation started', root_cause_recorded:'Root cause recorded',
+  risk_rated:'Risk rated', action_created:'Action created', action_completed:'Action completed',
+  action_verified:'Action verified', regulator_notified:'Regulator notified',
+  reopened:'Reopened', closed:'Closed', status_changed:'Status changed',
+}
+
+function IncidentsAdminView({ user }) {
+  const isAdmin = user.role === 'client_admin'
+  const [currentUid, setCurrentUid] = useState('')
+  const [orgId, setOrgId] = useState('')
+  const [incidents, setIncidents] = useState([])
+  const [names, setNames] = useState({})
+  const [members, setMembers] = useState([]) // [{user_id,role,name}]
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState('open')
+  const [breachedOnly, setBreachedOnly] = useState(false)
+  const [sel, setSel] = useState(null)          // selected incident (full row)
+  const [events, setEvents] = useState([])
+  const [actions, setActions] = useState([])
+  const [busy, setBusy] = useState(false)
+
+  const fmtDate = (d) => d ? new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
+  const fmtDay  = (d) => d ? new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : '—'
+
+  // resolve org ID (incidents.org holds the ID, not user.org which is the NAME)
+  const resolveOrg = async () => {
+    const { data: sess } = await supabase.auth.getSession()
+    const authId = sess?.session?.user?.id
+    if (!authId) return ''
+    if (authId !== currentUid) setCurrentUid(authId)
+    const { data: m } = await supabase.from('org_members').select('org').eq('user_id', authId)
+    return (m||[]).map(x=>x.org).find(o => /^ORG/i.test(o||'')) || ''
+  }
+
+  const load = async () => {
+    if (!isConfigured()) { setLoading(false); return }
+    setLoading(true)
+    const id = orgId || await resolveOrg()
+    if (id && id !== orgId) setOrgId(id)
+    if (!id) { setLoading(false); return }
+    const { data } = await supabase.from('incidents').select('*').eq('org', id).order('created_at',{ascending:false})
+    const list = data || []
+    setIncidents(list)
+    // resolve names for reporters/assignees/investigators
+    const ids = [...new Set(list.flatMap(i=>[i.reported_by,i.assigned_to,i.investigator_id]).filter(Boolean))]
+    if (ids.length) {
+      const { data: p } = await supabase.from('profiles').select('id,name').in('id', ids)
+      if (p) setNames(Object.fromEntries(p.map(r=>[r.id,r.name])))
+    }
+    // org members for the assignee picker (supervisor/manager/client_admin only)
+    const { data: mem } = await supabase.from('org_members').select('user_id,role').eq('org', id)
+    if (mem) {
+      const memIds = mem.map(m=>m.user_id)
+      const { data: mp } = await supabase.from('profiles').select('id,name').in('id', memIds)
+      const nameMap = Object.fromEntries((mp||[]).map(r=>[r.id,r.name]))
+      setMembers(mem.filter(m=>['supervisor','manager','client_admin'].includes(m.role))
+        .map(m=>({ ...m, name: nameMap[m.user_id]||'—' })))
+    }
+    setLoading(false)
+  }
+  useEffect(()=>{ load() },[])
+  useEffect(()=>{
+    if(!incidents.length) return
+    let ref=null; try{ ref=sessionStorage.getItem('taksyn-open-incident') }catch(e){}
+    if(ref){ try{ sessionStorage.removeItem('taksyn-open-incident') }catch(e){}
+      const target=incidents.find(i=>i.ref===ref); if(target) openIncident(target) }
+  },[incidents])
+
+  const openIncident = async (inc) => {
+    setSel(inc); setEvents([]); setActions([])
+    const [{ data: ev }, { data: act }] = await Promise.all([
+      supabase.from('incident_events').select('*').eq('incident_id', inc.id).order('at',{ascending:false}),
+      supabase.from('incident_actions').select('*').eq('incident_id', inc.id).order('created_at',{ascending:true}),
+    ])
+    setEvents(ev||[]); setActions(act||[])
+  }
+
+  // write helper: patch the incident AND append an audit event, then refresh
+  const patchIncident = async (patch, eventType, extra={}) => {
+    if (!sel) return
+    setBusy(true)
+    const { data: sess } = await supabase.auth.getSession()
+    const uid = sess?.session?.user?.id
+    const now = new Date().toISOString()
+    const { error: upErr } = await supabase.from('incidents')
+      .update({ ...patch, updated_at: now }).eq('id', sel.id)
+    if (!upErr) {
+      await supabase.from('incident_events').insert({
+        incident_id: sel.id, org: orgId, event_type: eventType,
+        by_id: uid, by_name: user.name, by_role: user.role,
+        from_value: extra.from ?? null, to_value: extra.to ?? null, details: extra.details ?? null,
+      })
+      const updated = { ...sel, ...patch }
+      setSel(updated)
+      setIncidents(prev=>prev.map(i=>i.id===sel.id?updated:i))
+      const { data: ev } = await supabase.from('incident_events').select('*').eq('incident_id', sel.id).order('at',{ascending:false})
+      setEvents(ev||[])
+    } else {
+      alert('Could not save: ' + upErr.message)
+    }
+    setBusy(false)
+  }
+
+  // ---- derived list ----
+  const isOpenStatus = (s) => s !== 'closed'
+  const breached = (i) => {
+    const now = Date.now()
+    const overdue = (d) => d && new Date(d).getTime() < now
+    if (i.status==='closed') return false
+    return overdue(i.assign_due_at) && !i.assigned_at
+        || overdue(i.investigate_due_at) && !i.root_cause
+        || overdue(i.close_due_at)
+  }
+  const visible = incidents.filter(i => {
+    if (!isAdmin && !(i.assigned_to===currentUid || i.investigator_id===currentUid)) return false
+    if (filterStatus==='open' && !isOpenStatus(i.status)) return false
+    if (filterStatus!=='open' && filterStatus!=='all' && i.status!==filterStatus) return false
+    if (breachedOnly && !breached(i)) return false
+    return true
+  })
+  const bySeverity = [5,4,3,2,1].map(s => ({ s, items: visible.filter(i=>i.severity===s) })).filter(g=>g.items.length)
+
+  const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:16, marginBottom:14 }
+  const lbl = { display:'block', fontSize:12, fontWeight:700, color:'var(--t2)', marginBottom:6, textTransform:'uppercase', letterSpacing:.3 }
+  const pill = (color,bg) => ({ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:12, background:bg||'var(--brand-lt)', color, flexShrink:0 })
+
+  // ============ DETAIL ============
+  if (sel) {
+    const sev = INC_SEVERITY_CFG[sel.severity] || INC_SEVERITY_CFG[1]
+    const st  = INC_STATUS_CFG[sel.status] || INC_STATUS_CFG.reported
+    const clinical = sel.clinical || {}
+    return (
+      <div className="page-wrap anim">
+        <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={()=>{setSel(null); load()}}>← Back to incidents</button>
+
+        {/* header */}
+        <div style={card}>
+          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:8}}>
+            <span style={{fontSize:18,fontWeight:800}}>{sel.ref}</span>
+            <span style={pill(sev.color,sev.bg)}>{sel.severity} · {sev.label}</span>
+            <span style={pill(st.color)}>{st.label}</span>
+            {breached(sel) && <span style={pill('#fff','var(--red)')}>⚠ Target breached</span>}
+          </div>
+          <div style={{fontSize:13,color:'var(--t2)'}}>
+            {INC_CATEGORY_LABEL[sel.category]||sel.category} · {fmtDate(sel.occurred_at)}
+            {sel.department && ' · '+sel.department}{sel.location_text && ' · '+sel.location_text}
+            {sel.gps && ` · 📍 ${sel.gps.lat},${sel.gps.lng}`}
+          </div>
+        </div>
+
+        {/* who is responsible */}
+        <div style={card}>
+          <span style={lbl}>Who is responsible</span>
+          <div style={{display:'grid',gridTemplateColumns:'1fr',gap:12}}>
+            <div>
+              <div style={{fontSize:12,color:'var(--t3)'}}>Assigned owner</div>
+              {isAdmin ? (
+                <select className="inp" value={sel.assigned_to||''} disabled={busy}
+                  onChange={e=>{
+                    const uid=e.target.value; const m=members.find(x=>x.user_id===uid)
+                    patchIncident({ assigned_to:uid||null, assigned_to_name:m?.name||null, assigned_role:m?.role||null, assigned_at:new Date().toISOString() },
+                      sel.assigned_to?'reassigned':'assigned', { from: names[sel.assigned_to]||null, to: m?.name||null })
+                  }}
+                  style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',marginTop:4}}>
+                  <option value="">— unassigned —</option>
+                  {members.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}
+                </select>
+              ) : (
+                <div style={{marginTop:4,fontSize:14,fontWeight:600}}>{names[sel.assigned_to]||sel.assigned_to_name||'— unassigned —'}</div>
+              )}
+            </div>
+          </div>
+          <div style={{fontSize:11,color:'var(--t3)',marginTop:10}}>
+            Reported by {names[sel.reported_by]||'a team member'} · {fmtDate(sel.created_at)}
+          </div>
+        </div>
+
+        {/* what happened */}
+        <div style={card}>
+          <span style={lbl}>What happened</span>
+          <div style={{fontSize:14,lineHeight:1.5,whiteSpace:'pre-wrap',marginBottom:10}}>{sel.facts}</div>
+          {sel.immediate_actions && <><span style={lbl}>Immediate actions taken</span>
+            <div style={{fontSize:14,marginBottom:10}}>{sel.immediate_actions}</div></>}
+          {sel.hazard_present && <div style={{...pill('#fff','var(--red)'),display:'inline-block',marginBottom:8}}>⚠ Hazard still present</div>}
+          {(sel.affected_type||sel.affected_initials) &&
+            <div style={{fontSize:13,color:'var(--t2)'}}>Affected: {sel.affected_type||'—'}{sel.affected_initials?` (${sel.affected_initials})`:''}</div>}
+        </div>
+
+        {/* clinical block — client_admin only (need to know) */}
+        {(sel.harm_type || Object.keys(clinical).length>0) && (
+          <div style={{...card,borderColor:'var(--amber)'}}>
+            <span style={lbl}>Clinical details</span>
+            {sel.harm_type && <div style={{fontSize:13,marginBottom:4}}>Harm type: {sel.harm_type.replace(/_/g,' ')}</div>}
+            {sel.outcome_level && <div style={{fontSize:13,marginBottom:4}}>Outcome level: {sel.outcome_level}/8</div>}
+            {clinical.note && <div style={{fontSize:14,whiteSpace:'pre-wrap'}}>{clinical.note}</div>}
+          </div>
+        )}
+
+        {/* investigation + risk */}
+        <div style={card}>
+          <span style={lbl}>Investigation</span>
+          <textarea defaultValue={sel.root_cause||''} placeholder="Root cause…" id="inc-rootcause"
+            style={{width:'100%',minHeight:70,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8}}/>
+          <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>{
+            const v=document.getElementById('inc-rootcause').value.trim()
+            patchIncident({ root_cause:v||null }, 'root_cause_recorded', { to: v?'recorded':null })
+          }}>Save root cause</button>
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:14}}>
+            <div>
+              <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Likelihood (1–5)</div>
+              <select id="inc-likelihood" defaultValue={sel.risk_likelihood||''}
+                style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+                <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Consequence (1–5)</div>
+              <select id="inc-consequence" defaultValue={sel.risk_consequence||''}
+                style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+                <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+          </div>
+          <button className="btn btn-secondary btn-sm" style={{marginTop:8}} disabled={busy} onClick={()=>{
+            const l=+document.getElementById('inc-likelihood').value||null
+            const c=+document.getElementById('inc-consequence').value||null
+            const rating=(l&&c)?l*c:null
+            patchIncident({ risk_likelihood:l, risk_consequence:c, risk_rating:rating },
+              'risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
+          }}>Save risk rating</button>
+          {sel.risk_rating && (()=>{ const r=sel.risk_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Risk rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.risk_likelihood}×{sel.risk_consequence})</span></div> })()}
+          {sel.risk_rating && (<div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--border2)'}}>
+            <div style={{fontSize:12,color:'var(--t3)',marginBottom:6,fontWeight:600}}>Residual risk (after corrective actions)</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <div>
+                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Likelihood (1–5)</div>
+                <select id="inc-res-likelihood" defaultValue={sel.residual_likelihood||''}
+                  style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+                  <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Consequence (1–5)</div>
+                <select id="inc-res-consequence" defaultValue={sel.residual_consequence||''}
+                  style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+                  <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </div>
+            <button className="btn btn-secondary btn-sm" style={{marginTop:8}} disabled={busy} onClick={()=>{
+              const l=+document.getElementById('inc-res-likelihood').value||null
+              const c=+document.getElementById('inc-res-consequence').value||null
+              const rating=(l&&c)?l*c:null
+              patchIncident({ residual_likelihood:l, residual_consequence:c, residual_rating:rating },
+                'residual_risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
+            }}>Save residual risk</button>
+            {sel.residual_rating && (()=>{ const r=sel.residual_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Residual rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.residual_likelihood}×{sel.residual_consequence})</span></div> })()}
+          </div>)}
+        </div>
+
+        {/* corrective actions (display + simple add; task-linking is a later branch) */}
+        <div style={card}>
+          <span style={lbl}>Corrective / preventive actions</span>
+          {actions.length===0 && <div style={{fontSize:13,color:'var(--t3)',marginBottom:8}}>No actions yet.</div>}
+          {actions.map(a=>(
+            <div key={a.id} style={{padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
+              <div style={{fontWeight:600}}>{a.description}</div>
+              <div style={{fontSize:11,color:'var(--t3)'}}>
+                {a.action_type} · {a.status}{a.owner_name?` · ${a.owner_name}`:''}{a.due_date?` · due ${fmtDay(a.due_date)}`:''}
+              </div>
+            </div>
+          ))}
+          <div style={{display:'flex',gap:8,marginTop:10}}>
+            <input id="inc-action" placeholder="Add a corrective action…"
+              style={{flex:1,padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}/>
+            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={async ()=>{
+              const el=document.getElementById('inc-action'); const desc=el.value.trim()
+              if(!desc) return
+              const { data: sess } = await supabase.auth.getSession()
+              await supabase.from('incident_actions').insert({ incident_id:sel.id, org:orgId, description:desc, action_type:'corrective' })
+              await supabase.from('incident_events').insert({ incident_id:sel.id, org:orgId, event_type:'action_created',
+                by_id:sess?.session?.user?.id, by_name:user.name, by_role:user.role, to_value:desc.slice(0,60) })
+              el.value=''
+              const { data: act } = await supabase.from('incident_actions').select('*').eq('incident_id',sel.id).order('created_at',{ascending:true})
+              setActions(act||[])
+              const { data: ev } = await supabase.from('incident_events').select('*').eq('incident_id',sel.id).order('at',{ascending:false})
+              setEvents(ev||[])
+            }}>Add</button>
+          </div>
+        </div>
+
+        {/* lifecycle */}
+        <div style={card}>
+          <span style={lbl}>Status</span>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {sel.status!=='closed' && [
+              ['assessing','Mark assessing'],['investigating','Start investigation'],
+              ['actions_open','Actions open'],['review','Move to review'],
+            ].map(([s,l])=>(
+              <button key={s} className="btn btn-secondary btn-sm" disabled={busy||sel.status===s}
+                onClick={()=>patchIncident({ status:s }, s==='investigating'?'investigation_started':'status_changed',
+                  { from: sel.status, to: s })}>{l}</button>
+            ))}
+            {isAdmin && (sel.status!=='closed'
+              ? <button className="btn btn-primary btn-sm" disabled={busy} onClick={()=>{
+                  const note=prompt('Closure note (what resolved this incident?)')
+                  if(note===null) return
+                  patchIncident({ status:'closed', closed_at:new Date().toISOString(), closure_note:note||null },
+                    'closed', { from: sel.status, to:'closed', details:{note} })
+                }}>Close incident</button>
+              : <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>
+                  patchIncident({ status:'review', closed_at:null }, 'reopened', { from:'closed', to:'review' })
+                }>Reopen</button>)}
+            {!isAdmin && sel.status!=='closed' && <span style={{fontSize:12,color:'var(--t3)',alignSelf:'center'}}>Move to review, then a client admin signs off closure.</span>}
+            {!isAdmin && sel.status==='closed' && <span style={{fontSize:12,color:'var(--t3)',alignSelf:'center'}}>Closed by client admin.</span>}
+          </div>
+          {sel.closure_note && <div style={{fontSize:13,color:'var(--t2)',marginTop:8}}>Closure: {sel.closure_note}</div>}
+        </div>
+
+        {/* audit timeline */}
+        <div style={card}>
+          <span style={lbl}>Timeline (audit trail)</span>
+          {events.length===0 ? <div style={{fontSize:13,color:'var(--t3)'}}>No events.</div> :
+            events.map(ev=>(
+              <div key={ev.id} style={{display:'flex',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                <div style={{width:8,height:8,borderRadius:4,background:'var(--brand)',marginTop:5,flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600}}>{INC_EVENT_LABEL[ev.event_type]||ev.event_type}
+                    {ev.from_value&&ev.to_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.from_value} → {ev.to_value}</span>}
+                    {!ev.from_value&&ev.to_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.to_value}</span>}
+                  </div>
+                  <div style={{fontSize:11,color:'var(--t3)'}}>{ev.by_name||'—'} ({ev.by_role||'—'}) · {fmtDate(ev.at)}</div>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+    )
+  }
+
+  // ============ LIST ============
+  return (
+    <div className="page-wrap">
+      <div className="ph"><div className="ph-title">Active Incidents</div><div className="ph-sub">Open incidents currently being handled. Closed incidents are in the Register.</div></div>
+      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+        {[['open','Open'],['reported','Reported'],['investigating','Investigating'],['review','Review']].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilterStatus(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${filterStatus===v?'var(--brand)':'var(--border)'}`,background:filterStatus===v?'var(--brand-lt)':'none',color:filterStatus===v?'var(--brand)':'var(--t2)',fontWeight:filterStatus===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>{l}</button>
+        ))}
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--t2)',marginLeft:6,cursor:'pointer'}}>
+          <input type="checkbox" checked={breachedOnly} onChange={e=>setBreachedOnly(e.target.checked)}/> Breached only
+        </label>
+      </div>
+
+      {loading ? <div style={{color:'var(--t2)',fontSize:13}}>Loading…</div> :
+        bySeverity.length===0 ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No incidents</div></div> :
+        bySeverity.map(({s,items})=>{
+          const sc = INC_SEVERITY_CFG[s]
+          return (
+            <div key={s} style={{marginBottom:24}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                <span style={{fontSize:13,fontWeight:700,color:sc.color}}>{s} · {sc.label}</span>
+                <span style={{fontSize:11,color:'var(--t2)'}}>({items.length})</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {items.map(inc=>{
+                  const st = INC_STATUS_CFG[inc.status]||INC_STATUS_CFG.reported
+                  return (
+                    <div key={inc.id} onClick={()=>openIncident(inc)}
+                      style={{background:'var(--card)',borderRadius:10,border:`1px solid ${breached(inc)?'var(--red)':'var(--border)'}`,padding:'14px 16px',cursor:'pointer'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:4}}>
+                        <span style={{fontWeight:700}}>{inc.ref}</span>
+                        <span style={pill(st.color)}>{st.label}</span>
+                        {breached(inc) && <span style={pill('#fff','var(--red)')}>⚠ Breached</span>}
+                      </div>
+                      <div style={{fontSize:13,color:'var(--t2)',marginBottom:4}}>{INC_CATEGORY_LABEL[inc.category]||inc.category}</div>
+                      <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
+                        <span>📅 {fmtDay(inc.occurred_at)}</span>
+                        {inc.affected_type && <span>👤 {inc.affected_type}</span>}
+                        <span>{inc.assigned_to ? '→ '+(names[inc.assigned_to]||inc.assigned_to_name||'assigned') : 'unassigned'}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })
+      }
     </div>
   )
 }
@@ -13739,7 +14729,11 @@ export default function App() {
                 {page==='platform_settings' && user.role==='super_admin' && <PlatformSettingsView user={user} sessionTimeout={sessionTimeout} setSessionTimeout={setSessionTimeout}/>}
                 {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser} darkMode={darkMode} toggleDarkMode={toggleDarkMode}/>}
                 {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
+                {page==='incident_register' && user.role==='client_admin' && <IncidentRegisterView user={user} setPage={setPage}/>}
+                {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user}/>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
+                {page==='incident_hub' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentHubView user={user} setPage={setPage}/>}
+                {page==='report_incident' && <IncidentReportView user={user}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
               </>
             )}
