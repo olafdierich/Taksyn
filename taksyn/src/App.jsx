@@ -980,6 +980,58 @@ const getUserDeptRole = (u, dept) => {
 const Avatar = ({ name, role, size=28, avatarUrl=null }) => avatarUrl
   ? <img src={avatarUrl} alt={name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0}} />
   : <div className="tb-avatar" style={{width:size,height:size,background:avatarColor(role)+'22',color:avatarColor(role)}}>{initials(name)}</div>
+const RISK_INFO = {
+  likelihood: {
+    title: 'Likelihood',
+    rows: [
+      ['5 \u00b7 Certain', '>50% \u2014 expected to occur in most circumstances'],
+      ['4 \u00b7 Likely', '21\u201350% \u2014 will probably occur in most circumstances'],
+      ['3 \u00b7 Possible', '6\u201320% \u2014 might occur at some time'],
+      ['2 \u00b7 Unlikely', '2\u20135% \u2014 could occur at some time'],
+      ['1 \u00b7 Rare', '<2% \u2014 may occur only in exceptional circumstances'],
+    ],
+  },
+  consequence: {
+    title: 'Consequence',
+    rows: [
+      ['5 \u00b7 Catastrophic', 'Serious/fatal harm, or a near miss needing immediate correction. Business: risk of closure, loss of accreditation, huge financial loss.'],
+      ['4 \u00b7 Major', 'Major harm or impact. Business: extensive financial and accreditation implications.'],
+      ['3 \u00b7 Moderate', 'Moderate effect; a near miss with important lessons. Business: high financial impact, some external assistance needed.'],
+      ['2 \u00b7 Minor', 'Inconvenience or minor effect; a near miss with some lessons. Business: medium financial impact, investigation.'],
+      ['1 \u00b7 Insignificant', 'Little or no impact; a near miss with slight lessons. Business: little or no financial loss.'],
+    ],
+  },
+};
+const InfoDot = ({ kind }) => {
+  const [open, setOpen] = useState(false);
+  const info = RISK_INFO[kind];
+  if (!info) return null;
+  return (
+    <span style={{position:'relative',display:'inline-block'}}>
+      <button type="button" onClick={()=>setOpen(o=>!o)} aria-label={'About '+info.title}
+        style={{width:16,height:16,lineHeight:'14px',padding:0,marginLeft:5,borderRadius:'50%',
+          border:'1px solid var(--border2)',background:'var(--card)',color:'var(--t2)',
+          fontSize:11,fontWeight:700,cursor:'pointer',verticalAlign:'middle'}}>i</button>
+      {open && (
+        <>
+          <div onClick={()=>setOpen(false)}
+            style={{position:'fixed',inset:0,zIndex:40}}/>
+          <div style={{position:'absolute',top:20,left:0,zIndex:41,width:280,
+            background:'var(--card)',border:'1px solid var(--border2)',borderRadius:10,
+            boxShadow:'0 8px 28px rgba(0,0,0,.25)',padding:'12px 14px'}}>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--text)',marginBottom:8}}>{info.title}</div>
+            {info.rows.map((r,i)=>(
+              <div key={i} style={{marginBottom:7}}>
+                <div style={{fontSize:12,fontWeight:600,color:'var(--text)'}}>{r[0]}</div>
+                <div style={{fontSize:11.5,color:'var(--t2)',lineHeight:1.4}}>{r[1]}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </span>
+  );
+};
 const Stat = ({ label, val, sub, icon, color='#00A87E', bg='rgba(0,168,126,.1)' }) => (
   <div className="stat-card">
     <div className="sc-top"><span className="sc-label">{label}</span><div className="sc-icon" style={{background:bg,color}}>{icon}</div></div>
@@ -13285,14 +13337,14 @@ function IncidentsAdminView({ user }) {
 
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:14}}>
             <div>
-              <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Likelihood (1–5)</div>
+              <div style={{fontSize:12,color:'var(--t3)',marginBottom:4,display:'flex',alignItems:'center'}}>Likelihood (1–5)<InfoDot kind="likelihood" /></div>
               <select id="inc-likelihood" defaultValue={sel.risk_likelihood||''}
                 style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
                 <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
               </select>
             </div>
             <div>
-              <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Consequence (1–5)</div>
+              <div style={{fontSize:12,color:'var(--t3)',marginBottom:4,display:'flex',alignItems:'center'}}>Consequence (1–5)<InfoDot kind="consequence" /></div>
               <select id="inc-consequence" defaultValue={sel.risk_consequence||''}
                 style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
                 <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
@@ -13311,14 +13363,14 @@ function IncidentsAdminView({ user }) {
             <div style={{fontSize:12,color:'var(--t3)',marginBottom:6,fontWeight:600}}>Residual risk (after corrective actions)</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               <div>
-                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Likelihood (1–5)</div>
+                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4,display:'flex',alignItems:'center'}}>Likelihood (1–5)<InfoDot kind="likelihood" /></div>
                 <select id="inc-res-likelihood" defaultValue={sel.residual_likelihood||''}
                   style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
                   <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
               <div>
-                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Consequence (1–5)</div>
+                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4,display:'flex',alignItems:'center'}}>Consequence (1–5)<InfoDot kind="consequence" /></div>
                 <select id="inc-res-consequence" defaultValue={sel.residual_consequence||''}
                   style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
                   <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
