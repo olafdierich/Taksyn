@@ -13324,6 +13324,33 @@ function IncidentsAdminView({ user }) {
               'risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
           }}>Save risk rating</button>
           {sel.risk_rating && (()=>{ const r=sel.risk_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Risk rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.risk_likelihood}×{sel.risk_consequence})</span></div> })()}
+          {sel.risk_rating && (<div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--border2)'}}>
+            <div style={{fontSize:12,color:'var(--t3)',marginBottom:6,fontWeight:600}}>Residual risk (after corrective actions)</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <div>
+                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Likelihood (1–5)</div>
+                <select id="inc-res-likelihood" defaultValue={sel.residual_likelihood||''}
+                  style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+                  <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Consequence (1–5)</div>
+                <select id="inc-res-consequence" defaultValue={sel.residual_consequence||''}
+                  style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+                  <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </div>
+            <button className="btn btn-secondary btn-sm" style={{marginTop:8}} disabled={busy} onClick={()=>{
+              const l=+document.getElementById('inc-res-likelihood').value||null
+              const c=+document.getElementById('inc-res-consequence').value||null
+              const rating=(l&&c)?l*c:null
+              patchIncident({ residual_likelihood:l, residual_consequence:c, residual_rating:rating },
+                'residual_risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
+            }}>Save residual risk</button>
+            {sel.residual_rating && (()=>{ const r=sel.residual_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Residual rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.residual_likelihood}×{sel.residual_consequence})</span></div> })()}
+          </div>)}
         </div>
 
         {/* corrective actions (display + simple add; task-linking is a later branch) */}
