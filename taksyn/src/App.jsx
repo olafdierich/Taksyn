@@ -1015,8 +1015,8 @@ const InfoDot = ({ kind }) => {
       {open && (
         <>
           <div onClick={()=>setOpen(false)}
-            style={{position:'fixed',inset:0,zIndex:40}}/>
-          <div style={{position:'absolute',top:20,left:0,zIndex:41,width:280,
+            style={{position:'fixed',inset:0,zIndex:9998}}/>
+          <div style={{position:'absolute',top:20,left:0,zIndex:9999,width:280,
             background:'var(--card)',border:'1px solid var(--border2)',borderRadius:10,
             boxShadow:'0 8px 28px rgba(0,0,0,.25)',padding:'12px 14px'}}>
             <div style={{fontSize:13,fontWeight:700,color:'var(--text)',marginBottom:8}}>{info.title}</div>
