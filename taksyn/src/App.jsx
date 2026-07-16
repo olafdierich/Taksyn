@@ -14367,11 +14367,11 @@ export default function App() {
     if(prev !== undefined && prev !== user?.role) setPage('dashboard')
   },[user?.role])
 
+  const [incidentBlob, setIncidentBlob] = useState('none') // 'none'|'ok'|'warn' -> green/orange/red
   if(needsPasswordSetup) return <PasswordSetupView onDone={()=>setNeedsPasswordSetup(false)}/>
   if(needsPasswordReset) return <PasswordResetView onDone={()=>setNeedsPasswordReset(false)}/>
   if(!user) return <AuthView onAuth={handleAuth} deactivatedMsg={deactivatedMsg} onClearDeactivated={()=>setDeactivatedMsg('')}/>
 
-  const [incidentBlob, setIncidentBlob] = useState('none') // 'none'|'ok'|'warn' -> green/orange/red
   const escalationCount = tasks.filter(t=>t.escalation||t.status==='overdue').length
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
