@@ -14416,6 +14416,20 @@ export default function App() {
     })()
     return ()=>{ cancelled = true }
   },[user, page])
+  // Requests sidebar blob (client_admin only): orange = open requests exist, else none. No red.
+  useEffect(()=>{
+    let cancelled = false
+    ;(async()=>{
+      try {
+        if(!user || user.role!=='client_admin') { setRequestsBlob('none'); return }
+        const { count } = await supabase.from('issue_reports')
+          .select('id',{count:'exact',head:true}).eq('org',user.org).eq('status','open')
+        if(cancelled) return
+        setRequestsBlob((count||0)>0 ? 'ok' : 'none')
+      } catch(e) { /* leave as-is on error */ }
+    })()
+    return ()=>{ cancelled = true }
+  },[user, page])
 
   // Reset to dashboard only when the role genuinely changes mid-session (e.g. admin role update),
   // NOT on the initial mount/restore — otherwise it would override the sessionStorage page.
@@ -14428,6 +14442,7 @@ export default function App() {
   },[user?.role])
 
   const [incidentBlob, setIncidentBlob] = useState('none') // 'none'|'ok'|'warn' -> green/orange/red
+  const [requestsBlob, setRequestsBlob] = useState('none') // 'none'|'ok' -> green/orange (no red)
   if(needsPasswordSetup) return <PasswordSetupView onDone={()=>setNeedsPasswordSetup(false)}/>
   if(needsPasswordReset) return <PasswordResetView onDone={()=>setNeedsPasswordReset(false)}/>
   if(!user) return <AuthView onAuth={handleAuth} deactivatedMsg={deactivatedMsg} onClearDeactivated={()=>setDeactivatedMsg('')}/>
@@ -14436,6 +14451,11 @@ export default function App() {
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
   const myReviewCount = ['supervisor','manager','client_admin'].includes(user.role) ? tasks.filter(t=>t.status==='awaiting_review'&&visibleTasks([t],user).length>0).length : 0
+  const _blobToday = new Date().toISOString().split('T')[0]
+  const _visTasks = tasks.filter(t=>visibleTasks([t],user).length>0)
+  const _tasksOverdue = _visTasks.some(t=>t.status==='pending' && t.due_date && t.due_date < _blobToday)
+  const _tasksOpen = _visTasks.some(t=>['pending','in_progress','overdue','rejected','awaiting_review'].includes(t.status))
+  const tasksBlob = _tasksOverdue ? 'warn' : (_tasksOpen ? 'ok' : 'none')
   const navItems = NAV[user.role]||NAV.worker
   const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
@@ -14808,6 +14828,8 @@ export default function App() {
                     {key==='tasks'&&rejectedCount>0&&user.role==='worker'&&<span className="nav-badge">{rejectedCount}</span>}
                     {key==='tasks'&&myReviewCount>0&&<span className="nav-badge amber">{myReviewCount}</span>}
                     {key==='incident_hub'&&incidentBlob!=='none'&&<span title={incidentBlob==='warn'?'An incident needs attention':'Active incidents, on track'} style={{marginLeft:'auto',width:9,height:9,borderRadius:'50%',flexShrink:0,background:incidentBlob==='warn'?'#EF4444':'#F59E0B'}}/>}
+                    {key==='tasks'&&tasksBlob!=='none'&&<span title={tasksBlob==='warn'?'Overdue tasks need attention':'Open tasks, on track'} style={{marginLeft:'auto',width:9,height:9,borderRadius:'50%',flexShrink:0,background:tasksBlob==='warn'?'#EF4444':'#F59E0B'}}/>}
+                    {key==='issue_reports'&&requestsBlob!=='none'&&<span title="Open requests" style={{marginLeft:'auto',width:9,height:9,borderRadius:'50%',flexShrink:0,background:'#F59E0B'}}/>}
                   </button>
                 ))}
               </div>
