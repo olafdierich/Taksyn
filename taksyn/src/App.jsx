@@ -12441,6 +12441,39 @@ const ROLES_ABOVE = {
 function IncidentHubView({ user, setPage }) {
   const isCA = user.role==='client_admin'
   const canReview = ['client_admin','manager','supervisor'].includes(user.role)
+  const [activeIncidents, setActiveIncidents] = useState([])
+  useEffect(()=>{
+    let cancelled = false
+    ;(async()=>{
+      try {
+        if(!canReview) return
+        const { data: sess } = await supabase.auth.getSession()
+        const authId = sess?.session?.user?.id
+        if(!authId) return
+        const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
+        const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+        if(!oid) return
+        const { data } = await supabase.from('incidents').select('*').eq('org', oid).order('created_at',{ascending:false})
+        if(cancelled) return
+        const now = Date.now(); const od=(d)=>d&&new Date(d).getTime()<now
+        const isBreached=(i)=> i.status!=='closed' && ((od(i.assign_due_at)&&!i.assigned_at)||(od(i.investigate_due_at)&&!i.root_cause)||od(i.close_due_at))
+        const active = (data||[]).filter(i=>i.status!=='closed').map(i=>({...i,_breached:isBreached(i)}))
+        // Option B: breached first, then newest-first within each group.
+        active.sort((a,b)=> (b._breached?1:0)-(a._breached?1:0) || new Date(b.created_at)-new Date(a.created_at))
+        setActiveIncidents(active)
+      } catch(e) { /* leave list empty on error */ }
+    })()
+    return ()=>{ cancelled = true }
+  },[user, canReview])
+  const openIncidentBar = (ref) => { try{ sessionStorage.setItem('taksyn-open-incident', ref) }catch(e){}; setPage('incidents') }
+  const relAge = (d) => {
+    if(!d) return ''
+    const ms = Date.now()-new Date(d).getTime(); const day=86400000
+    if(ms<day) return 'today'
+    const days=Math.floor(ms/day); if(days<7) return days+'d ago'
+    const wk=Math.floor(days/7); if(wk<5) return wk+'w ago'
+    const mo=Math.floor(days/30); return mo+'mo ago'
+  }
   const Tile = ({icon,title,sub,onClick,color}) => (
     <div onClick={onClick} style={{cursor:'pointer',flex:'1 1 220px',minWidth:220,background:'var(--s1)',border:'1px solid var(--border)',borderRadius:12,padding:'22px 20px',display:'flex',flexDirection:'column',gap:6,transition:'box-shadow .15s',boxShadow:'0 1px 2px rgba(0,0,0,.04)'}}
       onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,.10)'}
@@ -12464,6 +12497,33 @@ function IncidentHubView({ user, setPage }) {
           sub="The full compliance record — trends, filters, and CSV / PDF export."
           onClick={()=>setPage('incident_register')}/>}
       </div>
+      {canReview && activeIncidents.length>0 && (
+        <div style={{marginTop:22}}>
+          <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:.3,marginBottom:10}}>Active incidents ({activeIncidents.length})</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {activeIncidents.map(i=>{
+              const sev = INC_SEVERITY_CFG[i.severity] || INC_SEVERITY_CFG[1]
+              const st  = INC_STATUS_CFG[i.status] || INC_STATUS_CFG.reported
+              const pill = (color,bg)=>({fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:bg||(color+'22'),color,flexShrink:0,whiteSpace:'nowrap'})
+              return (
+                <div key={i.id} onClick={()=>openIncidentBar(i.ref)}
+                  style={{cursor:'pointer',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',
+                    background:'var(--card)',border:'1px solid '+(i._breached?'#EF4444':'var(--border)'),
+                    borderLeft:'4px solid '+(i._breached?'#EF4444':sev.color),borderRadius:10,padding:'10px 14px',
+                    transition:'box-shadow .15s'}}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 3px 12px rgba(0,0,0,.09)'}
+                  onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  <span style={{fontWeight:800,fontSize:13,flexShrink:0}}>{i.ref}</span>
+                  <span style={pill(sev.color,sev.bg)}>{i.severity} · {sev.label}</span>
+                  <span style={pill(st.color)}>{st.label}</span>
+                  {i._breached && <span style={pill('#fff','#EF4444')}>⚠ Breached</span>}
+                  <span style={{fontSize:12,color:'var(--t3)',marginLeft:'auto',flexShrink:0}}>{relAge(i.created_at)}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
