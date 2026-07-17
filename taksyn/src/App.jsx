@@ -13093,7 +13093,7 @@ function IncidentRegisterView({ user, setPage }) {
     if(ids.length){ const {data:p}=await supabase.from('profiles').select('id,name').in('id',ids); if(p) setNames(Object.fromEntries(p.map(r=>[r.id,r.name]))) }
     // action counts per incident
     const { data: acts } = await supabase.from('incident_actions').select('incident_id,status').eq('org', id)
-    const counts={}; (acts||[]).forEach(a=>{ const c=counts[a.incident_id]||{open:0,total:0}; c.total++; if(a.status!=='verified'&&a.status!=='done') c.open++; counts[a.incident_id]=c })
+    const counts={}; (acts||[]).forEach(a=>{ const c=counts[a.incident_id]||{open:0,total:0}; c.total++; if(a.status!=='verified'&&a.status!=='done'&&a.status!=='completed') c.open++; counts[a.incident_id]=c })
     setActionCounts(counts)
     setLoading(false)
   }
@@ -13347,10 +13347,45 @@ function IncidentsAdminView({ user }) {
 
   const openIncident = async (inc) => {
     setSel(inc); setEvents([]); setActions([])
-    const [{ data: ev }, { data: act }] = await Promise.all([
+    let [{ data: ev }, { data: act }] = await Promise.all([
       supabase.from('incident_events').select('*').eq('incident_id', inc.id).order('at',{ascending:false}),
       supabase.from('incident_actions').select('*').eq('incident_id', inc.id).order('created_at',{ascending:true}),
     ])
+    // CAPA "Back": reconcile actions whose linked task is approved -> flip to completed (idempotent, audit-accurate)
+    try {
+      const pending = (act||[]).filter(a => a.task_id && !['completed','done','verified'].includes(a.status))
+      if (pending.length) {
+        const ids = [...new Set(pending.map(a => a.task_id))]
+        const { data: tks } = await supabase.from('tasks').select('id,status,reviewed_at,approver_id,approver_name').in('id', ids)
+        const tmap = Object.fromEntries((tks||[]).map(t => [t.id, t]))
+        let changed = false
+        for (const a of pending) {
+          const t = tmap[a.task_id]
+          if (t && t.status === 'approved') {
+            const when = t.reviewed_at || new Date().toISOString()
+            const { error: uErr } = await supabase.from('incident_actions')
+              .update({ status:'completed', verified_at: when, verified_by: t.approver_id || null })
+              .eq('id', a.id)
+            if (!uErr) {
+              changed = true
+              await supabase.from('incident_events').insert({
+                incident_id: inc.id, org: orgId, event_type:'corrective_action_completed',
+                by_id: t.approver_id || null, by_name: t.approver_name || 'System', by_role: 'client_admin',
+                to_value: (a.description||'').slice(0,60),
+                details: { task_id: a.task_id, action_id: a.id, verified_at: when }
+              })
+            }
+          }
+        }
+        if (changed) {
+          const [{ data: ev2 }, { data: act2 }] = await Promise.all([
+            supabase.from('incident_events').select('*').eq('incident_id', inc.id).order('at',{ascending:false}),
+            supabase.from('incident_actions').select('*').eq('incident_id', inc.id).order('created_at',{ascending:true}),
+          ])
+          ev = ev2; act = act2
+        }
+      }
+    } catch (e) { /* reconcile is best-effort; never block opening the incident */ }
     setEvents(ev||[]); setActions(act||[])
   }
 
