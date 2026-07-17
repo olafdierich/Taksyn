@@ -6190,10 +6190,10 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Requests','clipboard'],['incident_hub','Incidents','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Request','flag'],['incident_hub','Incidents','alert']],
-  worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Request','flag']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Complaints & Feedback','clipboard'],['incident_hub','Incidents','alert']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents','alert']],
+  worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag']],
 }
 
 function PasswordSetupView({ onDone }) {
@@ -12995,7 +12995,7 @@ function ReportIssueView({ user }) {
 
   return (
     <div className="page-wrap">
-      <div className="ph"><div className="ph-title">Log a Request</div><div className="ph-sub">Let your team know about a problem that needs attention</div></div>
+      <div className="ph"><div className="ph-title">Log a Complaint / Feedback</div><div className="ph-sub">Raise a complaint, share feedback, or log a request that needs attention</div></div>
       <div style={{maxWidth:560,marginBottom:24}}>
         <div className="form-group">
           <label className="form-label">Title *</label>
@@ -13728,6 +13728,9 @@ function IssueReportsAdminView({ user }) {
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('open')
   const [filterType, setFilterType] = useState('all')
+  const [period, setPeriod] = useState('365')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
 
   const load = async () => {
     if(!isConfigured()) { setLoading(false); return }
@@ -13754,40 +13757,72 @@ function IssueReportsAdminView({ user }) {
     if(isConfigured()) await supabase.from('issue_reports').update(patch).eq('id',id)
   }
 
-  const visible = issues.filter(i=> (filterStatus==='all' ? true : i.status===filterStatus) && (filterType==='all' ? true : (i.type||'request')===filterType))
-  const grouped = { high: visible.filter(i=>i.priority==='high'), medium: visible.filter(i=>i.priority==='medium'), low: visible.filter(i=>i.priority==='low') }
+  const periodIssues = (()=>{
+    if(period==='custom'){
+      const from = customFrom ? new Date(customFrom+'T00:00:00') : null
+      const to = customTo ? new Date(customTo+'T23:59:59') : null
+      return issues.filter(i=>{ const d=new Date(i.created_at); return (!from||d>=from) && (!to||d<=to) })
+    }
+    const days = parseInt(period,10)||365
+    const cutoff = new Date(Date.now() - days*86400000)
+    return issues.filter(i=> new Date(i.created_at) >= cutoff)
+  })()
+  const visible = periodIssues.filter(i=> (filterStatus==='all' ? true : i.status===filterStatus) && (filterType==='all' ? true : (i.type||'request')===filterType))
+  const byRecent = (a,b)=> new Date(b.created_at) - new Date(a.created_at)
+  const grouped = {
+    complaint: visible.filter(i=>(i.type||'request')==='complaint').sort(byRecent),
+    feedback:  visible.filter(i=>(i.type||'request')==='feedback').sort(byRecent),
+    request:   visible.filter(i=>(i.type||'request')==='request').sort(byRecent),
+  }
+  const TYPE_SECTION = { complaint:['⚠️','Complaints','#EF4444'], feedback:['💬','Feedback','#10B981'], request:['📋','Requests','#6366F1'] }
 
   return (
     <div className="page-wrap">
-      <div className="ph"><div className="ph-title">Requests</div><div className="ph-sub">Requests logged by your team</div></div>
+      <div className="ph"><div className="ph-title">Complaints & Feedback</div><div className="ph-sub">Complaints, feedback and requests from your team</div></div>
       <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
         {[['open','Open'],['in_progress','In Progress'],['resolved','Resolved'],['all','All']].map(([v,l])=>(
           <button key={v} onClick={()=>setFilterStatus(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${filterStatus===v?'var(--brand)':'var(--border)'}`,background:filterStatus===v?'var(--brand-lt)':'none',color:filterStatus===v?'var(--brand)':'var(--t2)',fontWeight:filterStatus===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all .15s'}}>
-            {l} {v!=='all'&&<span style={{fontSize:10,opacity:.7}}>({issues.filter(i=>i.status===v).length})</span>}
+            {l} {v!=='all'&&<span style={{fontSize:10,opacity:.7}}>({periodIssues.filter(i=>i.status===v).length})</span>}
           </button>
         ))}
       </div>
       <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
         {[['all','All types'],['request','📋 Requests'],['complaint','⚠️ Complaints'],['feedback','💬 Feedback']].map(([v,l])=>(
           <button key={v} onClick={()=>setFilterType(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${filterType===v?'var(--brand)':'var(--border)'}`,background:filterType===v?'var(--brand-lt)':'none',color:filterType===v?'var(--brand)':'var(--t2)',fontWeight:filterType===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all .15s'}}>
-            {l} {v!=='all'&&<span style={{fontSize:10,opacity:.7}}>({issues.filter(i=>(i.type||'request')===v).length})</span>}
+            {l} {v!=='all'&&<span style={{fontSize:10,opacity:.7}}>({periodIssues.filter(i=>(i.type||'request')===v).length})</span>}
           </button>
         ))}
       </div>
+      <div style={{display:'flex',gap:8,marginBottom:period==='custom'?12:20,flexWrap:'wrap',alignItems:'center'}}>
+        {[['365','Annually'],['90','Quarterly'],['30','Monthly'],['custom','Custom']].map(([v,l])=>(
+          <button key={v} onClick={()=>setPeriod(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${period===v?'var(--brand)':'var(--border)'}`,background:period===v?'var(--brand-lt)':'none',color:period===v?'var(--brand)':'var(--t2)',fontWeight:period===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all .15s'}}>
+            {l}
+          </button>
+        ))}
+        <span style={{fontSize:11,color:'var(--t3)',marginLeft:4}}>{periodIssues.length} in period</span>
+      </div>
+      {period==='custom' && (
+        <div style={{display:'flex',gap:10,marginBottom:20,flexWrap:'wrap',alignItems:'center'}}>
+          <label style={{fontSize:12,color:'var(--t2)',display:'flex',alignItems:'center',gap:6}}>From <input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} style={{padding:'5px 8px',borderRadius:8,border:'1px solid var(--border)',fontFamily:'inherit',fontSize:12}}/></label>
+          <label style={{fontSize:12,color:'var(--t2)',display:'flex',alignItems:'center',gap:6}}>To <input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} style={{padding:'5px 8px',borderRadius:8,border:'1px solid var(--border)',fontFamily:'inherit',fontSize:12}}/></label>
+          {(customFrom||customTo) && <button onClick={()=>{setCustomFrom('');setCustomTo('')}} style={{fontSize:11,color:'var(--t2)',background:'none',border:'none',cursor:'pointer',textDecoration:'underline',fontFamily:'inherit'}}>clear</button>}
+        </div>
+      )}
       {loading ? <div style={{color:'var(--t2)',fontSize:13}}>Loading…</div> : visible.length===0 ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No {filterStatus==='all'?'':filterStatus} issues</div></div> : (
-        ['high','medium','low'].map(pri=>{
-          const grp = grouped[pri]
+        ['complaint','feedback','request'].map(typ=>{
+          const grp = grouped[typ]
           if(!grp.length) return null
-          const pc = ISSUE_PRIORITY_CFG[pri]
+          const [tEmoji,tLabel,tColor] = TYPE_SECTION[typ]
           return (
-            <div key={pri} style={{marginBottom:28}}>
+            <div key={typ} style={{marginBottom:28}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-                <span style={{fontSize:13,fontWeight:700,color:pc.color}}>{pc.emoji} {pc.label} Priority</span>
+                <span style={{fontSize:13,fontWeight:700,color:tColor}}>{tEmoji} {tLabel}</span>
                 <span style={{fontSize:11,color:'var(--t2)'}}>({grp.length})</span>
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
                 {grp.map(issue=>{
                   const sc = ISSUE_STATUS_CFG[issue.status]||ISSUE_STATUS_CFG.open
+                  const pc = ISSUE_PRIORITY_CFG[issue.priority]||ISSUE_PRIORITY_CFG.medium
                   return (
                     <div key={issue.id} style={{background:'var(--card)',borderRadius:10,border:`1px solid ${issue.status==='open'?pc.color+'44':'var(--border)'}`,padding:'14px 16px'}}>
                       <div style={{display:'flex',alignItems:'flex-start',gap:10,flexWrap:'wrap',marginBottom:6}}>
