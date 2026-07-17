@@ -12438,6 +12438,94 @@ const ROLES_ABOVE = {
 }
 
 // ============ INCIDENT REPORTING ============
+function CapaActionForm({ sel, orgId, user, busy, setBusy, capaStaff, isAdmin, onDone }) {
+  const [desc, setDesc] = useState('')
+  const [ownerId, setOwnerId] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [evidence, setEvidence] = useState(true)
+  const [err, setErr] = useState('')
+
+  const sev = Number(sel?.severity) || 0
+  const risk = Number(sel?.risk_rating) || 0
+  const gated = sev >= 3 || risk >= 9
+  const blocked = gated && !isAdmin
+
+  const create = async () => {
+    setErr('')
+    const d = desc.trim()
+    if (!d) { setErr('Enter a description.'); return }
+    if (!ownerId) { setErr('Choose who will do this action.'); return }
+    if (blocked) { setErr('High severity/risk — a client admin must assign this action.'); return }
+    setBusy(true)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const uid = sess?.session?.user?.id
+      const owner = capaStaff.find(m => m.user_id === ownerId)
+      const ownerName = owner?.name || ''
+      const now = new Date().toISOString()
+      const taskId = 'T' + Date.now()
+      const subtasks = [{ id: 's' + Date.now(), text: 'Complete corrective action and attach evidence', done: false, requirePhoto: !!evidence }]
+      const taskPayload = {
+        id: taskId, title: d, category: 'Corrective action', status: 'pending',
+        priority: 'high', compliance: !!evidence, recurrence: 'once',
+        assigned_role: owner?.role || 'worker',
+        assigned_user_id: ownerId, assigned_user_name: ownerName,
+        assigned_user_ids: [ownerId], assigned_user_names: [ownerName],
+        due_date: dueDate || null,
+        subtasks: JSON.stringify(subtasks), evidence: '[]', comments: '[]',
+        escalation: false, created_by: user.name, org: user.org, created_at: now
+      }
+      const { error: tErr } = await supabase.from('tasks').insert(taskPayload)
+      if (tErr) { setErr('Could not create task: ' + tErr.message); setBusy(false); return }
+      const { error: aErr } = await supabase.from('incident_actions').insert({
+        incident_id: sel.id, org: orgId, description: d, action_type: 'corrective',
+        task_id: taskId, owner_id: ownerId, owner_name: ownerName,
+        due_date: dueDate || null, status: 'open'
+      })
+      if (aErr) { setErr('Task created but link failed: ' + aErr.message); setBusy(false); return }
+      await supabase.from('incident_events').insert({
+        incident_id: sel.id, org: orgId, event_type: 'action_created',
+        by_id: uid, by_name: user.name, by_role: user.role,
+        to_value: d.slice(0, 60), details: { task_id: taskId, owner: ownerName }
+      })
+      setDesc(''); setOwnerId(''); setDueDate(''); setEvidence(true)
+      if (onDone) await onDone()
+    } catch (e) {
+      setErr('Unexpected error: ' + (e?.message || e))
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)'}}>
+      <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>Create a corrective action (becomes a task)</div>
+      <div style={{fontSize:11,color:'#DC2626',background:'rgba(220,38,38,.08)',padding:'6px 8px',borderRadius:6,marginBottom:8}}>
+        &#9888;&#65039; This title is visible to the assigned worker — do not include incident detail (category, people involved, or clinical information).
+      </div>
+      <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="What needs to be done (worker-safe wording)…"
+        style={{width:'100%',minHeight:52,padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8}}/>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
+        <select value={ownerId} onChange={e=>setOwnerId(e.target.value)} disabled={blocked}
+          style={{flex:'1 1 180px',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+          <option value="">— Assign to —</option>
+          {capaStaff.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({ROLE_LABELS[m.role]||m.role})</option>)}
+        </select>
+        <input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}
+          style={{flex:'0 1 150px',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}/>
+      </div>
+      <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,marginBottom:8,cursor:'pointer'}}>
+        <input type="checkbox" checked={evidence} onChange={e=>setEvidence(e.target.checked)}/>
+        Require photo evidence
+      </label>
+      {blocked && <div style={{fontSize:11,color:'#EA580C',marginBottom:8}}>High severity or high risk — a client admin must assign this action.</div>}
+      {err && <div style={{fontSize:11,color:'#DC2626',marginBottom:8}}>{err}</div>}
+      <button className="btn btn-primary btn-sm" disabled={busy||blocked} onClick={create}>
+        {busy?'Creating…':'Create corrective action'}
+      </button>
+    </div>
+  )
+}
+
 function IncidentHubView({ user, setPage }) {
   const isCA = user.role==='client_admin'
   const canReview = ['client_admin','manager','supervisor'].includes(user.role)
@@ -13005,7 +13093,7 @@ function IncidentRegisterView({ user, setPage }) {
     if(ids.length){ const {data:p}=await supabase.from('profiles').select('id,name').in('id',ids); if(p) setNames(Object.fromEntries(p.map(r=>[r.id,r.name]))) }
     // action counts per incident
     const { data: acts } = await supabase.from('incident_actions').select('incident_id,status').eq('org', id)
-    const counts={}; (acts||[]).forEach(a=>{ const c=counts[a.incident_id]||{open:0,total:0}; c.total++; if(a.status!=='verified'&&a.status!=='done') c.open++; counts[a.incident_id]=c })
+    const counts={}; (acts||[]).forEach(a=>{ const c=counts[a.incident_id]||{open:0,total:0}; c.total++; if(a.status!=='verified'&&a.status!=='done'&&a.status!=='completed') c.open++; counts[a.incident_id]=c })
     setActionCounts(counts)
     setLoading(false)
   }
@@ -13206,6 +13294,7 @@ function IncidentsAdminView({ user }) {
   const [sel, setSel] = useState(null)          // selected incident (full row)
   const [events, setEvents] = useState([])
   const [actions, setActions] = useState([])
+  const [capaStaff, setCapaStaff] = useState([])
   const [busy, setBusy] = useState(false)
 
   const fmtDate = (d) => d ? new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
@@ -13244,6 +13333,7 @@ function IncidentsAdminView({ user }) {
       const nameMap = Object.fromEntries((mp||[]).map(r=>[r.id,r.name]))
       setMembers(mem.filter(m=>['supervisor','manager','client_admin'].includes(m.role))
         .map(m=>({ ...m, name: nameMap[m.user_id]||'—' })))
+      setCapaStaff(mem.map(m=>({ ...m, name: nameMap[m.user_id]||'—' })))
     }
     setLoading(false)
   }
@@ -13257,10 +13347,45 @@ function IncidentsAdminView({ user }) {
 
   const openIncident = async (inc) => {
     setSel(inc); setEvents([]); setActions([])
-    const [{ data: ev }, { data: act }] = await Promise.all([
+    let [{ data: ev }, { data: act }] = await Promise.all([
       supabase.from('incident_events').select('*').eq('incident_id', inc.id).order('at',{ascending:false}),
       supabase.from('incident_actions').select('*').eq('incident_id', inc.id).order('created_at',{ascending:true}),
     ])
+    // CAPA "Back": reconcile actions whose linked task is approved -> flip to completed (idempotent, audit-accurate)
+    try {
+      const pending = (act||[]).filter(a => a.task_id && !['completed','done','verified'].includes(a.status))
+      if (pending.length) {
+        const ids = [...new Set(pending.map(a => a.task_id))]
+        const { data: tks } = await supabase.from('tasks').select('id,status,reviewed_at,approver_id,approver_name').in('id', ids)
+        const tmap = Object.fromEntries((tks||[]).map(t => [t.id, t]))
+        let changed = false
+        for (const a of pending) {
+          const t = tmap[a.task_id]
+          if (t && t.status === 'approved') {
+            const when = t.reviewed_at || new Date().toISOString()
+            const { error: uErr } = await supabase.from('incident_actions')
+              .update({ status:'completed', verified_at: when, verified_by: t.approver_id || null })
+              .eq('id', a.id)
+            if (!uErr) {
+              changed = true
+              await supabase.from('incident_events').insert({
+                incident_id: inc.id, org: orgId, event_type:'corrective_action_completed',
+                by_id: t.approver_id || null, by_name: t.approver_name || 'System', by_role: 'client_admin',
+                to_value: (a.description||'').slice(0,60),
+                details: { task_id: a.task_id, action_id: a.id, verified_at: when }
+              })
+            }
+          }
+        }
+        if (changed) {
+          const [{ data: ev2 }, { data: act2 }] = await Promise.all([
+            supabase.from('incident_events').select('*').eq('incident_id', inc.id).order('at',{ascending:false}),
+            supabase.from('incident_actions').select('*').eq('incident_id', inc.id).order('created_at',{ascending:true}),
+          ])
+          ev = ev2; act = act2
+        }
+      }
+    } catch (e) { /* reconcile is best-effort; never block opening the incident */ }
     setEvents(ev||[]); setActions(act||[])
   }
 
@@ -13460,23 +13585,14 @@ function IncidentsAdminView({ user }) {
               </div>
             </div>
           ))}
-          <div style={{display:'flex',gap:8,marginTop:10}}>
-            <input id="inc-action" placeholder="Add a corrective action…"
-              style={{flex:1,padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}/>
-            <button className="btn btn-secondary btn-sm" disabled={busy} onClick={async ()=>{
-              const el=document.getElementById('inc-action'); const desc=el.value.trim()
-              if(!desc) return
-              const { data: sess } = await supabase.auth.getSession()
-              await supabase.from('incident_actions').insert({ incident_id:sel.id, org:orgId, description:desc, action_type:'corrective' })
-              await supabase.from('incident_events').insert({ incident_id:sel.id, org:orgId, event_type:'action_created',
-                by_id:sess?.session?.user?.id, by_name:user.name, by_role:user.role, to_value:desc.slice(0,60) })
-              el.value=''
+          <CapaActionForm sel={sel} orgId={orgId} user={user} busy={busy} setBusy={setBusy}
+            capaStaff={capaStaff} isAdmin={isAdmin}
+            onDone={async ()=>{
               const { data: act } = await supabase.from('incident_actions').select('*').eq('incident_id',sel.id).order('created_at',{ascending:true})
               setActions(act||[])
               const { data: ev } = await supabase.from('incident_events').select('*').eq('incident_id',sel.id).order('at',{ascending:false})
               setEvents(ev||[])
-            }}>Add</button>
-          </div>
+            }}/>
         </div>
 
         {/* lifecycle */}
