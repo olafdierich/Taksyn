@@ -13768,7 +13768,13 @@ function IssueReportsAdminView({ user }) {
     return issues.filter(i=> new Date(i.created_at) >= cutoff)
   })()
   const visible = periodIssues.filter(i=> (filterStatus==='all' ? true : i.status===filterStatus) && (filterType==='all' ? true : (i.type||'request')===filterType))
-  const grouped = { high: visible.filter(i=>i.priority==='high'), medium: visible.filter(i=>i.priority==='medium'), low: visible.filter(i=>i.priority==='low') }
+  const byRecent = (a,b)=> new Date(b.created_at) - new Date(a.created_at)
+  const grouped = {
+    complaint: visible.filter(i=>(i.type||'request')==='complaint').sort(byRecent),
+    feedback:  visible.filter(i=>(i.type||'request')==='feedback').sort(byRecent),
+    request:   visible.filter(i=>(i.type||'request')==='request').sort(byRecent),
+  }
+  const TYPE_SECTION = { complaint:['⚠️','Complaints','#EF4444'], feedback:['💬','Feedback','#10B981'], request:['📋','Requests','#6366F1'] }
 
   return (
     <div className="page-wrap">
@@ -13803,19 +13809,20 @@ function IssueReportsAdminView({ user }) {
         </div>
       )}
       {loading ? <div style={{color:'var(--t2)',fontSize:13}}>Loading…</div> : visible.length===0 ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No {filterStatus==='all'?'':filterStatus} issues</div></div> : (
-        ['high','medium','low'].map(pri=>{
-          const grp = grouped[pri]
+        ['complaint','feedback','request'].map(typ=>{
+          const grp = grouped[typ]
           if(!grp.length) return null
-          const pc = ISSUE_PRIORITY_CFG[pri]
+          const [tEmoji,tLabel,tColor] = TYPE_SECTION[typ]
           return (
-            <div key={pri} style={{marginBottom:28}}>
+            <div key={typ} style={{marginBottom:28}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-                <span style={{fontSize:13,fontWeight:700,color:pc.color}}>{pc.emoji} {pc.label} Priority</span>
+                <span style={{fontSize:13,fontWeight:700,color:tColor}}>{tEmoji} {tLabel}</span>
                 <span style={{fontSize:11,color:'var(--t2)'}}>({grp.length})</span>
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
                 {grp.map(issue=>{
                   const sc = ISSUE_STATUS_CFG[issue.status]||ISSUE_STATUS_CFG.open
+                  const pc = ISSUE_PRIORITY_CFG[issue.priority]||ISSUE_PRIORITY_CFG.medium
                   return (
                     <div key={issue.id} style={{background:'var(--card)',borderRadius:10,border:`1px solid ${issue.status==='open'?pc.color+'44':'var(--border)'}`,padding:'14px 16px'}}>
                       <div style={{display:'flex',alignItems:'flex-start',gap:10,flexWrap:'wrap',marginBottom:6}}>
