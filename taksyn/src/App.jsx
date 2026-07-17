@@ -12937,6 +12937,8 @@ function ReportIssueView({ user }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [issues, setIssues] = useState([])
+  const [rtype, setRtype] = useState('request')
+  const [anon, setAnon] = useState(false)
 
   useEffect(()=>{
     if(!isConfigured()) return
@@ -12951,12 +12953,14 @@ function ReportIssueView({ user }) {
     setSubmitting(true)
     const now = new Date().toISOString()
     const payload = {
-      reported_by: user.id,
+      reported_by: anon ? null : user.id,
       org: user.org,
       title: title.trim(),
       description: desc.trim(),
       priority,
       status: 'open',
+      type: rtype,
+      is_anonymous: anon,
     }
     if(photo) payload.photo_url = photo
     if(isConfigured()) {
@@ -12974,14 +12978,17 @@ function ReportIssueView({ user }) {
           .then(({data})=>{
             if(!data) return
             data.filter(p=>notifyRoles.includes(p.role)&&p.email).forEach(p=>{
-              sendEmailNotif(p.email, `New request logged: ${payload.title}`,
-                `${user.name} (${ROLE_LABELS[user.role]||user.role}) reported a new ${priority} priority issue in ${user.org}.\n\nTitle: ${payload.title}\n\nDescription: ${payload.description}\n\nLog in to Taksyn to review and action this issue.`)
+              sendEmailNotif(p.email,
+                anon ? `New anonymous ${rtype} logged` : `New request logged: ${payload.title}`,
+                anon
+                  ? `An anonymous ${rtype} was logged in ${user.org}.\n\nLog in to Taksyn to review and action it. (The submitter chose to remain anonymous; no identity is stored.)`
+                  : `${user.name} (${ROLE_LABELS[user.role]||user.role}) reported a new ${priority} priority issue in ${user.org}.\n\nTitle: ${payload.title}\n\nDescription: ${payload.description}\n\nLog in to Taksyn to review and action this issue.`)
             })
           }).catch(()=>{})
       }
     }
-    setIssues(prev=>[{...payload, id:'local_'+Date.now(), created_at:now},...prev])
-    setTitle(''); setDesc(''); setPriority('medium'); setPhoto(null)
+    if(!anon) setIssues(prev=>[{...payload, id:'local_'+Date.now(), created_at:now},...prev])
+    setTitle(''); setDesc(''); setPriority('medium'); setPhoto(null); setRtype('request'); setAnon(false)
     setSubmitted(true); setSubmitting(false)
     setTimeout(()=>setSubmitted(false), 4000)
   }
@@ -12997,6 +13004,16 @@ function ReportIssueView({ user }) {
         <div className="form-group">
           <label className="form-label">Description *</label>
           <textarea className="form-input" rows={4} placeholder="Describe the issue in detail — what happened, where, and when" value={desc} onChange={e=>setDesc(e.target.value)} style={{resize:'vertical'}}/>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Type</label>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {[['request','\ud83d\udccb','Request'],['complaint','\u26a0\ufe0f','Complaint'],['feedback','\ud83d\udcac','Feedback']].map(([v,em,lb])=>(
+              <button key={v} onClick={()=>setRtype(v)} style={{padding:'7px 16px',borderRadius:20,border:`2px solid ${rtype===v?'var(--brand)':'var(--border)'}`,background:rtype===v?'rgba(99,102,241,.1)':'none',color:rtype===v?'var(--brand)':'var(--t2)',fontWeight:rtype===v?700:400,cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',gap:5,fontFamily:'inherit',transition:'all .15s'}}>
+                {em} {lb}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="form-group">
           <label className="form-label">Priority</label>
@@ -13021,6 +13038,15 @@ function ReportIssueView({ user }) {
             : <button className="btn btn-secondary" style={{fontSize:13}} onClick={()=>document.getElementById('issue-photo-inp').click()}>📷 Attach Photo</button>
           }
           <input id="issue-photo-inp" type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>setPhoto(ev.target.result); r.readAsDataURL(f); e.target.value='' }}/>
+        </div>
+        <div className="form-group">
+          <label style={{display:'flex',alignItems:'flex-start',gap:9,cursor:'pointer'}}>
+            <input type="checkbox" checked={anon} onChange={e=>setAnon(e.target.checked)} style={{marginTop:3,cursor:'pointer',flexShrink:0}}/>
+            <span style={{fontSize:13,color:'var(--t2)',lineHeight:1.5}}>
+              <strong style={{color:'var(--t1)'}}>Submit anonymously</strong><br/>
+              Your name and identity will not be stored. This cannot be undone or traced back to you — an anonymous submission will not appear in your list below.
+            </span>
+          </label>
         </div>
         {submitted && <div style={{padding:'10px 14px',borderRadius:8,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.3)',color:'#059669',fontWeight:600,marginBottom:12}}>✓ Request logged successfully</div>}
         <button className="btn btn-primary" disabled={!title.trim()||!desc.trim()||submitting} onClick={submit} style={{width:'100%'}}>
@@ -13701,6 +13727,7 @@ function IssueReportsAdminView({ user }) {
   const [reporterNames, setReporterNames] = useState({})
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('open')
+  const [filterType, setFilterType] = useState('all')
 
   const load = async () => {
     if(!isConfigured()) { setLoading(false); return }
@@ -13727,7 +13754,7 @@ function IssueReportsAdminView({ user }) {
     if(isConfigured()) await supabase.from('issue_reports').update(patch).eq('id',id)
   }
 
-  const visible = issues.filter(i=> filterStatus==='all' ? true : i.status===filterStatus)
+  const visible = issues.filter(i=> (filterStatus==='all' ? true : i.status===filterStatus) && (filterType==='all' ? true : (i.type||'request')===filterType))
   const grouped = { high: visible.filter(i=>i.priority==='high'), medium: visible.filter(i=>i.priority==='medium'), low: visible.filter(i=>i.priority==='low') }
 
   return (
@@ -13737,6 +13764,13 @@ function IssueReportsAdminView({ user }) {
         {[['open','Open'],['in_progress','In Progress'],['resolved','Resolved'],['all','All']].map(([v,l])=>(
           <button key={v} onClick={()=>setFilterStatus(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${filterStatus===v?'var(--brand)':'var(--border)'}`,background:filterStatus===v?'var(--brand-lt)':'none',color:filterStatus===v?'var(--brand)':'var(--t2)',fontWeight:filterStatus===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all .15s'}}>
             {l} {v!=='all'&&<span style={{fontSize:10,opacity:.7}}>({issues.filter(i=>i.status===v).length})</span>}
+          </button>
+        ))}
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
+        {[['all','All types'],['request','📋 Requests'],['complaint','⚠️ Complaints'],['feedback','💬 Feedback']].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilterType(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${filterType===v?'var(--brand)':'var(--border)'}`,background:filterType===v?'var(--brand-lt)':'none',color:filterType===v?'var(--brand)':'var(--t2)',fontWeight:filterType===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all .15s'}}>
+            {l} {v!=='all'&&<span style={{fontSize:10,opacity:.7}}>({issues.filter(i=>(i.type||'request')===v).length})</span>}
           </button>
         ))}
       </div>
@@ -13758,11 +13792,14 @@ function IssueReportsAdminView({ user }) {
                     <div key={issue.id} style={{background:'var(--card)',borderRadius:10,border:`1px solid ${issue.status==='open'?pc.color+'44':'var(--border)'}`,padding:'14px 16px'}}>
                       <div style={{display:'flex',alignItems:'flex-start',gap:10,flexWrap:'wrap',marginBottom:6}}>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontWeight:700,marginBottom:2}}>{issue.title}</div>
+                          <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:2,flexWrap:'wrap'}}>
+                            <span style={{fontWeight:700}}>{issue.title}</span>
+                            {(()=>{ const t=issue.type||'request'; const tc={request:['📋','#6366F1'],complaint:['⚠️','#EF4444'],feedback:['💬','#10B981']}[t]||['📋','#6366F1']; return <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:tc[1]+'1a',color:tc[1],textTransform:'capitalize'}}>{tc[0]} {t}</span> })()}
+                          </div>
                           <div style={{fontSize:12,color:'var(--t2)',marginBottom:6}}>{issue.description}</div>
                           {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:220,maxHeight:150,borderRadius:6,border:'1px solid var(--border)',display:'block',marginBottom:6}}/>}
                           <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
-                            <span>👤 {reporterNames[issue.reported_by]||'Team member'}</span>
+                            {issue.is_anonymous ? <span style={{color:'var(--t2)',fontWeight:600}}>🔒 Anonymous</span> : <span>👤 {reporterNames[issue.reported_by]||'Team member'}</span>}
                             <span>📅 {new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</span>
                             {issue.status==='resolved'&&issue.resolved_by&&<span>✓ Resolved by {issue.resolved_by}</span>}
                           </div>
