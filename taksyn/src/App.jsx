@@ -11396,15 +11396,21 @@ function SuperAdminAccountView({ user, setUser, darkMode, toggleDarkMode }) {
   const save = async () => {
     if(!form.name.trim()){setMsg('✗ Name is required');return}
     setSaving(true); setMsg('')
-    const updates = {name:form.name.trim(),email:form.email.trim()}
+    const updates = {name:form.name.trim()}
+    const emailChanged = form.email.trim() && form.email.trim()!==user.email
     if(isConfigured()){
       const { error } = await supabase.from('profiles').update(updates).eq('id',user.id); if(error) setMsg('✗ '+error.message)
-      if(form.email!==user.email) await supabase.auth.updateUser({email:form.email}).catch(()=>{})
+      if(emailChanged){
+        const { error: emailErr } = await supabase.auth.updateUser({email:form.email.trim()})
+        if(emailErr){ setMsg('✗ '+emailErr.message); setSaving(false); return }
+      }
     }
     if(setUser) setUser(prev=>({...prev,...updates}))
-    setMsg('✓ Profile saved')
+    setMsg(emailChanged
+      ? '✓ Name saved. Confirmation sent to '+form.email.trim()+' — click the link in that inbox to finish. Until you do, keep signing in with '+user.email
+      : '✓ Profile saved')
     setSaving(false)
-    setTimeout(()=>setMsg(''),3000)
+    setTimeout(()=>setMsg(''),emailChanged?15000:3000)
   }
 
   const changePw = async () => {
@@ -14351,7 +14357,7 @@ export default function App() {
         // Password was just set — log them in properly
         try {
           const {data} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('id',session.user.id).single()
-          if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
+          if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&data.email!==session.user.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
       } else if(event==='SIGNED_IN') {
         // If we're in the invite registration flow and not actively registering, sign out —
@@ -14870,10 +14876,9 @@ export default function App() {
                     if(!newEmail.trim()||newEmail===user.email) return
                     const {error} = await supabase.auth.updateUser({email:newEmail.trim()})
                     if(error) { setProfileMsg('✗ '+error.message); return }
-                    // Also update profiles table so admins see the new email
-                    await supabase.from('profiles').update({email:newEmail.trim()}).eq('id',user.id)
-                    setUser(prev=>({...prev,email:newEmail.trim()}))
-                    setProfileMsg('✓ Confirmation sent to '+newEmail+' — check your inbox to confirm the change')
+                    // Do NOT write profiles.email or setUser here — the change is only PENDING
+                    // until the confirmation link is clicked. profiles.email is synced from auth on login.
+                    setProfileMsg('✓ Confirmation sent to '+newEmail.trim()+' — click the link in that inbox to finish. Until you do, keep signing in with '+user.email)
                     setNewEmail('')
                   }}>Update Email</button>
                 </div>
