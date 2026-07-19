@@ -9961,6 +9961,8 @@ function ProjectsView({ user }) {
 function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
+  const [selectedTeam, setSelectedTeam] = useState('all')
+  const [nameQuery, setNameQuery] = useState('')
   const [orgMembers, setOrgMembers] = useState([]) // [{id, name, role}]
   const [teamsList, setTeamsList] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
@@ -10085,11 +10087,14 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
     if(t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) p.reviewedInTime++
   })
 
+  const memberTeams={}; teamMembers.forEach(m=>{ (memberTeams[m.user_id]=memberTeams[m.user_id]||[]).push(m.team_id) })
+  const _nq = nameQuery.trim().toLowerCase()
   const people = Object.values(peopleMap)
     .filter(p=>selectedRole==='all'||p.role===selectedRole)
+    .filter(p=>selectedTeam==='all'||(memberTeams[p.id]||[]).includes(selectedTeam))
+    .filter(p=>!_nq||(p.name||'').toLowerCase().includes(_nq))
     .sort((a,b)=>b.total-a.total)
-  const memberTeams={}; teamMembers.forEach(m=>{ (memberTeams[m.user_id]=memberTeams[m.user_id]||[]).push(m.team_id) })
-  const teamMap={}; teamsList.forEach(t=>{ teamMap[t.id]={name:t.name,total:0,done:0} })
+  const teamMap={}; teamsList.forEach(t=>{ teamMap[t.id]={id:t.id,name:t.name,total:0,done:0} })
   pt.forEach(t=>{
     const tset=new Set()
     if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
@@ -10102,7 +10107,12 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
     }
     tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=expectedFor(t.recurrence); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
-  const teams=Object.values(teamMap).sort((a,b)=>b.total-a.total)
+  const _teamIdsWithMatches = new Set()
+  people.forEach(p=>{ (memberTeams[p.id]||[]).forEach(tid=>_teamIdsWithMatches.add(tid)) })
+  const teams=Object.values(teamMap)
+    .filter(tm=>selectedTeam==='all'||tm.id===selectedTeam)
+    .filter(tm=>(selectedRole==='all'&&!_nq)||_teamIdsWithMatches.has(tm.id))
+    .sort((a,b)=>b.total-a.total)
 
   const fmtAvg = mins => {
     if(!mins.length) return '—'
@@ -10137,6 +10147,14 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
           <option value="all">All Roles</option>
           {['manager','supervisor','worker'].map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
         </select>
+        <select className="form-input" value={selectedTeam} onChange={e=>setSelectedTeam(e.target.value)} style={{fontSize:12,padding:'5px 10px',maxWidth:160}}>
+          <option value="all">All Teams</option>
+          {teamsList.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <input className="form-input" type="text" value={nameQuery} onChange={e=>setNameQuery(e.target.value)} placeholder="Search name…" style={{fontSize:12,padding:'5px 10px',maxWidth:180}}/>
+        {(selectedRole!=='all'||selectedTeam!=='all'||nameQuery.trim()) && (
+          <button className="btn btn-sm btn-secondary" onClick={()=>{setSelectedRole('all');setSelectedTeam('all');setNameQuery('')}} style={{fontSize:11}}>Clear</button>
+        )}
       </div>
 
       {people.length===0 ? (
