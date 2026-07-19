@@ -1929,8 +1929,8 @@ function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
       t.assigned_user_id===user.id ||
       t.assigned_user_ids?.includes(user.id) ||
       t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase() ||
-      (!t.assigned_user_id&&!t.assigned_user_name&&t.assigned_role==='worker') ||
-      (t.team_id && userTeamIds.includes(t.team_id))
+      (!t.assigned_user_id&&!t.assigned_user_name&&!(t.assigned_user_ids&&t.assigned_user_ids.length)&&t.assigned_role==='worker') ||
+      (t.team_id && userTeamIds.includes(t.team_id) && !t.assigned_user_id && !(t.assigned_user_ids&&t.assigned_user_ids.length) && !t.assigned_user_name)
     )
     // Add tasks of people being covered
     const coverTasks = coveringFor.length>0 ? orgTasks.filter(t=>
