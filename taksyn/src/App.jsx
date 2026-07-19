@@ -14878,6 +14878,9 @@ export default function App() {
                   <div className="form-field"><label className="form-label">New Email Address</label><input className="form-input" type="text" inputMode="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder={user.email} readOnly onFocus={e=>e.target.removeAttribute('readonly')} autoComplete="off" name="taksyn-new-email" spellCheck={false} autoCorrect="off" autoCapitalize="none"/></div>
                   <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} disabled={!newEmail.trim()||newEmail===user.email} onClick={async()=>{
                     if(!newEmail.trim()||newEmail===user.email) return
+                    // Confirm the destination before sending. The field can be pre-filled by the
+                    // browser's saved credentials, so show the user exactly where the link will go.
+                    if(!window.confirm('Send a confirmation link to '+newEmail.trim()+'?\n\nYour sign-in email changes to this address only after you click the link in that inbox. Until then, keep signing in with '+user.email+'.')) return
                     const {error} = await supabase.auth.updateUser({email:newEmail.trim()})
                     if(error) { setProfileMsg('✗ '+error.message); return }
                     // Do NOT write profiles.email or setUser here — the change is only PENDING
