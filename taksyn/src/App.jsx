@@ -12953,7 +12953,7 @@ function IncidentReportView({ user }) {
   )
 }
 
-function ReportIssueView({ user }) {
+function ReportIssueView({ user, embedded }) {
   const [title, setTitle] = useState('')
   const [desc, setDesc] = useState('')
   const [priority, setPriority] = useState('medium')
@@ -13019,7 +13019,7 @@ function ReportIssueView({ user }) {
 
   return (
     <div className="page-wrap">
-      <div className="ph"><div className="ph-title">Log a Complaint / Feedback</div><div className="ph-sub">Raise a complaint, share feedback, or log a request that needs attention</div></div>
+      {!embedded && <div className="ph"><div className="ph-title">Log a Complaint / Feedback</div><div className="ph-sub">Raise a complaint, share feedback, or log a request that needs attention</div></div>}
       <div style={{maxWidth:560,marginBottom:24}}>
         <div className="form-group">
           <label className="form-label">Title *</label>
@@ -13071,6 +13071,11 @@ function ReportIssueView({ user }) {
               Your name and identity will not be stored. This cannot be undone or traced back to you — an anonymous submission will not appear in your list below.
             </span>
           </label>
+          {embedded && anon && (
+            <div style={{marginTop:8,padding:'9px 12px',borderRadius:8,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.3)',fontSize:12,color:'var(--t2)',lineHeight:1.5}}>
+              Note: no identity is stored, but if your organisation has only one or two administrators, an anonymous submission may still be identifiable by elimination.
+            </div>
+          )}
         </div>
         {submitted && <div style={{padding:'10px 14px',borderRadius:8,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.3)',color:'#059669',fontWeight:600,marginBottom:12}}>✓ Request logged successfully</div>}
         <button className="btn btn-primary" disabled={!title.trim()||!desc.trim()||submitting} onClick={submit} style={{width:'100%'}}>
@@ -13078,7 +13083,7 @@ function ReportIssueView({ user }) {
         </button>
       </div>
 
-      {issues.length>0&&(
+      {!embedded && issues.length>0&&(
         <div>
           <div className="section-title">My Reported Issues</div>
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -13755,6 +13760,7 @@ function IssueReportsAdminView({ user }) {
   const [period, setPeriod] = useState('365')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  const [showForm, setShowForm] = useState(false)
 
   const load = async () => {
     if(!isConfigured()) { setLoading(false); return }
@@ -13803,6 +13809,12 @@ function IssueReportsAdminView({ user }) {
   return (
     <div className="page-wrap">
       <div className="ph"><div className="ph-title">Complaints & Feedback</div><div className="ph-sub">Complaints, feedback and requests from your team</div></div>
+      <div style={{marginBottom:20}}>
+        <button className="btn btn-secondary" style={{fontSize:13}} onClick={()=>setShowForm(v=>!v)}>
+          {showForm ? '× Close form' : '+ Submit a complaint or feedback'}
+        </button>
+        {showForm && <div style={{marginTop:16}}><ReportIssueView user={user} embedded/></div>}
+      </div>
       <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
         {[['open','Open'],['in_progress','In Progress'],['resolved','Resolved'],['all','All']].map(([v,l])=>(
           <button key={v} onClick={()=>setFilterStatus(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${filterStatus===v?'var(--brand)':'var(--border)'}`,background:filterStatus===v?'var(--brand-lt)':'none',color:filterStatus===v?'var(--brand)':'var(--t2)',fontWeight:filterStatus===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all .15s'}}>
