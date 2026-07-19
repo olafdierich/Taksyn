@@ -14878,14 +14878,20 @@ export default function App() {
                   <div className="form-field"><label className="form-label">New Email Address</label><input className="form-input" type="text" inputMode="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder={user.email} readOnly onFocus={e=>e.target.removeAttribute('readonly')} autoComplete="off" name="taksyn-new-email" spellCheck={false} autoCorrect="off" autoCapitalize="none"/></div>
                   <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} disabled={!newEmail.trim()||newEmail===user.email} onClick={async()=>{
                     if(!newEmail.trim()||newEmail===user.email) return
+                    // user.email comes from the cached access token, which can be one change behind
+                    // after a confirmed email change. Ask the server for the live identity so we never
+                    // tell someone to sign in with an address that no longer works.
+                    let currentEmail = user.email
+                    try { const {data:_au} = await supabase.auth.getUser(); if(_au?.user?.email) currentEmail = _au.user.email } catch(_e) {}
+                    if(newEmail.trim()===currentEmail) { setProfileMsg('✗ That is already your sign-in email'); return }
                     // Confirm the destination before sending. The field can be pre-filled by the
                     // browser's saved credentials, so show the user exactly where the link will go.
-                    if(!window.confirm('Send a confirmation link to '+newEmail.trim()+'?\n\nYour sign-in email changes to this address only after you click the link in that inbox. Until then, keep signing in with '+user.email+'.')) return
+                    if(!window.confirm('Send a confirmation link to '+newEmail.trim()+'?\n\nYour sign-in email changes to this address only after you click the link in that inbox. Until then, keep signing in with '+currentEmail+'.')) return
                     const {error} = await supabase.auth.updateUser({email:newEmail.trim()})
                     if(error) { setProfileMsg('✗ '+error.message); return }
                     // Do NOT write profiles.email or setUser here — the change is only PENDING
                     // until the confirmation link is clicked. profiles.email is synced from auth on login.
-                    setProfileMsg('✓ Confirmation sent to '+newEmail.trim()+' — click the link in that inbox to finish. Until you do, keep signing in with '+user.email)
+                    setProfileMsg('✓ Confirmation sent to '+newEmail.trim()+' — click the link in that inbox to finish. Until you do, keep signing in with '+currentEmail)
                     setNewEmail('')
                   }}>Update Email</button>
                   {profileMsg&&<div style={{background:profileMsg.startsWith('✗')?'rgba(239,68,68,.08)':'rgba(16,185,129,.08)',border:'1px solid '+(profileMsg.startsWith('✗')?'rgba(239,68,68,.25)':'rgba(16,185,129,.2)'),borderRadius:6,padding:'8px 12px',fontSize:13,color:profileMsg.startsWith('✗')?'#DC2626':'var(--green)',marginBottom:14,lineHeight:1.5}}>{profileMsg}</div>}
