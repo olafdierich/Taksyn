@@ -11396,15 +11396,21 @@ function SuperAdminAccountView({ user, setUser, darkMode, toggleDarkMode }) {
   const save = async () => {
     if(!form.name.trim()){setMsg('✗ Name is required');return}
     setSaving(true); setMsg('')
-    const updates = {name:form.name.trim(),email:form.email.trim()}
+    const updates = {name:form.name.trim()}
+    const emailChanged = form.email.trim() && form.email.trim()!==user.email
     if(isConfigured()){
       const { error } = await supabase.from('profiles').update(updates).eq('id',user.id); if(error) setMsg('✗ '+error.message)
-      if(form.email!==user.email) await supabase.auth.updateUser({email:form.email}).catch(()=>{})
+      if(emailChanged){
+        const { error: emailErr } = await supabase.auth.updateUser({email:form.email.trim()})
+        if(emailErr){ setMsg('✗ '+emailErr.message); setSaving(false); return }
+      }
     }
     if(setUser) setUser(prev=>({...prev,...updates}))
-    setMsg('✓ Profile saved')
+    setMsg(emailChanged
+      ? '✓ Name saved. Confirmation sent to '+form.email.trim()+' — click the link in that inbox to finish. Until you do, keep signing in with '+user.email
+      : '✓ Profile saved')
     setSaving(false)
-    setTimeout(()=>setMsg(''),3000)
+    setTimeout(()=>setMsg(''),emailChanged?15000:3000)
   }
 
   const changePw = async () => {
@@ -14327,6 +14333,10 @@ export default function App() {
               }
             }
             localStorage.setItem(TAKSYN_LAST_ACTIVITY_KEY, Date.now().toString())
+            // auth.users.email is the source of truth for sign-in; profiles.email is only a
+            // display mirror. Keep the mirror in step on every restored session. Must run
+            // BEFORE the saved-org early return below, or it would be skipped for most users.
+            if(isConfigured() && data.email!==session.user.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{})
             const savedOrgName = sessionStorage.getItem('currentOrgName')
             const savedRole = sessionStorage.getItem('currentRole')
             if (savedOrgName && savedRole) { setUser({...data, email:session.user.email, org:savedOrgName, role:savedRole}); return }
@@ -14351,7 +14361,7 @@ export default function App() {
         // Password was just set — log them in properly
         try {
           const {data} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('id',session.user.id).single()
-          if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&!data.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
+          if(data) { setUser({...data,email:session.user.email}); setNeedsPasswordSetup(false); if(isConfigured()&&data.email!==session.user.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{}) }
         } catch(e) {}
       } else if(event==='SIGNED_IN') {
         // If we're in the invite registration flow and not actively registering, sign out —
@@ -14822,7 +14832,7 @@ export default function App() {
                     <div style={{marginTop:4}}><RolePill role={user.role}/></div>
                   </div>
                 </div>
-                {profileMsg&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:6,padding:'8px 12px',fontSize:13,color:'var(--green)',marginBottom:14}}>{profileMsg}</div>}
+                {profileMsg&&<div style={{background:profileMsg.startsWith('✗')?'rgba(239,68,68,.08)':'rgba(16,185,129,.08)',border:'1px solid '+(profileMsg.startsWith('✗')?'rgba(239,68,68,.25)':'rgba(16,185,129,.2)'),borderRadius:6,padding:'8px 12px',fontSize:13,color:profileMsg.startsWith('✗')?'#DC2626':'var(--green)',marginBottom:14}}>{profileMsg}</div>}
                 <div className="form-field"><label className="form-label">Display Name</label><input className="form-input" value={profileName} onChange={e=>setProfileName(e.target.value)}/></div>
                 <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
 
@@ -14865,17 +14875,26 @@ export default function App() {
 
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:4}}>
                   <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>Update Email</div>
-                  <div className="form-field"><label className="form-label">New Email Address</label><input className="form-input" type="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder={user.email}/></div>
+                  <div className="form-field"><label className="form-label">New Email Address</label><input className="form-input" type="text" inputMode="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder={user.email} readOnly onFocus={e=>e.target.removeAttribute('readonly')} autoComplete="off" name="taksyn-new-email" spellCheck={false} autoCorrect="off" autoCapitalize="none"/></div>
                   <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} disabled={!newEmail.trim()||newEmail===user.email} onClick={async()=>{
                     if(!newEmail.trim()||newEmail===user.email) return
+                    // user.email comes from the cached access token, which can be one change behind
+                    // after a confirmed email change. Ask the server for the live identity so we never
+                    // tell someone to sign in with an address that no longer works.
+                    let currentEmail = user.email
+                    try { const {data:_au} = await supabase.auth.getUser(); if(_au?.user?.email) currentEmail = _au.user.email } catch(_e) {}
+                    if(newEmail.trim()===currentEmail) { setProfileMsg('✗ That is already your sign-in email'); return }
+                    // Confirm the destination before sending. The field can be pre-filled by the
+                    // browser's saved credentials, so show the user exactly where the link will go.
+                    if(!window.confirm('Send a confirmation link to '+newEmail.trim()+'?\n\nYour sign-in email changes to this address only after you click the link in that inbox. Until then, keep signing in with '+currentEmail+'.')) return
                     const {error} = await supabase.auth.updateUser({email:newEmail.trim()})
                     if(error) { setProfileMsg('✗ '+error.message); return }
-                    // Also update profiles table so admins see the new email
-                    await supabase.from('profiles').update({email:newEmail.trim()}).eq('id',user.id)
-                    setUser(prev=>({...prev,email:newEmail.trim()}))
-                    setProfileMsg('✓ Confirmation sent to '+newEmail+' — check your inbox to confirm the change')
+                    // Do NOT write profiles.email or setUser here — the change is only PENDING
+                    // until the confirmation link is clicked. profiles.email is synced from auth on login.
+                    setProfileMsg('✓ Confirmation sent to '+newEmail.trim()+' — click the link in that inbox to finish. Until you do, keep signing in with '+currentEmail)
                     setNewEmail('')
                   }}>Update Email</button>
+                  {profileMsg&&<div style={{background:profileMsg.startsWith('✗')?'rgba(239,68,68,.08)':'rgba(16,185,129,.08)',border:'1px solid '+(profileMsg.startsWith('✗')?'rgba(239,68,68,.25)':'rgba(16,185,129,.2)'),borderRadius:6,padding:'8px 12px',fontSize:13,color:profileMsg.startsWith('✗')?'#DC2626':'var(--green)',marginBottom:14,lineHeight:1.5}}>{profileMsg}</div>}
                 </div>
 
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16}}>
