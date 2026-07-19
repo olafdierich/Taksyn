@@ -272,11 +272,12 @@ const sendEmailNotif = async (toEmail, subject, body) => {
   if(!isConfigured()||!toEmail) return
   try {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-    await fetch(supabaseUrl+'/functions/v1/send-notification', {
+    const res = await fetch(supabaseUrl+'/functions/v1/send-notification', {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','Authorization': await getEdgeFunctionAuthHeader()},
       body: JSON.stringify({ to:toEmail, subject, body, secret:import.meta.env.VITE_INVITE_SECRET||'' })
     })
+    if(!res.ok) console.log('Email notif failed:', res.status, await res.text().catch(()=>''))
   } catch(e) { console.log('Email notif failed:', e.message) }
 }
 
