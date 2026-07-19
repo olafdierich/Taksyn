@@ -14333,6 +14333,10 @@ export default function App() {
               }
             }
             localStorage.setItem(TAKSYN_LAST_ACTIVITY_KEY, Date.now().toString())
+            // auth.users.email is the source of truth for sign-in; profiles.email is only a
+            // display mirror. Keep the mirror in step on every restored session. Must run
+            // BEFORE the saved-org early return below, or it would be skipped for most users.
+            if(isConfigured() && data.email!==session.user.email) supabase.from('profiles').update({email:session.user.email}).eq('id',session.user.id).then(()=>{})
             const savedOrgName = sessionStorage.getItem('currentOrgName')
             const savedRole = sessionStorage.getItem('currentRole')
             if (savedOrgName && savedRole) { setUser({...data, email:session.user.email, org:savedOrgName, role:savedRole}); return }
@@ -14871,7 +14875,7 @@ export default function App() {
 
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginBottom:4}}>
                   <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>Update Email</div>
-                  <div className="form-field"><label className="form-label">New Email Address</label><input className="form-input" type="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder={user.email} autoComplete="off" name="taksyn-new-email" spellCheck={false}/></div>
+                  <div className="form-field"><label className="form-label">New Email Address</label><input className="form-input" type="text" inputMode="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder={user.email} readOnly onFocus={e=>e.target.removeAttribute('readonly')} autoComplete="off" name="taksyn-new-email" spellCheck={false} autoCorrect="off" autoCapitalize="none"/></div>
                   <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} disabled={!newEmail.trim()||newEmail===user.email} onClick={async()=>{
                     if(!newEmail.trim()||newEmail===user.email) return
                     const {error} = await supabase.auth.updateUser({email:newEmail.trim()})
