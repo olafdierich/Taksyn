@@ -8536,7 +8536,9 @@ function CompanySettingsView({ user }) {
   const exportCSV = async () => {
     setExporting(true)
     try {
-      const { data } = await supabase.from('tasks').select('*').eq('org', user.org)
+      const { data } = await supabase.from('tasks')
+        .select('id,title,status,priority,category,department,assigned_user_name,assigned_role,due_date,created_at,submitted_at,completed_at,gps_start,gps_end,compliance')
+        .eq('org', user.org)
       if (!data?.length) { alert('No tasks to export'); setExporting(false); return }
       const cols = ['id','title','status','priority','category','department','assigned_user_name','assigned_role','due_date','created_at','submitted_at','completed_at','gps_start','gps_end','compliance']
       const esc = v => { const s=String(v??''); return (s.includes(',')||s.includes('"')||s.includes('\n'))?`"${s.replace(/"/g,'""')}"`  :s }
