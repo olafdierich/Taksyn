@@ -11,7 +11,7 @@ export async function uploadEvidence(file, orgId, taskId) {
 }
 
 // Resolve a stored path to a short-lived signed URL for reading (private bucket).
-export async function signedEvidenceUrl(path, expiresInSeconds = 3600) {
+export async function signedEvidenceUrl(path, expiresInSeconds = 28800) {
   const { data, error } = await supabase.storage
     .from('task-evidence')
     .createSignedUrl(path, expiresInSeconds)

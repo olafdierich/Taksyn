@@ -385,6 +385,29 @@ const taskPhotoIndex = (task) => {
 //   - `url` (base64 / legacy / http) → render directly (unchanged behaviour)
 //   - `path` (private Storage object key) → sign lazily via signedEvidenceUrl, placeholder while resolving
 // Nothing breaks for un-migrated tasks; migrated (path-only) entries render once signed.
+// Renders one document attachment, supporting BOTH shapes:
+//   - `url` (base64 / legacy / http) -> link directly (unchanged behaviour)
+//   - `path` (private Storage object key) -> sign lazily via signedEvidenceUrl
+// Mirrors EvidenceThumb's resolve pattern. Never renders a dead href.
+function EvidenceDocLink({ entry }) {
+  const direct = (entry && typeof entry === 'object') ? (entry.url || null) : entry
+  const path = (entry && typeof entry === 'object') ? (entry.path || null) : null
+  const [signed, setSigned] = useState(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let alive = true
+    if (!direct && path) {
+      setSigned(null); setFailed(false)
+      signedEvidenceUrl(path).then(u => { if (alive) setSigned(u) }).catch(() => { if (alive) setFailed(true) })
+    }
+    return () => { alive = false }
+  }, [direct, path])
+  const href = direct || signed
+  const name = (entry && typeof entry === 'object' && entry.name) || (path ? path.split('/').pop() : 'document')
+  if (failed || (!direct && !path)) return <span style={{color:'var(--t3)'}}>📎 {name} · unavailable</span>
+  if (!href) return <span style={{color:'var(--t3)'}}>📎 {name} · loading…</span>
+  return <a href={href} download={name} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {name}</a>
+}
 function EvidenceThumb({ entry, className, containerStyle, imgStyle, onImgClick, title }) {
   const direct = (entry && typeof entry === 'object') ? (entry.url || null) : entry
   const path = (entry && typeof entry === 'object') ? (entry.path || null) : null
@@ -3609,7 +3632,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
                         {[...(s.photos||[]),...(s.photo?[s.photo]:[])].map((ph,pi)=><EvidenceThumb key={pi} entry={ph} className="cl-photo-thumb" containerStyle={{marginTop:4,marginRight:6,display:'inline-block',verticalAlign:'top',overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>)}
-                        {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><a href={at.url} download={at.name} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {at.name}</a> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
+                        {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><EvidenceDocLink entry={at}/> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
                         {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
