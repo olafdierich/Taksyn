@@ -12457,9 +12457,10 @@ const ISSUE_STATUS_CFG = {
   resolved:    { label:'Resolved',    color:'#10B981', bg:'rgba(16,185,129,.12)' },
 }
 const ROLES_ABOVE = {
-  worker:     ['supervisor','manager','client_admin'],
-  supervisor: ['manager','client_admin'],
-  manager:    ['client_admin'],
+  worker:      ['supervisor','manager','client_admin'],
+  supervisor:  ['manager','client_admin'],
+  manager:     ['client_admin'],
+  client_admin:['client_admin'],
 }
 
 // ============ INCIDENT REPORTING ============
@@ -12997,12 +12998,15 @@ function ReportIssueView({ user, embedded }) {
         return
       }
       // Notify all roles above the reporter in the same org
-      const notifyRoles = ROLES_ABOVE[user.role]||[]
+      // client_admin peers are notified for NAMED submissions only. An anonymous
+      // admin submission notifies nobody: in a small admin team an immediate email
+      // identifies the submitter by elimination. The Open Requests card still counts it.
+      const notifyRoles = (anon && user.role==='client_admin') ? [] : (ROLES_ABOVE[user.role]||[])
       if(notifyRoles.length && user.org) {
-        supabase.from('profiles').select('email,name,role').eq('org',user.org)
+        supabase.from('profiles').select('id,email,name,role').eq('org',user.org)
           .then(({data})=>{
             if(!data) return
-            data.filter(p=>notifyRoles.includes(p.role)&&p.email).forEach(p=>{
+            data.filter(p=>notifyRoles.includes(p.role)&&p.email&&p.id!==user.id).forEach(p=>{
               sendEmailNotif(p.email,
                 anon ? `New anonymous ${rtype} logged` : `New request logged: ${payload.title}`,
                 anon
