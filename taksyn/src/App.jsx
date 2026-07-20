@@ -385,6 +385,29 @@ const taskPhotoIndex = (task) => {
 //   - `url` (base64 / legacy / http) → render directly (unchanged behaviour)
 //   - `path` (private Storage object key) → sign lazily via signedEvidenceUrl, placeholder while resolving
 // Nothing breaks for un-migrated tasks; migrated (path-only) entries render once signed.
+// Renders one document attachment, supporting BOTH shapes:
+//   - `url` (base64 / legacy / http) -> link directly (unchanged behaviour)
+//   - `path` (private Storage object key) -> sign lazily via signedEvidenceUrl
+// Mirrors EvidenceThumb's resolve pattern. Never renders a dead href.
+function EvidenceDocLink({ entry }) {
+  const direct = (entry && typeof entry === 'object') ? (entry.url || null) : entry
+  const path = (entry && typeof entry === 'object') ? (entry.path || null) : null
+  const [signed, setSigned] = useState(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let alive = true
+    if (!direct && path) {
+      setSigned(null); setFailed(false)
+      signedEvidenceUrl(path).then(u => { if (alive) setSigned(u) }).catch(() => { if (alive) setFailed(true) })
+    }
+    return () => { alive = false }
+  }, [direct, path])
+  const href = direct || signed
+  const name = (entry && typeof entry === 'object' && entry.name) || (path ? path.split('/').pop() : 'document')
+  if (failed || (!direct && !path)) return <span style={{color:'var(--t3)'}}>📎 {name} · unavailable</span>
+  if (!href) return <span style={{color:'var(--t3)'}}>📎 {name} · loading…</span>
+  return <a href={href} download={name} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {name}</a>
+}
 function EvidenceThumb({ entry, className, containerStyle, imgStyle, onImgClick, title }) {
   const direct = (entry && typeof entry === 'object') ? (entry.url || null) : entry
   const path = (entry && typeof entry === 'object') ? (entry.path || null) : null
@@ -590,6 +613,28 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
       )}
     </>
   )
+}
+
+// Resolve a task's org to the org ID. tasks.org stores the org NAME on live
+// (e.g. "Kemrose") but the task-evidence bucket policy keys on the ID
+// (e.g. ORG1780482520610). Module scope: used from more than one component.
+// Returns null when it cannot be resolved -- callers must refuse to upload.
+const resolveTaskOrgId = async (task) => {
+  let orgId = (task?.org && String(task.org).startsWith('ORG')) ? task.org : null
+  if (!orgId && task?.org && isConfigured()) {
+    const { data: orgRow } = await supabase.from('organisations').select('id').eq('name', task.org).maybeSingle()
+    orgId = orgRow?.id || null
+  }
+  return orgId
+}
+
+// Turn a captured data URL into a File. uploadEvidence builds its filename from
+// file.name, so a bare Blob would land in the bucket as "<ts>_undefined".
+const dataUrlToFile = async (dataUrl, stem) => {
+  const blob = await (await fetch(dataUrl)).blob()
+  const mime = blob.type || 'image/jpeg'
+  const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg'
+  return new File([blob], `${stem}.${ext}`, { type: mime })
 }
 
 const compressImage = async (file) => {
@@ -2706,13 +2751,36 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,note,history:[...(x.history||[]),histEntry]}:x) })
   }
 
+  // Bytes already held against an item's 5 MB budget. Storage-backed entries
+  // carry an explicit `size`; legacy base64 entries are measured from the data
+  // URL length as before. Without the `size` branch the cap silently reads 0.
+  const entryBytes = (e) => {
+    if (!e || typeof e !== 'object') return 0
+    if (typeof e.size === 'number') return e.size
+    return e.url ? e.url.length * 0.75 : 0
+  }
+
   const addSubDoc = async (tid, idx, docUrl, docName) => {
     const task = tasks.find(t=>t.id===tid)
     const subs = parseSafe(task.subtasks)
     const uid = await authUserId()
-    const _cur = subs[idx]||{}; const _used = [...(_cur.photos||[]),...(_cur.photo?[_cur.photo]:[]),...(_cur.attachments||[]),...(_cur.attachment?[_cur.attachment]:[])].reduce((a,e)=>a+((e&&e.url?e.url.length:0)*0.75),0)
+    const _cur = subs[idx]||{}; const _used = [...(_cur.photos||[]),...(_cur.photo?[_cur.photo]:[]),...(_cur.attachments||[]),...(_cur.attachment?[_cur.attachment]:[])].reduce((a,e)=>a+entryBytes(e),0)
     if (_used + (docUrl?docUrl.length*0.75:0) > 5*1024*1024) { alert('Attachments for this item would exceed the 5 MB total. Please attach a smaller file or remove one.'); return }
-    const docObj = { url:docUrl, name:docName||'document', ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
+    // Documents go to Storage as a path, same as photos. dataUrlToFile is not
+    // reused here: its extension logic is image-only and would name a PDF .jpg.
+    let docObj
+    try {
+      const orgId = await resolveTaskOrgId(task)
+      if (!orgId) throw new Error(`could not resolve organisation id for "${task?.org}"`)
+      const blob = await (await fetch(docUrl)).blob()
+      const safeName = String(docName || 'document').replace(/[^\w.\-]+/g, '_')
+      const file = new File([blob], safeName, { type: blob.type || 'application/octet-stream' })
+      const { path } = await uploadEvidence(file, orgId, tid)
+      docObj = { path, name:docName||'document', size:blob.size, ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
+    } catch (err) {
+      alert(`Document not saved -- ${err?.message || 'upload failed'}. Please try again.`)
+      return
+    }
     const histEntry = { action:'doc_added', by:user.name, byId:uid, at:new Date().toISOString(), note:docName||'' }
     update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,attachments:[...(x.attachments||[]),docObj],history:[...(x.history||[]),histEntry]}:x) })
   }
@@ -2720,7 +2788,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const task = tasks.find(t=>t.id===tid)
     const subs = parseSafe(task.subtasks)
     const uid = await authUserId()
-    const photoObj = { url:photoUrl, ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
+    // Evidence goes to Storage as a path -- never inline base64, which is what
+    // inflated the tasks table. Surface failures rather than silently falling
+    // back to base64 (silent fallback is how the original defect persisted).
+    let photoObj
+    try {
+      const orgId = await resolveTaskOrgId(task)
+      if (!orgId) throw new Error(`could not resolve organisation id for "${task?.org}"`)
+      const file = await dataUrlToFile(photoUrl, `evidence_${Date.now()}_sub${idx}`)
+      const { path } = await uploadEvidence(file, orgId, tid)
+      photoObj = { path, size:file.size, ts:new Date().toISOString(), by:user.name, by_id:uid, role:user.role }
+    } catch (err) {
+      alert(`Photo not saved -- ${err?.message || 'upload failed'}. Please try again.`)
+      return
+    }
     const histEntry = { action:'photo_added', by:user.name, byId:uid, at:new Date().toISOString() }
     update(tid, { subtasks: subs.map((x,i)=>i===idx?{...x,photos:[...(x.photos||[]),photoObj],history:[...(x.history||[]),histEntry]}:x) })
   }
@@ -3551,7 +3632,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
                         {[...(s.photos||[]),...(s.photo?[s.photo]:[])].map((ph,pi)=><EvidenceThumb key={pi} entry={ph} className="cl-photo-thumb" containerStyle={{marginTop:4,marginRight:6,display:'inline-block',verticalAlign:'top',overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>)}
-                        {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><a href={at.url} download={at.name} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {at.name}</a> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
+                        {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><EvidenceDocLink entry={at}/> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
                         {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
@@ -4337,10 +4418,24 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
           {hasAmendment&&<div style={{marginTop:8,fontSize:11,color:'var(--green)',fontWeight:600}}>✓ Amendment saved — press Resubmit to notify supervisor</div>}
           <input id={'amend-img-'+sel.id} type="file" accept="image/*" style={{display:'none'}} onChange={async e=>{
             const inp=e.target; const f=inp.files[0]; if(!f) return
-            const compressed=await compressImage(f)
             const curr=parseSafe(sel.evidence)
             if(curr.length>=5){ alert('Maximum 5 images reached'); inp.value=''; return }
-            await update(sel.id,{evidence:[...curr,{url:compressed,ts:new Date().toISOString(),by:user.name,by_id:await authUserId(),role:user.role}]})
+            const compressed=await compressImage(f)
+            // Amendment evidence goes to Storage as a path, never inline base64.
+            // Surface failures rather than silently falling back to base64.
+            let evObj
+            try {
+              const orgId = await resolveTaskOrgId(sel)
+              if (!orgId) throw new Error(`could not resolve organisation id for "${sel?.org}"`)
+              const file = await dataUrlToFile(compressed, `amendment_${Date.now()}`)
+              const { path } = await uploadEvidence(file, orgId, sel.id)
+              evObj = { path, size:file.size, ts:new Date().toISOString(), by:user.name, by_id:await authUserId(), role:user.role }
+            } catch (err) {
+              alert(`Photo not saved -- ${err?.message || 'upload failed'}. Please try again.`)
+              inp.value=''
+              return
+            }
+            await update(sel.id,{evidence:[...curr,evObj]})
             const photoEntry={ id: Date.now()+'', author: user.name, authorId: user.id, text:'📎 Amendment photo attached', timestamp: new Date().toISOString(), edits:[], isAmendment:true }
             update(sel.id,{comments:[...(parseSafe(sel.comments)||[]),photoEntry]})
             setHasAmendment(true)
