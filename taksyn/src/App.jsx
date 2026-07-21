@@ -2613,13 +2613,28 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
         const task = tasks.find(t=>t.id===id)
         // Task submitted → email supervisor/manager
         if(changes.status==='awaiting_review' && task) {
-          const supervisors = await supabase.from('profiles').select('email,name,role').eq('org',task.org||user.org)
-          if(supervisors.data) {
-            supervisors.data.filter(p=>['supervisor','manager','client_admin'].includes(p.role)&&p.email).forEach(p=>{
-              sendEmailNotif(p.email, `Task submitted for review: ${task.title}`,
-                `${task.assigned_user_name||'A worker'} has submitted "${task.title}" for your review in ${task.org||user.org}. Please review it in Taksyn.`)
-            })
+          // Role source of truth is org_members.role. profiles.role can be stale:
+          // role promotion via the UI writes org_members.role only.
+          const _notifOrgName = task.org||user.org
+          const _notifRoles = ['supervisor','manager','client_admin']
+          const _notifOrgId = await resolveTaskOrgId({org:_notifOrgName})
+          let _notifRecipients = []
+          if(_notifOrgId) {
+            const { data:_notifMem } = await supabase.from('org_members').select('user_id,role').eq('org',_notifOrgId)
+            const _notifIds = (_notifMem||[]).filter(m=>_notifRoles.includes(m.role)).map(m=>m.user_id)
+            if(_notifIds.length) {
+              const { data:_notifProfs } = await supabase.from('profiles').select('id,email,name').in('id',_notifIds)
+              _notifRecipients = (_notifProfs||[]).filter(p=>p.email)
+            }
+          } else {
+            // Org id unresolved - fall back to profiles.role so the email still sends.
+            const { data:_notifFb } = await supabase.from('profiles').select('email,name,role').eq('org',_notifOrgName)
+            _notifRecipients = (_notifFb||[]).filter(p=>_notifRoles.includes(p.role)&&p.email)
           }
+          _notifRecipients.forEach(p=>{
+            sendEmailNotif(p.email, `Task submitted for review: ${task.title}`,
+              `${task.assigned_user_name||'A worker'} has submitted "${task.title}" for your review in ${task.org||user.org}. Please review it in Taksyn.`)
+          })
         }
         // Task approved → email worker
         if(changes.status==='approved' && task?.assigned_user_id) {
@@ -13100,17 +13115,31 @@ function ReportIssueView({ user, embedded }) {
       // identifies the submitter by elimination. The Open Requests card still counts it.
       const notifyRoles = (anon && user.role==='client_admin') ? [] : (ROLES_ABOVE[user.role]||[])
       if(notifyRoles.length && user.org) {
-        supabase.from('profiles').select('id,email,name,role').eq('org',user.org)
-          .then(({data})=>{
-            if(!data) return
-            data.filter(p=>notifyRoles.includes(p.role)&&p.email&&p.id!==user.id).forEach(p=>{
-              sendEmailNotif(p.email,
-                anon ? `New anonymous ${rtype} logged` : `New request logged: ${payload.title}`,
-                anon
-                  ? `An anonymous ${rtype} was logged in ${user.org}.\n\nLog in to Taksyn to review and action it. (The submitter chose to remain anonymous; no identity is stored.)`
-                  : `${user.name} (${ROLE_LABELS[user.role]||user.role}) reported a new ${priority} priority issue in ${user.org}.\n\nTitle: ${payload.title}\n\nDescription: ${payload.description}\n\nLog in to Taksyn to review and action this issue.`)
-            })
-          }).catch(()=>{})
+        // Role source of truth is org_members.role. profiles.role can be stale:
+        // role promotion via the UI writes org_members.role only.
+        ;(async()=>{
+          const _reqOrgId = await resolveTaskOrgId({org:user.org})
+          let _reqRecipients = []
+          if(_reqOrgId) {
+            const { data:_reqMem } = await supabase.from('org_members').select('user_id,role').eq('org',_reqOrgId)
+            const _reqIds = (_reqMem||[]).filter(m=>notifyRoles.includes(m.role)).map(m=>m.user_id).filter(id=>id!==user.id)
+            if(_reqIds.length) {
+              const { data:_reqProfs } = await supabase.from('profiles').select('id,email,name').in('id',_reqIds)
+              _reqRecipients = (_reqProfs||[]).filter(p=>p.email)
+            }
+          } else {
+            // Org id unresolved - fall back to profiles.role so the email still sends.
+            const { data:_reqFb } = await supabase.from('profiles').select('id,email,name,role').eq('org',user.org)
+            _reqRecipients = (_reqFb||[]).filter(p=>notifyRoles.includes(p.role)&&p.email&&p.id!==user.id)
+          }
+          _reqRecipients.forEach(p=>{
+            sendEmailNotif(p.email,
+              anon ? `New anonymous ${rtype} logged` : `New request logged: ${payload.title}`,
+              anon
+                ? `An anonymous ${rtype} was logged in ${user.org}.\n\nLog in to Taksyn to review and action it. (The submitter chose to remain anonymous; no identity is stored.)`
+                : `${user.name} (${ROLE_LABELS[user.role]||user.role}) reported a new ${priority} priority issue in ${user.org}.\n\nTitle: ${payload.title}\n\nDescription: ${payload.description}\n\nLog in to Taksyn to review and action this issue.`)
+          })
+        })().catch(()=>{})
       }
     }
     if(!anon) setIssues(prev=>[{...payload, id:'local_'+Date.now(), created_at:now},...prev])
