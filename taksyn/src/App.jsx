@@ -10401,11 +10401,11 @@ function LeaveView({ user, tasks, setAuditLog }) {
   useEffect(()=>{
     if(!isConfigured()) return
     // Load own leave
-    supabase.from('leave_records').select('*').eq('user_id',user.id).order('date_from',{ascending:false})
+    supabase.from('leave_records').select('*').eq('user_id',user.id).neq('status','cancelled').order('date_from',{ascending:false})
       .then(({data})=>{ if(data) setLeaves(data) }).catch(()=>{})
     // Client admin sees all team leave
     if(isCA) {
-      supabase.from('leave_records').select('*').eq('org',user.org).order('date_from',{ascending:false})
+      supabase.from('leave_records').select('*').eq('org',user.org).neq('status','cancelled').order('date_from',{ascending:false})
         .then(({data})=>{ if(data) setTeamLeaves(data) }).catch(()=>{})
     }
   },[])
@@ -10449,7 +10449,11 @@ function LeaveView({ user, tasks, setAuditLog }) {
   const deleteLeave = async (id) => {
     if(!confirm('Cancel this leave request?')) return
     const lv = leaves.find(l=>l.id===id)
-    if(isConfigured()) await supabase.from('leave_records').delete().eq('id',id)
+    if(isConfigured()) {
+      const {data:cancelledRows, error} = await supabase.from('leave_records').update({status:'cancelled'}).eq('id',id).select()
+      if(error) { alert('Could not cancel leave: '+error.message); return }
+      if(!cancelledRows || cancelledRows.length===0) { alert('Could not cancel leave — the request was not updated. Please contact your administrator.'); return }
+    }
     setLeaves(prev=>prev.filter(l=>l.id!==id))
     setTeamLeaves(prev=>prev.filter(l=>l.id!==id))
     if (setAuditLog) {
@@ -14670,7 +14674,7 @@ export default function App() {
       }
       // Load leave records for org (not for super_admin — leave is operational data)
       if(isConfigured()&&user.org&&user.role!=='super_admin') {
-        supabase.from('leave_records').select('*').eq('org',user.org)
+        supabase.from('leave_records').select('*').eq('org',user.org).neq('status','cancelled')
           .then(({data})=>{ if(data) setLeaveRecords(data) }).catch(()=>{})
       }
       let reloadTimer = null
