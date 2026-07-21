@@ -12438,7 +12438,6 @@ function HelpView({ user }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [tickets, setTickets] = useState([])
-  const [leaveRecords, setLeaveRecords] = useState([])
   const [notifications, setNotifications] = useState([])
   const [showNotifPanel, setShowNotifPanel] = useState(false)
   const appVersion = '1.1.0'
