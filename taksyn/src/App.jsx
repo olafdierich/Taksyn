@@ -430,6 +430,31 @@ function EvidenceThumb({ entry, className, containerStyle, imgStyle, onImgClick,
   )
 }
 
+// Inline attachment link for supporting documents. Mirrors EvidenceThumb's dual-shape
+// handling but keeps the inline link look (not a thumbnail tile):
+//   - `url`  (legacy / base64 / http) -> link directly, unchanged behaviour
+//   - `path` (private Storage key)     -> sign lazily via signedEvidenceUrl
+// Un-migrated attachments keep working; migrated (path-only) ones resolve once signed.
+function AttachmentLink({ at }) {
+  const direct = (at && typeof at === 'object') ? (at.url || null) : at
+  const path = (at && typeof at === 'object') ? (at.path || null) : null
+  const [signed, setSigned] = useState(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let alive = true
+    if (!direct && path) {
+      setSigned(null); setFailed(false)
+      signedEvidenceUrl(path).then(u => { if (alive) setSigned(u) }).catch(() => { if (alive) setFailed(true) })
+    }
+    return () => { alive = false }
+  }, [direct, path])
+  const href = direct || signed
+  const name = (at && at.name) || (path ? path.split('/').pop() : 'attachment')
+  if (failed) return <span style={{color:'var(--t2)'}}>📎 {name} (unavailable)</span>
+  if (!href)  return <span style={{color:'var(--t2)',opacity:0.6}}>📎 {name} ⏳</span>
+  return <a href={href} download={at.name||undefined} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {name}</a>
+}
+
 // Reviewer-attached evidence: lets manager/supervisor/client_admin attach evidence to a task
 // they are reviewing. Uploads to Storage via uploadEvidence and appends a { path, ts, by, by_id, role }
 // entry with a COLUMN-SCOPED { evidence } update (reuses the parent `update` helper — no whole-object write).
@@ -3609,7 +3634,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
                         {[...(s.photos||[]),...(s.photo?[s.photo]:[])].map((ph,pi)=><EvidenceThumb key={pi} entry={ph} className="cl-photo-thumb" containerStyle={{marginTop:4,marginRight:6,display:'inline-block',verticalAlign:'top',overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>)}
-                        {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><a href={at.url} download={at.name} target="_blank" rel="noopener noreferrer" style={{color:'var(--blue)',textDecoration:'none'}}>📎 {at.name}</a> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
+                        {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><AttachmentLink at={at}/> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
                         {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
                             <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
