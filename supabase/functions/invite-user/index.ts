@@ -5,35 +5,94 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Must stay in sync with App.jsx ROLE_LEVEL (line ~113).
+// Higher number = more powerful. Used for the invite clamp.
+const ROLE_LEVEL: Record<string, number> = {
+  super_admin: 5,
+  client_admin: 4,
+  manager: 3,
+  supervisor: 2,
+  worker: 1,
+}
+const CAN_INVITE_ROLES = ['client_admin', 'manager']
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+
   try {
-    const { action, email, name, role, org, orgId, industry, positions, secret, inviteUrl } = await req.json()
+    const { action, email, name, role, org, orgId, industry, positions, inviteUrl } = await req.json()
 
-    console.log('[invite-user] received fields:', { email, name, role, org, orgId, secret })
-
-    const inviteSecret = Deno.env.get('INVITE_SECRET')
-    if (!inviteSecret || secret !== inviteSecret) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    if (!email) {
-      return new Response(JSON.stringify({ error: 'Email is required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
+    // NOTE: `secret` is intentionally no longer read or trusted.
+    console.log('[invite-user] received fields:', { action, email, name, role, org, orgId })
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SERVICE_ROLE_KEY') ?? ''
     )
+
+    // Separate client keyed with the ANON/publishable key, used ONLY to validate the
+    // caller's JWT. Using the service-role client here makes the auth endpoint reject the
+    // request with "Invalid API key". SUPABASE_ANON_KEY is auto-injected into functions.
+    const supabaseAuth = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    )
+
+    // ---- AUTH GATE (replaces shared-secret check) ----
+    // 1. Identify the caller from their session token.
+    const authHeader = req.headers.get('Authorization') || ''
+    const token = authHeader.replace(/^Bearer\s+/i, '')
+    if (!token) return json({ error: 'Unauthorized' }, 401)
+
+    const { data: userData, error: userErr } = await supabaseAuth.auth.getUser(token)
+    const caller = userData?.user
+    if (userErr || !caller) return json({ error: 'Unauthorized' }, 401)
+
+    // 2. Determine caller's authority.
+    //    super_admin is authoritative ONLY in profiles.role (in org_members
+    //    the super_admin is stored as client_admin against a sentinel org).
+    const { data: callerProfile } = await supabaseAdmin
+      .from('profiles').select('role').eq('id', caller.id).single()
+    const isSuperAdmin = callerProfile?.role === 'super_admin'
+
+    if (action === 'resend') {
+      // resend carries no role/org — can't escalate. Require admin/manager somewhere.
+      if (!isSuperAdmin) {
+        const { data: memberships } = await supabaseAdmin
+          .from('org_members').select('role').eq('user_id', caller.id)
+        const ok = (memberships || []).some((m) => CAN_INVITE_ROLES.includes(m.role))
+        if (!ok) return json({ error: 'Forbidden' }, 403)
+      }
+    } else {
+      // fresh invite — full org-scoped clamp.
+      if (!isSuperAdmin) {
+        if (!orgId) return json({ error: 'Forbidden' }, 403)
+        // caller must be a member of the TARGET org, with an invite-capable role
+        const { data: membership } = await supabaseAdmin
+          .from('org_members').select('role').eq('user_id', caller.id).eq('org', orgId).single()
+        const callerRole = membership?.role
+        if (!callerRole || !CAN_INVITE_ROLES.includes(callerRole)) {
+          return json({ error: 'Forbidden' }, 403)
+        }
+        // clamp: may only grant a role STRICTLY BELOW own level (matches getInvitableRoles)
+        const invitedLevel = ROLE_LEVEL[role || 'worker'] ?? 0
+        const callerLevel = ROLE_LEVEL[callerRole] ?? 0
+        if (invitedLevel >= callerLevel) {
+          return json({ error: 'Cannot invite a role at or above your own level' }, 403)
+        }
+      }
+    }
+    // ---- END AUTH GATE ----
+
+    if (!email) return json({ error: 'Email is required' }, 400)
 
     if (action === 'resend') {
       const { error: genError } = await supabaseAdmin.auth.admin.generateLink({
@@ -41,16 +100,8 @@ Deno.serve(async (req) => {
         email,
         options: { redirectTo: inviteUrl || undefined },
       })
-      if (genError) {
-        return new Response(JSON.stringify({ error: genError.message }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      if (genError) return json({ error: genError.message }, 400)
+      return json({ success: true }, 200)
     }
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
@@ -71,15 +122,9 @@ Deno.serve(async (req) => {
             industry: industry || null,
           }, { onConflict: 'user_id,org' })
         }
-        return new Response(JSON.stringify({ success: true, alreadyExisted: true, userId: profileData?.id || null }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return json({ success: true, alreadyExisted: true, userId: profileData?.id || null }, 200)
       }
-      return new Response(JSON.stringify({ error: inviteError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return json({ error: inviteError.message }, 400)
     }
 
     const userId = inviteData.user?.id
@@ -94,7 +139,7 @@ Deno.serve(async (req) => {
         org: org || '',
       }, { onConflict: 'id' })
 
-      // orgId (ORG... id) goes to org_members.org_id
+      // orgId (ORG... id) goes to org_members.org
       if (orgId) {
         await supabaseAdmin.from('org_members').upsert({
           user_id: userId,
@@ -105,14 +150,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ success: true, userId }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return json({ success: true, userId }, 200)
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return json({ error: (err as Error).message }, 500)
   }
 })
