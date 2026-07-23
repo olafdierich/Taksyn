@@ -14606,11 +14606,24 @@ export default function App() {
                 // Ensure a profiles record exists for this user; create from existing profile data if missing (bypass RLS)
                 const { data: existingProfile } = await dbAdmin.from('profiles').select('id').eq('id', session.user.id).maybeSingle()
                 if (!existingProfile) {
+                  // profiles.org stores the org NAME, not the ID - resolve it.
+                  // Mirrors the registration path (organisations.name lookup).
+                  let pendingOrgName = data.org || ''
+                  try {
+                    const { data: orgRow } = await dbAdmin
+                      .from('organisations')
+                      .select('name')
+                      .eq('id', pending.linkOrgId)
+                      .single()
+                    if (orgRow?.name) pendingOrgName = orgRow.name
+                  } catch (orgNameErr) {
+                    console.error('pending invite org name lookup failed:', orgNameErr?.message)
+                  }
                   await dbAdmin.from('profiles').upsert({
                     id: session.user.id,
                     name: data.name || pending.userName,
                     email: data.email || session.user.email,
-                    org: pending.linkOrgId || data.org,
+                    org: pendingOrgName,
                     role: pending.assignedRole || data.role || 'worker',
                     industry: invIndustry || data.industry || '',
                     position: invPosition || data.position || '',
