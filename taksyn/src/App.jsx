@@ -5632,7 +5632,7 @@ function UsersView({ user, setAuditLog }) {
     setDuplicateInvite(null)
 
     const buildInviteUrl = async (orgId) => {
-      if (!orgId || !isConfigured()) return window.location.origin + window.location.pathname
+      if (!orgId || !isConfigured()) throw new Error('Cannot build invite link - organisation not resolved or Supabase not configured.')
       const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
       try {
         const { error } = await supabase.from('invite_links').insert({
@@ -5653,7 +5653,7 @@ function UsersView({ user, setAuditLog }) {
         })
         if (error) throw error
       } catch (err) {
-        console.error('Invite link insert error:', err)
+        throw new Error('Could not create the invite link: ' + (err?.message || 'unknown error'))
       }
       const params = new URLSearchParams({
         invite: 'true',
@@ -6749,7 +6749,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       if (inviteMethod === 'whatsapp') {
         const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
         try {
-          await supabase.from('invite_links').insert({
+          const { error: linkErr } = await supabase.from('invite_links').insert({
             organisation_id: showInvite.id, team_id: null, role: inviteRoleSel, secret: linkId,
             created_by: user.id, created_at: new Date().toISOString(),
             expires_at: new Date(Date.now() + 7*24*60*60*1000).toISOString(), is_active: true,
@@ -6757,7 +6757,8 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             invited_role: inviteRoleSel,
             invited_industry: firstIndustry||null
           })
-        } catch(err) { console.error('Invite link insert error:', err) }
+          if (linkErr) throw linkErr
+        } catch(err) { throw new Error('Could not create the invite link: ' + (err?.message || 'unknown error')) }
         const params = new URLSearchParams({ invite:'true', org:showInvite.id, orgname:showInvite.name, firstname:inviteFirstName.trim(), lastname:inviteLastName.trim(), email:inviteEmail.trim(), phone:invitePhone.trim(), role:inviteRoleSel, secret:'taksyn-secret-2024', link:linkId })
         const inviteUrl = window.location.origin + window.location.pathname + '?' + params.toString()
         const msg = encodeURIComponent(`Hi ${inviteFirstName.trim()}, ${showInvite.name} has invited you to join Taksyn as ${inviteRoleLabel}. Tap the link to set up your account: ${inviteUrl}`)
