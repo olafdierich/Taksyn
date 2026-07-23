@@ -569,7 +569,13 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
     const ctx = c.getContext('2d')
     ctx.drawImage(v, 0, 0, w, h)
     const now = new Date()
-    const lines = [ now.toLocaleString(), 'GPS: '+(gps||'unavailable'), label ? ('Task: '+String(label).slice(0,42)) : '' ].filter(Boolean)
+    let stampStr
+    try {
+      stampStr = now.toLocaleString('en-AU', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23', timeZoneName:'short' })
+    } catch (e) {
+      stampStr = now.toISOString()
+    }
+    const lines = [ stampStr, 'GPS: '+(gps||'unavailable'), label ? ('Task: '+String(label).slice(0,42)) : '' ].filter(Boolean)
     const fs = Math.max(13, Math.round(h*0.03)), pad = Math.round(fs*0.5)
     ctx.font = '600 '+fs+'px system-ui, -apple-system, sans-serif'
     const boxH = lines.length*(fs+pad) + pad
