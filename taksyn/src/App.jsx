@@ -5509,13 +5509,17 @@ function UsersView({ user, setAuditLog }) {
       const validExtraPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
       await supabase.from('profiles').update({ additional_positions: validExtraPositions.length ? JSON.stringify(validExtraPositions) : null }).eq('id', id).then(()=>{}).catch(()=>{})
       if (orgId) {
-        const { error: memberError } = await supabase.from('org_members').update({ role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }).eq('user_id', id).eq('org', orgId)
+        const { data: _memberRows, error: memberError } = await supabase.from('org_members').update({ role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }).eq('user_id', id).eq('org', orgId).select()
         if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
         // M3: mirror the role into profiles.role so login/notifications/assignment stop reading a stale role.
         // Guard reads profiles.role (NOT org_members) because the super admin is super_admin there and
         // client_admin in org_members — an org_members-based guard would overwrite it. Fail-closed on read error.
         const { data: _tgtProfile } = await supabase.from('profiles').select('role').eq('id', id).maybeSingle()
-        if (_tgtProfile && _tgtProfile.role !== 'super_admin' && editForm.role !== 'super_admin') {
+        // Rows-affected check: PostgREST returns 204 even when an UPDATE matches 0 rows, so a null
+        // error does NOT prove a row changed. Without this, an RLS denial or org mismatch would
+        // silently no-op org_members while we still wrote profiles.role — creating drift.
+        if (!memberError && (!_memberRows || _memberRows.length === 0)) console.warn('[m3 role sync] org_members update matched 0 rows — profiles.role NOT synced (RLS denial or org mismatch)')
+        if (_memberRows && _memberRows.length > 0 && _tgtProfile && _tgtProfile.role !== 'super_admin' && editForm.role !== 'super_admin') {
           const { error: _roleSyncErr } = await supabase.from('profiles').update({ role: editForm.role }).eq('id', id)
           if (_roleSyncErr) console.warn('[m3 role sync] profiles.role not updated:', _roleSyncErr.message)
         }
@@ -6560,12 +6564,14 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     console.log('[saveMemberEdit] editingMember.id:', editingMember.id)
     if (isConfigured()) {
       await supabase.from('profiles').update(profileUpdates).eq('id', editingMember.id)
-      const orgMemberRes = await (supabaseAdmin || supabase).from('org_members').update({ role:memberEditForm.role, industry:memberEditForm.industry||'', position:memberEditForm.position||'' }).eq('user_id', editingMember.id).eq('org', orgId)
+      const orgMemberRes = await (supabaseAdmin || supabase).from('org_members').update({ role:memberEditForm.role, industry:memberEditForm.industry||'', position:memberEditForm.position||'' }).eq('user_id', editingMember.id).eq('org', orgId).select()
       console.log('[saveMemberEdit] org_members update response:', orgMemberRes)
       // M3: mirror the role into profiles.role (see saveEditUser for rationale). Guard reads profiles.role,
       // never org_members, so an existing super_admin can't be downgraded. Fail-closed on read error.
       const { data: _tgtProfileM } = await supabase.from('profiles').select('role').eq('id', editingMember.id).maybeSingle()
-      if (_tgtProfileM && _tgtProfileM.role !== 'super_admin' && memberEditForm.role !== 'super_admin') {
+      // Rows-affected check — see saveEditUser. status 204 / error null does NOT mean a row changed.
+      if (!orgMemberRes?.error && !(orgMemberRes?.data?.length > 0)) console.warn('[m3 role sync] org_members update matched 0 rows — profiles.role NOT synced (RLS denial or org mismatch)')
+      if (orgMemberRes?.data?.length > 0 && _tgtProfileM && _tgtProfileM.role !== 'super_admin' && memberEditForm.role !== 'super_admin') {
         const { error: _roleSyncErrM } = await supabase.from('profiles').update({ role: memberEditForm.role }).eq('id', editingMember.id)
         if (_roleSyncErrM) console.warn('[m3 role sync] profiles.role not updated:', _roleSyncErrM.message)
       }
