@@ -39,12 +39,23 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { to, subject, body, secret } = await req.json()
+    const { to, subject, body } = await req.json()
+    // NOTE: `secret` is intentionally no longer read or trusted.
 
-    // --- auth: shared secret, same model as invite-user ---
-    const inviteSecret = Deno.env.get('INVITE_SECRET')
-    if (!inviteSecret || secret !== inviteSecret) {
-      console.log('[send-notification] rejected: bad or missing secret')
+    // --- auth: caller session (replaces shared-secret check) ---
+    // Any authenticated Taksyn user may trigger a notification. The recipient
+    // allowlist below still bounds WHO can be mailed, so a logged-in user
+    // cannot make Taksyn email arbitrary outside addresses. Defense in depth.
+    const supabaseAuth = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    )
+    const authHeader = req.headers.get('Authorization') || ''
+    const token = authHeader.replace(/^Bearer\s+/i, '')
+    if (!token) return json({ error: 'Unauthorized' }, 401)
+    const { data: userData, error: userErr } = await supabaseAuth.auth.getUser(token)
+    if (userErr || !userData?.user) {
+      console.log('[send-notification] rejected: no valid session')
       return json({ error: 'Unauthorized' }, 401)
     }
 

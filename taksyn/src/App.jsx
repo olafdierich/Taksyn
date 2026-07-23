@@ -275,7 +275,7 @@ const sendEmailNotif = async (toEmail, subject, body) => {
     const res = await fetch(supabaseUrl+'/functions/v1/send-notification', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization': await getEdgeFunctionAuthHeader()},
-      body: JSON.stringify({ to:toEmail, subject, body, secret:import.meta.env.VITE_INVITE_SECRET||'' })
+      body: JSON.stringify({ to:toEmail, subject, body })
     })
     if(!res.ok) console.log('Email notif failed:', res.status, await res.text().catch(()=>''))
   } catch(e) { console.log('Email notif failed:', e.message) }
@@ -2084,7 +2084,6 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
       return
     }
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
-    const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
     try {
       const res = await fetch(supabaseUrl + '/functions/v1/invite-user', {
         method: 'POST',
@@ -2095,7 +2094,6 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         body: JSON.stringify({
           action: 'resend',
           email: invite.invited_email,
-          secret: inviteSecret,
           inviteUrl: window.location.origin + window.location.pathname
         })
       })
@@ -5671,7 +5669,7 @@ function UsersView({ user, setAuditLog }) {
       const linkOrgId = resolvedOrgId
       const inviteUrl = await buildInviteUrl(linkOrgId)
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
-      const invitePayload = { email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, orgId: linkOrgId, industry: firstIndustry, positions: rolesSummary, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl }
+      const invitePayload = { email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, orgId: linkOrgId, industry: firstIndustry, positions: rolesSummary, inviteUrl }
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
@@ -5717,7 +5715,7 @@ function UsersView({ user, setAuditLog }) {
       const res = await fetch(supabaseUrl + '/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
-        body: JSON.stringify({ action: 'resend', email: invite.invited_email, secret: import.meta.env.VITE_INVITE_SECRET || '', inviteUrl: window.location.origin + window.location.pathname })
+        body: JSON.stringify({ action: 'resend', email: invite.invited_email, inviteUrl: window.location.origin + window.location.pathname })
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || 'Resend failed')
@@ -6706,7 +6704,6 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     }
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
-      const inviteSecret = import.meta.env.VITE_INVITE_SECRET || ''
       const validPos = inviteOrgPositions.filter(p=>p.role||p.industry||p.position)
       const rolesSummary = validPos.map(p=>[p.industry,p.position,p.role].filter(Boolean).join(' / ')).join('; ')
       const firstIndustry = validPos.find(p=>p.industry)?.industry || ''
@@ -6767,7 +6764,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
         return
       }
 
-      const invitePayload = { email:inviteEmail.trim(), name:fullName, role:inviteRoleSel, org:showInvite.name, orgId:showInvite.id, industry:firstIndustry, positions:rolesSummary, secret:inviteSecret }
+      const invitePayload = { email:inviteEmail.trim(), name:fullName, role:inviteRoleSel, org:showInvite.name, orgId:showInvite.id, industry:firstIndustry, positions:rolesSummary }
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
