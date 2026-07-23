@@ -5503,7 +5503,9 @@ function UsersView({ user, setAuditLog }) {
       const { data: orgData } = await supabase.from('organisations').select('id').eq('name', user.org).maybeSingle()
       orgId = orgData?.id
     }
+    let roleWriteApplied = true   // unconfigured/demo mode: no DB write to verify
     if (isConfigured()) {
+      roleWriteApplied = false
       const { error: profileError } = await supabase.from('profiles').update(profileUpdates).eq('id', id)
       if (profileError) { alert('Failed to save changes: ' + profileError.message); return }
       const validExtraPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
@@ -5519,6 +5521,7 @@ function UsersView({ user, setAuditLog }) {
         // error does NOT prove a row changed. Without this, an RLS denial or org mismatch would
         // silently no-op org_members while we still wrote profiles.role — creating drift.
         if (!memberError && (!_memberRows || _memberRows.length === 0)) console.warn('[m3 role sync] org_members update matched 0 rows — profiles.role NOT synced (RLS denial or org mismatch)')
+        if (_memberRows && _memberRows.length > 0) roleWriteApplied = true
         if (_memberRows && _memberRows.length > 0 && _tgtProfile && _tgtProfile.role !== 'super_admin' && editForm.role !== 'super_admin') {
           const { error: _roleSyncErr } = await supabase.from('profiles').update({ role: editForm.role }).eq('id', id)
           if (_roleSyncErr) console.warn('[m3 role sync] profiles.role not updated:', _roleSyncErr.message)
@@ -5527,14 +5530,20 @@ function UsersView({ user, setAuditLog }) {
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
     const addedPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
-    setOrgAssignments(prev=>({...prev, [id]: [{role:editForm.role, industry:editForm.industry||'', position:editForm.position||''}, ...(prev[id]||[]).slice(1), ...addedPositions]}))
+    const _attemptedFirst = {role:editForm.role, industry:editForm.industry||'', position:editForm.position||''}
+    const _priorFirst = orgAssignments[id]?.[0]
+    const _firstEntry = roleWriteApplied ? _attemptedFirst : (_priorFirst || _attemptedFirst)
+    setOrgAssignments(prev=>({...prev, [id]: [_firstEntry, ...(prev[id]||[]).slice(1), ...addedPositions]}))
+    if (!roleWriteApplied) alert('Profile details were saved, but the role/position change could not be applied (permission denied, or no matching membership row). The role shown is unchanged.')
     if (isConfigured()) {
       const db = supabaseAdmin || supabase
       db.from('user_notifications').insert({ user_id: id, title: 'Your roster has been updated', message: `Your roster has been updated by ${user.name}. Please check your schedule.`, org: workforceOrgId || orgId || user.org, read: false, created_at: new Date().toISOString() }).then(({error:ne})=>{ if(ne) console.error('[roster-notif]', ne.message) })
     }
     if (setAuditLog) {
       const oldRole = orgAssignments[id]?.[0]?.role || realUsers.find(u=>u.id===id)?.role
-      const roleChanged = oldRole && oldRole!==editForm.role
+      // Gated on roleWriteApplied: a false role_changed entry in an immutable audit
+      // trail is worse than a stale badge. Falls back to member_edited, which is true.
+      const roleChanged = roleWriteApplied && oldRole && oldRole!==editForm.role
       const evType = roleChanged ? 'role_changed' : 'member_edited'
       const ov = roleChanged ? (ROLE_LABELS[oldRole]||oldRole) : null
       const nv = roleChanged ? (ROLE_LABELS[editForm.role]||editForm.role) : null
@@ -6562,21 +6571,27 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     const orgId = editingMember.orgId || orgs.find(o=>o.name===editingMember.org)?.id || editingMember.org
     console.log('[saveMemberEdit] orgId:', orgId)
     console.log('[saveMemberEdit] editingMember.id:', editingMember.id)
+    let roleWriteApplied = true   // unconfigured/demo mode: no DB write to verify
     if (isConfigured()) {
-      await supabase.from('profiles').update(profileUpdates).eq('id', editingMember.id)
+      roleWriteApplied = false
+      const { error: profileErrM } = await supabase.from('profiles').update(profileUpdates).eq('id', editingMember.id)
+      if (profileErrM) { alert('Failed to save changes: ' + profileErrM.message); return }
       const orgMemberRes = await (supabaseAdmin || supabase).from('org_members').update({ role:memberEditForm.role, industry:memberEditForm.industry||'', position:memberEditForm.position||'' }).eq('user_id', editingMember.id).eq('org', orgId).select()
       console.log('[saveMemberEdit] org_members update response:', orgMemberRes)
+      if (orgMemberRes?.error) { alert('Failed to save role/position: ' + orgMemberRes.error.message); return }
       // M3: mirror the role into profiles.role (see saveEditUser for rationale). Guard reads profiles.role,
       // never org_members, so an existing super_admin can't be downgraded. Fail-closed on read error.
       const { data: _tgtProfileM } = await supabase.from('profiles').select('role').eq('id', editingMember.id).maybeSingle()
       // Rows-affected check — see saveEditUser. status 204 / error null does NOT mean a row changed.
       if (!orgMemberRes?.error && !(orgMemberRes?.data?.length > 0)) console.warn('[m3 role sync] org_members update matched 0 rows — profiles.role NOT synced (RLS denial or org mismatch)')
+      if (orgMemberRes?.data?.length > 0) roleWriteApplied = true
       if (orgMemberRes?.data?.length > 0 && _tgtProfileM && _tgtProfileM.role !== 'super_admin' && memberEditForm.role !== 'super_admin') {
         const { error: _roleSyncErrM } = await supabase.from('profiles').update({ role: memberEditForm.role }).eq('id', editingMember.id)
         if (_roleSyncErrM) console.warn('[m3 role sync] profiles.role not updated:', _roleSyncErrM.message)
       }
     }
-    setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...profileUpdates,role:memberEditForm.role,industry:memberEditForm.industry||'',position:memberEditForm.position||''}:m))
+    setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...profileUpdates,...(roleWriteApplied?{role:memberEditForm.role,industry:memberEditForm.industry||'',position:memberEditForm.position||''}:{})}:m))
+    if (!roleWriteApplied) alert('Profile details were saved, but the role/position change could not be applied (permission denied, or no matching membership row). The role shown is unchanged.')
     setViewingMember(null)
     setEditingMember(null); setMemberEditForm({}); setOrgChangeSearch('')
     setEditMemberPositions([]); setEditOrgIndustries([]); setEditOrgCustomRoles([]); setEditOrgCustomPositions([])
