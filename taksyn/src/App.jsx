@@ -5511,6 +5511,14 @@ function UsersView({ user, setAuditLog }) {
       if (orgId) {
         const { error: memberError } = await supabase.from('org_members').update({ role: editForm.role, industry: editForm.industry||'', position: editForm.position||'' }).eq('user_id', id).eq('org', orgId)
         if (memberError) { alert('Failed to save role/position: ' + memberError.message); return }
+        // M3: mirror the role into profiles.role so login/notifications/assignment stop reading a stale role.
+        // Guard reads profiles.role (NOT org_members) because the super admin is super_admin there and
+        // client_admin in org_members — an org_members-based guard would overwrite it. Fail-closed on read error.
+        const { data: _tgtProfile } = await supabase.from('profiles').select('role').eq('id', id).maybeSingle()
+        if (_tgtProfile && _tgtProfile.role !== 'super_admin' && editForm.role !== 'super_admin') {
+          const { error: _roleSyncErr } = await supabase.from('profiles').update({ role: editForm.role }).eq('id', id)
+          if (_roleSyncErr) console.warn('[m3 role sync] profiles.role not updated:', _roleSyncErr.message)
+        }
       }
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
@@ -6554,6 +6562,13 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       await supabase.from('profiles').update(profileUpdates).eq('id', editingMember.id)
       const orgMemberRes = await (supabaseAdmin || supabase).from('org_members').update({ role:memberEditForm.role, industry:memberEditForm.industry||'', position:memberEditForm.position||'' }).eq('user_id', editingMember.id).eq('org', orgId)
       console.log('[saveMemberEdit] org_members update response:', orgMemberRes)
+      // M3: mirror the role into profiles.role (see saveEditUser for rationale). Guard reads profiles.role,
+      // never org_members, so an existing super_admin can't be downgraded. Fail-closed on read error.
+      const { data: _tgtProfileM } = await supabase.from('profiles').select('role').eq('id', editingMember.id).maybeSingle()
+      if (_tgtProfileM && _tgtProfileM.role !== 'super_admin' && memberEditForm.role !== 'super_admin') {
+        const { error: _roleSyncErrM } = await supabase.from('profiles').update({ role: memberEditForm.role }).eq('id', editingMember.id)
+        if (_roleSyncErrM) console.warn('[m3 role sync] profiles.role not updated:', _roleSyncErrM.message)
+      }
     }
     setOrgMembers(prev=>prev.map(m=>m.id===editingMember.id?{...m,...profileUpdates,role:memberEditForm.role,industry:memberEditForm.industry||'',position:memberEditForm.position||''}:m))
     setViewingMember(null)
