@@ -10724,7 +10724,8 @@ function TeamsView({ user }) {
         })
         if (error) throw error
       } catch (err) {
-        console.error('Invite error:', err)
+        alert('Could not create the invite link: ' + (err?.message || 'unknown error'))
+        return
       }
     }
     const base = window.location.origin + window.location.pathname
@@ -10806,7 +10807,8 @@ function TeamsView({ user }) {
         })
         if (error) throw error
       } catch (err) {
-        console.error('Invite error:', err)
+        alert('Could not create the invite link: ' + (err?.message || 'unknown error'))
+        return
       }
     }
     const base = window.location.origin + window.location.pathname
