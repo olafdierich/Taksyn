@@ -1338,47 +1338,88 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         if (inviteUrlRef.current) {
           if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
 
-          // Read directly from the ref — these are the original URL params captured at page load
-          const inviteOrgId    = inviteUrlRef.current.orgId
+          // Read directly from the ref - identity-only params captured at page load.
           const firstName      = inviteUrlRef.current.firstName
           const lastName       = inviteUrlRef.current.lastName
           const inviteEmail    = inviteUrlRef.current.email    || email
           const invitePhone    = inviteUrlRef.current.phone
-          const inviteRole     = inviteUrlRef.current.role
-          const inviteIndustry = inviteUrlRef.current.industry
-          const invitePosition = inviteUrlRef.current.position
           const inviteLinkId   = inviteUrlRef.current.linkId
           const inviteTeamId   = inviteUrlRef.current.teamId
-          console.log('Invite params from ref:', { inviteOrgId, firstName, lastName, inviteEmail, invitePhone, inviteRole, inviteIndustry, invitePosition, inviteLinkId, inviteTeamId })
 
-          assignedRole = inviteRole || 'worker'
+          // SECURITY (handover 2026-07-24): role, org, position and industry are NEVER
+          // sourced from the URL. A crafted ?role=/?org= pair was a live privilege-
+          // escalation vector into service-role writes. They now come only from the
+          // invite_links row, resolved server-side by resolve_invite_link().
+          let inviteOrgId    = null
+          let inviteRole     = null
+          let invitePosition = null
+          let inviteIndustry = null
+          let linkTeamId     = inviteTeamId || null
+          let linkCreatedBy  = null
+          let linkOrgId      = null
+          let linkRecord     = null
+
+          // Validate FIRST - above the existing-account branch, so both registration
+          // paths consume one validated record. Fail closed: no link, or any status
+          // other than 'valid', is a refusal rather than a downgrade.
+          if (!inviteLinkId) {
+            setError('This invite link is not valid. Please ask your admin for a new link.')
+            setLoading(false); return
+          }
+          {
+            const { data: rpcRows, error: rpcErr } = await supabase
+              .rpc('resolve_invite_link', { p_secret: inviteLinkId })
+            if (rpcErr) {
+              console.error('[invite-reg] resolve_invite_link failed:', rpcErr.message)
+              setError('Could not verify this invite link. Please try again, or ask your admin for a new link.')
+              setLoading(false); return
+            }
+            const rec = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows
+            const status = rec?.status || 'not_found'
+            if (status === 'used') {
+              setError('This invite link has already been used. Please ask your admin for a new link.')
+              setLoading(false); return
+            }
+            if (status === 'inactive') {
+              setError('This invite link is no longer active. Please ask your admin for a new link.')
+              setLoading(false); return
+            }
+            if (status === 'expired') {
+              setError('This invite link has expired. Please ask your admin for a new link.')
+              setLoading(false); return
+            }
+            if (status !== 'valid' || !rec?.organisation_id) {
+              setError('This invite link is not valid. Please ask your admin for a new link.')
+              setLoading(false); return
+            }
+            linkRecord     = rec
+            inviteOrgId    = rec.organisation_id
+            inviteRole     = rec.role || 'worker'
+            invitePosition = rec.position || ''
+            inviteIndustry = rec.invited_industry || ''
+            linkTeamId     = rec.team_id || inviteTeamId || null
+            linkCreatedBy  = rec.created_by || null
+            linkOrgId      = rec.organisation_id
+          }
+
+          assignedRole = inviteRole
+
+          console.log('[invite-reg] resolved from DB:', { inviteOrgId, assignedRole, invitePosition, inviteIndustry, linkTeamId, linkCreatedBy, inviteLinkId })
 
           // Single-use per email: check if this email already has an account
           try {
             const { data: existingAccount } = await supabase
               .from('profiles').select('id').eq('email', inviteEmail).maybeSingle()
             if (existingAccount) {
-              // Store invite context so it can be applied after they sign in
+              // Store invite context so it can be applied after they sign in.
+              // Every value below comes from the validated record, not the URL.
               pendingInviteAcceptRef.current = {
-                linkTeamId: inviteTeamId || null,
-                linkOrgId: null,
-                linkCreatedBy: null,
+                linkTeamId: linkTeamId,
+                linkOrgId: linkOrgId,
+                linkCreatedBy: linkCreatedBy,
                 inviteLinkId: inviteLinkId || null,
-                assignedRole: inviteRole || 'worker',
+                assignedRole: assignedRole,
                 userName: (inviteUrlRef.current?.firstName + ' ' + inviteUrlRef.current?.lastName).trim() || inviteEmail,
-              }
-              // Pre-fill the link details from DB before switching to login
-              if (inviteLinkId) {
-                try {
-                  const { data: lc } = await supabase.from('invite_links')
-                    .select('team_id, created_by, organisation_id')
-                    .eq('secret', inviteLinkId).maybeSingle()
-                  if (lc) {
-                    pendingInviteAcceptRef.current.linkTeamId = lc.team_id || inviteTeamId || null
-                    pendingInviteAcceptRef.current.linkCreatedBy = lc.created_by || null
-                    pendingInviteAcceptRef.current.linkOrgId = lc.organisation_id || null
-                  }
-                } catch (_) {}
               }
               setInviteSignInPrompt(true)
               setMode('login')
@@ -1387,38 +1428,6 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               setLoading(false); return
             }
           } catch (_) {}
-
-          // Validate invite link
-          let linkTeamId = inviteTeamId || null
-          let linkCreatedBy = null
-          let linkOrgId = null
-          let linkRecord = null
-          if (inviteLinkId) {
-            try {
-              const { data: linkCheck } = await supabase
-                .from('invite_links')
-                .select('id, is_active, expires_at, used_at, team_id, created_by, organisation_id')
-                .eq('secret', inviteLinkId)
-                .maybeSingle()
-              if (linkCheck) {
-                linkRecord = linkCheck
-                if (linkCheck.is_active === false) {
-                  setError('This invite link has already been used. Please ask your admin for a new link.')
-                  setLoading(false); return
-                }
-                if (linkCheck.expires_at && new Date(linkCheck.expires_at) < new Date()) {
-                  setError('This invite link has expired. Please ask your admin for a new link.')
-                  setLoading(false); return
-                }
-                if (linkCheck.team_id) linkTeamId = linkCheck.team_id
-                if (linkCheck.created_by) linkCreatedBy = linkCheck.created_by
-                if (linkCheck.organisation_id) linkOrgId = linkCheck.organisation_id
-              } else {
-              }
-            } catch (linkErr) {
-              console.warn('invite_links validation query failed, proceeding:', linkErr.message)
-            }
-          }
 
           window.__taksyn_registering = true
           const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
