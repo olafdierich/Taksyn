@@ -3140,6 +3140,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const sel = selected ? tasks.find(t=>t.id===selected) : null
   const myTime = workerTimes.find(r=>r.user_id===user.id) || null
   const amAssigned = !!sel && user.role!=='client_admin' && user.role!=='super_admin' && ((Array.isArray(sel.assigned_user_ids)&&sel.assigned_user_ids.includes(user.id)) || sel.assigned_user_id===user.id || (sel.assigned_user_name&&sel.assigned_user_name.toLowerCase()===user.name?.toLowerCase()) || (sel.team_id&&userTeamIds.includes(sel.team_id)))
+  // Gentle worker reminders: Time In on open, Time Out+Submit when the checklist is finished.
+  const [reminder, setReminder] = useState(null)
+  const _remTimer = useRef(null)
+  const _showReminder = (msg) => { setReminder(msg); if(_remTimer.current) clearTimeout(_remTimer.current); _remTimer.current = setTimeout(()=>setReminder(null), 5000) }
+  useEffect(()=>{ if(sel && amAssigned && !myTime?.started_at){ _showReminder('\u25B6 Don\u2019t forget to Time In') } }, [sel?.id])
+  const _allSubsDone = (()=>{ const subs = sel ? parseSafe(sel.subtasks) : []; return subs.length>0 && subs.every(s=>s.done) })()
+  useEffect(()=>{ if(sel && amAssigned && _allSubsDone && myTime?.started_at && !myTime?.completed_at){ _showReminder('\u23F9 Don\u2019t forget to Time Out & Submit') } }, [sel?.id, _allSubsDone])
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
@@ -3159,6 +3166,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   return (
     <div className="anim">
+      {reminder && (
+        <div style={{position:'fixed',top:70,right:20,zIndex:9999,background:'var(--brand,#00A87E)',color:'#fff',padding:'10px 16px',borderRadius:12,boxShadow:'0 6px 20px rgba(0,0,0,.18)',fontSize:13,fontWeight:600,maxWidth:260,lineHeight:1.35,pointerEvents:'none'}}>{reminder}</div>
+      )}
       {celebration&&<Celebration onClose={()=>setCelebration(false)}/>}
 
       {showEdit&&sel&&(
