@@ -2777,6 +2777,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const histEntry = { action:newDone?'checked':'unchecked', by:user.name, byId:user.id, at:new Date().toISOString() }
     const newSubs = subs.map((x,i)=>i===idx?{...x,done:newDone,history:[...(x.history||[]),histEntry]}:x)
     update(tid, { subtasks: newSubs })
+    if (newDone && newSubs.length > 0 && newSubs.every(x=>x.done) && amAssigned && myTime?.started_at && !myTime?.completed_at) {
+      _showReminder('\u23F9 Don\u2019t forget to Time Out & Submit')
+    }
     const auditEntry = mkAuditEntry('checklist_toggled', user, task.org||user.org, { action:newDone?'checked':'unchecked', item:s.text }, tid, task.title, newDone?'unchecked':'checked', newDone?'checked':'unchecked')
     setAuditLog(log=>[auditEntry,...log])
     if(isConfigured()) supabase.from('audit_log').insert(auditEntry).then(({error})=>{ if(error) console.warn('audit_log insert error:', error.message) })
@@ -3145,8 +3148,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const _remTimer = useRef(null)
   const _showReminder = (msg) => { setReminder(msg); if(_remTimer.current) clearTimeout(_remTimer.current); _remTimer.current = setTimeout(()=>setReminder(null), 5000) }
   useEffect(()=>{ if(sel && amAssigned && !myTime?.started_at){ _showReminder('\u25B6 Don\u2019t forget to Time In') } }, [sel?.id])
-  const _allSubsDone = (()=>{ const subs = sel ? parseSafe(sel.subtasks) : []; return subs.length>0 && subs.every(s=>s.done) })()
-  useEffect(()=>{ if(sel && amAssigned && _allSubsDone && myTime?.started_at && !myTime?.completed_at){ _showReminder('\u23F9 Don\u2019t forget to Time Out & Submit') } }, [sel?.id, _allSubsDone])
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
