@@ -132,6 +132,24 @@ const getSLAStatus = (task, orgSLA) => {
 }
 
 const isRecurring = t => t.recurrence && t.recurrence !== '' && t.recurrence !== 'once' && t.recurrence !== null
+const nextOccurrenceDate = (dateStr, recurrence) => {
+  if (!dateStr || !recurrence || recurrence === 'once') return null
+  const [y,m,d] = String(dateStr).slice(0,10).split('-').map(Number)
+  const base = new Date(Date.UTC(y, m-1, d))
+  const fmt = dt => dt.toISOString().slice(0,10)
+  const addDays = (dt,n) => new Date(dt.getTime() + n*86400000)
+  const addMonths = (dt,n) => { const Y=dt.getUTCFullYear(),M=dt.getUTCMonth(),D=dt.getUTCDate(),idx=M+n,tY=Y+Math.floor(idx/12),tM=((idx%12)+12)%12,last=new Date(Date.UTC(tY,tM+1,0)).getUTCDate(); return new Date(Date.UTC(tY,tM,Math.min(D,last))) }
+  switch (recurrence) {
+    case 'daily': return fmt(addDays(base,1))
+    case 'weekdays': { let nd=addDays(base,1); const w=nd.getUTCDay(); if(w===6)nd=addDays(nd,2); else if(w===0)nd=addDays(nd,1); return fmt(nd) }
+    case 'weekly': return fmt(addDays(base,7))
+    case 'fortnightly': return fmt(addDays(base,14))
+    case 'monthly': return fmt(addMonths(base,1))
+    case 'quarterly': return fmt(addMonths(base,3))
+    case 'annually': return fmt(addMonths(base,12))
+    default: return null
+  }
+}
 const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
 // Optional time-of-day suffix for a task's due date (compliance tasks only). '' when no due_time set.
@@ -4474,7 +4492,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
   const [occurrences, setOccurrences] = useState([])
-  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [orgLogo, setOrgLogo] = useState(null)
@@ -4621,11 +4639,11 @@ function ReportsView({ tasks, user, setAuditLog }) {
 
   // --- Worker performance stats ---
   const workerRoles = ['worker','supervisor','manager']
-  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push(o.occurrence_date) })
+  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10)
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):1
-  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(d=>d>=_rsStr&&d<=_reStr).length
+  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status!=='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
   const workerMap = {}
   const teamMap = {}
   filteredPt.forEach(t => {
@@ -10120,7 +10138,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
   const [occurrences, setOccurrences] = useState([])
-  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
@@ -10155,11 +10173,11 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [rs,re] = getRange()
   const orgTasks = tasks.filter(t=>t.org===user.org)
   const pt = orgTasks.filter(t=>{ if(isRecurring(t)) return true; const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
-  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push(o.occurrence_date) })
+  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10)
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):1
-  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(d=>d>=_rsStr&&d<=_reStr).length
+  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status!=='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
 
   // Build leave day lookup per user
   const leaveDaysByUser = {}
@@ -14465,6 +14483,34 @@ export default function App() {
           const occDate=(t.completed_at||t.submitted_at||new Date().toISOString()).slice(0,10)
           supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence},{onConflict:'task_id,occurrence_date'}).then(()=>{})
           supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
+        })
+      }
+      // Auto-log MISSED recurring occurrences — grace-aware, future-only, insert-if-absent,
+      // task row UNTOUCHED (due_date not moved, escalation not cleared — D2 never-silently).
+      // Day boundary is plain UTC (company registered in a positive-UTC-offset region).
+      if(isConfigured()) {
+        const MISS_LOGGING_FROM = '2026-07-25'  // SHIP FLOOR: set to LIVE deploy date before live. (Sandbox: set earlier to exercise.)
+        const MISS_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, annually:14 }
+        const _msToday = new Date().toISOString().slice(0,10)
+        const _msFloor = MISS_LOGGING_FROM > _msToday ? _msToday : MISS_LOGGING_FROM
+        const _msPlusDays = (dstr,n) => new Date(new Date(dstr+'T00:00:00Z').getTime() + n*86400000).toISOString().slice(0,10)
+        const _msActedOn = ['approved','completed','awaiting_review','in_progress','rejected']
+        newTasks.filter(t=>isRecurring(t) && !_msActedOn.includes(t.status)).forEach(t=>{
+          let cur=(t.due_date||'').slice(0,10)
+          if(!cur) return
+          const grace = MISS_GRACE_DAYS[t.recurrence] ?? 0
+          let guard=0
+          while(cur && guard < 370){
+            const graceDeadline = _msPlusDays(cur, grace)
+            if(graceDeadline >= _msToday) break
+            if(cur >= _msFloor){
+              supabase.from('task_occurrences').upsert(
+                {task_id:t.id,org:t.org,occurrence_date:cur,status:'missed',recurrence:t.recurrence},
+                {onConflict:'task_id,occurrence_date',ignoreDuplicates:true}
+              ).then(()=>{})
+            }
+            cur=nextOccurrenceDate(cur,t.recurrence); guard++
+          }
         })
       }
       setTasks(newTasks)
