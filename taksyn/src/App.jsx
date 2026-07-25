@@ -8389,7 +8389,6 @@ function CompanySettingsView({ user }) {
             ref={logoInputRef}
             type="file"
             accept={LOGO_ACCEPT_ATTR}
-            capture={isMobile ? 'environment' : undefined}
             style={{display:'none'}}
             onChange={e => { processLogoFile(e.target.files[0]); e.target.value='' }}
           />
