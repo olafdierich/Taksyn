@@ -3514,7 +3514,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       )}
       {sel ? (
         <div className="anim">
-          <button className="back-btn" onClick={()=>{setSelected(null);setShowDeleteConfirm(false);setDeleteScope('')}}><IC n="x" s={14}/> {showArchive?'Back to Archive':'Back to Tasks'}</button>
+          <button className="back-btn" onClick={()=>{ if(amAssigned && myTime?.started_at && !myTime?.completed_at) _showReminder('\u23F9 Still clocked in \u2014 don\u2019t forget to Time Out & Submit'); setSelected(null);setShowDeleteConfirm(false);setDeleteScope('') }}><IC n="x" s={14}/> {showArchive?'Back to Archive':'Back to Tasks'}</button>
           <div className="detail-header">
             <div style={{flex:1}}>
               <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
