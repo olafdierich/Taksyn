@@ -2191,7 +2191,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
       </div>
       <div style={{marginTop:4}}>
         <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Active Tasks</div>
-        {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>setPage('tasks')}/>)}
+        {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>{ try{ sessionStorage.setItem('taksyn-open-task', t.id) }catch(e){}; setPage('tasks') }}/>)}
         {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
       </div>
       {(isCA||isMgr)&&(
@@ -2413,6 +2413,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [calPicking, setCalPicking] = useState('from') // 'from' | 'to' | null
   const [orgsList, setOrgsList] = useState([])
   const [selected, setSelected] = useState(null)
+  // Deep-link: dashboard task cards write 'taksyn-open-task'; open it once on mount, then clear.
+  useEffect(()=>{ try{ const _t=sessionStorage.getItem('taksyn-open-task'); if(_t){ setSelected(_t); sessionStorage.removeItem('taksyn-open-task') } }catch(e){} },[])
   // Open-hydration: opening a task detail refetches its full row (evidence/subtasks) as ONE single-row select.
   // `selected` is always a scalar task id (never bulk), so this fires exactly one refetch per open.
   useEffect(()=>{ if(selected) loadTaskById(selected) }, [selected])
