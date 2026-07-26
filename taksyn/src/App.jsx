@@ -5498,19 +5498,25 @@ function UsersView({ user, setAuditLog }) {
     if (!confirm(`This will permanently delete ${target?.name||'this member'} and cannot be undone.`)) return
     if (isConfigured()) {
       const userOrgId = workforceOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org
-      const db = supabaseAdmin || supabase
-      try { await db.from('invite_links').delete().eq('invited_email', target?.email).eq('organisation_id', userOrgId) } catch(err) {}
-      try { await db.from('team_members').delete().eq('user_id', id) } catch(err) {}
-      try { await db.from('org_members').delete().eq('user_id', id).eq('org', userOrgId) } catch(err) {}
-      try { await db.from('profiles').delete().eq('id', id) } catch(err) {}
+      const mode = user.role === 'super_admin' ? 'purge' : 'remove'
       try {
-        await supabase.from('tasks').update({ assigned_user_id: null })
-          .eq('assigned_user_id', id).eq('org', user.org)
-          .not('status', 'in', '("completed","approved")')
-      } catch(err) {}
-      if (supabaseAdmin) {
-        try { await supabaseAdmin.auth.admin.deleteUser(id) }
-        catch(err) { console.error('[deleteUser] auth.admin.deleteUser failed:', err.message) }
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+        const res = await fetch(supabaseUrl + '/functions/v1/delete-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': await getEdgeFunctionAuthHeader()
+          },
+          body: JSON.stringify({ userId: id, orgId: userOrgId, orgName: user.org, mode })
+        })
+        const result = await res.json().catch(()=>({}))
+        if (!res.ok) {
+          alert('Failed to delete member: ' + (result.error || res.status))
+          return
+        }
+      } catch (err) {
+        alert('Failed to delete member: ' + err.message)
+        return
       }
     }
     setArchivedUsers(prev => prev.filter(u => u.id !== id))
