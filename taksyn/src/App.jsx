@@ -3429,7 +3429,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 <label className="form-label">Approver <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— reviews the task on completion</span></label>
                 <select className="form-select" value={newTask.approver_id||''} onChange={e=>{ const a=teamUsers.find(u=>u.id===e.target.value); setNewTask({...newTask,approver_id:a?.id||'',approver_name:a?.name||''}) }}>
                   <option value="">{user.role==='client_admin'?'— Select approver —':'— Me —'}</option>
-                  {teamUsers.filter(u=>(ROLE_LEVEL[u.role]||0)>=(ROLE_LEVEL[newTask.assigned_role]||0)||(u.id===newTask.assigned_user_id&&newTask.assigned_user_id===user.id)).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
+                  {teamUsers.filter(u=>(ROLE_LEVEL[u.role]||0)>(ROLE_LEVEL[newTask.assigned_role]||0)||(u.id===newTask.assigned_user_id&&(ROLE_LEVEL[newTask.assigned_role]||0)>=3)||(u.id===newTask.assigned_user_id&&newTask.assigned_user_id===user.id)).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
                 </select>
               </div>
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
