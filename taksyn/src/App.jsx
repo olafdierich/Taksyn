@@ -3056,7 +3056,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               user_id: a.user_id,
               title: 'Task escalated',
               message: `${user.name} escalated "${task.title}" — needs your attention: ${reason}`,
-              org: orgId,
+              org: user.org,
               created_at: new Date().toISOString(),
               read: false,
             }))
@@ -5580,7 +5580,7 @@ function UsersView({ user, setAuditLog }) {
     if (!roleWriteApplied) alert('Profile details were saved, but the role/position change could not be applied (permission denied, or no matching membership row). The role shown is unchanged.')
     if (isConfigured()) {
       const db = supabaseAdmin || supabase
-      db.from('user_notifications').insert({ user_id: id, title: 'Your roster has been updated', message: `Your roster has been updated by ${user.name}. Please check your schedule.`, org: workforceOrgId || orgId || user.org, read: false, created_at: new Date().toISOString() }).then(({error:ne})=>{ if(ne) console.error('[roster-notif]', ne.message) })
+      db.from('user_notifications').insert({ user_id: id, title: 'Your roster has been updated', message: `Your roster has been updated by ${user.name}. Please check your schedule.`, org: user.org, read: false, created_at: new Date().toISOString() }).then(({error:ne})=>{ if(ne) console.error('[roster-notif]', ne.message) })
     }
     if (setAuditLog) {
       const oldRole = orgAssignments[id]?.[0]?.role || realUsers.find(u=>u.id===id)?.role
@@ -5611,7 +5611,7 @@ function UsersView({ user, setAuditLog }) {
       const { error } = await supabase.from('profiles').update({ roster: rosterOnlyData, regularly_rostered: rosterOnlyRegRostered }).eq('id', rosterOnlyUser.id)
       if (error) { alert('Failed to save roster: ' + error.message); setRosterOnlySaving(false); return }
       const db = supabaseAdmin || supabase
-      db.from('user_notifications').insert({ user_id: rosterOnlyUser.id, title: 'Your roster has been updated', message: `Your roster has been updated by ${user.name}. Please check your schedule.`, org: workforceOrgId || orgsList.find(o=>o.name===user.org)?.id || user.org, read: false, created_at: new Date().toISOString() }).then(({error:ne})=>{ if(ne) console.error('[roster-notif]', ne.message) })
+      db.from('user_notifications').insert({ user_id: rosterOnlyUser.id, title: 'Your roster has been updated', message: `Your roster has been updated by ${user.name}. Please check your schedule.`, org: user.org, read: false, created_at: new Date().toISOString() }).then(({error:ne})=>{ if(ne) console.error('[roster-notif]', ne.message) })
     }
     setRosterOnlyUser(null)
     setRosterOnlyData([])
@@ -10893,7 +10893,7 @@ function TeamsView({ user }) {
         user_id: u.id,
         title: "You've been added to a team",
         message: `You have been added to ${selectedTeam.name} by ${user.name}`,
-        org: orgId || user.org,
+        org: user.org,
         created_at: new Date().toISOString(),
         read: false
       }
