@@ -4133,9 +4133,22 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {renderSection('wk-todo', '📋 To Do', toDo.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
-                          {renderSection('wk-recurring', '🔁 Recurring Tasks', recurring.length,
-                            {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
-                            (recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {(()=>{
+                            // Point 3: default Tasks view surfaces only recurring tasks in their
+                            // current due window; out-of-window ones move to a collapsed Scheduled
+                            // section. Nothing is hidden — the filter tabs still reach everything.
+                            const _today = new Date().toISOString().slice(0,10)
+                            const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
+                            const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
+                            return (<>
+                              {renderSection('wk-recurring', '🔁 Recurring Tasks', recurringInWin.length,
+                                {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
+                                (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                              {recurringSched.length>0&&renderSection('wk-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
+                                {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                                recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
+                            </>)
+                          })()}
                           {renderSection('wk-submitted', '⏳ Submitted — Awaiting Review', submitted.length,
                             {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
                             (submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
@@ -4161,9 +4174,22 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {renderSection('sv-oneoff', '📤 One-off Tasks I Assigned', oneOff.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
-                          {renderSection('sv-recurring', '🔁 Recurring Tasks I Assigned', recurring.length,
-                            {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
-                            (recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {(()=>{
+                            // Point 3: default Tasks view surfaces only recurring tasks in their
+                            // current due window; out-of-window ones move to a collapsed Scheduled
+                            // section. Nothing is hidden — the filter tabs still reach everything.
+                            const _today = new Date().toISOString().slice(0,10)
+                            const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
+                            const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
+                            return (<>
+                              {renderSection('sv-recurring', '🔁 Recurring Tasks I Assigned', recurringInWin.length,
+                                {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
+                                (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                              {recurringSched.length>0&&renderSection('sv-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
+                                {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                                recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
+                            </>)
+                          })()}
                         </div>
                       )
                     }
@@ -4186,9 +4212,22 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {renderSection('mg-oneoff', '📤 One-off Tasks I Assigned', oneOff.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
-                          {renderSection('mg-recurring', '🔁 Recurring Tasks I Assigned', recurring.length,
-                            {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
-                            (recurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks assigned</div>:recurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {(()=>{
+                            // Point 3: default Tasks view surfaces only recurring tasks in their
+                            // current due window; out-of-window ones move to a collapsed Scheduled
+                            // section. Nothing is hidden — the filter tabs still reach everything.
+                            const _today = new Date().toISOString().slice(0,10)
+                            const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
+                            const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
+                            return (<>
+                              {renderSection('mg-recurring', '🔁 Recurring Tasks I Assigned', recurringInWin.length,
+                                {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
+                                (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                              {recurringSched.length>0&&renderSection('mg-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
+                                {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                                recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
+                            </>)
+                          })()}
                         </div>
                       )
                     }
@@ -4222,9 +4261,22 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         {renderSection('ca-oneoff', '📋 One-off Tasks', oneOffAll.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
-                        {renderSection('ca-recurring', '🔁 Recurring Tasks', recurringAll.length,
-                          {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
-                          (recurringAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks</div>:recurringAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                        {(()=>{
+                          // Point 3: default Tasks view surfaces only recurring tasks in their
+                          // current due window; out-of-window ones move to a collapsed Scheduled
+                          // section. Nothing is hidden — the filter tabs still reach everything.
+                          const _today = new Date().toISOString().slice(0,10)
+                          const recurringInWin = recurringAll.filter(t=>recurringDueNow(t,_today))
+                          const recurringSched = recurringAll.filter(t=>!recurringDueNow(t,_today))
+                          return (<>
+                            {renderSection('ca-recurring', '🔁 Recurring Tasks', recurringInWin.length,
+                              {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
+                              (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            {recurringSched.length>0&&renderSection('ca-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
+                              {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                              recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
+                          </>)
+                        })()}
                       </div>
                     )
                   })()}
