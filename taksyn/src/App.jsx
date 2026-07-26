@@ -150,6 +150,26 @@ const nextOccurrenceDate = (dateStr, recurrence) => {
     default: return null
   }
 }
+// Grace windows (days) per cadence — MUST match MISS_GRACE_DAYS in the occurrence miss-writer.
+const RECUR_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, annually:14 }
+const _recurPlusDays = (dstr,n)=> new Date(new Date(dstr+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
+// True iff a recurring task is in its CURRENT due window as of `today` (YYYY-MM-DD).
+// Walks from due_date to the current occurrence (first occ where occ+grace >= today),
+// then returns whether today lies within [occ, occ+grace]. Mirrors the miss-writer walk.
+const recurringDueNow = (t, today) => {
+  if(!isRecurring(t)) return false
+  let cur = (t.due_date||'').slice(0,10)
+  if(!cur) return false
+  const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
+  let guard=0
+  while(cur && guard < 400){
+    const graceDeadline = _recurPlusDays(cur, grace)
+    if(graceDeadline >= today) break
+    cur = nextOccurrenceDate(cur, t.recurrence); guard++
+  }
+  if(!cur) return false
+  return today >= cur && today <= _recurPlusDays(cur, grace)
+}
 const isOneOff = t => !isRecurring(t)
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
 // Optional time-of-day suffix for a task's due date (compliance tasks only). '' when no due_time set.
@@ -2195,10 +2215,20 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
           <span style={{fontSize:12,color:'var(--t2)',transform:dashOpen.active?'rotate(90deg)':'rotate(0deg)',transition:'transform .15s'}}>▶</span>
           <span style={{fontSize:14,fontWeight:700}}>Active Tasks</span>
         </div>
-        {dashOpen.active&&<>
-          {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>{ try{ sessionStorage.setItem('taksyn-open-task', t.id) }catch(e){}; setPage('tasks') }}/>)}
-          {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
-        </>}
+        {dashOpen.active&&(()=>{
+          const notDone = t=>!['completed','approved'].includes(t.status)
+          const activeNow = visible.filter(t=> isRecurring(t) ? recurringDueNow(t,today) : notDone(t))
+          const scheduled = visible.filter(t=> isRecurring(t) && !recurringDueNow(t,today))
+          const openCard = id=>{ try{ sessionStorage.setItem('taksyn-open-task', id) }catch(e){}; setPage('tasks') }
+          return <>
+            {activeNow.map(t=><TaskCard key={t.id} task={t} onClick={()=>openCard(t.id)}/>)}
+            {activeNow.length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">Nothing due right now!</div></div>}
+            {scheduled.length>0&&<>
+              <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',margin:'14px 0 8px',display:'flex',alignItems:'center',gap:6}}>🕓 Scheduled ({scheduled.length}) <span style={{fontWeight:400,fontSize:11}}>— recurring, not due yet</span></div>
+              {scheduled.slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>openCard(t.id)}/>)}
+            </>}
+          </>
+        })()}
       </div>
       {(isCA||isMgr)&&(
         <div className="section" style={{marginTop:16}}>
