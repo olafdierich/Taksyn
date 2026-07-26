@@ -2221,7 +2221,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
           const scheduled = visible.filter(t=> isRecurring(t) && !recurringDueNow(t,today))
           const openCard = id=>{ try{ sessionStorage.setItem('taksyn-open-task', id) }catch(e){}; setPage('tasks') }
           return <>
-            {activeNow.slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>openCard(t.id)}/>)}
+            {activeNow.map(t=><TaskCard key={t.id} task={t} onClick={()=>openCard(t.id)}/>)}
             {activeNow.length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">Nothing due right now!</div></div>}
             {scheduled.length>0&&<>
               <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',margin:'14px 0 8px',display:'flex',alignItems:'center',gap:6}}>🕓 Scheduled ({scheduled.length}) <span style={{fontWeight:400,fontSize:11}}>— recurring, not due yet</span></div>
