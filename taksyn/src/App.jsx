@@ -2024,6 +2024,7 @@ function computeAwards(tasks) {
 
 function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgSLA=DEFAULT_SLA }) {
   const isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor', isWkr=user.role==='worker'
+  const [dashOpen, setDashOpen] = useState({ active:true, invites:false })
   const go = (f) => { try{ sessionStorage.setItem('taksyn-task-filter', f) }catch(e){}; setPage('tasks') }
 
   const [pendingInvites, setPendingInvites] = useState([])
@@ -2190,16 +2191,23 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         </div>
       </div>
       <div style={{marginTop:4}}>
-        <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Active Tasks</div>
-        {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>{ try{ sessionStorage.setItem('taksyn-open-task', t.id) }catch(e){}; setPage('tasks') }}/>)}
-        {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
+        <div onClick={()=>setDashOpen(o=>({...o,active:!o.active}))} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:10,userSelect:'none'}}>
+          <span style={{fontSize:12,color:'var(--t2)',transform:dashOpen.active?'rotate(90deg)':'rotate(0deg)',transition:'transform .15s'}}>▶</span>
+          <span style={{fontSize:14,fontWeight:700}}>Active Tasks</span>
+        </div>
+        {dashOpen.active&&<>
+          {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>{ try{ sessionStorage.setItem('taksyn-open-task', t.id) }catch(e){}; setPage('tasks') }}/>)}
+          {visible.filter(t=>!['completed','approved'].includes(t.status)||isRecurring(t)).length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">All tasks complete!</div></div>}
+        </>}
       </div>
       {(isCA||isMgr)&&(
         <div className="section" style={{marginTop:16}}>
-          <div className="section-title" style={{display:'flex',alignItems:'center',gap:8}}>
+          <div onClick={()=>setDashOpen(o=>({...o,invites:!o.invites}))} className="section-title" style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',userSelect:'none'}}>
+            <span style={{fontSize:12,color:'var(--t2)',transform:dashOpen.invites?'rotate(90deg)':'rotate(0deg)',transition:'transform .15s'}}>▶</span>
             📨 Pending Invitations
             {pendingInvites.length>0&&<span style={{background:'#F59E0B',color:'#fff',borderRadius:10,fontSize:11,fontWeight:700,padding:'2px 7px'}}>{pendingInvites.length}</span>}
           </div>
+          {dashOpen.invites&&(<>
           {inviteMsg&&<div style={{fontSize:12,color:'#059669',padding:'4px 0',fontWeight:600}}>{inviteMsg}</div>}
           {pendingInvites.length===0
             ? <div style={{fontSize:13,color:'var(--t2)',padding:'4px 0'}}>No pending invitations</div>
@@ -2224,6 +2232,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
                 )
               })
           }
+        </>)}
         </div>
       )}
     </div>
