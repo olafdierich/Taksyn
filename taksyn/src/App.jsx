@@ -1267,6 +1267,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   const [showPw1, setShowPw1] = useState(false)
   const [pendingAuthUser, setPendingAuthUser] = useState(null)
   const [inviteToken, setInviteToken] = useState(null)
+  const [sessionReady, setSessionReady] = useState(false)
   const [inviteSignInPrompt, setInviteSignInPrompt] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -1305,10 +1306,23 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       // against the replaceState below, so no session was ever created.
       if (refreshToken) {
         supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
-          .then(({ error }) => { if (error) console.error('[invite] setSession failed:', error.message) })
-          .catch(e => console.error('[invite] setSession threw:', e))
+          .then(({ error }) => {
+            if (error) {
+              console.error('[invite] setSession failed:', error.message)
+              setError(error.message || 'Could not verify this link — please ask your admin for a new one.')
+            } else {
+              // Only now does a session actually exist. The Activate button is
+              // gated on this -- see the race note on the password screen below.
+              setSessionReady(true)
+            }
+          })
+          .catch(e => {
+            console.error('[invite] setSession threw:', e)
+            setError('Could not verify this link — please ask your admin for a new one.')
+          })
       } else {
         console.error('[invite] no refresh_token in hash - cannot establish session')
+        setError('Could not verify this link — please ask your admin for a new one.')
       }
       window.history.replaceState(null, '', window.location.pathname)
     } else if (hashParams.get('error')) {
@@ -1892,13 +1906,15 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             <label className="auth-label">Confirm Password</label>
             <input className="auth-input" type="password" placeholder="Repeat password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/>
           </div>
-          <button className="auth-btn" disabled={loading||!newPassword||newPassword!==confirmPassword} onClick={async()=>{
+          <button className="auth-btn" disabled={loading||!sessionReady||!newPassword||newPassword!==confirmPassword} onClick={async()=>{
             if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return }
             if (newPassword !== confirmPassword) { setError('Passwords do not match'); return }
             setLoading(true); setError('')
             try {
-              // Session already established from the magic-link hash by detectSessionInUrl.
-              // Do NOT call setSession here - it destroys that session (see 6480/6530).
+              // The session is established by the setSession call in the invite effect
+              // above, NOT by detectSessionInUrl -- that loses the race against
+              // replaceState (27 July, defect 2). The button is gated on sessionReady
+              // so this cannot run before that resolves. Do NOT call setSession here.
               // Update password
               const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
               if (updateError) throw updateError
@@ -1916,7 +1932,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               setLoading(false)
             }
           }}>
-            {loading ? 'Setting up...' : 'Activate Account'}
+            {loading ? 'Setting up...' : (sessionReady ? 'Activate Account' : 'Preparing…')}
           </button>
           {newPassword && confirmPassword && newPassword !== confirmPassword && (
             <div style={{fontSize:11,color:'var(--red)',marginTop:4,textAlign:'center'}}>Passwords do not match</div>
