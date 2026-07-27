@@ -14714,7 +14714,7 @@ export default function App() {
         // Exception: pendingInviteAcceptRef means an existing user chose to sign in to accept an invite.
         const _isp = new URLSearchParams(window.location.search)
         const _isInviteContext = (_isp.get('invite')==='true' && _isp.get('secret')==='taksyn-secret-2024') || window.__taksyn_invite_registration
-        if (_isInviteContext && !window.__taksyn_registering && !pendingInviteAcceptRef.current) {
+        if (_isInviteContext && !window.__taksyn_registering && !pendingInviteAcceptRef.current && !window.__taksyn_invite_flow) {
           await supabase.auth.signOut()
           return
         }
