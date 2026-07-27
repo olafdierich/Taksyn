@@ -1750,7 +1750,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   }
 
   // ── Dedicated invite registration page ──
-  if (inviteParams && mode === 'register') {
+  if (inviteParams && mode === 'register' && !inviteToken) {
     const hasName = !!(inviteParams.name || name)
     const hasEmail = !!(inviteParams.email || email)
     const canSubmit = !loading && password.length >= 6 && password === confirmPassword && agreeChecked && !!(inviteParams.orgName || inviteParams.orgId) && hasName && hasEmail
