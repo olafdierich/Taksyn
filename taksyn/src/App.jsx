@@ -14655,10 +14655,19 @@ export default function App() {
       const p = new URLSearchParams(window.location.search)
       return p.get('invite')==='true' && p.get('secret')==='taksyn-secret-2024'
     })()
+    // Capture the GoTrue hash token synchronously too. A session minted by the
+    // link the invitee just clicked must NOT be signed out below. Cannot be read
+    // later: AuthView strips the hash via replaceState on mount, and the
+    // __taksyn_invite_flow flag is cleared once the SIGNED_IN handler consumes it.
+    const _freshInviteSession = (()=>{
+      const h = new URLSearchParams(window.location.hash.replace('#','?').replace('#','&'))
+      const t = h.get('type')
+      return Boolean(h.get('access_token')) && (t==='invite' || t==='recovery')
+    })()
 
     supabase.auth.getSession().then(({data:{session}})=>{
       // If we loaded with an invite URL (or the flag is set), always sign out any existing session
-      if ((_inviteInUrl || window.__taksyn_invite_registration) && session?.user) {
+      if ((_inviteInUrl || window.__taksyn_invite_registration) && session?.user && !_freshInviteSession) {
         supabase.auth.signOut().catch(()=>{})
         return
       }
