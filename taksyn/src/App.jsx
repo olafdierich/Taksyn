@@ -1295,10 +1295,21 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
     const hash = window.location.hash
     const hashParams = new URLSearchParams(hash.replace('#','?').replace('#','&'))
     const accessToken = hashParams.get('access_token')
+    const refreshToken = hashParams.get('refresh_token')
     const type = hashParams.get('type')
     if (accessToken && (type==='invite' || type==='recovery')) {
       window.__taksyn_invite_flow = true
       setInviteToken(accessToken)
+      // Establish the session from BOTH hash tokens BEFORE the URL is cleared.
+      // detectSessionInUrl consumes the hash asynchronously and loses the race
+      // against the replaceState below, so no session was ever created.
+      if (refreshToken) {
+        supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+          .then(({ error }) => { if (error) console.error('[invite] setSession failed:', error.message) })
+          .catch(e => console.error('[invite] setSession threw:', e))
+      } else {
+        console.error('[invite] no refresh_token in hash - cannot establish session')
+      }
       window.history.replaceState(null, '', window.location.pathname)
     }
 
