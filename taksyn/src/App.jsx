@@ -1874,12 +1874,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             if (newPassword !== confirmPassword) { setError('Passwords do not match'); return }
             setLoading(true); setError('')
             try {
-              // Set session from invite token first
-              const { error: sessionError } = await supabase.auth.setSession({
-                access_token: inviteToken,
-                refresh_token: inviteToken
-              })
-              if (sessionError) throw sessionError
+              // Session already established from the magic-link hash by detectSessionInUrl.
+              // Do NOT call setSession here - it destroys that session (see 6480/6530).
               // Update password
               const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
               if (updateError) throw updateError
