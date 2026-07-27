@@ -14667,6 +14667,11 @@ export default function App() {
     // later: AuthView strips the hash via replaceState on mount, and the
     // __taksyn_invite_flow flag is cleared once the SIGNED_IN handler consumes it.
     const _freshInviteSession = (()=>{
+      // AuthView is a CHILD component, so React runs its effect BEFORE this one.
+      // That effect sets __taksyn_invite_flow and then calls replaceState, so the
+      // hash is already gone by the time we get here. Trust the flag first - it is
+      // set before the URL is cleared and is never unset for the life of the page.
+      if (window.__taksyn_invite_flow) return true
       const h = new URLSearchParams(window.location.hash.replace('#','?').replace('#','&'))
       const t = h.get('type')
       return Boolean(h.get('access_token')) && (t==='invite' || t==='recovery')
