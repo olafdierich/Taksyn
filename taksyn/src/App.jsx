@@ -1311,6 +1311,18 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         console.error('[invite] no refresh_token in hash - cannot establish session')
       }
       window.history.replaceState(null, '', window.location.pathname)
+    } else if (hashParams.get('error')) {
+      // Spent or expired token: GoTrue returns no access_token, only
+      // #error=access_denied&error_code=otp_expired&error_description=...
+      // The branch above therefore never fires, and without this the
+      // registration form renders over a dead token explaining nothing.
+      const errCode = hashParams.get('error_code') || ''
+      const errDesc = hashParams.get('error_description') || ''
+      setError(errCode === 'otp_expired'
+        ? 'This invite link has expired or has already been used. Please ask your admin for a new link.'
+        : (errDesc || 'This invite link is no longer valid. Please ask your admin for a new link.'))
+      setMode('login')
+      window.history.replaceState(null, '', window.location.pathname)
     }
 
     // Resolve org/team names for the invite card, then clear the URL
