@@ -14740,7 +14740,6 @@ export default function App() {
         if (window.__taksyn_org_selection_pending) return
         // Only show password setup for Supabase native email invite (hash token in URL)
         if(window.__taksyn_invite_flow) {
-          window.__taksyn_invite_flow = false
           setNeedsPasswordSetup(true)
           return
         }
