@@ -5343,6 +5343,7 @@ function UsersView({ user, setAuditLog }) {
   const [inviteTeamId, setInviteTeamId] = useState('')
   const [inviteOrgTeams, setInviteOrgTeams] = useState([])
   const [duplicateInvite, setDuplicateInvite] = useState(null) // {existingId, linkOrgId, ...} when duplicate detected
+  const [inviteSending, setInviteSending] = useState(false)
   const [archivedUsers, setArchivedUsers] = useState([])
   const [showArchived, setShowArchived] = useState(false)
   const [archiveOrgAssignments, setArchiveOrgAssignments] = useState({})
@@ -5773,6 +5774,7 @@ function UsersView({ user, setAuditLog }) {
     const orgEntry = orgsList.find(o => o.name === targetOrg)
     const resolvedOrgId = orgEntry?.id || ''
 
+    setInviteSending(true)
     // Check for existing active unused invite for this email + org
     if (isConfigured() && inviteEmail.trim() && resolvedOrgId && !duplicateInvite) {
       const { data: existing } = await supabase.from('invite_links')
@@ -5782,6 +5784,7 @@ function UsersView({ user, setAuditLog }) {
         .maybeSingle()
       if (existing) {
         setDuplicateInvite({ existingId: existing.id, resolvedOrgId, systemRole, firstIndustry, rolesSummary, positionsSummary })
+        setInviteSending(false)
         return
       }
     }
@@ -5839,10 +5842,11 @@ function UsersView({ user, setAuditLog }) {
       } catch(e) {
         alert('Failed to send invite: '+e.message)
       }
+      setInviteSending(false)
       return
     }
 
-    if (!isConfigured()) { alert('Supabase not configured'); return }
+    if (!isConfigured()) { setInviteSending(false); alert('Supabase not configured'); return }
     try {
       const linkOrgId = resolvedOrgId
       const inviteUrl = await buildInviteUrl(linkOrgId)
@@ -5870,6 +5874,8 @@ function UsersView({ user, setAuditLog }) {
       setShowInvite(false); resetInviteForm()
     } catch(e) {
       alert('Failed to send invite: '+e.message)
+    } finally {
+      setInviteSending(false)
     }
   }
 
@@ -6208,7 +6214,7 @@ function UsersView({ user, setAuditLog }) {
               ) : (
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                   <button className="btn btn-secondary" onClick={()=>{ setShowInvite(false); resetInviteForm() }}>Cancel</button>
-                  <button className="btn btn-primary" onClick={sendInvite}>{inviteMethod==='whatsapp'?'💬 Send via WhatsApp':'📧 Send Invite'}</button>
+                  <button className="btn btn-primary" onClick={sendInvite} disabled={inviteSending}>{inviteSending?'Sending...':inviteMethod==='whatsapp'?'💬 Send via WhatsApp':'📧 Send Invite'}</button>
                 </div>
               )}
             </div>
