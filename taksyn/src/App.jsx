@@ -213,7 +213,7 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
     if(isAssigneeOnLeave) return // skip — worker on leave
 
     // Alert 1: Worker hasn't done task on due date — alert supervisor
-    if(t.status==='pending'&&t.due_date<today&&t.assigned_role==='worker') {
+    if(isOverdueOneOff(t,today)&&t.assigned_role==='worker') {
       if(['supervisor','manager','client_admin'].includes(user.role)) {
         alerts.push({ type:'overdue_worker', task:t, msg:`Staff Member task overdue: "${t.title}" assigned to ${t.assigned_user_name||'staff member'}`, level:'red' })
       }
@@ -289,7 +289,7 @@ const generateNotifications = (tasks, user, prevTasks=[]) => {
     }
 
     // Task overdue — notify assignee and supervisor
-    if(t.status==='pending' && t.due_date && t.due_date < today) {
+    if(isOverdueOneOff(t,today)) {
       if(user.id===t.assigned_user_id || user.name===t.assigned_user_name) {
         notifs.push({ id:t.id+'_overdue_worker', type:'overdue', title:'Task overdue 🔴', body:`"${t.title}" was due ${t.due_date}`, taskId:t.id, at:new Date().toISOString(), read:false, color:'#EF4444' })
       }
