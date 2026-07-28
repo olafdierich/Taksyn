@@ -150,24 +150,45 @@ const nextOccurrenceDate = (dateStr, recurrence) => {
     default: return null
   }
 }
-// Grace windows (days) per cadence — MUST match MISS_GRACE_DAYS in the occurrence miss-writer.
+// Grace windows (days) per cadence — THE single source. Read by currentOccurrenceDate,
+// by recurringDueNow, and by the occurrence miss-writer (~14640). Do not copy this table
+// into a local const again: it used to exist twice, kept in sync only by this comment.
 const RECUR_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, annually:14 }
 const _recurPlusDays = (dstr,n)=> new Date(new Date(dstr+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
-// True iff a recurring task is in its CURRENT due window as of `today` (YYYY-MM-DD).
-// Walks from due_date to the current occurrence (first occ where occ+grace >= today),
-// then returns whether today lies within [occ, occ+grace]. Mirrors the miss-writer walk.
-const recurringDueNow = (t, today) => {
-  if(!isRecurring(t)) return false
-  let cur = (t.due_date||'').slice(0,10)
-  if(!cur) return false
-  const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
+// Single walk bound, shared by recurringDueNow and the occurrence miss-writer.
+// (Was 400 here and 370 in the miss-writer — one number now, so they cannot drift.)
+const RECUR_WALK_GUARD = 400
+// SCHEDULED date of the cycle that `today` falls in, as YYYY-MM-DD. Null if not walkable.
+// This is THE canonical occurrence_date for a recurring task. Both task_occurrences
+// writers MUST derive occurrence_date from this function and from nothing else.
+//
+// SEMANTIC NOTE — deliberate, do not "fix":
+//   The walk breaks on the first cycle whose grace deadline is >= today, so a task
+//   completed INSIDE its grace window is attributed to the cycle it satisfies, not to
+//   the calendar day the work happened. A monthly task (grace 5) finished on the 3rd
+//   is credited to LAST month's occurrence. That is correct for compliance binning and
+//   will look wrong to anyone eyeballing the table. It is not a bug.
+//
+// Day boundary is plain UTC, matching the miss-writer and occurrence_date storage.
+const currentOccurrenceDate = (dueDate, recurrence, today) => {
+  let cur = (dueDate||'').slice(0,10)
+  if(!cur) return null
+  const grace = RECUR_GRACE_DAYS[recurrence] ?? 0
   let guard=0
-  while(cur && guard < 400){
+  while(cur && guard < RECUR_WALK_GUARD){
     const graceDeadline = _recurPlusDays(cur, grace)
     if(graceDeadline >= today) break
-    cur = nextOccurrenceDate(cur, t.recurrence); guard++
+    cur = nextOccurrenceDate(cur, recurrence); guard++
   }
+  return cur || null
+}
+// True iff a recurring task is in its CURRENT due window as of `today` (YYYY-MM-DD).
+// Thin wrapper over currentOccurrenceDate — same walk, boolean contract unchanged.
+const recurringDueNow = (t, today) => {
+  if(!isRecurring(t)) return false
+  const cur = currentOccurrenceDate(t.due_date, t.recurrence, today)
   if(!cur) return false
+  const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
   return today >= cur && today <= _recurPlusDays(cur, grace)
 }
 const isOneOff = t => !isRecurring(t)
@@ -14634,8 +14655,24 @@ export default function App() {
       // Auto-reset completed recurring tasks back to pending
       if(isConfigured()) {
         newTasks.filter(t=>isRecurring(t)&&['approved','completed'].includes(t.status)).forEach(t=>{
-          const occDate=(t.completed_at||t.submitted_at||new Date().toISOString()).slice(0,10)
-          supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence},{onConflict:'task_id,occurrence_date'}).then(()=>{})
+          // occurrence_date is the SCHEDULED date of the cycle, never the day the work landed.
+          // Falls back to actual-date ONLY when the task has no due_date to walk from — the
+          // miss-writer is silent on those same tasks (`if(!cur) return`), so there is no
+          // competing row and no collision. Skipping the write instead would guarantee 0/N.
+          // Resolve against the COMPLETION date, never today's date.
+          //   - Correctness: work done on the 27th but synced on the 29th belongs to the
+          //     27th's cycle. Today's date would credit the wrong cycle.
+          //   - Idempotency: the reset UPDATE below swallows its errors. If it fails, this
+          //     block re-runs every load. Anchored to completed_at the resolved cycle is
+          //     CONSTANT, so the re-write is a harmless no-op. Anchored to today it would
+          //     advance daily and fabricate a 'completed' row per day for unworked cycles.
+          const _occDone=(t.completed_at||t.submitted_at||new Date().toISOString()).slice(0,10)
+          const occDate=currentOccurrenceDate(t.due_date, t.recurrence, _occDone)||_occDone
+          // status is written EXPLICITLY. This upsert has no ignoreDuplicates, so it merges
+          // onto any existing row — including a 'missed' row the walk already stamped at this
+          // same scheduled date. Without this the row would keep status='missed' while gaining
+          // completed_at, and doneDaysFor (status!=='missed') would refuse to count it.
+          supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,status:'completed',completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence},{onConflict:'task_id,occurrence_date'}).then(()=>{})
           supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
         })
       }
@@ -14644,7 +14681,8 @@ export default function App() {
       // Day boundary is plain UTC (company registered in a positive-UTC-offset region).
       if(isConfigured()) {
         const MISS_LOGGING_FROM = '2026-07-25'  // SHIP FLOOR: set to LIVE deploy date before live. (Sandbox: set earlier to exercise.)
-        const MISS_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, annually:14 }
+        // Grace table is module-level RECUR_GRACE_DAYS (line ~154). The local copy that used
+        // to live here was kept in sync by a comment; it is now one object, three readers.
         const _msToday = new Date().toISOString().slice(0,10)
         const _msFloor = MISS_LOGGING_FROM > _msToday ? _msToday : MISS_LOGGING_FROM
         const _msPlusDays = (dstr,n) => new Date(new Date(dstr+'T00:00:00Z').getTime() + n*86400000).toISOString().slice(0,10)
@@ -14652,9 +14690,9 @@ export default function App() {
         newTasks.filter(t=>isRecurring(t) && !_msActedOn.includes(t.status)).forEach(t=>{
           let cur=(t.due_date||'').slice(0,10)
           if(!cur) return
-          const grace = MISS_GRACE_DAYS[t.recurrence] ?? 0
+          const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
           let guard=0
-          while(cur && guard < 370){
+          while(cur && guard < RECUR_WALK_GUARD){
             const graceDeadline = _msPlusDays(cur, grace)
             if(graceDeadline >= _msToday) break
             if(cur >= _msFloor){
