@@ -3213,6 +3213,44 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   const canCreate = ['client_admin','manager','supervisor'].includes(user.role)
   const canApprove = hasAccess(user.role, 2)
+  // --- Separation of duties on review -------------------------------------------
+  // canApprove above is an ORG-WIDE ROLE FLOOR: true for every supervisor and above,
+  // on every task, regardless of who raised it or who it is assigned to. That let an
+  // assignee approve their own submission. canReviewTask narrows ONLY the review
+  // action; canApprove still governs Edit / Reassign / Resolve unchanged.
+  //
+  // Rule: blocked if you are the assignee AND not the creator. The creator exemption
+  // exists so someone who raises a task for themselves can still close it out.
+  //
+  // The assignee side is ID-based (assigned_user_id / assigned_user_ids hold real ids).
+  // The creator side compares against user.name because tasks.created_by stores a
+  // display NAME, not an id — a known defect. It is tolerable HERE and only here
+  // because this comparison can only GRANT an exemption to someone already blocked;
+  // it can never grant review rights to someone canApprove had already refused.
+  //
+  // NOT YET ENFORCED — needs created_by_id, a creator-role lookup, and an RLS policy:
+  //   * a supervisor reviewing a client_admin's task while not the assignee
+  // This gate is CLIENT-SIDE ONLY. Until RLS enforces it, it hides buttons; it does
+  // not stop a crafted request.
+  const isAssignedTo = (t) => !!t && (
+    t.assigned_user_id === user.id ||
+    (Array.isArray(t.assigned_user_ids) && t.assigned_user_ids.includes(user.id))
+  )
+  const canReviewTask = (t) => canApprove && !(isAssignedTo(t) && t.created_by !== user.name)
+  // Delete is irreversible and the "This and future" scope destroys a whole recurrence,
+  // so it is gated harder than review: the creator, or client_admin and above.
+  //
+  // FAILS CLOSED on the stated intent. "Creator AND ABOVE" needs the creator's ROLE, and
+  // created_by holds a display NAME, so a manager cannot delete a supervisor-created task
+  // even though they outrank them. Deliberate: for a destructive action, refusing someone
+  // who should be allowed is cheaper than allowing someone who should not.
+  //
+  // Unlike canReviewTask, the name comparison here does REAL work — a user whose display
+  // name matches the creator's would gain delete rights. Accepted only because the status
+  // quo (every supervisor can delete everything) is worse. Resolve with created_by_id.
+  //
+  // CLIENT-SIDE ONLY — hides the control, does not stop a crafted request. Needs RLS.
+  const canDeleteTask = (t) => canApprove && !!t && (t.created_by === user.name || hasAccess(user.role, 4))
   // Each role can only assign to roles below them
   const assignableRoles = user.role==='client_admin' ? ['manager','supervisor','worker']
     : user.role==='manager' ? ['supervisor','worker']
@@ -3901,13 +3939,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
           </div>
           <div className="btn-row">
             {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>✏️ Edit</button>}
-            {canApprove&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
+            {canReviewTask(sel)&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
               {/* Escalate button hidden (path 2): pathway retained in code, not user-reachable */}
             </>}
             {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve</button>}
-            {canApprove&&(
+            {canDeleteTask(sel)&&(
               <div style={{marginLeft:'auto'}}>
                 {!showDeleteConfirm?<button className="btn btn-danger btn-sm" onClick={()=>setShowDeleteConfirm(true)}>🗑 Delete</button>:(
                   <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:8,padding:12,minWidth:200}}>
