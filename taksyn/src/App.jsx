@@ -151,7 +151,8 @@ const nextOccurrenceDate = (dateStr, recurrence) => {
   }
 }
 // Grace windows (days) per cadence — THE single source. Read by currentOccurrenceDate,
-// by recurringDueNow, and by the occurrence miss-writer (~14640). Do not copy this table
+// by recurringDueNow, and by the occurrence miss-writer (search: status:'missed').
+// Line-number pointers here have gone stale twice. Use a search string. Do not copy this table
 // into a local const again: it used to exist twice, kept in sync only by this comment.
 const RECUR_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, annually:14 }
 const _recurPlusDays = (dstr,n)=> new Date(new Date(dstr+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
@@ -159,8 +160,12 @@ const _recurPlusDays = (dstr,n)=> new Date(new Date(dstr+'T00:00:00Z').getTime()
 // (Was 400 here and 370 in the miss-writer — one number now, so they cannot drift.)
 const RECUR_WALK_GUARD = 400
 // SCHEDULED date of the cycle that `today` falls in, as YYYY-MM-DD. Null if not walkable.
-// This is THE canonical occurrence_date for a recurring task. Both task_occurrences
-// writers MUST derive occurrence_date from this function and from nothing else.
+// This is the cycle that `today` falls in. It is NOT the canonical source for every
+// task_occurrences write, and the previous claim here — that both writers derive from
+// this function "and from nothing else" — was already false when it was written.
+// Three walks exist: this one, the miss-writer's inline walk, and occurrenceForCompletion
+// below. They share nextOccurrenceDate for cycle boundaries and RECUR_WALK_GUARD for the
+// bound. They differ ONLY in where they stop, because they answer different questions.
 //
 // SEMANTIC NOTE — deliberate, do not "fix":
 //   The walk breaks on the first cycle whose grace deadline is >= today, so a task
@@ -179,6 +184,30 @@ const currentOccurrenceDate = (dueDate, recurrence, today) => {
     const graceDeadline = _recurPlusDays(cur, grace)
     if(graceDeadline >= today) break
     cur = nextOccurrenceDate(cur, recurrence); guard++
+  }
+  return cur || null
+}
+// SCHEDULED date of the cycle a COMPLETION credits, as YYYY-MM-DD. Null if not walkable.
+//
+// Walks forward from due_date and stops at the first cycle whose SUCCESSOR would begin
+// after the completion date. It therefore never returns a cycle that starts after the
+// work was done — EXCEPT when due_date itself is later, i.e. early completion, which
+// correctly credits the cycle the work was for.
+//
+// DELIBERATELY DOES NOT READ RECUR_GRACE_DAYS. Grace does not select the cycle; it only
+// decides whether the completion was late. currentOccurrenceDate stops on the grace
+// deadline instead, which is right for "which cycle are we in NOW?" and wrong for
+// "which cycle does this work credit?" — with grace > 0 it OVERSHOOTS into a cycle that
+// has not started yet, crediting unperformed work while leaving the attempted cycle
+// marked missed. That is the defect this helper exists to avoid. Do not merge the two.
+const occurrenceForCompletion = (dueDate, recurrence, completedOn) => {
+  let cur = (dueDate||'').slice(0,10)
+  if(!cur) return null
+  let guard=0
+  while(cur && guard < RECUR_WALK_GUARD){
+    const nxt = nextOccurrenceDate(cur, recurrence)
+    if(!nxt || nxt > completedOn) break
+    cur = nxt; guard++
   }
   return cur || null
 }
@@ -14757,7 +14786,7 @@ export default function App() {
       }
       // Auto-reset completed recurring tasks back to pending
       if(isConfigured()) {
-        newTasks.filter(t=>isRecurring(t)&&['approved','completed'].includes(t.status)).forEach(t=>{
+        newTasks.filter(t=>isRecurring(t)&&['approved','completed'].includes(t.status)).forEach(async t=>{
           // occurrence_date is the SCHEDULED date of the cycle, never the day the work landed.
           // Falls back to actual-date ONLY when the task has no due_date to walk from — the
           // miss-writer is silent on those same tasks (`if(!cur) return`), so there is no
@@ -14770,12 +14799,23 @@ export default function App() {
           //     CONSTANT, so the re-write is a harmless no-op. Anchored to today it would
           //     advance daily and fabricate a 'completed' row per day for unworked cycles.
           const _occDone=(t.completed_at||t.submitted_at||new Date().toISOString()).slice(0,10)
-          const occDate=currentOccurrenceDate(t.due_date, t.recurrence, _occDone)||_occDone
+          const occDate=occurrenceForCompletion(t.due_date, t.recurrence, _occDone)||_occDone
+          // Grace no longer selects the cycle. It does exactly one job now: this flag.
+          const _occGrace=RECUR_GRACE_DAYS[t.recurrence] ?? 0
+          const _occLate=_occDone > _recurPlusDays(occDate, _occGrace)
           // status is written EXPLICITLY. This upsert has no ignoreDuplicates, so it merges
           // onto any existing row — including a 'missed' row the walk already stamped at this
           // same scheduled date. Without this the row would keep status='missed' while gaining
           // completed_at, and doneDaysFor (status!=='missed') would refuse to count it.
-          supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,status:'completed',completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence},{onConflict:'task_id,occurrence_date'}).then(()=>{})
+          // ORDERING — the reset below is GATED on this upsert landing. The two used to
+          // fire unawaited and independently. If the upsert failed, the reset still ran,
+          // the task went to pending, and this block (which filters on approved/completed)
+          // never fired again: the credit was lost permanently. Under forward-crediting
+          // that is worse than a missing row — the miss-writer then stamps 'missed' on a
+          // cycle the work was actually done in, and that feeds bulk_approvals, which by
+          // design cannot be corrected. On failure we leave the task alone and retry next load.
+          const { error:_occErr } = await supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,status:'completed',completed_late:_occLate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence},{onConflict:'task_id,occurrence_date'})
+          if(_occErr){ console.warn('task_occurrences upsert failed — reset skipped, will retry next load:', _occErr.message); return }
           supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
         })
       }
