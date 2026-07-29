@@ -4732,7 +4732,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
     {id:'total',l:'Total Tasks',v:()=>total,c:'b'},
     {id:'done',l:'Completed',v:()=>done,c:'g'},
     {id:'notdone',l:'Not Completed',v:()=>total-done,c:'a'},
-    {id:'overdue',l:'Overdue',v:()=>overdue,c:'r'},
+    {id:'empty4',l:'',v:()=>'',c:'x'},
     {id:'compliance',l:'Compliance Rate',v:()=>pct(compDone,compT.length)+'%',c:'p'},
     {id:'toreview',l:'Total for Review',v:()=>totalToReview,c:'b'},
     {id:'reviewed',l:'Reviewed',v:()=>reviewed,c:'g'},
