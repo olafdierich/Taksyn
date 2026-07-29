@@ -4738,7 +4738,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
     {id:'reviewed',l:'Reviewed',v:()=>reviewed,c:'g'},
     {id:'pending',l:'Pending Reviews',v:()=>pendingReview,c:'a'},
     {id:'reviewtime',l:'Reviewed in Time',v:()=>reviewedInTimePct+'%',c:'p'},
-    {id:'sameday',l:'Tasks Done Same Day',v:()=>doneOnDayPct+'%',c:'g'},
+    {id:'empty3',l:'',v:()=>'',c:'x'},
     {id:'empty1',l:'',v:()=>'',c:'x'},
     {id:'reporttime',l:'Report Reviewed in Time',v:()=>reportWithinWeekPct+'%',c:'g'},
     {id:'empty2',l:'',v:()=>'',c:'x'},
