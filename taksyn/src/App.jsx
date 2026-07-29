@@ -4694,7 +4694,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
   const [occurrences, setOccurrences] = useState([])
-  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_at,completed_by_name,recurrence').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [orgLogo, setOrgLogo] = useState(null)
@@ -4841,11 +4841,31 @@ function ReportsView({ tasks, user, setAuditLog }) {
 
   // --- Worker performance stats ---
   const workerRoles = ['worker','supervisor','manager']
-  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status}) })
+  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10)
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):1
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status!=='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  // --- Occurrence history (READ-ONLY display). Chips are SCHEDULED cycles, never completion dates.
+  // 'late' means the completion landed outside its own grace window, so currentOccurrenceDate
+  // credited it to a LATER cycle than the one being attempted (proven 29 Jul 2026: work done
+  // 23 Jul on a 20 Jul weekly cycle was credited to 27 Jul). Nothing here feeds any KPI.
+  const occRows = filteredPt.filter(t=>isRecurring(t)).map(t=>{
+    const cells=(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr).sort((a,b)=>a.d<b.d?-1:1).map(o=>{
+      const rec=o.rec||t.recurrence
+      const grace=RECUR_GRACE_DAYS[rec]??0
+      const doneOn=o.at?String(o.at).slice(0,10):''
+      const late=!!(doneOn&&o.status!=='missed'&&doneOn>_recurPlusDays(o.d,grace))
+      const tip=o.status==='missed'
+        ? 'Cycle '+o.d+' \u2014 missed'
+        : 'Cycle '+o.d+(doneOn&&doneOn!==o.d?' \u2014 completed '+doneOn:' \u2014 completed')+(late?' (outside grace window)':'')+(o.by?' by '+o.by:'')
+      return {...o,late,tip}
+    })
+    return {title:t.title||t.id,rec:t.recurrence,cells,
+      done:cells.filter(c=>c.status!=='missed').length,
+      missed:cells.filter(c=>c.status==='missed').length,
+      flagged:cells.filter(c=>c.late).length}
+  }).filter(r=>r.cells.length>0).sort((a,b)=>(b.missed+b.flagged)-(a.missed+a.flagged))
   const workerMap = {}
   const teamMap = {}
   filteredPt.forEach(t => {
@@ -5330,6 +5350,53 @@ function ReportsView({ tasks, user, setAuditLog }) {
         </div>
       )}
 
+      {/* Occurrence History Preview — per-cycle detail behind the recurring numbers */}
+      {reportType==='worker' && isClientAdmin && (
+        <div className="section">
+          <div className="section-title">Occurrence History &mdash; {occRows.length} recurring task{occRows.length===1?'':'s'} &middot; {pl}</div>
+          <div style={{fontSize:11,color:'var(--t2)',marginTop:4,lineHeight:1.5}}>
+            Each chip is one scheduled cycle, oldest first. Amber marks a completion that landed outside its grace window &mdash; credited to a later cycle than the one attempted. Hover a chip for dates.
+          </div>
+          <div style={{display:'flex',gap:14,marginTop:8,fontSize:10,color:'var(--t2)',flexWrap:'wrap'}}>
+            {[['var(--green)','Completed'],['#F59E0B','Outside grace'],['var(--red)','Missed']].map(([c,l])=>(
+              <span key={l} style={{display:'inline-flex',alignItems:'center',gap:5}}>
+                <span style={{width:9,height:9,borderRadius:3,background:c,display:'inline-block'}} />{l}
+              </span>
+            ))}
+          </div>
+          <div style={{overflowX:'auto',marginTop:10}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead>
+                <tr style={{background:'var(--s3)'}}>
+                  {['Task','Cadence','Cycles','Done','Missed','Outside Grace'].map(h=>(
+                    <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {occRows.length===0 && <tr><td colSpan={6} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No occurrence data for this period</td></tr>}
+                {occRows.map((r,i)=>(
+                  <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
+                    <td style={{padding:'8px 10px',fontWeight:600,minWidth:200}}>
+                      <div>{r.title}</div>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:3,marginTop:6}}>
+                        {r.cells.map((c,j)=>(
+                          <span key={j} title={c.tip} style={{width:11,height:11,borderRadius:3,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.late?'#F59E0B':'var(--green)'}} />
+                        ))}
+                      </div>
+                    </td>
+                    <td style={{padding:'8px 10px',color:'var(--t2)',fontSize:11,textTransform:'capitalize'}}>{r.rec}</td>
+                    <td style={{padding:'8px 10px'}}>{r.cells.length}</td>
+                    <td style={{padding:'8px 10px'}}>{r.done}</td>
+                    <td style={{padding:'8px 10px',color:r.missed?'var(--red)':'var(--t2)',fontWeight:r.missed?700:400}}>{r.missed}</td>
+                    <td style={{padding:'8px 10px',color:r.flagged?'#F59E0B':'var(--t2)',fontWeight:r.flagged?700:400}}>{r.flagged}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       {/* Org Overview Preview */}
       {reportType==='org' && isClientAdmin && (
         <>
@@ -10351,7 +10418,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
   const [occurrences, setOccurrences] = useState([])
-  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_at,completed_by_name,recurrence').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
@@ -10386,7 +10453,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [rs,re] = getRange()
   const orgTasks = tasks.filter(t=>t.org===user.org)
   const pt = orgTasks.filter(t=>{ if(isRecurring(t)) return true; const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
-  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status}) })
+  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10)
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):1
