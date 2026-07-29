@@ -4982,7 +4982,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
       const onTimePct = pct(w.onTime,w.done)
       const avg = w.avgMins.length ? Math.round(w.avgMins.reduce((a,b)=>a+b,0)/w.avgMins.length) : 0
       const avgStr = avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
-      return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+onTimePct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
+      return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
     }).join('')
     const teamHtml = teamRows.map(tm=>'<tr><td>'+tm.name+'</td><td>'+tm.total+'</td><td>'+tm.done+'</td><td>'+pct(tm.done,tm.total)+'%</td></tr>').join('')
     const approverHtml = approverRows.map(a=>{
@@ -4993,7 +4993,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
       return '<tr><td><strong>'+a.name+'</strong></td><td>'+reviewed+'</td><td style="color:#10B981">'+a.approved+'</td><td style="color:'+(a.sentBack>0?'#F59E0B':'#5a6478')+'">'+a.sentBack+'</td><td>'+sbPct+'%</td><td>'+turnLabel+'</td><td style="color:'+(a.pending>0?'#F59E0B':'#5a6478')+'">'+a.pending+'</td></tr>'
     }).join('')
     const approverSec = (isClientAdmin && approverRows.length) ? '<div class="sec"><div class="sec-title">🔍 Approver Review Performance</div><table><thead><tr><th>Approver</th><th>Reviewed</th><th>Approved</th><th>Sent Back</th><th>Send-Back %</th><th>Avg Turnaround</th><th>Pending</th></tr></thead><tbody>'+approverHtml+'</tbody></table></div>' : ''
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Staff Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Staff Performance Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Staff</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div>${teamRows.length?'<div class="sec"><div class="sec-title">Team Performance</div><table><thead><tr><th>Team</th><th>Tasks</th><th>Done</th><th>Rate</th></tr></thead><tbody>'+teamHtml+'</tbody></table></div>':''}${approverSec}<table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>On Time %</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Staff Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Staff Performance Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Staff</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div>${teamRows.length?'<div class="sec"><div class="sec-title">Team Performance</div><table><thead><tr><th>Team</th><th>Tasks</th><th>Done</th><th>Rate</th></tr></thead><tbody>'+teamHtml+'</tbody></table></div>':''}${approverSec}<table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
     openReport(html)
   }
 
@@ -5321,13 +5321,13 @@ function ReportsView({ tasks, user, setAuditLog }) {
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
               <thead>
                 <tr style={{background:'var(--s3)'}}>
-                  {['Name','Role','Tasks','Done','Rate','On Time %','Avg Duration','Reviews 24h'].map(h=>(
+                  {['Name','Role','Tasks','Done','Rate','Avg Duration','Reviews 24h'].map(h=>(
                     <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {workerRows.length===0 && <tr><td colSpan={8} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No worker data for this period</td></tr>}
+                {workerRows.length===0 && <tr><td colSpan={7} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No worker data for this period</td></tr>}
                 {workerRows.map((w,i)=>{
                   const cp=pct(w.done,w.total)
                   const avg=w.avgMins.length?Math.round(w.avgMins.reduce((a,b)=>a+b,0)/w.avgMins.length):0
@@ -5338,7 +5338,6 @@ function ReportsView({ tasks, user, setAuditLog }) {
                       <td style={{padding:'8px 10px'}}>{w.total}</td>
                       <td style={{padding:'8px 10px'}}>{w.done}</td>
                       <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
-                      <td style={{padding:'8px 10px'}}>{pct(w.onTime,w.done)}%</td>
                       <td style={{padding:'8px 10px',color:'var(--t2)'}}>{avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'}</td>
                       <td style={{padding:'8px 10px'}}>{w.reviewedInTime}</td>
                     </tr>
@@ -10666,7 +10665,6 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
                   {[
                     ['Tasks',p.total,'#5BC8C0'],
                     ['Completed',p.done,'#10B981'],
-                    ['On Time',onTimeRate+'%','#3B82F6'],
                     ['Checklist',p.clTotal>0?pct(p.clDone,p.clTotal)+'%':'—',p.clTotal>0&&pct(p.clDone,p.clTotal)>=80?'#10B981':p.clTotal>0?'#F59E0B':'#6B7280'],
                     ['Rejected',p.rejected,p.rejected>0?'#EF4444':'#6B7280'],
                     ['Overdue',p.overdue,p.overdue>0?'#EF4444':'#6B7280'],
