@@ -10645,7 +10645,6 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
               {label:'Team Members',val:people.length,color:'#3B82F6'},
               {label:'Tasks Assigned',val:pt.length,color:'#5BC8C0'},
               {label:'Completed',val:pt.filter(t=>['completed','approved'].includes(t.status)).length,color:'#10B981'},
-              {label:'Overdue',val:pt.filter(t=>t.status==='overdue').length,color:'#EF4444'},
             ].map(s=>(
               <div key={s.label} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
                 <div style={{fontSize:22,fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
