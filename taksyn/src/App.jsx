@@ -4784,7 +4784,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
     if (period==='quarterly') { const s=new Date(now); s.setDate(s.getDate()-89); return [s,end] }
     if (period==='annual') { const s=new Date(now); s.setDate(s.getDate()-364); return [s,end] }
     if (period==='custom' && customStart && customEnd) return [new Date(customStart), new Date(customEnd)]
-    return [new Date(0), end]
+    const s=new Date(now); s.setDate(s.getDate()-6); return [s,end]
   }
   const [rs,re] = getRange()
   const pt = tasks.filter(t => { if(isRecurring(t)) return true; const d = new Date(t.created_at||t.due_date||0); return d>=rs && d<=re })
@@ -4815,7 +4815,7 @@ function ReportsView({ tasks, user, setAuditLog }) {
   // --- Shared stats helpers ---
   const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0
   const fmtDur = (s,e) => { if(!s||!e) return '—'; const m=Math.round((new Date(e)-new Date(s))/60000); return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m' }
-  const pl = {weekly:'Last 7 Days',monthly:'Last Month',quarterly:'Last 3 Months',annual:'Last Year',custom:customStart+' to '+customEnd}[period]
+  const pl = {weekly:'Last 7 Days',monthly:'Last Month',quarterly:'Last 3 Months',annual:'Last Year',custom:(customStart&&customEnd)?customStart+' to '+customEnd:'Last 7 Days (select dates)'}[period]
 
   // Load checklist completions for filtered tasks
   useEffect(()=>{
@@ -10476,7 +10476,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
     if (period==='weekly') { const s=new Date(now); s.setDate(s.getDate()-6); return [s,now] }
     if (period==='monthly') { const s=new Date(now); s.setDate(s.getDate()-29); return [s,now] }
     if (period==='quarterly') { const s=new Date(now); s.setDate(s.getDate()-89); return [s,now] }
-    return [new Date(0), now]
+    const s=new Date(now); s.setDate(s.getDate()-29); return [s,now]
   }
   const [rs,re] = getRange()
   const orgTasks = tasks.filter(t=>t.org===user.org)
