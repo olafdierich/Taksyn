@@ -4872,8 +4872,8 @@ function ReportsView({ tasks, user, setAuditLog }) {
   const workerRoles = ['worker','supervisor','manager']
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
-  const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10)
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
+  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status!=='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
   // --- Occurrence history (READ-ONLY display). Chips are SCHEDULED cycles, never completion dates.
   // 'late' means the completion landed outside its own grace window, so currentOccurrenceDate
@@ -10483,8 +10483,8 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const pt = orgTasks.filter(t=>{ if(isRecurring(t)) return true; const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
-  const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10)
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
+  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status!=='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
 
   // Build leave day lookup per user
