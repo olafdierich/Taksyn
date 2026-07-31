@@ -5733,9 +5733,9 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
                   <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
                     <td style={{padding:'8px 10px',fontWeight:600,minWidth:200}}>
                       <div>{r.title}</div>
-                      <div style={{display:'flex',flexWrap:'wrap',gap:3,marginTop:6}}>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:0,marginTop:6}}>
                         {r.cells.map((c,j)=>(
-                          <span key={j} title={c.tip} style={{width:11,height:11,borderRadius:3,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.late?'#F59E0B':'var(--green)'}} />
+                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
                         ))}
                       </div>
                     </td>
