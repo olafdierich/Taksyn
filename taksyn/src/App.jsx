@@ -3793,7 +3793,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {/* F70 - "Not applicable today". OUTSIDE the myTime conditional on purpose:
                   Submit requires Time In AND Time Out, and a worker must not have to clock
                   in and out of a task they are declaring was not needed. Recurring only. */}
-              {isRecurring(sel)&&!['awaiting_review','approved'].includes(sel.status)&&(
+              {/* D2: same-day only. Not-due-yet cycles are excluded, or the
+                  declaration would resolve to the CURRENT cycle rather than the
+                  one on screen. in_progress/rejected excluded so the D8 reset
+                  cannot wipe a started task - mirrors the miss-writer's
+                  _msActedOn list. orgTz unresolved: show, and let
+                  markNotApplicable's guard handle it. */}
+              {isRecurring(sel)&&!['awaiting_review','approved','in_progress','rejected'].includes(sel.status)&&(!orgTz||recurringDueNow(sel,orgToday(orgTz)))&&(
                 <div style={{marginBottom:10}}>
                   {naPrompt!==sel.id ? (
                     <button
