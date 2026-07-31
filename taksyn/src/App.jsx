@@ -5033,7 +5033,7 @@ function ReviewView({ user }) {
   )
 }
 
-function ReportsView({ tasks, user, setAuditLog }) {
+function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
   const [reportType, setReportType] = useState('compliance')
   const [period, setPeriod] = useState('weekly')
   const [teamsList, setTeamsList] = useState([])
@@ -5200,7 +5200,11 @@ function ReportsView({ tasks, user, setAuditLog }) {
     const cells=(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr).sort((a,b)=>a.d<b.d?-1:1).map(o=>{
       const rec=o.rec||t.recurrence
       const grace=RECUR_GRACE_DAYS[rec]??0
-      const doneOn=o.at?String(o.at).slice(0,10):''
+      // F53-ORGDAY: org-local completion day. Stored completed_late is org-day derived
+      // (F14); this display value must agree, or one occurrence reads late in Reports
+      // and on-time in the stored row. orgDayOf(ts, null) falls back to UTC without
+      // throwing, so an unresolved prop renders old behaviour and self-corrects.
+      const doneOn=orgDayOf(o.at, orgTimezone)||''
       const late=!!(doneOn&&o.status!=='missed'&&doneOn>_recurPlusDays(o.d,grace))
       const tip=o.status==='missed'
         ? 'Cycle '+o.d+' \u2014 missed'
@@ -16026,7 +16030,7 @@ export default function App() {
                 {page==='evidence'    && user.role!=='super_admin' && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
                 {page==='escalations' && user.role!=='super_admin' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
                 {page==='org_escalations' && user.role==='client_admin' && <OrgEscalationsView {...pageProps}/>}
-                {page==='reports'     && user.role!=='super_admin' && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
+                {page==='reports'     && user.role!=='super_admin' && hasAccess(user.role,3) && <ReportsView    {...pageProps} orgTimezone={orgTimezone}/>}
                 {page==='review'      && user.role!=='super_admin' && hasAccess(user.role,3) && <ReviewView     {...pageProps}/>}
                 {page==='audit'       && hasAccess(user.role,2) && <AuditLogView   {...pageProps}/>}
                 {page==='orgs'        && user.role==='super_admin' && <OrganisationsView {...pageProps}/>}
