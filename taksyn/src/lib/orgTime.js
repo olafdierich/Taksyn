@@ -31,3 +31,15 @@ export function isSameOrgDay(isoTs, timezone) {
   if (isNaN(d.getTime())) return false
   return ymdInTz(d, timezone) === ymdInTz(new Date(), timezone)
 }
+
+// F14-ORGDAY — the org-local calendar day of an ARBITRARY timestamp, as 'YYYY-MM-DD'.
+// orgToday()/isSameOrgDay() are both hardwired to `new Date()`; this is the same
+// Intl-based, DST-safe machinery applied to a timestamp that is not now.
+// Returns null for a missing or unparseable timestamp — callers must treat null
+// as "cannot resolve" and skip, never substitute today.
+export function orgDayOf(isoTs, timezone) {
+  if (!isoTs) return null
+  const d = new Date(isoTs)
+  if (isNaN(d.getTime())) return null
+  return ymdInTz(d, timezone)
+}

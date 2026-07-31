@@ -3,7 +3,7 @@ import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import { uploadEvidence, signedEvidenceUrl } from './lib/evidenceStorage'
-import { isSameOrgDay } from './lib/orgTime'
+import { isSameOrgDay, orgToday, orgDayOf } from './lib/orgTime'
 
 // Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
 // Declared here (outside all components) so it is always in scope everywhere in this file.
@@ -174,7 +174,8 @@ const RECUR_WALK_GUARD = 400
 //   is credited to LAST month's occurrence. That is correct for compliance binning and
 //   will look wrong to anyone eyeballing the table. It is not a bug.
 //
-// Day boundary is plain UTC, matching the miss-writer and occurrence_date storage.
+// Day boundary: these walks are timezone-AGNOSTIC — `today`/`completedOn` are parameters.
+// The org-day is resolved by the two callers in loadTasks() and passed in. See F14-ORGDAY.
 const currentOccurrenceDate = (dueDate, recurrence, today) => {
   let cur = (dueDate||'').slice(0,10)
   if(!cur) return null
@@ -15113,7 +15114,15 @@ export default function App() {
           //     block re-runs every load. Anchored to completed_at the resolved cycle is
           //     CONSTANT, so the re-write is a harmless no-op. Anchored to today it would
           //     advance daily and fabricate a 'completed' row per day for unworked cycles.
-          const _occDone=(t.completed_at||t.submitted_at||new Date().toISOString()).slice(0,10)
+          if(!orgTimezone) return   // F14-ORGDAY: org day unresolved — skip. Task stays 'completed',
+                                    // so this block re-runs on the reload effect above. Fire-once
+                                    // and permanent, so guessing UTC here is not survivable.
+          // _occDone feeds occurrenceForCompletion() below, so it selects WHICH CYCLE the work
+          // credits — not just whether it was late. Derived in UTC, a completion at 01:00 in a
+          // +03 org reads as the previous day and credits the previous cycle, flipping that
+          // cycle's 'missed' row to completed while the real cycle is later stamped missed.
+          const _occDone=orgDayOf(t.completed_at||t.submitted_at||new Date().toISOString(), orgTimezone)
+          if(!_occDone) return   // unparseable timestamp — never substitute today
           const occDate=occurrenceForCompletion(t.due_date, t.recurrence, _occDone)||_occDone
           // Grace no longer selects the cycle. It does exactly one job now: this flag.
           const _occGrace=RECUR_GRACE_DAYS[t.recurrence] ?? 0
@@ -15136,16 +15145,18 @@ export default function App() {
       }
       // Auto-log MISSED recurring occurrences — grace-aware, future-only, insert-if-absent,
       // task row UNTOUCHED (due_date not moved, escalation not cleared — D2 never-silently).
-      // Day boundary is plain UTC (company registered in a positive-UTC-offset region).
+      // Day boundary is the ORGANISATION's operational day (O1), not UTC and not the device's.
       if(isConfigured()) {
         const MISS_LOGGING_FROM = '2026-07-25'  // SHIP FLOOR: set to LIVE deploy date before live. (Sandbox: set earlier to exercise.)
         // Grace table is module-level RECUR_GRACE_DAYS (line ~154). The local copy that used
         // to live here was kept in sync by a comment; it is now one object, three readers.
-        const _msToday = new Date().toISOString().slice(0,10)
+        const _msToday = orgToday(orgTimezone)
         const _msFloor = MISS_LOGGING_FROM > _msToday ? _msToday : MISS_LOGGING_FROM
         const _msPlusDays = (dstr,n) => new Date(new Date(dstr+'T00:00:00Z').getTime() + n*86400000).toISOString().slice(0,10)
         const _msActedOn = ['approved','completed','awaiting_review','in_progress','rejected']
         newTasks.filter(t=>isRecurring(t) && !_msActedOn.includes(t.status)).forEach(t=>{
+          if(!orgTimezone) return   // F14-ORGDAY: org day unresolved — skip. Insert-if-absent,
+                                    // so the row is stamped on the next load instead.
           let cur=(t.due_date||'').slice(0,10)
           if(!cur) return
           const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
@@ -15412,10 +15423,16 @@ export default function App() {
         }).catch(()=>{})
       // Load org SLA settings
       if(isConfigured()&&user.org) {
-        supabase.from('organisations').select('sla_settings,auto_logout_minutes').eq('name',user.org).maybeSingle()
+        supabase.from('organisations').select('sla_settings,auto_logout_minutes,timezone').eq('name',user.org).maybeSingle()
           .then(({data})=>{
             if(data?.sla_settings) updateOrgSLA({...DEFAULT_SLA,...JSON.parse(data.sla_settings)})
             if(data?.auto_logout_minutes!=null) setSessionTimeout(data.auto_logout_minutes)
+            // F14-ORGDAY — resolve unconditionally. supabase-js returns errors in the envelope
+            // rather than throwing (F37), so a 400 lands here with data undefined and we settle
+            // on 'UTC' — i.e. exactly today's behaviour, never an indefinite skip. '' and null
+            // both mean unconfigured; ymdInTz would coerce them to UTC anyway, but settling here
+            // keeps null meaning strictly "not yet fetched".
+            setOrgTimezone((data?.timezone || '').trim() || 'UTC')
           })
           .catch(()=>{})
       }
@@ -15452,7 +15469,27 @@ export default function App() {
   // re-subscribe) on every refresh. This effect only depends on who the user is + their org/role.
   },[user?.id, user?.org, user?.role])
 
+  // F14-ORGDAY — org timezone for the two task_occurrences writers.
+  // Stays null until the org settings fetch resolves. Both writers SKIP while it is
+  // null rather than falling back to UTC: a wrong occurrence_date is permanent and
+  // feeds bulk_approvals, which by design cannot be corrected. A skipped pass is free
+  // (the completion writer leaves the task 'completed' so it re-runs; the miss-writer
+  // is insert-if-absent). NOT defaulted to 'UTC' like TasksView's copy at ~2590 —
+  // that one only gates a UI action and can afford to guess. This one cannot.
+  // A user with no user.org never resolves, which is correct: occurrence rows are
+  // org-scoped and t.org would be null anyway.
+  const [orgTimezone, setOrgTimezone] = useState(null)
   const [showOrgSwitch, setShowOrgSwitch] = useState(false)
+
+  // F14-ORGDAY — loadTasks() is called at the top of the main effect, BEFORE the org
+  // settings fetch below it resolves, so both occurrence writers skip on the first
+  // pass. Re-run once the timezone lands. Deliberately its own effect: orgTimezone is
+  // NOT added to the main effect's dep array because that effect also owns the
+  // tasks-realtime channel, and re-running it would tear down and re-subscribe — the
+  // exact churn the comment on that dep array warns against.
+  useEffect(()=>{
+    if(orgTimezone && user?.id && isConfigured()) loadTasks()
+  }, [orgTimezone])
   const [orgSwitchChoices, setOrgSwitchChoices] = useState([])
 
   const handleAuth = (userData) => {
