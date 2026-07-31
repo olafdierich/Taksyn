@@ -155,6 +155,10 @@ const nextOccurrenceDate = (dateStr, recurrence) => {
 // Line-number pointers here have gone stale twice. Use a search string. Do not copy this table
 // into a local const again: it used to exist twice, kept in sync only by this comment.
 const RECUR_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, annually:14 }
+// Occurrence status for a cycle declared NOT APPLICABLE (F70). THE single source:
+// task_occurrences.status has NO CHECK constraint, so a typo here becomes a silent
+// third status that no reader knows about. Never type this literal at a call site.
+const OCC_NOT_APPLICABLE = 'not_applicable'
 const _recurPlusDays = (dstr,n)=> new Date(new Date(dstr+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
 // Single walk bound, shared by recurringDueNow and the occurrence miss-writer.
 // (Was 400 here and 370 in the miss-writer — one number now, so they cannot drift.)
@@ -2522,7 +2526,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{} }) {
+function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null }) {
   const [filter, setFilter] = useState('all')
   useEffect(()=>{ try{ const _f=sessionStorage.getItem('taksyn-task-filter'); if(_f){ setFilter(_f); sessionStorage.removeItem('taksyn-task-filter') } }catch(e){} },[])
   const [selectedOrg, setSelectedOrg] = useState('all')
@@ -2577,6 +2581,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [clNoteText, setClNoteText] = useState('')
   const [mandatoryWarn, setMandatoryWarn] = useState(null)
   const [photoWarn, setPhotoWarn] = useState(false)
+  // F70 - "Not applicable today". naPrompt holds the task id whose reason panel is
+  // open (null = closed). naBusy guards the four awaited round trips in
+  // markNotApplicable against a double tap.
+  const [naPrompt, setNaPrompt] = useState(null)
+  const [naReason, setNaReason] = useState('')
+  const [naBusy, setNaBusy] = useState(false)
   // Multi-completion checklist state
   const [clCompletions, setClCompletions] = useState({}) // {taskId: {itemId: [rows]}}
   const [clExpanded, setClExpanded] = useState(new Set()) // keys 'taskId::itemId'
@@ -3088,6 +3098,67 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
         doStart()
       }
     )
+  }
+
+  // ---- F70: "Not applicable today" -----------------------------------------
+  // Writes a task_occurrences row with status OCC_NOT_APPLICABLE, then resets the task
+  // so the cycle advances exactly as a completion does (D8).
+  //
+  // ORDERING IS LOAD-BEARING. Mirrors the completion reconcile (search string:
+  // 'reset skipped, will retry next load'): the occurrence upsert is AWAITED and the
+  // task reset is GATED on it succeeding. An ungated reset loses the declaration
+  // permanently, because the task returns to 'pending' and nothing re-runs.
+  //
+  // TIMEZONE: uses orgTz (App-level, null until resolved), NOT this component's own
+  // orgTimezone state, which defaults to 'UTC' and would sail through a truthy guard
+  // before the real value lands. This is a PERMANENT write, so an unresolved pass is
+  // not survivable - same reasoning as the comment at the completion reconcile.
+  //
+  // BYPASSES update() DELIBERATELY. update() writes audit_log, sends email on status
+  // change, and returns early behind an intervention modal for super_admin - so an N/A
+  // routed through it would silently do nothing for that role. The audit entry is
+  // therefore written explicitly here: a compliance suppression must not be the one
+  // action with no entry in the audit trail.
+  const markNotApplicable = async (tid, reason) => {
+    if(!isConfigured()) return
+    if(!orgTz) { alert('Organisation timezone has not loaded yet. Please try again in a moment.'); return }
+    const _naReason = (reason||'').trim()
+    if(!_naReason) { alert('A reason is required to mark a task not applicable.'); return }   // D3
+    const t = tasks.find(x=>x.id===tid)
+    if(!t) return
+    const _naToday = orgToday(orgTz)
+    if(!_naToday) return   // unresolvable org day - never substitute UTC on a permanent write
+    const _naDate = occurrenceForCompletion(t.due_date, t.recurrence, _naToday) || _naToday
+    // D4 - an N/A must never erase a recorded completion. Reversing a completion is an
+    // approver action (waive), not a worker one.
+    const { data:_naExisting } = await supabase.from('task_occurrences')
+      .select('status').eq('task_id', t.id).eq('occurrence_date', _naDate).maybeSingle()
+    if(_naExisting && _naExisting.status==='completed') {
+      alert('This cycle is already recorded as completed. An approver must change it.'); return
+    }
+    const { error:_naErr } = await supabase.from('task_occurrences').upsert(
+      { task_id:t.id, org:t.org, occurrence_date:_naDate, status:OCC_NOT_APPLICABLE,
+        recurrence:t.recurrence, na_by:user?.id||null, na_by_name:user?.name||null,
+        na_at:new Date().toISOString(), na_reason:_naReason },
+      { onConflict:'task_id,occurrence_date' }
+    )
+    if(_naErr) {
+      console.warn('task_occurrences N/A upsert failed - task left unchanged:', _naErr.message)
+      alert('Could not record this. Nothing was changed. Please try again.'); return
+    }
+    const _naEntry = mkAuditEntry('task_not_applicable', user, t.org||user?.org,
+      { reason:_naReason, occurrence_date:_naDate }, t.id, t.title||t.id,
+      t.status||null, OCC_NOT_APPLICABLE)
+    setAuditLog(log=>[_naEntry,...log])
+    const { error:_naAudErr } = await supabase.from('audit_log').insert(_naEntry)
+    if(_naAudErr) console.warn('audit_log insert error (N/A):', _naAudErr.message)
+    // Reset mirrors the completion reconcile's reset exactly. Direct, not via update().
+    const { error:_naRstErr } = await supabase.from('tasks').update(
+      {status:'pending',started_at:null,completed_at:null,submitted_at:null,
+       completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}
+    ).eq('id', tid)
+    if(_naRstErr) console.warn('task reset after N/A failed - occurrence row IS written:', _naRstErr.message)
+    if(loadTasks) loadTasks()
   }
 
   const submitTask = (tid) => {
@@ -3719,6 +3790,58 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 {!myTime?.started_at&&<button className="btn btn-green" style={{flex:1}} onClick={()=>workerTimeIn(sel.id)}>▶ Time In</button>}
                 {myTime?.started_at&&!myTime?.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>workerTimeOut(sel.id)}>⏹ Time Out</button>}
               </div>
+              {/* F70 - "Not applicable today". OUTSIDE the myTime conditional on purpose:
+                  Submit requires Time In AND Time Out, and a worker must not have to clock
+                  in and out of a task they are declaring was not needed. Recurring only. */}
+              {isRecurring(sel)&&!['awaiting_review','approved'].includes(sel.status)&&(
+                <div style={{marginBottom:10}}>
+                  {naPrompt!==sel.id ? (
+                    <button
+                      className="btn"
+                      style={{width:'100%',background:'var(--s3)',border:'1px solid var(--border)',color:'var(--t2)',fontWeight:600}}
+                      onClick={()=>{ setNaPrompt(sel.id); setNaReason('') }}
+                    >
+                      Not applicable today
+                    </button>
+                  ) : (
+                    <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:12}}>
+                      <div style={{fontSize:12,fontWeight:700,marginBottom:6}}>Why is this not applicable today?</div>
+                      <div style={{fontSize:11,color:'var(--t2)',marginBottom:8,lineHeight:1.5}}>
+                        This cycle will not count as done, and will not count as missed. Your reason is recorded and is visible to your approver.
+                      </div>
+                      <textarea
+                        value={naReason}
+                        onChange={e=>setNaReason(e.target.value)}
+                        rows={3}
+                        placeholder="e.g. no sterilisation performed today - no instruments used"
+                        style={{width:'100%',padding:8,borderRadius:6,border:'1px solid var(--border)',background:'transparent',color:'inherit',fontSize:13,fontFamily:'inherit',resize:'vertical'}}
+                      />
+                      <div style={{display:'flex',gap:8,marginTop:8}}>
+                        <button
+                          className="btn btn-primary"
+                          style={{flex:1,opacity:(naReason.trim()&&!naBusy)?1:0.5}}
+                          disabled={!naReason.trim()||naBusy}
+                          onClick={async()=>{
+                            setNaBusy(true)
+                            await markNotApplicable(sel.id, naReason)
+                            setNaBusy(false); setNaPrompt(null); setNaReason('')
+                          }}
+                        >
+                          {naBusy?'Recording...':'Confirm'}
+                        </button>
+                        <button
+                          className="btn"
+                          style={{flex:1,background:'transparent',border:'1px solid var(--border)',color:'var(--t2)'}}
+                          onClick={()=>{ setNaPrompt(null); setNaReason('') }}
+                          disabled={naBusy}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               {myTime?.started_at&&myTime?.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
                 <button
                   className="btn btn-primary"
@@ -16031,7 +16154,7 @@ export default function App() {
             ) : (
               <>
                 {page==='dashboard'   && <DashboardView   {...pageProps} tickets={tickets} leaveRecords={leaveRecords}/>}
-                {page==='tasks'       && user.role!=='super_admin' && <TasksView {...pageProps}/>}
+                {page==='tasks'       && user.role!=='super_admin' && <TasksView {...pageProps} orgTz={orgTimezone}/>}
                 {page==='evidence'    && user.role!=='super_admin' && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
                 {page==='escalations' && user.role!=='super_admin' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
                 {page==='org_escalations' && user.role==='client_admin' && <OrgEscalationsView {...pageProps}/>}
