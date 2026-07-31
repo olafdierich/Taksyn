@@ -5100,7 +5100,12 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
     if (period==='monthly') { const s=new Date(now); s.setDate(s.getDate()-29); return [s,end] }
     if (period==='quarterly') { const s=new Date(now); s.setDate(s.getDate()-89); return [s,end] }
     if (period==='annual') { const s=new Date(now); s.setDate(s.getDate()-364); return [s,end] }
-    if (period==='custom' && customStart && customEnd) return [new Date(customStart), new Date(customEnd)]
+    // F66: customEnd is a bare YYYY-MM-DD, which JS parses as UTC MIDNIGHT. The
+    // dataset filter is inclusive on both ends (d>=rs && d<=re), so an unmodified
+    // customEnd cut the range at 00:00 of the final day and dropped it entirely.
+    // Extended to the last millisecond of that day. Still UTC - making this
+    // org-local is F62, and belongs with the display-site batch, not here.
+    if (period==='custom' && customStart && customEnd) return [new Date(customStart), new Date(customEnd+'T23:59:59.999Z')]
     const s=new Date(now); s.setDate(s.getDate()-6); return [s,end]
   }
   const [rs,re] = getRange()
