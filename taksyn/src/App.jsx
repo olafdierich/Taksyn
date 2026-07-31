@@ -232,7 +232,7 @@ const authUserId = async () => {
   try { const { data: { user: authUser } } = await supabase.auth.getUser(); if (authUser?.id) return authUser.id } catch {}
   return null
 }
-const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, users:2, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1, issue_reports:1 }
+const PAGE_ACCESS = { dashboard:1, tasks:1, evidence:2, escalations:2, reports:3, review:3, users:2, tiers:4, orgs:5, support:5, help:1, projects:2, performance:4, leave:1, teams:2, sla:4, company_settings:4, platform_industries:5, roles_departments:4, platform_settings:5, my_account:1, issue_reports:1 }
 const pct = (a,b) => b ? Math.round(a/b*100) : 0
 const workingDaysBetween = (start, end) => {
   let count = 0
@@ -4716,6 +4716,322 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
 }
 
 
+function ReviewView({ user }) {
+  // Bulk review / approval surface for recurring task occurrences.
+  //
+  // Fetches its OWN tasks and occurrences rather than reading the shared
+  // `tasks` prop. Two reasons, both structural:
+  //   1. The occurrence fetches in ReportsView/PerformanceView do NOT select
+  //      the id column, and bulk_approve_occurrences takes uuid[]. They cannot
+  //      feed this screen.
+  //   2. Owning both fetches keeps this change addition-only -- no existing
+  //      query is touched, and nothing here breaks if loadTasks' column list
+  //      changes later.
+  //
+  // Org bridge is by NAME (.eq('org', user.org)), matching the house pattern
+  // at the tasks fetch and the occurrence fetch, and matching the name-to-name
+  // task_occurrences_org_scoped policy.
+  const [bulkTasks, setBulkTasks] = useState([])
+  const [occurrences, setOccurrences] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState({})
+  const [periodStart, setPeriodStart] = useState('')
+  const [periodEnd, setPeriodEnd] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  // Eligibility, mirrored from the tasks_bulk_eligibility CHECK constraint.
+  // Set membership on both axes -- NOT an ordinal priority ceiling.
+  // Filtered client-side BEFORE the call because a constraint violation dumps
+  // a FULL ROW back to the client (F33), which has been observed to include an
+  // email address and GPS coordinates. The constraint is a backstop; it is not
+  // a safe thing to trip on purpose.
+  const BULK_PRIORITIES = ['low', 'medium', 'high']
+  const BULK_CADENCES = ['daily', 'weekly', 'fortnightly', 'monthly']
+  const isEligibleTask = t =>
+    BULK_PRIORITIES.includes(t.priority) &&
+    BULK_CADENCES.includes(t.review_cadence)
+
+  const load = async () => {
+    if (!isConfigured() || !user.org) { setLoading(false); return }
+    setLoading(true)
+    try {
+      const { data: tks, error: tErr } = await supabase.from('tasks')
+        .select('id,title,priority,category,compliance,review_mode,review_cadence,recurrence')
+        .eq('org', user.org)
+        .eq('review_mode', 'bulk')
+      // supabase-js RETURNS errors, it does not throw. Without this branch a
+      // 400 silently becomes an empty list and the screen lies confidently.
+      if (tErr) {
+        setBulkTasks([]); setOccurrences([]); setLoading(false)
+        setMsg({ kind: 'err', text: 'Could not load tasks: ' + tErr.message })
+        return
+      }
+      const list = tks || []
+      setBulkTasks(list)
+      const ids = list.map(t => t.id)
+      if (ids.length) {
+        // Column list verified against information_schema, not inferred.
+        // approval_batch_id -- NOT bulk_approval_id, which does not exist.
+        const { data: occ, error: oErr } = await supabase.from('task_occurrences')
+          .select('id,task_id,occurrence_date,status,completed_at,completed_by_name,approved_at,approved_by_name,approval_batch_id')
+          .eq('org', user.org)
+          .in('task_id', ids)
+        if (oErr) {
+          setOccurrences([]); setLoading(false)
+          setMsg({ kind: 'err', text: 'Could not load occurrences: ' + oErr.message })
+          return
+        }
+        setOccurrences(occ || [])
+      } else {
+        setOccurrences([])
+      }
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Could not load review data. ' + (e?.message || '') })
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [user.org])
+
+  // Default the period to the last full week, Monday..Sunday.
+  useEffect(() => {
+    if (periodStart || periodEnd) return
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    const dow = (d.getDay() + 6) % 7           // Monday = 0
+    const thisMon = new Date(d); thisMon.setDate(d.getDate() - dow)
+    const lastMon = new Date(thisMon); lastMon.setDate(thisMon.getDate() - 7)
+    const lastSun = new Date(lastMon); lastSun.setDate(lastMon.getDate() + 6)
+    // Format from LOCAL date parts. toISOString() would convert to UTC and
+    // return the PREVIOUS day in any timezone ahead of UTC -- Brisbane UTC+10,
+    // Africa/Kampala UTC+3. These strings are the RPC period bounds.
+    const iso = x => x.getFullYear() + '-' +
+      String(x.getMonth() + 1).padStart(2, '0') + '-' +
+      String(x.getDate()).padStart(2, '0')
+    setPeriodStart(iso(lastMon))
+    setPeriodEnd(iso(lastSun))
+  }, [])
+
+  const taskById = {}
+  bulkTasks.forEach(t => { taskById[t.id] = t })
+
+  // The RPC windows on occurrence_date, NOT completed_at. An occurrence dated
+  // inside the period but completed after it is still in scope.
+  const inPeriod = o =>
+    periodStart && periodEnd &&
+    o.occurrence_date >= periodStart && o.occurrence_date <= periodEnd
+
+  const scoped = occurrences.filter(o => inPeriod(o) && taskById[o.task_id])
+  // The RPC stamps the approval columns and deliberately leaves status alone,
+  // so status NEVER becomes 'approved'. Keying the panels off status would
+  // leave approved rows sitting in the awaiting list forever. These predicates
+  // mirror the RPC's own eligibility test:
+  //   status='completed' AND approved_at IS NULL AND approval_batch_id IS NULL
+  const isApproved = o => !!(o.approved_at || o.approval_batch_id)
+  const approved = scoped.filter(isApproved)
+  const missed = scoped.filter(o => o.status === 'missed' && !isApproved(o))
+  const completed = scoped.filter(
+    o => o.status === 'completed' && !isApproved(o) && isEligibleTask(taskById[o.task_id])
+  )
+  const ineligible = scoped.filter(
+    o => o.status === 'completed' && !isApproved(o) && !isEligibleTask(taskById[o.task_id])
+  )
+
+  const selectedIds = completed.filter(o => selected[o.id]).map(o => o.id)
+  const allSelected = completed.length > 0 && selectedIds.length === completed.length
+
+  const toggleAll = () => {
+    if (allSelected) { setSelected({}); return }
+    const next = {}
+    completed.forEach(o => { next[o.id] = true })
+    setSelected(next)
+  }
+
+  const approve = async () => {
+    if (!selectedIds.length || busy) return
+    setBusy(true); setMsg(null)
+    try {
+      const { data, error } = await supabase.rpc('bulk_approve_occurrences', {
+        p_occurrence_ids: selectedIds,
+        p_period_start: periodStart,
+        p_period_end: periodEnd,
+      })
+      if (error) {
+        setMsg({ kind: 'err', text: error.message || 'Approval was refused.' })
+      } else {
+        const batch = Array.isArray(data) ? data[0] : data
+        setMsg({
+          kind: 'ok',
+          text: 'Approved ' + selectedIds.length + ' occurrence' +
+                (selectedIds.length === 1 ? '' : 's') +
+                (batch?.batch_id ? '  -  batch ' + String(batch.batch_id).slice(0, 8) : ''),
+        })
+        setSelected({})
+        await load()
+      }
+    } catch (e) {
+      setMsg({ kind: 'err', text: e?.message || 'Approval failed.' })
+    }
+    setBusy(false)
+  }
+
+  const box = { border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 16, background: '#fff' }
+  const th = { textAlign: 'left', padding: '8px 10px', fontSize: 12, color: '#64748b', fontWeight: 600 }
+  const td = { padding: '8px 10px', fontSize: 14, borderTop: '1px solid #f1f5f9' }
+
+  if (loading) return <div style={{ padding: 24 }}>Loading review data...</div>
+
+  if (!bulkTasks.length) return (
+    <div style={{ padding: 24 }}>
+      <h2 style={{ marginTop: 0 }}>Review</h2>
+      <div style={box}>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>No tasks are set up for bulk review.</div>
+        <div style={{ color: '#64748b', fontSize: 14 }}>
+          A task becomes reviewable here once it is opted in to bulk review.
+          Eligible tasks are low, medium or high priority on a daily, weekly,
+          fortnightly or monthly cadence.
+        </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ padding: 24 }}>
+      <h2 style={{ marginTop: 0 }}>Review</h2>
+
+      <div style={box}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Period start</div>
+            <input type="date" value={periodStart} onChange={e => { setPeriodStart(e.target.value); setSelected({}) }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Period end</div>
+            <input type="date" value={periodEnd} onChange={e => { setPeriodEnd(e.target.value); setSelected({}) }} />
+          </div>
+          <div style={{ marginLeft: 'auto' }}>
+            <button
+              onClick={approve}
+              disabled={!selectedIds.length || busy}
+              style={{
+                padding: '10px 18px', borderRadius: 6, border: 'none', fontWeight: 600,
+                cursor: (!selectedIds.length || busy) ? 'not-allowed' : 'pointer',
+                background: (!selectedIds.length || busy) ? '#cbd5e1' : '#16a34a', color: '#fff',
+              }}>
+              {busy ? 'Approving...' : 'Approve ' + selectedIds.length + ' selected'}
+            </button>
+          </div>
+        </div>
+        {msg && (
+          <div style={{
+            marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 14,
+            background: msg.kind === 'ok' ? '#f0fdf4' : '#fef2f2',
+            color: msg.kind === 'ok' ? '#166534' : '#991b1b',
+          }}>{msg.text}</div>
+        )}
+      </div>
+
+      <div style={box}>
+        <div style={{ fontWeight: 600, marginBottom: 10 }}>
+          Awaiting approval ({completed.length})
+        </div>
+        {!completed.length ? (
+          <div style={{ color: '#64748b', fontSize: 14 }}>
+            Nothing completed in this period is awaiting approval.
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, width: 34 }}>
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+                </th>
+                <th style={th}>Task</th>
+                <th style={th}>Date</th>
+                <th style={th}>Completed by</th>
+                <th style={th}>Cadence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {completed.map(o => (
+                <tr key={o.id}>
+                  <td style={td}>
+                    <input
+                      type="checkbox"
+                      checked={!!selected[o.id]}
+                      onChange={() => setSelected(s => ({ ...s, [o.id]: !s[o.id] }))} />
+                  </td>
+                  <td style={td}>
+                    {taskById[o.task_id]?.title || o.task_id}
+                    {taskById[o.task_id]?.compliance
+                      ? <span style={{ marginLeft: 8, fontSize: 11, color: '#7c3aed' }}>compliance</span>
+                      : null}
+                  </td>
+                  <td style={td}>{o.occurrence_date}</td>
+                  <td style={td}>{o.completed_by_name || '-'}</td>
+                  <td style={td}>{taskById[o.task_id]?.review_cadence || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {missed.length > 0 && (
+        <div style={box}>
+          <div style={{ fontWeight: 600, marginBottom: 10 }}>Missed ({missed.length})</div>
+          <div style={{ color: '#64748b', fontSize: 13, marginBottom: 10 }}>
+            Missed occurrences cannot be bulk approved. They are shown so the
+            period reads as a complete picture rather than a filtered one.
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              {missed.map(o => (
+                <tr key={o.id}>
+                  <td style={td}>{taskById[o.task_id]?.title || o.task_id}</td>
+                  <td style={td}>{o.occurrence_date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {ineligible.length > 0 && (
+        <div style={box}>
+          <div style={{ fontWeight: 600, marginBottom: 10 }}>
+            Not eligible for bulk review ({ineligible.length})
+          </div>
+          <div style={{ color: '#64748b', fontSize: 13 }}>
+            These are completed, but their priority or cadence falls outside the
+            bulk-eligible set. They need individual review.
+          </div>
+        </div>
+      )}
+
+      {approved.length > 0 && (
+        <div style={box}>
+          <div style={{ fontWeight: 600, marginBottom: 10 }}>
+            Already approved in this period ({approved.length})
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              {approved.map(o => (
+                <tr key={o.id}>
+                  <td style={td}>{taskById[o.task_id]?.title || o.task_id}</td>
+                  <td style={td}>{o.occurrence_date}</td>
+                  <td style={td}>{o.approved_by_name || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ReportsView({ tasks, user, setAuditLog }) {
   const [reportType, setReportType] = useState('compliance')
   const [period, setPeriod] = useState('weekly')
@@ -6653,8 +6969,8 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Complaints & Feedback','clipboard'],['incident_hub','Incidents','alert']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Complaints & Feedback','clipboard'],['incident_hub','Incidents','alert']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents','alert']],
   worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag']],
 }
@@ -15674,6 +15990,7 @@ export default function App() {
                 {page==='escalations' && user.role!=='super_admin' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
                 {page==='org_escalations' && user.role==='client_admin' && <OrgEscalationsView {...pageProps}/>}
                 {page==='reports'     && user.role!=='super_admin' && hasAccess(user.role,3) && <ReportsView    {...pageProps}/>}
+                {page==='review'      && user.role!=='super_admin' && hasAccess(user.role,3) && <ReviewView     {...pageProps}/>}
                 {page==='audit'       && hasAccess(user.role,2) && <AuditLogView   {...pageProps}/>}
                 {page==='orgs'        && user.role==='super_admin' && <OrganisationsView {...pageProps}/>}
                 {page==='users'       && hasAccess(user.role,2) && <UsersView      {...pageProps}/>}
