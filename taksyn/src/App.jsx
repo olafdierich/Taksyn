@@ -5319,7 +5319,10 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
-  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status!=='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  // F70/D7: cycles declared not applicable leave the denominator entirely -
+  // not counted as done, not counted as missed. See TaskDetail N/A copy.
+  const naDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status===OCC_NOT_APPLICABLE&&o.d>=_rsStr&&o.d<=_reStr).length
   // --- Occurrence history (READ-ONLY display). Chips are SCHEDULED cycles, never completion dates.
   // 'late' means the completion landed outside its own grace window, so currentOccurrenceDate
   // credited it to a LATER cycle than the one being attempted (proven 29 Jul 2026: work done
@@ -5333,14 +5336,17 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
       // and on-time in the stored row. orgDayOf(ts, null) falls back to UTC without
       // throwing, so an unresolved prop renders old behaviour and self-corrects.
       const doneOn=orgDayOf(o.at, orgTimezone)||''
-      const late=!!(doneOn&&o.status!=='missed'&&doneOn>_recurPlusDays(o.d,grace))
-      const tip=o.status==='missed'
+      const late=!!(doneOn&&o.status==='completed'&&doneOn>_recurPlusDays(o.d,grace))
+      const tip=o.status===OCC_NOT_APPLICABLE
+        ? 'Cycle '+o.d+' \u2014 not applicable'
+        : o.status==='missed'
         ? 'Cycle '+o.d+' \u2014 missed'
         : 'Cycle '+o.d+(doneOn&&doneOn!==o.d?' \u2014 completed '+doneOn:' \u2014 completed')+(late?' (outside grace window)':'')+(o.by?' by '+o.by:'')
       return {...o,late,tip}
     })
     return {title:t.title||t.id,rec:t.recurrence,cells,
-      done:cells.filter(c=>c.status!=='missed').length,
+      done:cells.filter(c=>c.status==='completed').length,
+      na:cells.filter(c=>c.status===OCC_NOT_APPLICABLE).length,
       missed:cells.filter(c=>c.status==='missed').length,
       flagged:cells.filter(c=>c.late).length}
   }).filter(r=>r.cells.length>0).sort((a,b)=>(b.missed+b.flagged)-(a.missed+a.flagged))
@@ -5356,7 +5362,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
     const role = t.assigned_role || 'worker'
     keys.forEach(key => {
       if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
-      if (isRecurring(t)) { const exp=expectedFor(t.recurrence); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=dn; return }
+      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=dn; return }
       workerMap[key].total++
       if (['completed','approved'].includes(t.status)) {
         workerMap[key].done++
@@ -5374,7 +5380,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
     const tset=new Set()
     if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
     else { let uids=[]; if(Array.isArray(t.assigned_user_ids)&&t.assigned_user_ids.length) uids=t.assigned_user_ids; else if(t.assigned_user_id) uids=[t.assigned_user_id]; uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) })) }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=expectedFor(t.recurrence); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const teamRows = Object.values(teamMap).sort((a,b)=>b.total-a.total)
   // --- Approver (review) performance stats ---
@@ -5835,7 +5841,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
             Each chip is one scheduled cycle, oldest first. Amber marks a completion that landed outside its grace window &mdash; credited to a later cycle than the one attempted. Hover a chip for dates.
           </div>
           <div style={{display:'flex',gap:14,marginTop:8,fontSize:10,color:'var(--t2)',flexWrap:'wrap'}}>
-            {[['var(--green)','Completed'],['#F59E0B','Outside grace'],['var(--red)','Missed']].map(([c,l])=>(
+            {[['var(--green)','Completed'],['#F59E0B','Outside grace'],['var(--red)','Missed'],['#6B7280','Not applicable']].map(([c,l])=>(
               <span key={l} style={{display:'inline-flex',alignItems:'center',gap:5}}>
                 <span style={{width:9,height:9,borderRadius:3,background:c,display:'inline-block'}} />{l}
               </span>
@@ -5858,7 +5864,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
                       <div>{r.title}</div>
                       <div style={{display:'flex',flexWrap:'wrap',gap:0,marginTop:6}}>
                         {r.cells.map((c,j)=>(
-                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
+                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.status===OCC_NOT_APPLICABLE?'#6B7280':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
                         ))}
                       </div>
                     </td>
@@ -10934,7 +10940,10 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
-  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status!=='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  // F70/D7: cycles declared not applicable leave the denominator entirely -
+  // not counted as done, not counted as missed. See TaskDetail N/A copy.
+  const naDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status===OCC_NOT_APPLICABLE&&o.d>=_rsStr&&o.d<=_reStr).length
 
   // Build leave day lookup per user
   const leaveDaysByUser = {}
@@ -10984,7 +10993,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
     const p = peopleMap[resolvedId]
     if (!p) return
-    if (isRecurring(t)) { const exp=expectedFor(t.recurrence); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=dn; return }
+    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=dn; return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
@@ -11032,7 +11041,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
       else if(t.assigned_user_name){ const mid=memberNameMap[t.assigned_user_name.toLowerCase().trim()]; if(mid) uids=[mid] }
       uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) }))
     }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=expectedFor(t.recurrence); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const _teamIdsWithMatches = new Set()
   people.forEach(p=>{ (memberTeams[p.id]||[]).forEach(tid=>_teamIdsWithMatches.add(tid)) })
