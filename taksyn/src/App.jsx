@@ -4904,7 +4904,7 @@ function ReviewView({ user }) {
         // Column list verified against information_schema, not inferred.
         // approval_batch_id -- NOT bulk_approval_id, which does not exist.
         const { data: occ, error: oErr } = await supabase.from('task_occurrences')
-          .select('id,task_id,occurrence_date,status,completed_at,completed_by_name,approved_at,approved_by_name,approval_batch_id')
+          .select('id,task_id,occurrence_date,status,completed_at,completed_by_name,approved_at,approved_by_name,approval_batch_id,na_by_name,na_at,na_reason')
           .eq('org', user.org)
           .in('task_id', ids)
         if (oErr) {
@@ -4966,6 +4966,13 @@ function ReviewView({ user }) {
   )
   const ineligible = scoped.filter(
     o => o.status === 'completed' && !isApproved(o) && !isEligibleTask(taskById[o.task_id])
+  )
+  // Declared not applicable. Without this bucket the row falls through all
+  // four predicates above — every one is positively keyed on status — and
+  // renders nowhere, which silently withholds the condition D5 was granted
+  // on: a self-reported N/A must be visible to the approver.
+  const notApplicable = scoped.filter(
+    o => o.status === 'not_applicable' && !isApproved(o)
   )
 
   const selectedIds = completed.filter(o => selected[o.id]).map(o => o.id)
@@ -5128,6 +5135,30 @@ function ReviewView({ user }) {
         </div>
       )}
 
+      {notApplicable.length > 0 && (
+        <div style={box}>
+          <div style={{ fontWeight: 600, marginBottom: 10 }}>
+            Declared not applicable ({notApplicable.length})
+          </div>
+          <div style={{ color: '#64748b', fontSize: 13, marginBottom: 10 }}>
+            These cycles were declared not applicable by the person responsible.
+            They are excluded from the completion percentage rather than counted
+            against anyone, so the stated reason is the only record of why.
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              {notApplicable.map(o => (
+                <tr key={o.id}>
+                  <td style={td}>{taskById[o.task_id]?.title || o.task_id}</td>
+                  <td style={td}>{o.occurrence_date}</td>
+                  <td style={td}>{o.na_by_name || '\u2014'}</td>
+                  <td style={td}>{o.na_reason || '\u2014'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {ineligible.length > 0 && (
         <div style={box}>
           <div style={{ fontWeight: 600, marginBottom: 10 }}>
