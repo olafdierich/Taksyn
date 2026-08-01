@@ -5200,7 +5200,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
   const [occurrences, setOccurrences] = useState([])
-  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by_name,recurrence').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by_name,recurrence,evidence').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [orgLogo, setOrgLogo] = useState(null)
@@ -5352,7 +5352,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
 
   // --- Worker performance stats ---
   const workerRoles = ['worker','supervisor','manager']
-  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence}) })
+  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
@@ -10938,7 +10938,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
   const [occurrences, setOccurrences] = useState([])
-  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by_name,recurrence').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
+  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by_name,recurrence,evidence').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
@@ -10973,7 +10973,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [rs,re] = getRange()
   const orgTasks = tasks.filter(t=>t.org===user.org)
   const pt = orgTasks.filter(t=>{ if(isRecurring(t)) return true; const d=new Date(t.created_at||t.due_date||0); return d>=rs&&d<=re })
-  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence}) })
+  const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
@@ -15316,7 +15316,7 @@ export default function App() {
           // that is worse than a missing row — the miss-writer then stamps 'missed' on a
           // cycle the work was actually done in, and that feeds bulk_approvals, which by
           // design cannot be corrected. On failure we leave the task alone and retry next load.
-          const { error:_occErr } = await supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,status:'completed',completed_late:_occLate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence},{onConflict:'task_id,occurrence_date'})
+          const { error:_occErr } = await supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,status:'completed',completed_late:_occLate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence,evidence:t.evidence},{onConflict:'task_id,occurrence_date'})
           if(_occErr){ console.warn('task_occurrences upsert failed — reset skipped, will retry next load:', _occErr.message); return }
           supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
         })
