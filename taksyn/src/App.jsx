@@ -155,6 +155,10 @@ const nextOccurrenceDate = (dateStr, recurrence) => {
 // Line-number pointers here have gone stale twice. Use a search string. Do not copy this table
 // into a local const again: it used to exist twice, kept in sync only by this comment.
 const RECUR_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, annually:14 }
+// Occurrence status for a cycle declared NOT APPLICABLE (F70). THE single source:
+// task_occurrences.status has NO CHECK constraint, so a typo here becomes a silent
+// third status that no reader knows about. Never type this literal at a call site.
+const OCC_NOT_APPLICABLE = 'not_applicable'
 const _recurPlusDays = (dstr,n)=> new Date(new Date(dstr+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
 // Single walk bound, shared by recurringDueNow and the occurrence miss-writer.
 // (Was 400 here and 370 in the miss-writer — one number now, so they cannot drift.)
@@ -2522,7 +2526,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{} }) {
+function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null }) {
   const [filter, setFilter] = useState('all')
   useEffect(()=>{ try{ const _f=sessionStorage.getItem('taksyn-task-filter'); if(_f){ setFilter(_f); sessionStorage.removeItem('taksyn-task-filter') } }catch(e){} },[])
   const [selectedOrg, setSelectedOrg] = useState('all')
@@ -2577,6 +2581,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [clNoteText, setClNoteText] = useState('')
   const [mandatoryWarn, setMandatoryWarn] = useState(null)
   const [photoWarn, setPhotoWarn] = useState(false)
+  // F70 - "Not applicable today". naPrompt holds the task id whose reason panel is
+  // open (null = closed). naBusy guards the four awaited round trips in
+  // markNotApplicable against a double tap.
+  const [naPrompt, setNaPrompt] = useState(null)
+  const [naReason, setNaReason] = useState('')
+  const [naBusy, setNaBusy] = useState(false)
   // Multi-completion checklist state
   const [clCompletions, setClCompletions] = useState({}) // {taskId: {itemId: [rows]}}
   const [clExpanded, setClExpanded] = useState(new Set()) // keys 'taskId::itemId'
@@ -3088,6 +3098,67 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
         doStart()
       }
     )
+  }
+
+  // ---- F70: "Not applicable today" -----------------------------------------
+  // Writes a task_occurrences row with status OCC_NOT_APPLICABLE, then resets the task
+  // so the cycle advances exactly as a completion does (D8).
+  //
+  // ORDERING IS LOAD-BEARING. Mirrors the completion reconcile (search string:
+  // 'reset skipped, will retry next load'): the occurrence upsert is AWAITED and the
+  // task reset is GATED on it succeeding. An ungated reset loses the declaration
+  // permanently, because the task returns to 'pending' and nothing re-runs.
+  //
+  // TIMEZONE: uses orgTz (App-level, null until resolved), NOT this component's own
+  // orgTimezone state, which defaults to 'UTC' and would sail through a truthy guard
+  // before the real value lands. This is a PERMANENT write, so an unresolved pass is
+  // not survivable - same reasoning as the comment at the completion reconcile.
+  //
+  // BYPASSES update() DELIBERATELY. update() writes audit_log, sends email on status
+  // change, and returns early behind an intervention modal for super_admin - so an N/A
+  // routed through it would silently do nothing for that role. The audit entry is
+  // therefore written explicitly here: a compliance suppression must not be the one
+  // action with no entry in the audit trail.
+  const markNotApplicable = async (tid, reason) => {
+    if(!isConfigured()) return
+    if(!orgTz) { alert('Organisation timezone has not loaded yet. Please try again in a moment.'); return }
+    const _naReason = (reason||'').trim()
+    if(!_naReason) { alert('A reason is required to mark a task not applicable.'); return }   // D3
+    const t = tasks.find(x=>x.id===tid)
+    if(!t) return
+    const _naToday = orgToday(orgTz)
+    if(!_naToday) return   // unresolvable org day - never substitute UTC on a permanent write
+    const _naDate = occurrenceForCompletion(t.due_date, t.recurrence, _naToday) || _naToday
+    // D4 - an N/A must never erase a recorded completion. Reversing a completion is an
+    // approver action (waive), not a worker one.
+    const { data:_naExisting } = await supabase.from('task_occurrences')
+      .select('status').eq('task_id', t.id).eq('occurrence_date', _naDate).maybeSingle()
+    if(_naExisting && _naExisting.status==='completed') {
+      alert('This cycle is already recorded as completed. An approver must change it.'); return
+    }
+    const { error:_naErr } = await supabase.from('task_occurrences').upsert(
+      { task_id:t.id, org:t.org, occurrence_date:_naDate, status:OCC_NOT_APPLICABLE,
+        recurrence:t.recurrence, na_by:user?.id||null, na_by_name:user?.name||null,
+        na_at:new Date().toISOString(), na_reason:_naReason },
+      { onConflict:'task_id,occurrence_date' }
+    )
+    if(_naErr) {
+      console.warn('task_occurrences N/A upsert failed - task left unchanged:', _naErr.message)
+      alert('Could not record this. Nothing was changed. Please try again.'); return
+    }
+    const _naEntry = mkAuditEntry('task_not_applicable', user, t.org||user?.org,
+      { reason:_naReason, occurrence_date:_naDate }, t.id, t.title||t.id,
+      t.status||null, OCC_NOT_APPLICABLE)
+    setAuditLog(log=>[_naEntry,...log])
+    const { error:_naAudErr } = await supabase.from('audit_log').insert(_naEntry)
+    if(_naAudErr) console.warn('audit_log insert error (N/A):', _naAudErr.message)
+    // Reset mirrors the completion reconcile's reset exactly. Direct, not via update().
+    const { error:_naRstErr } = await supabase.from('tasks').update(
+      {status:'pending',started_at:null,completed_at:null,submitted_at:null,
+       completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}
+    ).eq('id', tid)
+    if(_naRstErr) console.warn('task reset after N/A failed - occurrence row IS written:', _naRstErr.message)
+    if(loadTasks) loadTasks()
   }
 
   const submitTask = (tid) => {
@@ -3719,6 +3790,64 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 {!myTime?.started_at&&<button className="btn btn-green" style={{flex:1}} onClick={()=>workerTimeIn(sel.id)}>▶ Time In</button>}
                 {myTime?.started_at&&!myTime?.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>workerTimeOut(sel.id)}>⏹ Time Out</button>}
               </div>
+              {/* F70 - "Not applicable today". OUTSIDE the myTime conditional on purpose:
+                  Submit requires Time In AND Time Out, and a worker must not have to clock
+                  in and out of a task they are declaring was not needed. Recurring only. */}
+              {/* D2: same-day only. Not-due-yet cycles are excluded, or the
+                  declaration would resolve to the CURRENT cycle rather than the
+                  one on screen. in_progress/rejected excluded so the D8 reset
+                  cannot wipe a started task - mirrors the miss-writer's
+                  _msActedOn list. orgTz unresolved: show, and let
+                  markNotApplicable's guard handle it. */}
+              {isRecurring(sel)&&!['awaiting_review','approved','in_progress','rejected'].includes(sel.status)&&(!orgTz||recurringDueNow(sel,orgToday(orgTz)))&&(
+                <div style={{marginBottom:10}}>
+                  {naPrompt!==sel.id ? (
+                    <button
+                      className="btn"
+                      style={{width:'100%',background:'var(--s3)',border:'1px solid var(--border)',color:'var(--t2)',fontWeight:600}}
+                      onClick={()=>{ setNaPrompt(sel.id); setNaReason('') }}
+                    >
+                      Not applicable today
+                    </button>
+                  ) : (
+                    <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:12}}>
+                      <div style={{fontSize:12,fontWeight:700,marginBottom:6}}>Why is this not applicable today?</div>
+                      <div style={{fontSize:11,color:'var(--t2)',marginBottom:8,lineHeight:1.5}}>
+                        This cycle will not count as done, and will not count as missed. Your reason is recorded and is visible to your approver.
+                      </div>
+                      <textarea
+                        value={naReason}
+                        onChange={e=>setNaReason(e.target.value)}
+                        rows={3}
+                        placeholder="e.g. no sterilisation performed today - no instruments used"
+                        style={{width:'100%',padding:8,borderRadius:6,border:'1px solid var(--border)',background:'transparent',color:'inherit',fontSize:13,fontFamily:'inherit',resize:'vertical'}}
+                      />
+                      <div style={{display:'flex',gap:8,marginTop:8}}>
+                        <button
+                          className="btn btn-primary"
+                          style={{flex:1,opacity:(naReason.trim()&&!naBusy)?1:0.5}}
+                          disabled={!naReason.trim()||naBusy}
+                          onClick={async()=>{
+                            setNaBusy(true)
+                            await markNotApplicable(sel.id, naReason)
+                            setNaBusy(false); setNaPrompt(null); setNaReason('')
+                          }}
+                        >
+                          {naBusy?'Recording...':'Confirm'}
+                        </button>
+                        <button
+                          className="btn"
+                          style={{flex:1,background:'transparent',border:'1px solid var(--border)',color:'var(--t2)'}}
+                          onClick={()=>{ setNaPrompt(null); setNaReason('') }}
+                          disabled={naBusy}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               {myTime?.started_at&&myTime?.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
                 <button
                   className="btn btn-primary"
@@ -4775,7 +4904,7 @@ function ReviewView({ user }) {
         // Column list verified against information_schema, not inferred.
         // approval_batch_id -- NOT bulk_approval_id, which does not exist.
         const { data: occ, error: oErr } = await supabase.from('task_occurrences')
-          .select('id,task_id,occurrence_date,status,completed_at,completed_by_name,approved_at,approved_by_name,approval_batch_id')
+          .select('id,task_id,occurrence_date,status,completed_at,completed_by_name,approved_at,approved_by_name,approval_batch_id,na_by_name,na_at,na_reason')
           .eq('org', user.org)
           .in('task_id', ids)
         if (oErr) {
@@ -4837,6 +4966,13 @@ function ReviewView({ user }) {
   )
   const ineligible = scoped.filter(
     o => o.status === 'completed' && !isApproved(o) && !isEligibleTask(taskById[o.task_id])
+  )
+  // Declared not applicable. Without this bucket the row falls through all
+  // four predicates above — every one is positively keyed on status — and
+  // renders nowhere, which silently withholds the condition D5 was granted
+  // on: a self-reported N/A must be visible to the approver.
+  const notApplicable = scoped.filter(
+    o => o.status === 'not_applicable' && !isApproved(o)
   )
 
   const selectedIds = completed.filter(o => selected[o.id]).map(o => o.id)
@@ -4999,6 +5135,30 @@ function ReviewView({ user }) {
         </div>
       )}
 
+      {notApplicable.length > 0 && (
+        <div style={box}>
+          <div style={{ fontWeight: 600, marginBottom: 10 }}>
+            Declared not applicable ({notApplicable.length})
+          </div>
+          <div style={{ color: '#64748b', fontSize: 13, marginBottom: 10 }}>
+            These cycles were declared not applicable by the person responsible.
+            They are excluded from the completion percentage rather than counted
+            against anyone, so the stated reason is the only record of why.
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              {notApplicable.map(o => (
+                <tr key={o.id}>
+                  <td style={td}>{taskById[o.task_id]?.title || o.task_id}</td>
+                  <td style={td}>{o.occurrence_date}</td>
+                  <td style={td}>{o.na_by_name || '\u2014'}</td>
+                  <td style={td}>{o.na_reason || '\u2014'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {ineligible.length > 0 && (
         <div style={box}>
           <div style={{ fontWeight: 600, marginBottom: 10 }}>
@@ -5196,7 +5356,10 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
-  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status!=='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  // F70/D7: cycles declared not applicable leave the denominator entirely -
+  // not counted as done, not counted as missed. See TaskDetail N/A copy.
+  const naDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status===OCC_NOT_APPLICABLE&&o.d>=_rsStr&&o.d<=_reStr).length
   // --- Occurrence history (READ-ONLY display). Chips are SCHEDULED cycles, never completion dates.
   // 'late' means the completion landed outside its own grace window, so currentOccurrenceDate
   // credited it to a LATER cycle than the one being attempted (proven 29 Jul 2026: work done
@@ -5210,14 +5373,17 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
       // and on-time in the stored row. orgDayOf(ts, null) falls back to UTC without
       // throwing, so an unresolved prop renders old behaviour and self-corrects.
       const doneOn=orgDayOf(o.at, orgTimezone)||''
-      const late=!!(doneOn&&o.status!=='missed'&&doneOn>_recurPlusDays(o.d,grace))
-      const tip=o.status==='missed'
+      const late=!!(doneOn&&o.status==='completed'&&doneOn>_recurPlusDays(o.d,grace))
+      const tip=o.status===OCC_NOT_APPLICABLE
+        ? 'Cycle '+o.d+' \u2014 not applicable'
+        : o.status==='missed'
         ? 'Cycle '+o.d+' \u2014 missed'
         : 'Cycle '+o.d+(doneOn&&doneOn!==o.d?' \u2014 completed '+doneOn:' \u2014 completed')+(late?' (outside grace window)':'')+(o.by?' by '+o.by:'')
       return {...o,late,tip}
     })
     return {title:t.title||t.id,rec:t.recurrence,cells,
-      done:cells.filter(c=>c.status!=='missed').length,
+      done:cells.filter(c=>c.status==='completed').length,
+      na:cells.filter(c=>c.status===OCC_NOT_APPLICABLE).length,
       missed:cells.filter(c=>c.status==='missed').length,
       flagged:cells.filter(c=>c.late).length}
   }).filter(r=>r.cells.length>0).sort((a,b)=>(b.missed+b.flagged)-(a.missed+a.flagged))
@@ -5233,7 +5399,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
     const role = t.assigned_role || 'worker'
     keys.forEach(key => {
       if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
-      if (isRecurring(t)) { const exp=expectedFor(t.recurrence); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=dn; return }
+      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=dn; return }
       workerMap[key].total++
       if (['completed','approved'].includes(t.status)) {
         workerMap[key].done++
@@ -5251,7 +5417,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
     const tset=new Set()
     if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
     else { let uids=[]; if(Array.isArray(t.assigned_user_ids)&&t.assigned_user_ids.length) uids=t.assigned_user_ids; else if(t.assigned_user_id) uids=[t.assigned_user_id]; uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) })) }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=expectedFor(t.recurrence); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const teamRows = Object.values(teamMap).sort((a,b)=>b.total-a.total)
   // --- Approver (review) performance stats ---
@@ -5712,7 +5878,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
             Each chip is one scheduled cycle, oldest first. Amber marks a completion that landed outside its grace window &mdash; credited to a later cycle than the one attempted. Hover a chip for dates.
           </div>
           <div style={{display:'flex',gap:14,marginTop:8,fontSize:10,color:'var(--t2)',flexWrap:'wrap'}}>
-            {[['var(--green)','Completed'],['#F59E0B','Outside grace'],['var(--red)','Missed']].map(([c,l])=>(
+            {[['var(--green)','Completed'],['#F59E0B','Outside grace'],['var(--red)','Missed'],['#6B7280','Not applicable']].map(([c,l])=>(
               <span key={l} style={{display:'inline-flex',alignItems:'center',gap:5}}>
                 <span style={{width:9,height:9,borderRadius:3,background:c,display:'inline-block'}} />{l}
               </span>
@@ -5735,7 +5901,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
                       <div>{r.title}</div>
                       <div style={{display:'flex',flexWrap:'wrap',gap:0,marginTop:6}}>
                         {r.cells.map((c,j)=>(
-                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
+                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.status===OCC_NOT_APPLICABLE?'#6B7280':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
                         ))}
                       </div>
                     </td>
@@ -10811,7 +10977,10 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
-  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status!=='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  // F70/D7: cycles declared not applicable leave the denominator entirely -
+  // not counted as done, not counted as missed. See TaskDetail N/A copy.
+  const naDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status===OCC_NOT_APPLICABLE&&o.d>=_rsStr&&o.d<=_reStr).length
 
   // Build leave day lookup per user
   const leaveDaysByUser = {}
@@ -10861,7 +11030,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
     const p = peopleMap[resolvedId]
     if (!p) return
-    if (isRecurring(t)) { const exp=expectedFor(t.recurrence); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=dn; return }
+    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=dn; return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
@@ -10909,7 +11078,7 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
       else if(t.assigned_user_name){ const mid=memberNameMap[t.assigned_user_name.toLowerCase().trim()]; if(mid) uids=[mid] }
       uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) }))
     }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=expectedFor(t.recurrence); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const _teamIdsWithMatches = new Set()
   people.forEach(p=>{ (memberTeams[p.id]||[]).forEach(tid=>_teamIdsWithMatches.add(tid)) })
@@ -16031,7 +16200,7 @@ export default function App() {
             ) : (
               <>
                 {page==='dashboard'   && <DashboardView   {...pageProps} tickets={tickets} leaveRecords={leaveRecords}/>}
-                {page==='tasks'       && user.role!=='super_admin' && <TasksView {...pageProps}/>}
+                {page==='tasks'       && user.role!=='super_admin' && <TasksView {...pageProps} orgTz={orgTimezone}/>}
                 {page==='evidence'    && user.role!=='super_admin' && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
                 {page==='escalations' && user.role!=='super_admin' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
                 {page==='org_escalations' && user.role==='client_admin' && <OrgEscalationsView {...pageProps}/>}
