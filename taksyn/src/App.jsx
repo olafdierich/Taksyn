@@ -15316,7 +15316,7 @@ export default function App() {
           // that is worse than a missing row — the miss-writer then stamps 'missed' on a
           // cycle the work was actually done in, and that feeds bulk_approvals, which by
           // design cannot be corrected. On failure we leave the task alone and retry next load.
-          const { error:_occErr } = await supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,status:'completed',completed_late:_occLate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence,evidence:t.evidence},{onConflict:'task_id,occurrence_date'})
+          const { error:_occErr } = await supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,status:'completed',completed_late:_occLate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence,evidence:taskPhotoIndex(t).filter(p=>p.ts&&orgDayOf(p.ts,orgTimezone)===_occDone)},{onConflict:'task_id,occurrence_date'})
           if(_occErr){ console.warn('task_occurrences upsert failed — reset skipped, will retry next load:', _occErr.message); return }
           supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
         })
