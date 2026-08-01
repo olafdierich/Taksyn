@@ -3901,12 +3901,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
           {(()=>{
             const subs = parseSafe(sel.subtasks)
             if(!subs.length) return null
-            const todayStr = new Date().toISOString().slice(0,10)
+            const todayStr = orgToday(orgTz)
             const taskCompletionsMap = clCompletions[sel.id] || {}
             const doneCount = subs.filter((s,idx)=>{
               const itemId = s.id || String(idx)
               const rows = taskCompletionsMap[itemId] || []
-              return rows.some(r=>r.completed_at&&r.completed_at.slice(0,10)===todayStr) || s.done
+              return rows.some(r=>r.completed_at&&orgDayOf(r.completed_at,orgTz)===todayStr) || s.done
             }).length
             const pctVal = Math.round(doneCount/subs.length*100)
             const pctColor = pctVal===100?'var(--green)':pctVal>=50?'var(--amber)':'var(--brand)'
@@ -3927,8 +3927,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   const isFlashing = clFlash===flashKey
                   const taskCompletions = clCompletions[sel.id] || {}
                   const itemRows = taskCompletions[itemId] || []
-                  const todayStr = new Date().toISOString().slice(0,10)
-                  const todayRows = itemRows.filter(r=>r.completed_at&&r.completed_at.slice(0,10)===todayStr)
+                  const todayStr = orgToday(orgTz)
+                  const todayRows = itemRows.filter(r=>r.completed_at&&orgDayOf(r.completed_at,orgTz)===todayStr)
                   const todayCount = todayRows.length
                   const isExpandedKey = sel.id+'::'+itemId
                   const isHistExpanded = clExpanded.has(isExpandedKey)
@@ -4392,7 +4392,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             // Point 3: default Tasks view surfaces only recurring tasks in their
                             // current due window; out-of-window ones move to a collapsed Scheduled
                             // section. Nothing is hidden — the filter tabs still reach everything.
-                            const _today = new Date().toISOString().slice(0,10)
+                            const _today = orgToday(orgTz)
                             const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
                             const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
                             return (<>
@@ -4433,7 +4433,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             // Point 3: default Tasks view surfaces only recurring tasks in their
                             // current due window; out-of-window ones move to a collapsed Scheduled
                             // section. Nothing is hidden — the filter tabs still reach everything.
-                            const _today = new Date().toISOString().slice(0,10)
+                            const _today = orgToday(orgTz)
                             const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
                             const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
                             return (<>
@@ -4471,7 +4471,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             // Point 3: default Tasks view surfaces only recurring tasks in their
                             // current due window; out-of-window ones move to a collapsed Scheduled
                             // section. Nothing is hidden — the filter tabs still reach everything.
-                            const _today = new Date().toISOString().slice(0,10)
+                            const _today = orgToday(orgTz)
                             const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
                             const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
                             return (<>
@@ -4520,7 +4520,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           // Point 3: default Tasks view surfaces only recurring tasks in their
                           // current due window; out-of-window ones move to a collapsed Scheduled
                           // section. Nothing is hidden — the filter tabs still reach everything.
-                          const _today = new Date().toISOString().slice(0,10)
+                          const _today = orgToday(orgTz)
                           const recurringInWin = recurringAll.filter(t=>recurringDueNow(t,_today))
                           const recurringSched = recurringAll.filter(t=>!recurringDueNow(t,_today))
                           return (<>
