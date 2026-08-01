@@ -5875,7 +5875,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
         <div className="section">
           <div className="section-title">Occurrence History &mdash; {occRows.length} recurring task{occRows.length===1?'':'s'} &middot; {pl}</div>
           <div style={{fontSize:11,color:'var(--t2)',marginTop:4,lineHeight:1.5}}>
-            Each chip is one scheduled cycle, oldest first. Amber marks a completion that landed outside its grace window &mdash; credited to a later cycle than the one attempted. Hover a chip for dates.
+            Each chip is one scheduled cycle, oldest first. Amber marks a completion that landed outside its grace window &mdash; credited to a later cycle than the one attempted. Grey marks a cycle declared not applicable by the person responsible &mdash; it is excluded from the completion rate rather than counted as a miss, and the stated reason is recorded against it. Hover a chip for dates.
           </div>
           <div style={{display:'flex',gap:14,marginTop:8,fontSize:10,color:'var(--t2)',flexWrap:'wrap'}}>
             {[['var(--green)','Completed'],['#F59E0B','Outside grace'],['var(--red)','Missed'],['#6B7280','Not applicable']].map(([c,l])=>(
