@@ -225,6 +225,37 @@ const recurringDueNow = (t, today) => {
   const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
   return today >= cur && today <= _recurPlusDays(cur, grace)
 }
+// SCHEDULED occurrence dates for a recurring task that fall inside [fromDate, toDate],
+// as an array of YYYY-MM-DD. Empty if none. THE calendar's placement source.
+//
+// This is the FOURTH walk. It shares nextOccurrenceDate for cycle boundaries and
+// RECUR_WALK_GUARD for the bound, like the other three, and differs only in where it
+// stops: when the cursor passes toDate.
+//
+// DELIBERATELY DOES NOT READ RECUR_GRACE_DAYS. Grace does not select the cycle - it only
+// widens the window in which work still counts. currentOccurrenceDate stops on the grace
+// deadline, which is right for "which cycle are we in NOW?" and WRONG here: with grace > 0
+// it would place a cycle on the calendar before that cycle has started.
+//
+// WALKS FROM due_date, not from fromDate. Seeding arithmetically from the range start is
+// tempting and wrong: addMonths clamps to month length (31 Jan -> 28 Feb) and never
+// un-clamps, so a jump-ahead lands on a different date than the walk does. Daily and
+// weekly agree; monthly, quarterly and annually do not.
+//
+// Day boundary: timezone-AGNOSTIC. fromDate/toDate are YYYY-MM-DD strings resolved by the
+// caller from the ORG day (F14-ORGDAY), never derived here.
+const calendarOccurrences = (dueDate, recurrence, fromDate, toDate) => {
+  const out = []
+  let cur = (dueDate||'').slice(0,10)
+  if(!cur || !recurrence || recurrence === 'once') return out
+  let guard = 0
+  while(cur && guard < RECUR_WALK_GUARD){
+    if(cur > toDate) break
+    if(cur >= fromDate) out.push(cur)
+    cur = nextOccurrenceDate(cur, recurrence); guard++
+  }
+  return out
+}
 const isOneOff = t => !isRecurring(t)
 // One-off "overdue". Recurring overdue is per-occurrence and owned by the miss-writer — never computed here.
 const isOverdueOneOff = (t, today) => !isRecurring(t) && t.status==='pending' && t.due_date && t.due_date < today
@@ -976,8 +1007,8 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .undo-btn{background:var(--brand);color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite}
-.notif-panel{position:fixed;top:52px;right:0;width:320px;max-height:calc(100vh - 52px);background:#fff;border-left:1px solid var(--border);border-bottom:1px solid var(--border);box-shadow:-4px 4px 20px rgba(0,0,0,.1);z-index:250;display:flex;flex-direction:column;overflow:hidden}
-@media(max-width:480px){.notif-panel{width:100vw}}
+.notif-panel,.cal-panel{position:fixed;top:52px;right:0;width:320px;max-height:calc(100vh - 52px);background:#fff;border-left:1px solid var(--border);border-bottom:1px solid var(--border);box-shadow:-4px 4px 20px rgba(0,0,0,.1);z-index:250;display:flex;flex-direction:column;overflow:hidden}
+@media(max-width:480px){.notif-panel,.cal-panel{width:100vw}}
 .notif-entry{padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
 .notif-entry:hover{background:var(--s3)}
 .notif-entry.unread{background:rgba(59,130,246,.04);border-left:3px solid #3B82F6}
@@ -1070,7 +1101,7 @@ html.dark .sidebar{background:#161B26;border-right-color:rgba(255,255,255,.07)}
 html.dark .section,html.dark .stat-card,html.dark .task-card,html.dark .tier-card{background:#1A2035}
 html.dark .modal,html.dark .modal-hdr{background:#1A2035}
 html.dark .tab.active{background:#252B3B}
-html.dark .notif-panel{background:#1A2035;border-color:rgba(255,255,255,.07)}
+html.dark .notif-panel,html.dark .cal-panel{background:#1A2035;border-color:rgba(255,255,255,.07)}
 html.dark .guide-section,html.dark .guide-section-hdr,html.dark .guide-chapter{background:#1A2035}
 html.dark .celebration-card{background:#1A2035}
 html.dark .auth-bg{background:linear-gradient(135deg,#0D1117,#161B26)}
@@ -1100,6 +1131,7 @@ const IC = ({ n, s=16 }) => {
     shield:'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
     flag:'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z',
     clipboard:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
+    calendar:'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
   }
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={paths[n]||paths.check} /></svg>
 }
@@ -15073,6 +15105,8 @@ export default function App() {
     try { const v=localStorage.getItem('taksyn_notif_prefs'); return v?{...DEFAULT_NOTIF_PREFS,...JSON.parse(v)}:DEFAULT_NOTIF_PREFS } catch { return DEFAULT_NOTIF_PREFS }
   })
   const [showNotifSettings, setShowNotifSettings] = useState(false)
+  const [showCalPanel, setShowCalPanel] = useState(false)
+  const [calRange, setCalRange] = useState('today')
   const notifPrefsRef = useRef(notifPrefs)
   useEffect(()=>{ notifPrefsRef.current = notifPrefs },[notifPrefs])
   const notifIdsRef = useRef(new Set())
@@ -15819,7 +15853,10 @@ export default function App() {
           <div className="tb-sep"/><span className="tb-org">{user.role==='super_admin'?'Platform Admin':user.org||'My Organisation'}</span>
           <div className="tb-space"/>
           {user.role!=='super_admin'&&<div className="tb-search"><IC n="search" s={12}/><input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/></div>}
-          <button className="tb-icon-btn" onClick={()=>setShowNotifPanel(v=>!v)}>
+          <button className="tb-icon-btn" title="Calendar" onClick={()=>{ setShowNotifPanel(false); setShowCalPanel(v=>!v) }}>
+            <IC n="calendar" s={16}/>
+          </button>
+          <button className="tb-icon-btn" onClick={()=>{ setShowCalPanel(false); setShowNotifPanel(v=>!v) }}>
             <IC n="bell" s={16}/>
             {notifications.filter(n=>!n.read).length>0&&<div className="tb-badge">{notifications.filter(n=>!n.read).length}</div>}
           </button>
@@ -15830,6 +15867,134 @@ export default function App() {
         </div>
 
         {/* Notification Panel */}
+        {showCalPanel&&(
+          <>
+            <div style={{position:'fixed',inset:0,zIndex:249}} onClick={()=>setShowCalPanel(false)}/>
+            <div className="cal-panel">
+              <div style={{padding:'12px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                <div style={{fontWeight:700,fontSize:14}}>Calendar</div>
+                <button className="notif-icon-btn" title="Close" onClick={()=>setShowCalPanel(false)}>✕</button>
+              </div>
+              <div style={{padding:'10px 14px',display:'flex',gap:6,borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                {[['today','Today'],['weekly','Weekly'],['monthly','Monthly']].map(([k,label])=>(
+                  <button key={k} onClick={()=>setCalRange(k)}
+                    style={{fontSize:12,padding:'4px 10px',borderRadius:6,border:'none',cursor:'pointer',fontFamily:'inherit',
+                      background:calRange===k?'var(--brand)':'transparent',
+                      color:calRange===k?'#fff':'var(--t2)',
+                      fontWeight:calRange===k?600:400}}>{label}</button>
+                ))}
+              </div>
+              <div style={{padding:'16px 14px',fontSize:13,color:'var(--t2)',overflowY:'auto',flex:1,minHeight:0}}>
+                {(()=>{
+                  if(!orgTimezone) return <div>Loading…</div>
+                  const _d = orgToday(orgTimezone)
+                  const _plus = (d,n)=> new Date(new Date(d+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
+                  const _dow = new Date(_d+'T00:00:00Z').getUTCDay()
+                  let from=_d, to=_d
+                  if(calRange==='weekly'){ from=_plus(_d,-((_dow+6)%7)); to=_plus(from,6) }
+                  if(calRange==='monthly'){
+                    const [_y,_m] = _d.split('-').map(Number)
+                    from = _d.slice(0,8)+'01'
+                    to = new Date(Date.UTC(_y,_m,0)).toISOString().slice(0,10)
+                  }
+                  const _mine = (t)=>{
+                    if(user?.role!=='worker') return true
+                    const ids = (t.assigned_user_ids&&t.assigned_user_ids.length)
+                      ? t.assigned_user_ids
+                      : [t.assigned_user_id||null].filter(Boolean)
+                    if(ids.length>0) return ids.includes(user.id)
+                    return t.assigned_role===user.role
+                  }
+                  const days = {}
+                  const add = (date,item)=>{ if(!date||date<from||date>to) return; (days[date]=days[date]||[]).push(item) }
+                  ;(tasks||[]).filter(_mine).forEach(t=>{
+                    if(isRecurring(t)){
+                      calendarOccurrences(t.due_date,t.recurrence,from,to).forEach(d=>add(d,{k:'task',t}))
+                    } else if(t.due_date){
+                      add(String(t.due_date).slice(0,10),{k:'task',t})
+                    }
+                    if(t.status==='awaiting_review'&&t.submitted_at){
+                      add(orgDayOf(t.submitted_at,orgTimezone),{k:'review',t})
+                    }
+                  })
+                  const dates = Object.keys(days).sort()
+                  if(dates.length===0) return <div>Nothing scheduled.</div>
+                  const _DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+                  if(calRange==='weekly'){
+                    return (
+                      <div style={{display:'flex',flexDirection:'column'}}>
+                        {Array.from({length:7},(_,k)=>_plus(from,k)).map((d,i)=>{
+                          const items = days[d]||[]
+                          return (
+                            <div key={d} style={{display:'flex',gap:10,padding:'9px 0',borderBottom:'1px solid var(--border)'}}>
+                              <div style={{width:46,flexShrink:0,fontSize:11,color:d===_d?'var(--brand)':'var(--t2)',fontWeight:d===_d?600:400}}>
+                                {_DOW[i]} {Number(d.slice(8,10))}
+                              </div>
+                              <div style={{flex:1,minWidth:0,fontSize:12}}>
+                                {items.length===0
+                                  ? <span style={{color:'var(--t2)',opacity:.6}}>Nothing scheduled</span>
+                                  : items.map((it,j)=>(
+                                      <div key={j} style={{color:'var(--text)',marginBottom:j===items.length-1?0:3}}>
+                                        {it.t.title}{it.k==='review'?' · review':''}
+                                      </div>
+                                    ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  }
+                  if(calRange==='monthly'){
+                    const _first = new Date(from+'T00:00:00Z').getUTCDay()
+                    const _lead = (_first+6)%7
+                    const _len = Number(to.slice(8,10))
+                    const _cell = { aspectRatio:'1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:6 }
+                    return (
+                      <div>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:6}}>
+                          {_DOW.map(w=><div key={w} style={{fontSize:10,color:'var(--t2)',textAlign:'center'}}>{w[0]}</div>)}
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+                          {Array.from({length:_lead},(_,i)=><div key={'b'+i}/>)}
+                          {Array.from({length:_len},(_,i)=>{
+                            const d = from.slice(0,8)+String(i+1).padStart(2,'0')
+                            const n = (days[d]||[]).length
+                            return (
+                              <div key={d} style={{..._cell, boxShadow:d===_d?'0 0 0 1px var(--brand)':'none'}}>
+                                <div style={{fontSize:10,color:'var(--t2)',lineHeight:1.1}}>{i+1}</div>
+                                <div style={{width:6,height:6,borderRadius:'50%',marginTop:2,
+                                  background: n===0?'transparent':(n>=3?'var(--text)':'var(--brand)')}}/>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div style={{marginTop:10,fontSize:10,color:'var(--t2)',display:'flex',gap:12}}>
+                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'var(--brand)',marginRight:4}}/>1–2 items</span>
+                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'var(--text)',marginRight:4}}/>3+ items</span>
+                        </div>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                      {(days[_d]||[]).map((it,i)=>(
+                        <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px'}}>
+                          <div style={{fontSize:13,color:'var(--text)',fontWeight:500}}>{it.t.title}</div>
+                          <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>
+                            {it.k==='review' ? 'Awaiting review' : (it.t.recurrence&&it.t.recurrence!=='once' ? it.t.recurrence : 'One-off')}
+                            {it.t.assigned_user_name ? ' · '+it.t.assigned_user_name : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+          </>
+        )}
+
         {showNotifPanel&&(()=>{
           const now = new Date()
           const today = new Date(now.getFullYear(),now.getMonth(),now.getDate())
