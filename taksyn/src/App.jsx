@@ -691,9 +691,6 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
     const MAX_EDGE = 1600
     const scale = Math.min(1, MAX_EDGE / Math.max(v.videoWidth, v.videoHeight))
     const w = Math.round(v.videoWidth*scale), h = Math.round(v.videoHeight*scale)
-    const c = document.createElement('canvas'); c.width=w; c.height=h
-    const ctx = c.getContext('2d')
-    ctx.drawImage(v, 0, 0, w, h)
     const now = new Date()
     let stampStr
     try {
@@ -703,11 +700,14 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
     }
     const lines = [ stampStr, 'GPS: '+(gps||'unavailable'), label ? ('Task: '+String(label).slice(0,42)) : '' ].filter(Boolean)
     const fs = Math.max(13, Math.round(h*0.03)), pad = Math.round(fs*0.5)
-    ctx.font = '600 '+fs+'px system-ui, -apple-system, sans-serif'
     const boxH = lines.length*(fs+pad) + pad
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, h-boxH, w, boxH)
+    const c = document.createElement('canvas'); c.width=w; c.height=h+boxH
+    const ctx = c.getContext('2d')
+    ctx.drawImage(v, 0, 0, w, h)
+    ctx.font = '600 '+fs+'px system-ui, -apple-system, sans-serif'
+    ctx.fillStyle = '#000'; ctx.fillRect(0, h, w, boxH)
     ctx.fillStyle = '#fff'; ctx.textBaseline = 'top'
-    lines.forEach((ln,i)=>ctx.fillText(ln, pad, h-boxH+pad+i*(fs+pad)))
+    lines.forEach((ln,i)=>ctx.fillText(ln, pad, h+pad+i*(fs+pad)))
     const url = c.toDataURL('image/jpeg', 0.8)
     stop()
     onCapture(url, { gps, ts: now.toISOString() })
