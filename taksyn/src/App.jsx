@@ -15919,7 +15919,63 @@ export default function App() {
                   })
                   const dates = Object.keys(days).sort()
                   if(dates.length===0) return <div>Nothing scheduled.</div>
-                  if(calRange!=='today') return <div>{dates.length} day{dates.length===1?'':'s'} with items — layout coming next.</div>
+                  const _DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+                  if(calRange==='weekly'){
+                    return (
+                      <div style={{display:'flex',flexDirection:'column'}}>
+                        {Array.from({length:7},(_,k)=>_plus(from,k)).map((d,i)=>{
+                          const items = days[d]||[]
+                          return (
+                            <div key={d} style={{display:'flex',gap:10,padding:'9px 0',borderBottom:'1px solid var(--border)'}}>
+                              <div style={{width:46,flexShrink:0,fontSize:11,color:d===_d?'var(--brand)':'var(--t2)',fontWeight:d===_d?600:400}}>
+                                {_DOW[i]} {Number(d.slice(8,10))}
+                              </div>
+                              <div style={{flex:1,minWidth:0,fontSize:12}}>
+                                {items.length===0
+                                  ? <span style={{color:'var(--t2)',opacity:.6}}>Nothing scheduled</span>
+                                  : items.map((it,j)=>(
+                                      <div key={j} style={{color:'var(--text)',marginBottom:j===items.length-1?0:3}}>
+                                        {it.t.title}{it.k==='review'?' · review':''}
+                                      </div>
+                                    ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  }
+                  if(calRange==='monthly'){
+                    const _first = new Date(from+'T00:00:00Z').getUTCDay()
+                    const _lead = (_first+6)%7
+                    const _len = Number(to.slice(8,10))
+                    const _cell = { aspectRatio:'1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:6 }
+                    return (
+                      <div>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:6}}>
+                          {_DOW.map(w=><div key={w} style={{fontSize:10,color:'var(--t2)',textAlign:'center'}}>{w[0]}</div>)}
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+                          {Array.from({length:_lead},(_,i)=><div key={'b'+i}/>)}
+                          {Array.from({length:_len},(_,i)=>{
+                            const d = from.slice(0,8)+String(i+1).padStart(2,'0')
+                            const n = (days[d]||[]).length
+                            return (
+                              <div key={d} style={{..._cell, boxShadow:d===_d?'0 0 0 1px var(--brand)':'none'}}>
+                                <div style={{fontSize:10,color:'var(--t2)',lineHeight:1.1}}>{i+1}</div>
+                                <div style={{width:6,height:6,borderRadius:'50%',marginTop:2,
+                                  background: n===0?'transparent':(n>=3?'var(--text)':'var(--brand)')}}/>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div style={{marginTop:10,fontSize:10,color:'var(--t2)',display:'flex',gap:12}}>
+                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'var(--brand)',marginRight:4}}/>1–2 items</span>
+                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'var(--text)',marginRight:4}}/>3+ items</span>
+                        </div>
+                      </div>
+                    )
+                  }
                   return (
                     <div style={{display:'flex',flexDirection:'column',gap:8}}>
                       {(days[_d]||[]).map((it,i)=>(
