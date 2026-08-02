@@ -976,8 +976,8 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .undo-btn{background:var(--brand);color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite}
-.notif-panel{position:fixed;top:52px;right:0;width:320px;max-height:calc(100vh - 52px);background:#fff;border-left:1px solid var(--border);border-bottom:1px solid var(--border);box-shadow:-4px 4px 20px rgba(0,0,0,.1);z-index:250;display:flex;flex-direction:column;overflow:hidden}
-@media(max-width:480px){.notif-panel{width:100vw}}
+.notif-panel,.cal-panel{position:fixed;top:52px;right:0;width:320px;max-height:calc(100vh - 52px);background:#fff;border-left:1px solid var(--border);border-bottom:1px solid var(--border);box-shadow:-4px 4px 20px rgba(0,0,0,.1);z-index:250;display:flex;flex-direction:column;overflow:hidden}
+@media(max-width:480px){.notif-panel,.cal-panel{width:100vw}}
 .notif-entry{padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
 .notif-entry:hover{background:var(--s3)}
 .notif-entry.unread{background:rgba(59,130,246,.04);border-left:3px solid #3B82F6}
@@ -1070,7 +1070,7 @@ html.dark .sidebar{background:#161B26;border-right-color:rgba(255,255,255,.07)}
 html.dark .section,html.dark .stat-card,html.dark .task-card,html.dark .tier-card{background:#1A2035}
 html.dark .modal,html.dark .modal-hdr{background:#1A2035}
 html.dark .tab.active{background:#252B3B}
-html.dark .notif-panel{background:#1A2035;border-color:rgba(255,255,255,.07)}
+html.dark .notif-panel,html.dark .cal-panel{background:#1A2035;border-color:rgba(255,255,255,.07)}
 html.dark .guide-section,html.dark .guide-section-hdr,html.dark .guide-chapter{background:#1A2035}
 html.dark .celebration-card{background:#1A2035}
 html.dark .auth-bg{background:linear-gradient(135deg,#0D1117,#161B26)}
@@ -1100,6 +1100,7 @@ const IC = ({ n, s=16 }) => {
     shield:'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
     flag:'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z',
     clipboard:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
+    calendar:'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
   }
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={paths[n]||paths.check} /></svg>
 }
@@ -15073,6 +15074,7 @@ export default function App() {
     try { const v=localStorage.getItem('taksyn_notif_prefs'); return v?{...DEFAULT_NOTIF_PREFS,...JSON.parse(v)}:DEFAULT_NOTIF_PREFS } catch { return DEFAULT_NOTIF_PREFS }
   })
   const [showNotifSettings, setShowNotifSettings] = useState(false)
+  const [showCalPanel, setShowCalPanel] = useState(false)
   const notifPrefsRef = useRef(notifPrefs)
   useEffect(()=>{ notifPrefsRef.current = notifPrefs },[notifPrefs])
   const notifIdsRef = useRef(new Set())
@@ -15819,7 +15821,10 @@ export default function App() {
           <div className="tb-sep"/><span className="tb-org">{user.role==='super_admin'?'Platform Admin':user.org||'My Organisation'}</span>
           <div className="tb-space"/>
           {user.role!=='super_admin'&&<div className="tb-search"><IC n="search" s={12}/><input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/></div>}
-          <button className="tb-icon-btn" onClick={()=>setShowNotifPanel(v=>!v)}>
+          <button className="tb-icon-btn" title="Calendar" onClick={()=>{ setShowNotifPanel(false); setShowCalPanel(v=>!v) }}>
+            <IC n="calendar" s={16}/>
+          </button>
+          <button className="tb-icon-btn" onClick={()=>{ setShowCalPanel(false); setShowNotifPanel(v=>!v) }}>
             <IC n="bell" s={16}/>
             {notifications.filter(n=>!n.read).length>0&&<div className="tb-badge">{notifications.filter(n=>!n.read).length}</div>}
           </button>
