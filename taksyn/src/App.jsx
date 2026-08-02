@@ -15075,6 +15075,7 @@ export default function App() {
   })
   const [showNotifSettings, setShowNotifSettings] = useState(false)
   const [showCalPanel, setShowCalPanel] = useState(false)
+  const [calRange, setCalRange] = useState('today')
   const notifPrefsRef = useRef(notifPrefs)
   useEffect(()=>{ notifPrefsRef.current = notifPrefs },[notifPrefs])
   const notifIdsRef = useRef(new Set())
@@ -15835,6 +15836,30 @@ export default function App() {
         </div>
 
         {/* Notification Panel */}
+        {showCalPanel&&(
+          <>
+            <div style={{position:'fixed',inset:0,zIndex:249}} onClick={()=>setShowCalPanel(false)}/>
+            <div className="cal-panel">
+              <div style={{padding:'12px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                <div style={{fontWeight:700,fontSize:14}}>Calendar</div>
+                <button className="notif-icon-btn" title="Close" onClick={()=>setShowCalPanel(false)}>✕</button>
+              </div>
+              <div style={{padding:'10px 14px',display:'flex',gap:6,borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                {[['today','Today'],['weekly','Weekly'],['monthly','Monthly']].map(([k,label])=>(
+                  <button key={k} onClick={()=>setCalRange(k)}
+                    style={{fontSize:12,padding:'4px 10px',borderRadius:6,border:'none',cursor:'pointer',fontFamily:'inherit',
+                      background:calRange===k?'var(--brand)':'transparent',
+                      color:calRange===k?'#fff':'var(--t2)',
+                      fontWeight:calRange===k?600:400}}>{label}</button>
+                ))}
+              </div>
+              <div style={{padding:'16px 14px',fontSize:13,color:'var(--t2)',overflowY:'auto',flex:1,minHeight:0}}>
+                Nothing scheduled.
+              </div>
+            </div>
+          </>
+        )}
+
         {showNotifPanel&&(()=>{
           const now = new Date()
           const today = new Date(now.getFullYear(),now.getMonth(),now.getDate())
