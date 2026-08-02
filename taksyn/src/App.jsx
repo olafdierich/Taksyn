@@ -225,6 +225,37 @@ const recurringDueNow = (t, today) => {
   const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
   return today >= cur && today <= _recurPlusDays(cur, grace)
 }
+// SCHEDULED occurrence dates for a recurring task that fall inside [fromDate, toDate],
+// as an array of YYYY-MM-DD. Empty if none. THE calendar's placement source.
+//
+// This is the FOURTH walk. It shares nextOccurrenceDate for cycle boundaries and
+// RECUR_WALK_GUARD for the bound, like the other three, and differs only in where it
+// stops: when the cursor passes toDate.
+//
+// DELIBERATELY DOES NOT READ RECUR_GRACE_DAYS. Grace does not select the cycle - it only
+// widens the window in which work still counts. currentOccurrenceDate stops on the grace
+// deadline, which is right for "which cycle are we in NOW?" and WRONG here: with grace > 0
+// it would place a cycle on the calendar before that cycle has started.
+//
+// WALKS FROM due_date, not from fromDate. Seeding arithmetically from the range start is
+// tempting and wrong: addMonths clamps to month length (31 Jan -> 28 Feb) and never
+// un-clamps, so a jump-ahead lands on a different date than the walk does. Daily and
+// weekly agree; monthly, quarterly and annually do not.
+//
+// Day boundary: timezone-AGNOSTIC. fromDate/toDate are YYYY-MM-DD strings resolved by the
+// caller from the ORG day (F14-ORGDAY), never derived here.
+const calendarOccurrences = (dueDate, recurrence, fromDate, toDate) => {
+  const out = []
+  let cur = (dueDate||'').slice(0,10)
+  if(!cur || !recurrence || recurrence === 'once') return out
+  let guard = 0
+  while(cur && guard < RECUR_WALK_GUARD){
+    if(cur > toDate) break
+    if(cur >= fromDate) out.push(cur)
+    cur = nextOccurrenceDate(cur, recurrence); guard++
+  }
+  return out
+}
 const isOneOff = t => !isRecurring(t)
 // One-off "overdue". Recurring overdue is per-occurrence and owned by the miss-writer — never computed here.
 const isOverdueOneOff = (t, today) => !isRecurring(t) && t.status==='pending' && t.due_date && t.due_date < today
@@ -15854,7 +15885,55 @@ export default function App() {
                 ))}
               </div>
               <div style={{padding:'16px 14px',fontSize:13,color:'var(--t2)',overflowY:'auto',flex:1,minHeight:0}}>
-                Nothing scheduled.
+                {(()=>{
+                  if(!orgTimezone) return <div>Loading…</div>
+                  const _d = orgToday(orgTimezone)
+                  const _plus = (d,n)=> new Date(new Date(d+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
+                  const _dow = new Date(_d+'T00:00:00Z').getUTCDay()
+                  let from=_d, to=_d
+                  if(calRange==='weekly'){ from=_plus(_d,-((_dow+6)%7)); to=_plus(from,6) }
+                  if(calRange==='monthly'){
+                    const [_y,_m] = _d.split('-').map(Number)
+                    from = _d.slice(0,8)+'01'
+                    to = new Date(Date.UTC(_y,_m,0)).toISOString().slice(0,10)
+                  }
+                  const _mine = (t)=>{
+                    if(user?.role!=='worker') return true
+                    const ids = (t.assigned_user_ids&&t.assigned_user_ids.length)
+                      ? t.assigned_user_ids
+                      : [t.assigned_user_id||null].filter(Boolean)
+                    if(ids.length>0) return ids.includes(user.id)
+                    return t.assigned_role===user.role
+                  }
+                  const days = {}
+                  const add = (date,item)=>{ if(!date||date<from||date>to) return; (days[date]=days[date]||[]).push(item) }
+                  ;(tasks||[]).filter(_mine).forEach(t=>{
+                    if(isRecurring(t)){
+                      calendarOccurrences(t.due_date,t.recurrence,from,to).forEach(d=>add(d,{k:'task',t}))
+                    } else if(t.due_date){
+                      add(String(t.due_date).slice(0,10),{k:'task',t})
+                    }
+                    if(t.status==='awaiting_review'&&t.submitted_at){
+                      add(orgDayOf(t.submitted_at,orgTimezone),{k:'review',t})
+                    }
+                  })
+                  const dates = Object.keys(days).sort()
+                  if(dates.length===0) return <div>Nothing scheduled.</div>
+                  if(calRange!=='today') return <div>{dates.length} day{dates.length===1?'':'s'} with items — layout coming next.</div>
+                  return (
+                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                      {(days[_d]||[]).map((it,i)=>(
+                        <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px'}}>
+                          <div style={{fontSize:13,color:'var(--text)',fontWeight:500}}>{it.t.title}</div>
+                          <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>
+                            {it.k==='review' ? 'Awaiting review' : (it.t.recurrence&&it.t.recurrence!=='once' ? it.t.recurrence : 'One-off')}
+                            {it.t.assigned_user_name ? ' · '+it.t.assigned_user_name : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
           </>
