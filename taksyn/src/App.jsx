@@ -15977,6 +15977,11 @@ export default function App() {
                     if(ids.length>0) return ids.includes(user.id)
                     return t.assigned_role===user.role
                   }
+                  const _calAttention = ['escalated','overdue','rejected','awaiting_review']
+                  const _tint = (t)=>{
+                    const s = t.escalation ? 'escalated' : t.status
+                    return _calAttention.includes(s) ? STATUS_CFG[s] : null
+                  }
                   const days = {}
                   const add = (date,item)=>{ if(!date||date<from||date>to) return; (days[date]=days[date]||[]).push(item) }
                   ;(tasks||[]).filter(_mine).forEach(t=>{
@@ -16051,7 +16056,9 @@ export default function App() {
                   return (
                     <div style={{display:'flex',flexDirection:'column',gap:8}}>
                       {(days[_d]||[]).map((it,i)=>(
-                        <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px'}}>
+                        <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',
+                          background:(_tint(it.t)||{}).bg||'transparent',
+                          borderLeft:_tint(it.t)?('3px solid '+_tint(it.t).color):'1px solid var(--border)'}}>
                           <div style={{fontSize:13,color:'var(--text)',fontWeight:500}}>{it.t.title}</div>
                           <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>
                             {it.k==='review' ? 'Awaiting review' : (it.t.recurrence&&it.t.recurrence!=='once' ? it.t.recurrence : 'One-off')}
