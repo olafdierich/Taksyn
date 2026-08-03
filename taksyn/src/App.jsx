@@ -669,7 +669,9 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const rawRef = useRef(null)
+  const origRef = useRef(null)
   const [shot, setShot] = useState(null)
+  const [cleaned, setCleaned] = useState(false)
   const stop = () => { if (streamRef.current) { streamRef.current.getTracks().forEach(t=>t.stop()); streamRef.current=null } }
   const openCam = async () => {
     setErr(''); setGps('')
@@ -685,7 +687,7 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
       setOpen(true)
     }
   }
-  const close = () => { stop(); setOpen(false); setErr(''); setBusy(false); setShot(null); rawRef.current = null }
+  const close = () => { stop(); setOpen(false); setErr(''); setBusy(false); setShot(null); rawRef.current = null; origRef.current = null; setCleaned(false) }
   const capture = () => {
     const v = videoRef.current
     if (!v || !v.videoWidth) { setErr('Camera not ready — please wait a moment and try again.'); return }
@@ -707,7 +709,46 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
     // and a late geolocation callback must not change the recorded location.
     setShot({ url: raw.toDataURL('image/jpeg', 0.9), ts: now.toISOString(), stampStr, gps: gps || 'unavailable' })
   }
-  const retake = () => { setShot(null); rawRef.current = null }
+  const retake = () => { setShot(null); rawRef.current = null; origRef.current = null; setCleaned(false) }
+  // Greyscale + contrast stretch, applied IN PLACE to the held frame so that
+  // commit() (which reads rawRef) picks it up with no further wiring.
+  const toggleClean = () => {
+    const raw = rawRef.current
+    if (!raw) return
+    const ctx = raw.getContext('2d')
+    if (cleaned) {
+      if (origRef.current) ctx.putImageData(origRef.current, 0, 0)
+      setCleaned(false)
+      setShot(s => s ? { ...s, url: raw.toDataURL('image/jpeg', 0.9) } : s)
+      return
+    }
+    const img = ctx.getImageData(0, 0, raw.width, raw.height)
+    const copy = ctx.createImageData(img.width, img.height)
+    copy.data.set(img.data)
+    origRef.current = copy
+    const d = img.data
+    const hist = new Uint32Array(256)
+    for (let i = 0; i < d.length; i += 4) hist[(0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]) | 0]++
+    // Percentile clip, NOT raw min/max: one dark speck or one blown highlight
+    // would otherwise span the full range and the stretch would do nothing.
+    const total = d.length / 4, cut = total * 0.005
+    let lo = 0, hi = 255, acc = 0
+    for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > cut) { lo = v; break } }
+    acc = 0
+    for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > cut) { hi = v; break } }
+    // Floor the span so a flat frame degrades to plain greyscale rather than
+    // amplifying sensor noise.
+    const span = Math.max(8, hi - lo)
+    const lut = new Uint8ClampedArray(256)
+    for (let v = 0; v < 256; v++) lut[v] = Math.max(0, Math.min(255, Math.round((v - lo) * 255 / span)))
+    for (let i = 0; i < d.length; i += 4) {
+      const y = lut[(0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]) | 0]
+      d[i] = y; d[i+1] = y; d[i+2] = y
+    }
+    ctx.putImageData(img, 0, 0)
+    setCleaned(true)
+    setShot(s => s ? { ...s, url: raw.toDataURL('image/jpeg', 0.9) } : s)
+  }
   const commit = () => {
     const raw = rawRef.current
     if (!raw || !shot) return
@@ -750,6 +791,11 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
               <video ref={videoRef} playsInline muted style={{maxWidth:'100%',maxHeight:'68vh',borderRadius:8,background:'#000',display:shot?'none':'block'}}/>
               {shot && <img src={shot.url} alt="" style={{maxWidth:'100%',maxHeight:'68vh',borderRadius:8,background:'#000'}}/>}
               <div style={{color:'#fff',fontSize:12,marginTop:8,opacity:.85}}>📍 {shot ? shot.gps : (gps||'locating…')} · {shot ? shot.stampStr : new Date().toLocaleDateString()}</div>
+              {shot && (
+                <div style={{marginTop:10}}>
+                  <button className="btn btn-secondary" disabled={busy} onClick={toggleClean}>{cleaned ? '↩ Original' : '✨ Clean up'}</button>
+                </div>
+              )}
               <div style={{display:'flex',gap:10,marginTop:14}}>
                 {shot ? (
                   <>
