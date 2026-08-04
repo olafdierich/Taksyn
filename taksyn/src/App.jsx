@@ -13720,12 +13720,13 @@ function IncidentHubView({ user, setPage }) {
 }
 
 function IncidentReportView({ user }) {
-  const CATEGORIES = [
-    ['injury_harm','🩹 Injury / Harm to a person','Someone was hurt — physical, infection/illness, or mental/psychological'],
-    ['near_miss','⚠️ Near miss','No harm or damage occurred, but it could have'],
-    ['property_damage','🔧 Property / equipment damage','Damage to property, equipment, vehicle or environment'],
-    ['other','📋 Other','Complaint, security, service quality or anything else'],
-  ]
+  // CATEGORY PACKS — the dropdown reads incident_category_packs for this
+  // org's industry, union the org's own additions, with pack rows the org
+  // has overridden suppressed. Shape stays [key, label, sub] so the render
+  // site below is unchanged. sub is empty: the packs table has no helper
+  // text column.
+  const [CATEGORIES, setCategories] = useState([])
+  const [catsLoading, setCatsLoading] = useState(true)
   // outcome ladder -> suggested severity (1-5)
   const OUTCOMES = [
     [1,'No treatment needed',1],
@@ -13790,7 +13791,42 @@ function IncidentReportView({ user }) {
     })()
   }, [])
 
-  // suggested severity from the outcome ladder (harm categories only)
+  // CATEGORY PACKS — load once the org ID is known. Resolves the org's
+  // industry_id, then reads packs ∪ org categories. source='category'
+  // excludes outcome rows (report-only) and legacy rows.
+  useEffect(() => {
+    if (!orgResolved) return
+    if (!orgId) { setCategories([]); setCatsLoading(false); return }
+    ;(async()=>{
+      try {
+        const { data: org } = await supabase.from('organisations')
+          .select('industry_id').eq('id', orgId).maybeSingle()
+        const industryId = org?.industry_id
+        const [packsRes, ownRes] = await Promise.all([
+          industryId
+            ? supabase.from('incident_category_packs')
+                .select('category_key,label,sort_order')
+                .eq('industry_id', industryId).eq('source','category').eq('is_active', true)
+            : Promise.resolve({ data: [] }),
+          supabase.from('org_incident_categories')
+            .select('category_key,label,sort_order,overrides_key')
+            .eq('org', orgId).eq('is_active', true),
+        ])
+        const own = ownRes?.data || []
+        const suppressed = new Set(own.filter(r=>r.overrides_key).map(r=>r.overrides_key))
+        const merged = [
+          ...(packsRes?.data || []).filter(r => !suppressed.has(r.category_key)),
+          ...own.filter(r => !r.overrides_key),
+        ].sort((a,b) => (a.sort_order||0) - (b.sort_order||0) || String(a.label).localeCompare(String(b.label)))
+        setCategories(merged.map(r => [r.category_key, r.label, '']))
+      } catch (e) {
+        setCategories([])
+      }
+      setCatsLoading(false)
+    })()
+  }, [orgId, orgResolved])
+
+  // suggested severity from the outcome ladder
   const suggested = outcome ? (OUTCOMES.find(o=>o[0]===outcome)||[])[2] : 0
 
   const grabGps = () => {
@@ -13800,13 +13836,21 @@ function IncidentReportView({ user }) {
       () => setGps(null), { enableHighAccuracy:true, timeout:8000, maximumAge:0 })
   }
 
-  const isHarm = category==='injury_harm'
-  const showLadder = isHarm || category==='near_miss'
+  // CATEGORY PACKS — the isHarm fork is gone. It keyed on 'injury_harm',
+  // which no longer exists once packs drive the form; leaving it would
+  // have hidden the outcome ladder from every category, and outcome_level
+  // feeds the whole outcome half of the trend report.
+  //
+  // Harm type and affected person now show for EVERY category but are
+  // OPTIONAL. Outcome is REQUIRED — it is one tap, "No treatment needed"
+  // is an honest answer for any incident, and it is the field the report
+  // most depends on. Forcing harm type on a property incident produces a
+  // populated field, not a true one.
+  const showLadder = true
   const effectiveSeverity = severity || suggested
   const overrideNeeded = severity && suggested && severity !== suggested
 
-  const canSubmit = category && effectiveSeverity && facts.trim() && occurredAt &&
-    (!isHarm || (harmType && affectedType)) &&
+  const canSubmit = category && outcome && effectiveSeverity && facts.trim() && occurredAt &&
     (!overrideNeeded || overrideReason.trim())
 
   const submit = async () => {
@@ -13820,8 +13864,8 @@ function IncidentReportView({ user }) {
       shift: shift||null, department: department||null, location_text: locationText||null,
       gps: gps||null, immediate_actions: immediateActions||null, hazard_present: hazardPresent,
       affected_type: affectedType||null, affected_initials: affectedInitials||null,
-      outcome_level: outcome||null, harm_type: isHarm ? harmType : null,
-      clinical: (isHarm && clinicalNote.trim()) ? { note: clinicalNote.trim() } : null,
+      outcome_level: outcome||null, harm_type: harmType||null,
+      clinical: clinicalNote.trim() ? { note: clinicalNote.trim() } : null,
     }
     try {
       const { data, error: rpcErr } = await supabase.rpc('create_incident', {
@@ -13892,9 +13936,9 @@ function IncidentReportView({ user }) {
 
       {category && (<>
         {/* Harm fork */}
-        {isHarm && (
+        {true && (
           <div style={card}>
-            <span style={lbl}>Type of harm</span>
+            <span style={lbl}>Type of harm <span style={{fontWeight:400,color:'#9CA3AF'}}>(if anyone was harmed)</span></span>
             <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
               {HARM_TYPES.map(([k,t]) => (
                 <button key={k} onClick={()=>setHarmType(k)}
@@ -13903,7 +13947,7 @@ function IncidentReportView({ user }) {
                     background: harmType===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
               ))}
             </div>
-            <span style={lbl}>Who was affected?</span>
+            <span style={lbl}>Who was affected? <span style={{fontWeight:400,color:'#9CA3AF'}}>(if applicable)</span></span>
             <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
               {['staff','client','visitor','contractor'].map(t => (
                 <button key={t} onClick={()=>setAffectedType(t)}
@@ -13921,7 +13965,7 @@ function IncidentReportView({ user }) {
         {/* Outcome ladder */}
         {showLadder && (
           <div style={card}>
-            <span style={lbl}>{isHarm ? 'What was the outcome?' : 'What could have happened?'}</span>
+            <span style={lbl}>What was the outcome?</span>
             <select style={inp} value={outcome} onChange={e=>{setOutcome(+e.target.value); setSeverity(0)}}>
               <option value={0}>— select —</option>
               {OUTCOMES.map(([v,t]) => <option key={v} value={v}>{t}</option>)}
@@ -13929,7 +13973,7 @@ function IncidentReportView({ user }) {
             {suggested>0 && (
               <div style={{marginTop:10,fontSize:13,padding:'8px 12px',borderRadius:8,background:'rgba(79,70,229,.06)'}}>
                 Suggested severity: <strong>{suggested} – {SEVERITY[suggested-1][1]}</strong>
-                {isHarm && ' — you can adjust below if needed.'}
+                {' — you can adjust below if needed.'}
               </div>
             )}
           </div>
@@ -13960,7 +14004,7 @@ function IncidentReportView({ user }) {
         </div>
 
         {/* Clinical note (harm only) */}
-        {isHarm && (
+        {true && (
           <div style={card}>
             <span style={lbl}>Clinical details <span style={{fontWeight:400,color:'#9CA3AF'}}>(optional — antibiotics, hospital, organism, etc.)</span></span>
             <textarea style={{...inp,minHeight:70,resize:'vertical'}} value={clinicalNote}
