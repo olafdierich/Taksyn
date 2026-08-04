@@ -14790,6 +14790,56 @@ function IncidentsAdminView({ user }) {
           </div>)}
         </div>
 
+        {/* NOTIFY ACTION — the write side of external notification (F7).
+            Renders only when the incident is flagged as requiring an
+            external statutory notification. notified_to is required:
+            a record naming nobody is not a record. */}
+        {sel.external_notification_required && (
+          <div style={card}>
+            <span style={lbl}>External notification</span>
+            {sel.notified_at ? (
+              <div style={{fontSize:13,lineHeight:1.6}}>
+                <div>
+                  Notified <strong>{sel.notified_to || 'an external body'}</strong>
+                  {' on '}{fmtDay(sel.notified_at)}
+                </div>
+                {sel.notified_ref && (
+                  <div style={{color:'var(--t2)'}}>Their reference: <strong>{sel.notified_ref}</strong></div>
+                )}
+              </div>
+            ) : isAdmin ? (<>
+              <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>
+                This incident requires an external notification. Record it here
+                once it has been made.
+              </div>
+              <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Notified whom? (required)</div>
+              <input id="inc-notified-to" placeholder="e.g. NDIS Commission, SIRS, food authority"
+                style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',
+                        background:'var(--card)',color:'var(--text)',marginBottom:10}}/>
+              <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Their reference (optional)</div>
+              <input id="inc-notified-ref" placeholder="e.g. RPT-2026-00123"
+                style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',
+                        background:'var(--card)',color:'var(--text)'}}/>
+              <button className="btn btn-primary btn-sm" style={{marginTop:10}} disabled={busy} onClick={async ()=>{
+                const to = (document.getElementById('inc-notified-to').value||'').trim()
+                const ref = (document.getElementById('inc-notified-ref').value||'').trim()
+                if (!to) { alert('Please record which body was notified.'); return }
+                const { data: sess } = await supabase.auth.getSession()
+                const uid = sess?.session?.user?.id || null
+                patchIncident(
+                  { notified_at: new Date().toISOString(), notified_by: uid,
+                    notified_to: to, notified_ref: ref || null },
+                  'notified',
+                  { to, details: { notified_to: to, notified_ref: ref || null } })
+              }}>Mark as notified</button>
+            </>) : (
+              <div style={{fontSize:13,color:'var(--t2)'}}>
+                External notification required — not yet recorded.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* corrective actions (display + simple add; task-linking is a later branch) */}
         <div style={card}>
           <span style={lbl}>Corrective / preventive actions</span>
