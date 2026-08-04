@@ -13850,8 +13850,25 @@ function IncidentReportView({ user }) {
   const effectiveSeverity = severity || suggested
   const overrideNeeded = severity && suggested && severity !== suggested
 
-  const canSubmit = category && outcome && effectiveSeverity && facts.trim() && occurredAt &&
+  // REQUIRED FIELDS — immediateActions is now mandatory. "What did you do
+  // about it" is a compliance expectation and a blank is a real gap; there
+  // is always a true answer, so this does not invite garbage input the way
+  // a forced harm type would.
+  const canSubmit = category && outcome && effectiveSeverity && facts.trim() &&
+    occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim())
+
+  // The first thing still missing, in the same order canSubmit tests them,
+  // so the message cannot drift away from the condition it explains.
+  const missingField =
+    !category                                   ? 'Choose what happened'
+    : !outcome                                  ? 'Choose the outcome'
+    : !effectiveSeverity                        ? 'Choose a severity'
+    : !occurredAt                               ? 'Set when it happened'
+    : !facts.trim()                             ? 'Describe what happened'
+    : !immediateActions.trim()                  ? 'Add the immediate actions taken'
+    : (overrideNeeded && !overrideReason.trim()) ? 'Give a reason for changing the severity'
+    : null
 
   const submit = async () => {
     setError('')
@@ -13922,7 +13939,7 @@ function IncidentReportView({ user }) {
 
       {/* Step 1 — category */}
       <div style={card}>
-        <span style={lbl}>What happened?</span>
+        <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
         {CATEGORIES.map(([k,title,sub]) => (
           <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcome(0); setSeverity(0)}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:8,borderRadius:10,
@@ -13965,7 +13982,7 @@ function IncidentReportView({ user }) {
         {/* Outcome ladder */}
         {showLadder && (
           <div style={card}>
-            <span style={lbl}>What was the outcome?</span>
+            <span style={lbl}>What was the outcome? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
             <select style={inp} value={outcome} onChange={e=>{setOutcome(+e.target.value); setSeverity(0)}}>
               <option value={0}>— select —</option>
               {OUTCOMES.map(([v,t]) => <option key={v} value={v}>{t}</option>)}
@@ -14015,7 +14032,7 @@ function IncidentReportView({ user }) {
 
         {/* Common tail */}
         <div style={card}>
-          <span style={lbl}>When did it happen?</span>
+          <span style={lbl}>When did it happen? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
           <input type="datetime-local" style={{...inp,marginBottom:12}} value={occurredAt} onChange={e=>setOccurredAt(e.target.value)}/>
           <span style={lbl}>Shift <span style={{fontWeight:400,color:'#9CA3AF'}}>(optional)</span></span>
           <input style={{...inp,marginBottom:12}} value={shift} onChange={e=>setShift(e.target.value)} placeholder="e.g. Night"/>
@@ -14029,10 +14046,10 @@ function IncidentReportView({ user }) {
         </div>
 
         <div style={card}>
-          <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(the facts, in order)</span></span>
+          <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(the facts, in order — required)</span></span>
           <textarea style={{...inp,minHeight:100,resize:'vertical',marginBottom:12}} value={facts}
             onChange={e=>setFacts(e.target.value)} placeholder="Describe what happened, step by step…"/>
-          <span style={lbl}>Immediate actions taken to make it safe</span>
+          <span style={lbl}>Immediate actions taken to make it safe <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
           <textarea style={{...inp,minHeight:70,resize:'vertical',marginBottom:12}} value={immediateActions}
             onChange={e=>setImmediateActions(e.target.value)} placeholder="What was done right away?"/>
           <label style={{display:'flex',alignItems:'center',gap:8,fontSize:14,cursor:'pointer'}}>
@@ -14066,6 +14083,11 @@ function IncidentReportView({ user }) {
 
         {error && <div style={{color:'#DC2626',fontSize:14,marginBottom:12}}>{error}</div>}
 
+        {missingField && !submitting && (
+          <div style={{fontSize:13,color:'#6B7280',marginBottom:8,textAlign:'center'}}>
+            {missingField} to submit
+          </div>
+        )}
         <button onClick={submit} disabled={!canSubmit||submitting}
           style={{width:'100%',padding:'14px',borderRadius:10,border:'none',fontSize:15,fontWeight:600,cursor:canSubmit&&!submitting?'pointer':'not-allowed',
             background: canSubmit&&!submitting ? 'var(--brand,#4F46E5)' : 'rgba(0,0,0,.15)', color:'#fff'}}>
