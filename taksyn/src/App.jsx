@@ -13848,7 +13848,7 @@ function IncidentReportView({ user }) {
   // populated field, not a true one.
   const showLadder = true
   const effectiveSeverity = severity || suggested
-  const overrideNeeded = severity && suggested && severity !== suggested
+  const overrideNeeded = !!(severity && suggested && severity !== suggested)
 
   // REQUIRED FIELDS — immediateActions is now mandatory. "What did you do
   // about it" is a compliance expectation and a blank is a real gap; there
