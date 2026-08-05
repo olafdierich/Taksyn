@@ -14422,6 +14422,18 @@ function IncidentRegisterView({ user, setPage }) {
   const tByDomain = ['people','property','information'].map(dom=>({ dom, n:tInc6m.filter(i=>i.outcome_domain===dom).length }))
   const tCatMap   = {}; tInc6m.forEach(i=>{ tCatMap[i.category]=(tCatMap[i.category]||0)+1 })
   const tTopCats  = Object.entries(tCatMap).sort((a,b)=>b[1]-a[1]).slice(0,5)
+  // --- BREAKDOWN AXES (harm type / affected persons / outcome) ---
+  const HARM_LABEL = { physical:'Physical', infection_illness:'Infection / Illness', mental_psychological:'Mental / Psychological' }
+  const OUTCOME_LABEL = { 1:'No treatment needed', 2:'First aid only', 3:'Seen by GP / clinic, no admission', 4:'Antibiotics commenced', 5:'Hospital presentation, no admission', 6:'Hospital admission', 7:'ICU / life-threatening / permanent harm', 8:'Death' }
+  const tHarmMap = {}; tInc6m.forEach(i=>{ if(i.harm_type) tHarmMap[i.harm_type]=(tHarmMap[i.harm_type]||0)+1 })
+  const tHarmRows = Object.entries(tHarmMap).sort((a,b)=>b[1]-a[1])
+  const tAffMap = {}; tInc6m.forEach(i=>{ if(i.affected_type) tAffMap[i.affected_type]=(tAffMap[i.affected_type]||0)+1 })
+  const tAffRows = Object.entries(tAffMap).sort((a,b)=>b[1]-a[1])
+  const tInitMap = {}; tInc6m.forEach(i=>{ const k=(i.affected_initials||'').trim().toUpperCase(); if(k) tInitMap[k]=(tInitMap[k]||0)+1 })
+  const tRepeatPeople = Object.values(tInitMap).filter(n=>n>=2).length
+  const tOutInc = tInc6m.filter(i=>i.outcome_domain==='people'&&i.outcome_level)
+  const tOutMap = {}; tOutInc.forEach(i=>{ tOutMap[i.outcome_level]=(tOutMap[i.outcome_level]||0)+1 })
+  const tOutRows = Object.keys(tOutMap).map(k=>[Number(k),tOutMap[k]]).sort((a,b)=>a[0]-b[0])
   const tNotifReq = tInc6m.filter(i=>i.external_notification_required)
   const tNotifDone= tNotifReq.filter(i=>i.notified_at)
   const tNotifRate= tNotifReq.length ? Math.round(tNotifDone.length/tNotifReq.length*100) : null
@@ -14508,6 +14520,31 @@ function IncidentRegisterView({ user, setPage }) {
     pdf.text('Prior year',lm+26,y+2.5)
     y+=6
     gap(2); rule()
+    // breakdown axes: harm type / affected persons / outcome
+    const axisBlock = (title, rows, labelFn) => {
+      if(!rows || rows.length===0) return
+      line(title,12,true)
+      gap(3)
+      const maxN=Math.max(...rows.map(r=>r[1]),1)
+      rows.forEach(([key,n])=>{
+        pdf.setFontSize(9); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
+        pdf.text(String(labelFn(key)),lm,y)
+        pdf.text(String(n),lm+rw,y,{align:'right'})
+        y+=4
+        const barPct=Math.min(rw,Math.round(rw*n/Math.max(maxN*2,4)))
+        rect(lm,y,barPct,3,[79,70,229])
+        if(barPct<rw) rect(lm+barPct,y,rw-barPct,3,[220,220,220])
+        y+=6
+      })
+      gap(2); rule()
+    }
+    axisBlock('Type of Harm (6 months)', tHarmRows, k=>HARM_LABEL[k]||String(k).replace(/_/g,' '))
+    axisBlock('Who Was Affected (6 months)', tAffRows, k=>String(k).replace(/_/g,' '))
+    if(tRepeatPeople>0){
+      line(tRepeatPeople+' individual'+(tRepeatPeople!==1?'s':'')+' had 2 or more incidents in the period. Refer to the Incident Register for detail.',9,false,[80,80,80])
+      gap(2); rule()
+    }
+    axisBlock('Outcome (6 months, people domain)', tOutRows, k=>k+'. '+(OUTCOME_LABEL[k]||('Level '+k)))
     // top categories
     if(tTopCats.length>0){
       line('Top Categories (6 months)',12,true)
@@ -14639,6 +14676,42 @@ function IncidentRegisterView({ user, setPage }) {
                 {topCats.map(([key,n])=>{ const mx=topCats[0]?.[1]||1; return <div key={key} style={{marginBottom:6}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
                     <span style={{color:'var(--text)',fontWeight:500}}>{categoryLabels[key]||key}</span>
+                    <span style={{color:'var(--t2)',fontWeight:700}}>{n}</span>
+                  </div>
+                  <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:(Math.round(n/mx*100))+'%',background:'var(--brand)',borderRadius:2}}/></div>
+                </div>})}
+              </div>
+            </div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:12,marginBottom:12}}>
+              <div style={{...trCard,flex:'1 1 200px'}}>
+                <div style={trH}>Type of harm (6 months)</div>
+                {tHarmRows.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No harm type recorded</div>}
+                {tHarmRows.map(([key,n])=>{ const mx=tHarmRows[0]?.[1]||1; return <div key={key} style={{marginBottom:6}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
+                    <span style={{color:'var(--text)',fontWeight:500}}>{HARM_LABEL[key]||key.replace(/_/g,' ')}</span>
+                    <span style={{color:'var(--t2)',fontWeight:700}}>{n}</span>
+                  </div>
+                  <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:(Math.round(n/mx*100))+'%',background:'var(--brand)',borderRadius:2}}/></div>
+                </div>})}
+              </div>
+              <div style={{...trCard,flex:'1 1 200px'}}>
+                <div style={trH}>Who was affected (6 months)</div>
+                {tAffRows.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No affected person recorded</div>}
+                {tAffRows.map(([key,n])=>{ const mx=tAffRows[0]?.[1]||1; return <div key={key} style={{marginBottom:6}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
+                    <span style={{color:'var(--text)',fontWeight:500,textTransform:'capitalize'}}>{String(key).replace(/_/g,' ')}</span>
+                    <span style={{color:'var(--t2)',fontWeight:700}}>{n}</span>
+                  </div>
+                  <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:(Math.round(n/mx*100))+'%',background:'var(--brand)',borderRadius:2}}/></div>
+                </div>})}
+                {tRepeatPeople>0&&<div style={{fontSize:11,color:'var(--t2)',marginTop:8,paddingTop:8,borderTop:'1px solid var(--border)'}}>{tRepeatPeople} individual{tRepeatPeople!==1?'s':''} with 2+ incidents \u2014 see register for detail</div>}
+              </div>
+              <div style={{...trCard,flex:'1 1 200px'}}>
+                <div style={trH}>Outcome (6 months, people)</div>
+                {tOutRows.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No outcome recorded</div>}
+                {tOutRows.map(([lvl,n])=>{ const mx=Math.max(...tOutRows.map(r=>r[1]),1); return <div key={lvl} style={{marginBottom:6}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
+                    <span style={{color:'var(--text)',fontWeight:500}}>{lvl}. {OUTCOME_LABEL[lvl]||('Level '+lvl)}</span>
                     <span style={{color:'var(--t2)',fontWeight:700}}>{n}</span>
                   </div>
                   <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:(Math.round(n/mx*100))+'%',background:'var(--brand)',borderRadius:2}}/></div>
