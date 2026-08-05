@@ -13760,6 +13760,8 @@ function IncidentReportView({ user }) {
   const [overrideReason, setOverrideReason] = useState('')
   const [affectedType, setAffectedType] = useState('')
   const [affectedInitials, setAffectedInitials] = useState('')
+  // '' | 'known' | 'unknown'. Only meaningful when affectedType is set.
+  const [affectedKnown, setAffectedKnown] = useState('')
   const [occurredAt, setOccurredAt] = useState(() => {
     const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,16)
   })
@@ -13854,9 +13856,16 @@ function IncidentReportView({ user }) {
   // about it" is a compliance expectation and a blank is a real gap; there
   // is always a true answer, so this does not invite garbage input the way
   // a forced harm type would.
+  // CONDITIONAL. Only once an affected TYPE is chosen does the identity
+  // question apply. A property incident has no affected person, so nothing
+  // below is required and the control is not rendered.
+  const affectedIdentityOk = !affectedType ||
+    (affectedKnown === 'unknown') ||
+    (affectedKnown === 'known' && affectedInitials.trim())
   const canSubmit = category && outcome && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
-    (!overrideNeeded || overrideReason.trim())
+    (!overrideNeeded || overrideReason.trim()) &&
+    affectedIdentityOk
 
   // The first thing still missing, in the same order canSubmit tests them,
   // so the message cannot drift away from the condition it explains.
@@ -13868,6 +13877,9 @@ function IncidentReportView({ user }) {
     : !facts.trim()                             ? 'Describe what happened'
     : !immediateActions.trim()                  ? 'Add the immediate actions taken'
     : (overrideNeeded && !overrideReason.trim()) ? 'Give a reason for changing the severity'
+    : (affectedType && !affectedKnown)             ? 'Say whether the affected person is known'
+    : (affectedType && affectedKnown === 'known' && !affectedInitials.trim())
+                                                   ? "Add the affected person's initials"
     : null
 
   const submit = async () => {
@@ -13880,7 +13892,9 @@ function IncidentReportView({ user }) {
       severity_override_reason: overrideNeeded ? overrideReason.trim() : null,
       shift: shift||null, department: department||null, location_text: locationText||null,
       gps: gps||null, immediate_actions: immediateActions||null, hazard_present: hazardPresent,
-      affected_type: affectedType||null, affected_initials: affectedInitials||null,
+      affected_type: affectedType||null,
+      // Never persist initials when the person was declared Not known.
+      affected_initials: (affectedType && affectedKnown==='known' && affectedInitials.trim()) ? affectedInitials.trim() : null,
       outcome_level: outcome||null, harm_type: harmType||null,
       clinical: clinicalNote.trim() ? { note: clinicalNote.trim() } : null,
     }
@@ -13973,9 +13987,26 @@ function IncidentReportView({ user }) {
                     background: affectedType===t ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
               ))}
             </div>
-            <span style={lbl}>Person's initials <span style={{fontWeight:400,color:'#9CA3AF'}}>(not full name — confidential)</span></span>
-            <input style={inp} value={affectedInitials} maxLength={6} placeholder="e.g. J.D."
-              onChange={e=>setAffectedInitials(e.target.value)}/>
+            {affectedType && (
+              <>
+                <span style={lbl}>Is the person known? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                  {[['known','Known'],['unknown','Not known']].map(([k,t]) => (
+                    <button key={k} onClick={()=>{ setAffectedKnown(k); if(k==='unknown') setAffectedInitials('') }}
+                      style={{padding:'8px 12px',borderRadius:20,fontSize:13,cursor:'pointer',
+                        border: affectedKnown===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
+                        background: affectedKnown===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
+                  ))}
+                </div>
+              </>
+            )}
+            {affectedType && affectedKnown==='known' && (
+              <>
+                <span style={lbl}>Person's initials <span style={{fontWeight:400,color:'#9CA3AF'}}>(required — not full name, confidential)</span></span>
+                <input style={inp} value={affectedInitials} maxLength={6} placeholder="e.g. J.D."
+                  onChange={e=>setAffectedInitials(e.target.value)}/>
+              </>
+            )}
           </div>
         )}
 
