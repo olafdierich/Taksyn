@@ -14589,6 +14589,7 @@ function IncidentRegisterView({ user, setPage }) {
 
   return (
     <div className="page-wrap">
+      {setPage && <button className="btn btn-secondary btn-sm" style={{marginBottom:12}} onClick={()=>setPage('incidents')}>← Back to Incidents</button>}
       <div className="ph"><div className="ph-title">Incident Register</div><div className="ph-sub">Compliance record of all incidents and their resolution</div></div>
 
       {/* TREND REPORT - fixed 6-month window, ignores register filters */}
