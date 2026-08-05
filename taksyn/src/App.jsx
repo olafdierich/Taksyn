@@ -14493,10 +14493,10 @@ function IncidentRegisterView({ user, setPage }) {
     const chartTop=y+chartH
     tMonths.forEach((m,mi)=>{
       const cx=lm+colW*(mi+1)
-      const curH=Math.max(1,Math.round((tMonthlyCounts[mi]/maxVal)*chartH))
-      const yoyH=Math.max(1,Math.round((tYoyCounts[mi]/maxVal)*chartH))
-      pdf.setFillColor(79,70,229); pdf.rect(cx-barW-0.5,chartTop-curH,barW,curH,'F')
-      pdf.setFillColor(180,180,180); pdf.rect(cx+0.5,chartTop-yoyH,barW,yoyH,'F')
+      const curH=Math.round((tMonthlyCounts[mi]/maxVal)*chartH)
+      const yoyH=Math.round((tYoyCounts[mi]/maxVal)*chartH)
+      if(curH>0){ pdf.setFillColor(79,70,229); pdf.rect(cx-barW-0.5,chartTop-curH,barW,curH,'F') }
+      if(yoyH>0){ pdf.setFillColor(180,180,180); pdf.rect(cx+0.5,chartTop-yoyH,barW,yoyH,'F') }
       pdf.setFontSize(7); pdf.setTextColor(120,120,120)
       pdf.text(m.label,cx,chartTop+4,{align:'center'})
     })
