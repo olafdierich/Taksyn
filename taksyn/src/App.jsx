@@ -14285,6 +14285,7 @@ function IncidentRegisterView({ user, setPage }) {
   const [fSeverity, setFSeverity] = useState('all')
   const [fStatus, setFStatus] = useState('all')
   const [breachedOnly, setBreachedOnly] = useState(false)
+  const [categoryLabels, setCategoryLabels] = useState({}) // category_key -> label
 
   const fmtDay = (d) => d ? new Date(d).toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'}) : ''
   const daysBetween = (a,b) => { if(!a) return null; const end=b?new Date(b):new Date(); return Math.max(0, Math.round((end-new Date(a))/86400000)) }
@@ -14312,6 +14313,25 @@ function IncidentRegisterView({ user, setPage }) {
     const { data: acts } = await supabase.from('incident_actions').select('incident_id,status').eq('org', id)
     const counts={}; (acts||[]).forEach(a=>{ const c=counts[a.incident_id]||{open:0,total:0}; c.total++; if(a.status!=='verified'&&a.status!=='done'&&a.status!=='completed') c.open++; counts[a.incident_id]=c })
     setActionCounts(counts)
+    // category labels — load packs union for this org's industry so real
+    // pack keys resolve to human labels in the trend report and register
+    try {
+      const { data: orgRow } = await supabase.from('organisations').select('industry_id').eq('id', id).maybeSingle()
+      const indId = orgRow?.industry_id
+      const [pkRes, ownRes] = await Promise.all([
+        indId ? supabase.from('incident_category_packs').select('category_key,label').eq('industry_id', indId).eq('source','category').eq('is_active',true) : Promise.resolve({data:[]}),
+        supabase.from('org_incident_categories').select('category_key,label,overrides_key').eq('org', id).eq('is_active',true),
+      ])
+      const own = ownRes?.data || []
+      const suppressed = new Set(own.filter(r=>r.overrides_key).map(r=>r.overrides_key))
+      const merged = [
+        ...(pkRes?.data||[]).filter(r=>!suppressed.has(r.category_key)),
+        ...own.filter(r=>!r.overrides_key),
+      ]
+      const labels = {...INC_CATEGORY_LABEL}
+      merged.forEach(r=>{ labels[r.category_key] = r.label })
+      setCategoryLabels(labels)
+    } catch(e) { setCategoryLabels(INC_CATEGORY_LABEL) }
     setLoading(false)
   }
   useEffect(()=>{ load() },[])
@@ -14393,6 +14413,105 @@ function IncidentRegisterView({ user, setPage }) {
   return (
     <div className="page-wrap">
       <div className="ph"><div className="ph-title">Incident Register</div><div className="ph-sub">Compliance record of all incidents and their resolution</div></div>
+
+      {/* TREND REPORT - fixed 6-month window, ignores register filters */}
+      {(()=>{
+        const now = new Date()
+        const months = Array.from({length:6},(_,i)=>{
+          const d = new Date(now.getFullYear(), now.getMonth()-5+i, 1)
+          return { year:d.getFullYear(), month:d.getMonth(), label:d.toLocaleDateString('en-AU',{month:'short',year:'2-digit'}) }
+        })
+        const inMonth = (inc, y, m) => {
+          const d = new Date(inc.occurred_at)
+          return d.getFullYear()===y && d.getMonth()===m
+        }
+        const yoyMonths = months.map(m=>({ year:m.year-1, month:m.month, label:m.label }))
+        const monthlyCounts = months.map(m=>incidents.filter(i=>inMonth(i,m.year,m.month)).length)
+        const yoyCounts     = yoyMonths.map(m=>incidents.filter(i=>inMonth(i,m.year,m.month)).length)
+        const inc6m = incidents.filter(i=>{ const d=new Date(i.occurred_at); return months.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) })
+        const total6m  = inc6m.length
+        const totalYoy = incidents.filter(i=>{ const d=new Date(i.occurred_at); return yoyMonths.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) }).length
+        const delta    = total6m - totalYoy
+        const maxBar   = Math.max(1,...monthlyCounts,...yoyCounts)
+        const byDomain = ['people','property','information'].map(dom=>({ dom, n:inc6m.filter(i=>i.outcome_domain===dom).length }))
+        const catMap = {}; inc6m.forEach(i=>{ catMap[i.category]=(catMap[i.category]||0)+1 })
+        const topCats   = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,5)
+        const notifReq  = inc6m.filter(i=>i.external_notification_required)
+        const notifDone = notifReq.filter(i=>i.notified_at)
+        const notifRate = notifReq.length ? Math.round(notifDone.length/notifReq.length*100) : null
+        const sevByMonth= [1,2,3,4,5].map(s=>({ s, counts:months.map(m=>incidents.filter(i=>inMonth(i,m.year,m.month)&&i.severity===s).length) }))
+        const trCard={background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14}
+        const trH={fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:.4,marginBottom:10}
+        return (
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--text)',marginBottom:10}}>6-Month Trend Analysis</div>
+
+            <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}}>
+              <div style={{...trCard,flex:'1 1 110px'}}><div style={trH}>Last 6 months</div><div style={{fontSize:28,fontWeight:800}}>{total6m}</div><div style={{fontSize:11,color:'var(--t2)'}}>incidents</div></div>
+              <div style={{...trCard,flex:'1 1 110px'}}><div style={trH}>Prior year</div><div style={{fontSize:28,fontWeight:800}}>{totalYoy}</div><div style={{fontSize:11,color:'var(--t2)'}}>same 6 months</div></div>
+              <div style={{...trCard,flex:'1 1 110px'}}><div style={trH}>Year on year</div><div style={{fontSize:28,fontWeight:800,color:delta>0?'var(--red)':delta<0?'var(--green)':'var(--t2)'}}>{delta>0?'+':''}{delta}</div><div style={{fontSize:11,color:'var(--t2)'}}>{delta>0?'increase':delta<0?'decrease':'no change'}</div></div>
+              {notifRate!==null&&<div style={{...trCard,flex:'1 1 110px'}}><div style={trH}>Notification rate</div><div style={{fontSize:28,fontWeight:800,color:notifRate===100?'var(--green)':'var(--red)'}}>{notifRate}%</div><div style={{fontSize:11,color:'var(--t2)'}}>{notifDone.length}/{notifReq.length} notified</div></div>}
+              {byDomain.map(({dom,n})=><div key={dom} style={{...trCard,flex:'1 1 100px'}}><div style={trH}>{dom==='people'?'👤':dom==='property'?'🏢':'🔒'} {dom.charAt(0).toUpperCase()+dom.slice(1)}</div><div style={{fontSize:24,fontWeight:800}}>{n}</div><div style={{fontSize:11,color:'var(--t2)'}}>incidents</div></div>)}
+            </div>
+
+            <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}}>
+              <div style={{...trCard,flex:'2 1 280px'}}>
+                <div style={trH}>Monthly volume — this year vs prior year</div>
+                <div style={{display:'flex',gap:4,alignItems:'flex-end',height:80}}>
+                  {months.map((m,i)=>{
+                    const cur=monthlyCounts[i],yoy=yoyCounts[i]
+                    return <div key={m.label} style={{flex:1,textAlign:'center'}}>
+                      <div style={{display:'flex',gap:1,alignItems:'flex-end',justifyContent:'center',height:64}}>
+                        <div title={cur+' this year'} style={{width:'42%',height:Math.round((cur/maxBar)*60)+2,background:'var(--brand)',borderRadius:'2px 2px 0 0'}}/>
+                        <div title={yoy+' prior year'} style={{width:'42%',height:Math.round((yoy/maxBar)*60)+2,background:'var(--border2)',borderRadius:'2px 2px 0 0'}}/>
+                      </div>
+                      <div style={{fontSize:9,color:'var(--t3)',marginTop:3}}>{m.label}</div>
+                    </div>
+                  })}
+                </div>
+                <div style={{display:'flex',gap:12,marginTop:6}}>
+                  <span style={{fontSize:10,color:'var(--t2)',display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,background:'var(--brand)',borderRadius:2,display:'inline-block'}}/> This year</span>
+                  <span style={{fontSize:10,color:'var(--t2)',display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,background:'var(--border2)',borderRadius:2,display:'inline-block'}}/> Prior year</span>
+                </div>
+              </div>
+              <div style={{...trCard,flex:'1 1 200px'}}>
+                <div style={trH}>Top categories (6 months)</div>
+                {topCats.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No incidents yet</div>}
+                {topCats.map(([key,n])=>{ const mx=topCats[0]?.[1]||1; return <div key={key} style={{marginBottom:6}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
+                    <span style={{color:'var(--text)',fontWeight:500}}>{categoryLabels[key]||key}</span>
+                    <span style={{color:'var(--t2)',fontWeight:700}}>{n}</span>
+                  </div>
+                  <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:(Math.round(n/mx*100))+'%',background:'var(--brand)',borderRadius:2}}/></div>
+                </div>})}
+              </div>
+            </div>
+
+            <div style={{...trCard,marginBottom:0}}>
+              <div style={trH}>Severity by month</div>
+              <div style={{overflowX:'auto'}}>
+                <table style={{borderCollapse:'collapse',width:'100%',minWidth:360}}>
+                  <thead><tr>
+                    <th style={{fontSize:10,color:'var(--t2)',textAlign:'left',padding:'3px 8px',fontWeight:600}}>Severity</th>
+                    {months.map(m=><th key={m.label} style={{fontSize:10,color:'var(--t2)',textAlign:'center',padding:'3px 6px',fontWeight:600}}>{m.label}</th>)}
+                    <th style={{fontSize:10,color:'var(--t2)',textAlign:'center',padding:'3px 8px',fontWeight:600}}>Total</th>
+                  </tr></thead>
+                  <tbody>{sevByMonth.map(({s,counts})=>{
+                    const cfg=INC_SEVERITY_CFG[s]||{}
+                    const rowTotal=counts.reduce((a,b)=>a+b,0)
+                    const rowMax=Math.max(1,...counts)
+                    return <tr key={s}>
+                      <td style={{fontSize:11,padding:'4px 8px',color:cfg.color||'var(--text)',fontWeight:600,whiteSpace:'nowrap'}}>{s} {cfg.label||''}</td>
+                      {counts.map((n,i)=><td key={i} style={{textAlign:'center',padding:'4px 6px',fontSize:12,borderRadius:4,fontWeight:n>0?700:400,color:n>0?cfg.color||'var(--text)':'var(--t3)'}}>{n||'·'}</td>)}
+                      <td style={{textAlign:'center',padding:'4px 8px',fontSize:12,fontWeight:700,color:rowTotal>0?cfg.color||'var(--text)':'var(--t3)'}}>{rowTotal||'·'}</td>
+                    </tr>
+                  })}</tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* trend strip */}
       <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:14}}>
