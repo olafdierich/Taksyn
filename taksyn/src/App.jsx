@@ -14493,8 +14493,8 @@ function IncidentRegisterView({ user, setPage }) {
     const chartTop=y+chartH
     tMonths.forEach((m,mi)=>{
       const cx=lm+colW*(mi+1)
-      const curH=Math.round((tMonthlyCounts[mi]/maxVal)*chartH)
-      const yoyH=Math.round((tYoyCounts[mi]/maxVal)*chartH)
+      const curH=Math.max(1,Math.round((tMonthlyCounts[mi]/maxVal)*chartH))
+      const yoyH=Math.max(1,Math.round((tYoyCounts[mi]/maxVal)*chartH))
       if(curH>0){ pdf.setFillColor(79,70,229); pdf.rect(cx-barW-0.5,chartTop-curH,barW,curH,'F') }
       if(yoyH>0){ pdf.setFillColor(180,180,180); pdf.rect(cx+0.5,chartTop-yoyH,barW,yoyH,'F') }
       pdf.setFontSize(7); pdf.setTextColor(120,120,120)
@@ -14519,8 +14519,9 @@ function IncidentRegisterView({ user, setPage }) {
         pdf.text(label,lm,y)
         pdf.text(String(n),lm+rw,y,{align:'right'})
         y+=4
-        rect(lm,y,Math.round(rw*n/maxN),3,[79,70,229])
-        if(n<maxN) rect(lm+Math.round(rw*n/maxN),y,rw-Math.round(rw*n/maxN),3,[220,220,220])
+        const barPct=Math.min(rw,Math.round(rw*n/Math.max(maxN*2,4)))
+        rect(lm,y,barPct,3,[79,70,229])
+        if(barPct<rw) rect(lm+barPct,y,rw-barPct,3,[220,220,220])
         y+=6
       })
       gap(1); rule()
