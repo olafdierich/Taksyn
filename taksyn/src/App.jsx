@@ -14553,9 +14553,16 @@ function IncidentRegisterView({ user, setPage }) {
     gap(2); rule()
     // breakdown axes: harm type / affected persons / outcome
     const axisBlock = (title, rows, labelFn) => {
-      if(!rows || rows.length===0) return
+      if(!rows) return
       line(title,12,true)
       gap(3)
+      // An OMITTED section is ambiguous — a reader cannot tell "nothing was
+      // recorded" from "this report does not cover that". State it instead.
+      if(rows.length===0){
+        line('None recorded in this period.',9,false,[120,120,120])
+        gap(2); rule()
+        return
+      }
       const maxN=Math.max(...rows.map(r=>r[1]),1)
       rows.forEach(([key,n])=>{
         pdf.setFontSize(9); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
@@ -14573,8 +14580,10 @@ function IncidentRegisterView({ user, setPage }) {
     axisBlock('Who Was Affected (6 months)', tAffRows, k=>String(k).replace(/_/g,' '))
     if(tRepeatPeople>0){
       line(tRepeatPeople+' individual'+(tRepeatPeople!==1?'s':'')+' had 2 or more incidents in the period. Refer to the Incident Register for detail.',9,false,[80,80,80])
-      gap(2); rule()
+    } else {
+      line('No individual had more than one incident in the period.',9,false,[120,120,120])
     }
+    gap(2); rule()
     axisBlock('Outcome (6 months, people domain)', tOutRows, k=>k+'. '+(OUTCOME_LABEL[k]||('Level '+k)))
     // top categories
     if(tTopCats.length>0){
