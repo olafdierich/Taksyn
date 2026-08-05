@@ -14432,8 +14432,9 @@ function IncidentRegisterView({ user, setPage }) {
     const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'})
     const lm=14, rw=182, y0=14
     let y=y0
-    const line = (txt,size,bold,color)=>{ pdf.setFontSize(size); pdf.setFont(undefined,bold?'bold':'normal'); if(color) pdf.setTextColor(...color); else pdf.setTextColor(30,30,30); pdf.text(txt,lm,y); y+=size*0.45 }
-    const gap  = (n=4)=>{ y+=n }
+    const ph=277, addPage=()=>{ pdf.addPage(); y=14 }
+    const line = (txt,size,bold,color)=>{ if(y>ph) addPage(); pdf.setFontSize(size); pdf.setFont(undefined,bold?'bold':'normal'); if(color) pdf.setTextColor(...color); else pdf.setTextColor(30,30,30); pdf.text(String(txt||''),lm,y); y+=size*0.45 }
+    const gap  = (n=4)=>{ y+=n; if(y>ph) addPage() }
     const rule = ()=>{ pdf.setDrawColor(200,200,200); pdf.line(lm,y,lm+rw,y); y+=4 }
     const rect = (x,ry,w,h,fill)=>{ pdf.setFillColor(...fill); pdf.roundedRect(x,ry,w,h,1,1,'F') }
     // header
