@@ -14478,7 +14478,7 @@ function IncidentRegisterView({ user, setPage }) {
     tMonths.forEach((m,i)=>pdf.text(m.label,lm+colW*(i+1),y,{align:'center'}))
     pdf.text('Total',lm+colW*(tMonths.length+1),y,{align:'center'})
     y+=5
-    [['This year',tMonthlyCounts],['Prior year',tYoyCounts]].forEach(([label,counts])=>{
+    ;[['This year',tMonthlyCounts],['Prior year',tYoyCounts]].forEach(([label,counts])=>{
       pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
       pdf.text(label,lm,y)
       const tot=counts.reduce((a,b)=>a+b,0)
