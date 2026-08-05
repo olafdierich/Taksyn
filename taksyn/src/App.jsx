@@ -14405,6 +14405,133 @@ function IncidentRegisterView({ user, setPage }) {
 
   const openIncident = (ref) => { try{ sessionStorage.setItem('taksyn-open-incident', ref) }catch(e){}; if(setPage) setPage('incidents') }
 
+  // TREND COMPUTATIONS — shared by JSX section and exportTrendPDF
+  const tNow = new Date()
+  const tMonths = Array.from({length:6},(_,i)=>{
+    const d = new Date(tNow.getFullYear(), tNow.getMonth()-5+i, 1)
+    return { year:d.getFullYear(), month:d.getMonth(), label:d.toLocaleDateString('en-AU',{month:'short',year:'2-digit'}) }
+  })
+  const tInMonth = (inc, y, m) => { const d=new Date(inc.occurred_at); return d.getFullYear()===y&&d.getMonth()===m }
+  const tYoy = tMonths.map(m=>({ year:m.year-1, month:m.month, label:m.label }))
+  const tMonthlyCounts = tMonths.map(m=>incidents.filter(i=>tInMonth(i,m.year,m.month)).length)
+  const tYoyCounts     = tYoy.map(m=>incidents.filter(i=>tInMonth(i,m.year,m.month)).length)
+  const tInc6m = incidents.filter(i=>{ const d=new Date(i.occurred_at); return tMonths.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) })
+  const tTotal6m  = tInc6m.length
+  const tTotalYoy = incidents.filter(i=>{ const d=new Date(i.occurred_at); return tYoy.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) }).length
+  const tDelta    = tTotal6m - tTotalYoy
+  const tByDomain = ['people','property','information'].map(dom=>({ dom, n:tInc6m.filter(i=>i.outcome_domain===dom).length }))
+  const tCatMap   = {}; tInc6m.forEach(i=>{ tCatMap[i.category]=(tCatMap[i.category]||0)+1 })
+  const tTopCats  = Object.entries(tCatMap).sort((a,b)=>b[1]-a[1]).slice(0,5)
+  const tNotifReq = tInc6m.filter(i=>i.external_notification_required)
+  const tNotifDone= tNotifReq.filter(i=>i.notified_at)
+  const tNotifRate= tNotifReq.length ? Math.round(tNotifDone.length/tNotifReq.length*100) : null
+  const tSevByMonth=[1,2,3,4,5].map(s=>({ s, counts:tMonths.map(m=>incidents.filter(i=>tInMonth(i,m.year,m.month)&&i.severity===s).length) }))
+  const tPeriodLabel = tMonths[0].label+' – '+tMonths[5].label
+
+  const exportTrendPDF = () => {
+    const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'})
+    const lm=14, rw=182, y0=14
+    let y=y0
+    const line = (txt,size,bold,color)=>{ pdf.setFontSize(size); pdf.setFont(undefined,bold?'bold':'normal'); if(color) pdf.setTextColor(...color); else pdf.setTextColor(30,30,30); pdf.text(txt,lm,y); y+=size*0.45 }
+    const gap  = (n=4)=>{ y+=n }
+    const rule = ()=>{ pdf.setDrawColor(200,200,200); pdf.line(lm,y,lm+rw,y); y+=4 }
+    const rect = (x,ry,w,h,fill)=>{ pdf.setFillColor(...fill); pdf.roundedRect(x,ry,w,h,1,1,'F') }
+    // header
+    line('Incident Trend Report',16,true)
+    gap(1)
+    line(user.org||'Organisation',11,false,[80,80,80])
+    line('Period: '+tPeriodLabel,10,false,[80,80,80])
+    line('Generated: '+new Date().toLocaleString('en-AU'),9,false,[120,120,120])
+    gap(2); rule()
+    // factual summary
+    line('Summary',12,true)
+    gap(2)
+    const sevCfg={1:'Minor',2:'Moderate',3:'Major',4:'Severe',5:'Critical'}
+    const domN = (d)=>tByDomain.find(x=>x.dom===d)?.n||0
+    const summaryLines = [
+      tTotal6m===0
+        ? 'No incidents were recorded in the 6-month period.'
+        : tTotal6m+' incident'+(tTotal6m!==1?'s were':'was')+' recorded in the period '+tPeriodLabel+'.',
+      tTotalYoy===0&&tTotal6m===0 ? null
+        : 'The prior year same period recorded '+tTotalYoy+' incident'+(tTotalYoy!==1?'s':'')+
+          '. This represents a '+(tDelta>0?'increase of '+tDelta:tDelta<0?'decrease of '+Math.abs(tDelta):'no change')+' year on year.',
+      domN('people')>0  ? domN('people')+' incident'+(domN('people')!==1?'s were':'was')+' people-domain (harm to a person).' : null,
+      domN('property')>0? domN('property')+' incident'+(domN('property')!==1?'s were':'was')+' property-domain (damage to property or equipment).' : null,
+      domN('information')>0? domN('information')+' incident'+(domN('information')!==1?'s were':'was')+' information-domain (data or privacy).' : null,
+      tNotifRate!==null ? 'Regulatory notification compliance: '+tNotifRate+'% ('+tNotifDone.length+' of '+tNotifReq.length+' required notifications completed).' : null,
+      tTopCats.length>0 ? 'Most frequent category: '+(categoryLabels[tTopCats[0][0]]||tTopCats[0][0])+' ('+tTopCats[0][1]+' incident'+(tTopCats[0][1]!==1?'s':'')+').' : null,
+    ].filter(Boolean)
+    summaryLines.forEach(s=>{
+      pdf.setFontSize(10); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
+      const wrapped=pdf.splitTextToSize(s,rw)
+      pdf.text(wrapped,lm,y); y+=wrapped.length*5
+    })
+    gap(2); rule()
+    // monthly volume table
+    line('Monthly Volume',12,true)
+    gap(3)
+    const colW=rw/(tMonths.length+2)
+    pdf.setFontSize(8); pdf.setFont(undefined,'bold'); pdf.setTextColor(80,80,80)
+    pdf.text('Period',lm,y)
+    tMonths.forEach((m,i)=>pdf.text(m.label,lm+colW*(i+1),y,{align:'center'}))
+    pdf.text('Total',lm+colW*(tMonths.length+1),y,{align:'center'})
+    y+=5
+    [['This year',tMonthlyCounts],['Prior year',tYoyCounts]].forEach(([label,counts])=>{
+      pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
+      pdf.text(label,lm,y)
+      const tot=counts.reduce((a,b)=>a+b,0)
+      counts.forEach((n,i)=>pdf.text(String(n),lm+colW*(i+1),y,{align:'center'}))
+      pdf.text(String(tot),lm+colW*(tMonths.length+1),y,{align:'center'})
+      y+=5
+    })
+    gap(2); rule()
+    // top categories
+    if(tTopCats.length>0){
+      line('Top Categories (6 months)',12,true)
+      gap(3)
+      const maxN=tTopCats[0][1]||1
+      tTopCats.forEach(([key,n])=>{
+        const label=categoryLabels[key]||key
+        pdf.setFontSize(9); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
+        pdf.text(label,lm,y)
+        pdf.text(String(n),lm+rw,y,{align:'right'})
+        y+=4
+        rect(lm,y,Math.round(rw*n/maxN),3,[79,70,229])
+        if(n<maxN) rect(lm+Math.round(rw*n/maxN),y,rw-Math.round(rw*n/maxN),3,[220,220,220])
+        y+=6
+      })
+      gap(1); rule()
+    }
+    // severity by month
+    line('Severity by Month',12,true)
+    gap(3)
+    const sColW=rw/(tMonths.length+2)
+    pdf.setFontSize(8); pdf.setFont(undefined,'bold'); pdf.setTextColor(80,80,80)
+    pdf.text('Severity',lm,y)
+    tMonths.forEach((m,i)=>pdf.text(m.label,lm+sColW*(i+1),y,{align:'center'}))
+    pdf.text('Total',lm+sColW*(tMonths.length+1),y,{align:'center'})
+    y+=5
+    const sevColors={1:[16,185,129],2:[59,130,246],3:[245,158,11],4:[239,68,68],5:[239,68,68]}
+    tSevByMonth.forEach(({s,counts})=>{
+      const rowTotal=counts.reduce((a,b)=>a+b,0)
+      const col=sevColors[s]||[100,100,100]
+      pdf.setFont(undefined,'bold'); pdf.setTextColor(...col)
+      pdf.text(s+' '+sevCfg[s],lm,y)
+      pdf.setFont(undefined,'normal')
+      counts.forEach((n,i)=>{
+        if(n>0) pdf.setTextColor(...col); else pdf.setTextColor(180,180,180)
+        pdf.text(n>0?String(n):'·',lm+sColW*(i+1),y,{align:'center'})
+      })
+      if(rowTotal>0) pdf.setTextColor(...col); else pdf.setTextColor(180,180,180)
+      pdf.text(rowTotal>0?String(rowTotal):'·',lm+sColW*(tMonths.length+1),y,{align:'center'})
+      y+=5
+    })
+    gap(4)
+    pdf.setFontSize(7); pdf.setTextColor(160,160,160); pdf.setFont(undefined,'italic')
+    pdf.text('This report was generated by Taksyn. Narrative analysis by Taksyn EQ (coming soon).',lm,y)
+    pdf.save('incident-trend-'+new Date().toISOString().slice(0,10)+'.pdf')
+  }
+
   const card={background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}
   const th={textAlign:'left',fontSize:11,fontWeight:700,color:'var(--t2)',padding:'6px 8px',textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}
   const td={fontSize:12,padding:'8px',borderTop:'1px solid var(--border)',whiteSpace:'nowrap'}
@@ -14416,30 +14543,12 @@ function IncidentRegisterView({ user, setPage }) {
 
       {/* TREND REPORT - fixed 6-month window, ignores register filters */}
       {(()=>{
-        const now = new Date()
-        const months = Array.from({length:6},(_,i)=>{
-          const d = new Date(now.getFullYear(), now.getMonth()-5+i, 1)
-          return { year:d.getFullYear(), month:d.getMonth(), label:d.toLocaleDateString('en-AU',{month:'short',year:'2-digit'}) }
-        })
-        const inMonth = (inc, y, m) => {
-          const d = new Date(inc.occurred_at)
-          return d.getFullYear()===y && d.getMonth()===m
-        }
-        const yoyMonths = months.map(m=>({ year:m.year-1, month:m.month, label:m.label }))
-        const monthlyCounts = months.map(m=>incidents.filter(i=>inMonth(i,m.year,m.month)).length)
-        const yoyCounts     = yoyMonths.map(m=>incidents.filter(i=>inMonth(i,m.year,m.month)).length)
-        const inc6m = incidents.filter(i=>{ const d=new Date(i.occurred_at); return months.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) })
-        const total6m  = inc6m.length
-        const totalYoy = incidents.filter(i=>{ const d=new Date(i.occurred_at); return yoyMonths.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) }).length
-        const delta    = total6m - totalYoy
-        const maxBar   = Math.max(1,...monthlyCounts,...yoyCounts)
-        const byDomain = ['people','property','information'].map(dom=>({ dom, n:inc6m.filter(i=>i.outcome_domain===dom).length }))
-        const catMap = {}; inc6m.forEach(i=>{ catMap[i.category]=(catMap[i.category]||0)+1 })
-        const topCats   = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,5)
-        const notifReq  = inc6m.filter(i=>i.external_notification_required)
-        const notifDone = notifReq.filter(i=>i.notified_at)
-        const notifRate = notifReq.length ? Math.round(notifDone.length/notifReq.length*100) : null
-        const sevByMonth= [1,2,3,4,5].map(s=>({ s, counts:months.map(m=>incidents.filter(i=>inMonth(i,m.year,m.month)&&i.severity===s).length) }))
+        const months=tMonths, monthlyCounts=tMonthlyCounts, yoyCounts=tYoyCounts
+        const inc6m=tInc6m, total6m=tTotal6m, totalYoy=tTotalYoy, delta=tDelta
+        const maxBar=Math.max(1,...tMonthlyCounts,...tYoyCounts)
+        const byDomain=tByDomain, topCats=tTopCats
+        const notifReq=tNotifReq, notifDone=tNotifDone, notifRate=tNotifRate
+        const sevByMonth=tSevByMonth
         const trCard={background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14}
         const trH={fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:.4,marginBottom:10}
         return (
@@ -14551,6 +14660,7 @@ function IncidentRegisterView({ user, setPage }) {
         </label>
         <div style={{flex:1}}/>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportCSV}>📥 CSV</button>
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportTrendPDF}>📊 Trend PDF</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 PDF</button>
       </div>
 
