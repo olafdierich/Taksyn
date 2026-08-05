@@ -14453,13 +14453,13 @@ function IncidentRegisterView({ user, setPage }) {
     const summaryLines = [
       tTotal6m===0
         ? 'No incidents were recorded in the 6-month period.'
-        : tTotal6m+' incident'+(tTotal6m!==1?'s were':'was')+' recorded in the period '+tPeriodLabel+'.',
+        : tTotal6m+' incident'+(tTotal6m!==1?'s were':' was')+' recorded in the period '+tPeriodLabel+'.',
       tTotalYoy===0&&tTotal6m===0 ? null
         : 'The prior year same period recorded '+tTotalYoy+' incident'+(tTotalYoy!==1?'s':'')+
-          '. This represents a '+(tDelta>0?'increase of '+tDelta:tDelta<0?'decrease of '+Math.abs(tDelta):'no change')+' year on year.',
-      domN('people')>0  ? domN('people')+' incident'+(domN('people')!==1?'s were':'was')+' people-domain (harm to a person).' : null,
-      domN('property')>0? domN('property')+' incident'+(domN('property')!==1?'s were':'was')+' property-domain (damage to property or equipment).' : null,
-      domN('information')>0? domN('information')+' incident'+(domN('information')!==1?'s were':'was')+' information-domain (data or privacy).' : null,
+          '. This represents '+(tDelta>0?'an increase of '+tDelta:tDelta<0?'a decrease of '+Math.abs(tDelta):'no change')+' year on year.',
+      domN('people')>0  ? domN('people')+' incident'+(domN('people')!==1?'s were':' was')+' people-domain (harm to a person).' : null,
+      domN('property')>0? domN('property')+' incident'+(domN('property')!==1?'s were':' was')+' property-domain (damage to property or equipment).' : null,
+      domN('information')>0? domN('information')+' incident'+(domN('information')!==1?'s were':' was')+' information-domain (data or privacy).' : null,
       tNotifRate!==null ? 'Regulatory notification compliance: '+tNotifRate+'% ('+tNotifDone.length+' of '+tNotifReq.length+' required notifications completed).' : null,
       tTopCats.length>0 ? 'Most frequent category: '+(categoryLabels[tTopCats[0][0]]||tTopCats[0][0])+' ('+tTopCats[0][1]+' incident'+(tTopCats[0][1]!==1?'s':'')+').' : null,
     ].filter(Boolean)
@@ -14469,16 +14469,17 @@ function IncidentRegisterView({ user, setPage }) {
       pdf.text(wrapped,lm,y); y+=wrapped.length*5
     })
     gap(2); rule()
-    // monthly volume table
+    // monthly volume — table + bar chart
     line('Monthly Volume',12,true)
     gap(3)
     const colW=rw/(tMonths.length+2)
+    // table header
     pdf.setFontSize(8); pdf.setFont(undefined,'bold'); pdf.setTextColor(80,80,80)
     pdf.text('Period',lm,y)
     tMonths.forEach((m,i)=>pdf.text(m.label,lm+colW*(i+1),y,{align:'center'}))
     pdf.text('Total',lm+colW*(tMonths.length+1),y,{align:'center'})
     y+=5
-    ;[['This year',tMonthlyCounts],['Prior year',tYoyCounts]].forEach(([label,counts])=>{
+    ;[['This year',tMonthlyCounts,[79,70,229]],['Prior year',tYoyCounts,[180,180,180]]].forEach(([label,counts,col])=>{
       pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
       pdf.text(label,lm,y)
       const tot=counts.reduce((a,b)=>a+b,0)
@@ -14486,6 +14487,26 @@ function IncidentRegisterView({ user, setPage }) {
       pdf.text(String(tot),lm+colW*(tMonths.length+1),y,{align:'center'})
       y+=5
     })
+    gap(3)
+    // bar chart — grouped bars per month
+    const chartH=28, barW=colW*0.38, maxVal=Math.max(1,...tMonthlyCounts,...tYoyCounts)
+    const chartTop=y+chartH
+    tMonths.forEach((m,mi)=>{
+      const cx=lm+colW*(mi+1)
+      const curH=Math.max(1,Math.round((tMonthlyCounts[mi]/maxVal)*chartH))
+      const yoyH=Math.max(1,Math.round((tYoyCounts[mi]/maxVal)*chartH))
+      pdf.setFillColor(79,70,229); pdf.rect(cx-barW-0.5,chartTop-curH,barW,curH,'F')
+      pdf.setFillColor(180,180,180); pdf.rect(cx+0.5,chartTop-yoyH,barW,yoyH,'F')
+      pdf.setFontSize(7); pdf.setTextColor(120,120,120)
+      pdf.text(m.label,cx,chartTop+4,{align:'center'})
+    })
+    y=chartTop+8
+    // legend
+    pdf.setFillColor(79,70,229); pdf.rect(lm,y,3,3,'F')
+    pdf.setFontSize(7); pdf.setTextColor(80,80,80); pdf.text('This year',lm+4,y+2.5)
+    pdf.setFillColor(180,180,180); pdf.rect(lm+22,y,3,3,'F')
+    pdf.text('Prior year',lm+26,y+2.5)
+    y+=6
     gap(2); rule()
     // top categories
     if(tTopCats.length>0){
@@ -14528,6 +14549,31 @@ function IncidentRegisterView({ user, setPage }) {
       pdf.text(rowTotal>0?String(rowTotal):'·',lm+sColW*(tMonths.length+1),y,{align:'center'})
       y+=5
     })
+    gap(4)
+    // severity bar chart
+    line('Severity Distribution (6 months)',12,true)
+    gap(3)
+    const sevTotals=tSevByMonth.map(({s,counts})=>({ s, n:counts.reduce((a,b)=>a+b,0) })).filter(x=>x.n>0)
+    if(sevTotals.length>0){
+      const sevChartMax=Math.max(1,...sevTotals.map(x=>x.n))
+      const sevColors2={1:[16,185,129],2:[59,130,246],3:[245,158,11],4:[239,68,68],5:[185,28,28]}
+      const sevLabels={1:'Minor',2:'Moderate',3:'Major',4:'Severe',5:'Critical'}
+      const bw=rw/7
+      const sChartH=24, sChartTop=y+sChartH
+      sevTotals.forEach((x,xi)=>{
+        const bx=lm+bw*xi+bw*0.2
+        const bh=Math.max(1,Math.round((x.n/sevChartMax)*sChartH))
+        const col=sevColors2[x.s]||[100,100,100]
+        pdf.setFillColor(...col); pdf.rect(bx,sChartTop-bh,bw*0.6,bh,'F')
+        pdf.setFontSize(7); pdf.setTextColor(...col)
+        pdf.text(String(x.n),bx+bw*0.3,sChartTop-bh-1,{align:'center'})
+        pdf.setTextColor(100,100,100)
+        pdf.text(sevLabels[x.s]||String(x.s),bx+bw*0.3,sChartTop+4,{align:'center'})
+      })
+      y=sChartTop+8
+    } else {
+      pdf.setFontSize(10); pdf.setTextColor(160,160,160); pdf.text('No incidents in this period.',lm,y); y+=6
+    }
     gap(4)
     pdf.setFontSize(7); pdf.setTextColor(160,160,160); pdf.setFont(undefined,'italic')
     pdf.text('This report was generated by Taksyn. Narrative analysis by Taksyn EQ (coming soon).',lm,y)
