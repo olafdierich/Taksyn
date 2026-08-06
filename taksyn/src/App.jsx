@@ -13733,6 +13733,11 @@ function IncidentReportView({ user }) {
   // search_org_people matches person_type against the key.
   const AFFECTED_FALLBACK = [['workforce','Staff'],['client','Client'],['contractor','Contractor']]
   const [AFFECTED_TYPES, setAffectedTypes] = useState(AFFECTED_FALLBACK)
+  // category_key -> outcome_domain, read from the SAME rows create_incident
+  // uses to derive v_domain. A map, not a fourth tuple slot: the render
+  // site destructures [key,label,sub] positionally and a fourth element
+  // there would be a standing invitation to an off-by-one.
+  const [CATEGORY_DOMAINS, setCategoryDomains] = useState({})
   // outcome ladder -> suggested severity (1-5)
   const OUTCOMES = [
     [1,'No treatment needed',1],
@@ -13804,7 +13809,7 @@ function IncidentReportView({ user }) {
   // excludes outcome rows (report-only) and legacy rows.
   useEffect(() => {
     if (!orgResolved) return
-    if (!orgId) { setCategories([]); setAffectedTypes(AFFECTED_FALLBACK); setCatsLoading(false); return }
+    if (!orgId) { setCategories([]); setAffectedTypes(AFFECTED_FALLBACK); setCategoryDomains({}); setCatsLoading(false); return }
     ;(async()=>{
       try {
         const { data: org } = await supabase.from('organisations')
@@ -13813,11 +13818,11 @@ function IncidentReportView({ user }) {
         const [packsRes, ownRes, affRes] = await Promise.all([
           industryId
             ? supabase.from('incident_category_packs')
-                .select('category_key,label,sort_order')
+                .select('category_key,label,sort_order,outcome_domain')
                 .eq('industry_id', industryId).eq('source','category').eq('is_active', true)
             : Promise.resolve({ data: [] }),
           supabase.from('org_incident_categories')
-            .select('category_key,label,sort_order,overrides_key')
+            .select('category_key,label,sort_order,overrides_key,outcome_domain')
             .eq('org', orgId).eq('is_active', true),
           industryId
             ? supabase.from('incident_category_packs')
@@ -13839,9 +13844,12 @@ function IncidentReportView({ user }) {
           ...own.filter(r => !r.overrides_key),
         ].sort((a,b) => (a.sort_order||0) - (b.sort_order||0) || String(a.label).localeCompare(String(b.label)))
         setCategories(merged.map(r => [r.category_key, r.label, '']))
+        setCategoryDomains(Object.fromEntries(
+          merged.map(r => [r.category_key, r.outcome_domain || null])))
       } catch (e) {
         setCategories([])
         setAffectedTypes(AFFECTED_FALLBACK)
+        setCategoryDomains({})
       }
       setCatsLoading(false)
     })()
@@ -13878,13 +13886,19 @@ function IncidentReportView({ user }) {
   // CONDITIONAL. Only once an affected TYPE is chosen does the identity
   // question apply. A property incident has no affected person, so nothing
   // below is required and the control is not rendered.
+  // STEP 2. A people-domain incident with no affected party recorded is
+  // the gap the register cannot close later — there is nothing to search
+  // for and nothing to resolve. Property and information are untouched.
+  const categoryDomain = CATEGORY_DOMAINS[category] || null
+  const isPeopleDomain = categoryDomain === 'people'
+  const affectedTypeOk = !isPeopleDomain || !!affectedType
   const affectedIdentityOk = !affectedType ||
     (affectedKnown === 'unknown') ||
     (affectedKnown === 'known' && affectedInitials.trim())
   const canSubmit = category && outcome && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
-    affectedIdentityOk
+    affectedTypeOk && affectedIdentityOk
 
   // The first thing still missing, in the same order canSubmit tests them,
   // so the message cannot drift away from the condition it explains.
@@ -13896,6 +13910,7 @@ function IncidentReportView({ user }) {
     : !facts.trim()                             ? 'Describe what happened'
     : !immediateActions.trim()                  ? 'Add the immediate actions taken'
     : (overrideNeeded && !overrideReason.trim()) ? 'Give a reason for changing the severity'
+    : (isPeopleDomain && !affectedType)            ? 'Say who was affected'
     : (affectedType && !affectedKnown)             ? 'Say whether the affected person is known'
     : (affectedType && affectedKnown === 'known' && !affectedInitials.trim())
                                                    ? "Add the affected person's initials"
@@ -13997,7 +14012,7 @@ function IncidentReportView({ user }) {
                     background: harmType===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
               ))}
             </div>
-            <span style={lbl}>Who was affected? <span style={{fontWeight:400,color:'#9CA3AF'}}>(if applicable)</span></span>
+            <span style={lbl}>Who was affected? <span style={{fontWeight:400,color:'#9CA3AF'}}>{isPeopleDomain ? '(required)' : '(if applicable)'}</span></span>
             <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
               {AFFECTED_TYPES.map(([k,t]) => (
                 <button key={k} onClick={()=>setAffectedType(k)}
