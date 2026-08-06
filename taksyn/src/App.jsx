@@ -14700,7 +14700,7 @@ function IncidentRegisterView({ user, setPage }) {
 
   return (
     <div className="page-wrap">
-      {setPage && <button className="btn btn-secondary btn-sm" style={{marginBottom:12}} onClick={()=>setPage('incidents')}>← Back to Incidents</button>}
+      {setPage && <button className="btn btn-secondary btn-sm" style={{marginBottom:12}} onClick={()=>setPage('incident_hub')}>← Back to Incidents</button>}
       <div className="ph"><div className="ph-title">Incident Register</div><div className="ph-sub">Compliance record of all incidents and their resolution</div></div>
 
       {/* TREND REPORT - fixed 6-month window, ignores register filters */}
@@ -14925,7 +14925,7 @@ const INC_EVENT_LABEL = {
   reopened:'Reopened', closed:'Closed', status_changed:'Status changed',
 }
 
-function IncidentsAdminView({ user }) {
+function IncidentsAdminView({ user, setPage }) {
   const isAdmin = user.role === 'client_admin'
   const [currentUid, setCurrentUid] = useState('')
   const [orgId, setOrgId] = useState('')
@@ -15089,7 +15089,7 @@ function IncidentsAdminView({ user }) {
     const clinical = sel.clinical || {}
     return (
       <div className="page-wrap anim">
-        <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={()=>{setSel(null); load()}}>← Back to incidents</button>
+        <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={()=>{ setSel(null); if(setPage) setPage('incident_hub'); else load() }}>← Back to Incidents</button>
 
         {/* header */}
         <div style={card}>
@@ -17014,7 +17014,7 @@ export default function App() {
                 {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser} darkMode={darkMode} toggleDarkMode={toggleDarkMode}/>}
                 {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
                 {page==='incident_register' && user.role==='client_admin' && <IncidentRegisterView user={user} setPage={setPage}/>}
-                {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user}/>}
+                {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user} setPage={setPage}/>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='incident_hub' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentHubView user={user} setPage={setPage}/>}
                 {page==='report_incident' && <IncidentReportView user={user}/>}
