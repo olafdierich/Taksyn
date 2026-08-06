@@ -13629,10 +13629,166 @@ function CapaActionForm({ sel, orgId, user, busy, setBusy, capaStaff, isAdmin, o
   )
 }
 
+// ============ REGISTER RESOLUTION QUEUE (step 5) ============
+// Pending submissions from reporters who could not find the affected
+// person. Every action here goes through resolve_org_people_submission,
+// which is the ONLY path that writes to org_people. Nothing in this
+// component inserts a register row directly.
+function PeopleSubmissionsView({ user, setPage }) {
+  const [orgId, setOrgId] = useState('')
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState(null)
+  const [err, setErr] = useState('')
+  const [note, setNote] = useState('')
+  // per-row match search
+  const [openMatch, setOpenMatch] = useState(null)
+  const [mQuery, setMQuery] = useState('')
+  const [mResults, setMResults] = useState([])
+  const [mMsg, setMMsg] = useState('')
+  // the row whose create hit the duplicate guard, and the guard's text
+  const [dupId, setDupId] = useState(null)
+  const [dupMsg, setDupMsg] = useState('')
+
+  const load = async (oid) => {
+    setLoading(true)
+    const { data, error } = await supabase.from('org_people_submissions')
+      .select('*').eq('org', oid).eq('status','pending').order('submitted_at',{ascending:true})
+    if (error) setErr('Could not load the queue: ' + error.message)
+    else setRows(data || [])
+    setLoading(false)
+  }
+
+  useEffect(()=>{
+    ;(async()=>{
+      try {
+        const { data: sess } = await supabase.auth.getSession()
+        const authId = sess?.session?.user?.id
+        if(!authId) { setLoading(false); return }
+        const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
+        const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+        if(!oid) { setLoading(false); return }
+        setOrgId(oid); await load(oid)
+      } catch(e) { setErr('Could not load the queue.'); setLoading(false) }
+    })()
+  },[user])
+
+  // Match search. Same three constraints as the reporter's search -
+  // min 3 chars, no % _ backslash, capped at 10 - because it is the
+  // same RPC and it fails the same silent way.
+  useEffect(()=>{
+    if(!openMatch) return
+    const row = rows.find(r=>r.id===openMatch)
+    if(!row) return
+    const q = mQuery.trim()
+    setMMsg('')
+    if(q.length===0){ setMResults([]); return }
+    if(q.length<3){ setMResults([]); setMMsg('Type at least 3 characters'); return }
+    if(/[%_\\]/.test(q)){ setMResults([]); setMMsg('Remove the % _ or \\ character'); return }
+    let cancelled=false
+    const t=setTimeout(async()=>{
+      const { data, error } = await supabase.rpc('search_org_people', {
+        p_org: orgId, p_type: row.person_type, p_query: q })
+      if(cancelled) return
+      if(error){ setMResults([]); setMMsg('Search failed: '+error.message) }
+      else { setMResults(data||[]); if(!(data||[]).length) setMMsg('No match in the register') }
+    },350)
+    return ()=>{ cancelled=true; clearTimeout(t) }
+  },[mQuery, openMatch, orgId, rows])
+
+  const resolve = async (row, action, personId, override) => {
+    setBusyId(row.id); setErr(''); setNote(''); setDupId(null); setDupMsg('')
+    const args = { p_submission_id: row.id, p_action: action }
+    if(personId) args.p_person_id = personId
+    if(override) args.p_override_duplicate_check = true
+    const { data, error } = await supabase.rpc('resolve_org_people_submission', args)
+    if (error) {
+      // The duplicate guard is not a failure - it is the guard doing
+      // its job. Surface it with an explicit override rather than
+      // burying it in a generic error.
+      if (/refusing to create/i.test(error.message||'')) {
+        setDupId(row.id); setDupMsg(error.message)
+      } else {
+        setErr(error.message || 'Could not resolve this submission.')
+      }
+    } else {
+      const ref = data?.incident_id ? ` Incident ${data.incident_id} now has an identified person.` : ''
+      setNote(action==='dismiss' ? 'Dismissed.' : `Done.${ref}`)
+      setOpenMatch(null); setMQuery(''); setMResults([])
+      if(orgId) await load(orgId)
+    }
+    setBusyId(null)
+  }
+
+  const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:16, marginBottom:14 }
+  const inp  = { width:'100%', padding:'9px 11px', borderRadius:8, border:'1px solid var(--border)', fontSize:14, marginBottom:8, background:'var(--card)', color:'var(--text)' }
+  const btn  = (bg,fg) => ({ padding:'8px 12px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', border:'1px solid var(--border)', background:bg||'transparent', color:fg||'var(--text)' })
+
+  if (user.role !== 'client_admin') {
+    return <div className="page-wrap anim"><div style={card}>Only a client admin can review register submissions.</div></div>
+  }
+
+  return (
+    <div className="page-wrap anim">
+      {setPage && <button className="btn btn-secondary btn-sm" style={{marginBottom:12}} onClick={()=>setPage('incident_hub')}>← Back to Incidents</button>}
+      <div className="ph"><div className="ph-title">People to review</div>
+        <div className="ph-sub">Reporters who could not find someone in the register sent their details here. Until you resolve them, those incidents have no identified person.</div></div>
+      {err  && <div style={{...card, borderColor:'#DC2626', color:'#DC2626'}}>{err}</div>}
+      {note && <div style={{...card, borderColor:'#10B981'}}>{note}</div>}
+      {loading && <div style={card}>Loading…</div>}
+      {!loading && rows.length===0 && <div style={card}>Nobody waiting. 🎉</div>}
+      {rows.map(r => (
+        <div key={r.id} style={card}>
+          <div style={{fontWeight:700,fontSize:16,marginBottom:2}}>{r.submitted_name}</div>
+          <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>
+            {r.person_type}
+            {r.date_of_birth ? ` · DOB ${r.date_of_birth}` : ''}
+            {r.submitted_email ? ` · ${r.submitted_email}` : ''}
+            {r.incident_id ? ` · incident #${r.incident_id}` : ' · no incident linked'}
+          </div>
+          {dupId===r.id && (
+            <div style={{padding:10,borderRadius:8,border:'1px solid #B45309',background:'rgba(180,83,9,.06)',marginBottom:10}}>
+              <div style={{fontSize:13,color:'#B45309',marginBottom:8}}>{dupMsg}</div>
+              <button style={btn('#B45309','#fff')} disabled={busyId===r.id}
+                onClick={()=>resolve(r,'create',null,true)}>Create anyway</button>
+            </div>
+          )}
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <button style={btn('var(--brand,#4F46E5)','#fff')} disabled={busyId===r.id}
+              onClick={()=>resolve(r,'create')}>Add to register</button>
+            <button style={btn()} disabled={busyId===r.id}
+              onClick={()=>{ setOpenMatch(openMatch===r.id?null:r.id); setMQuery(''); setMResults([]); setMMsg('') }}>
+              {openMatch===r.id ? 'Cancel link' : 'Link to existing'}
+            </button>
+            <button style={btn()} disabled={busyId===r.id}
+              onClick={()=>resolve(r,'dismiss')}>Dismiss</button>
+          </div>
+          {openMatch===r.id && (
+            <div style={{marginTop:10}}>
+              <input style={inp} value={mQuery} placeholder="Search the register by name…"
+                onChange={e=>setMQuery(e.target.value)}/>
+              {mMsg && <div style={{fontSize:12,color:'var(--t2)'}}>{mMsg}</div>}
+              {mResults.map(p => (
+                <div key={p.id} onClick={()=>resolve(r,'match',p.id)}
+                  style={{padding:'9px 11px',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:'pointer'}}>
+                  <div style={{fontWeight:600,fontSize:14}}>{p.full_name}</div>
+                  {p.date_of_birth && <div style={{fontSize:12,color:'var(--t2)'}}>DOB {p.date_of_birth}</div>}
+                </div>
+              ))}
+              {mResults.length===10 && <div style={{fontSize:12,color:'var(--t2)'}}>Showing the first 10 — narrow the search.</div>}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function IncidentHubView({ user, setPage }) {
   const isCA = user.role==='client_admin'
   const canReview = ['client_admin','manager','supervisor'].includes(user.role)
   const [activeIncidents, setActiveIncidents] = useState([])
+  const [pendingPeople, setPendingPeople] = useState(0)
   useEffect(()=>{
     let cancelled = false
     ;(async()=>{
@@ -13652,6 +13808,15 @@ function IncidentHubView({ user, setPage }) {
         // Option B: breached first, then newest-first within each group.
         active.sort((a,b)=> (b._breached?1:0)-(a._breached?1:0) || new Date(b.created_at)-new Date(a.created_at))
         setActiveIncidents(active)
+        // Pending register submissions. client_admin only - RLS denies
+        // everyone else, so asking would return 0 and read as "none
+        // waiting" rather than "not your job".
+        if (isCA) {
+          const { count } = await supabase.from('org_people_submissions')
+            .select('id', { count:'exact', head:true })
+            .eq('org', oid).eq('status','pending')
+          if(!cancelled) setPendingPeople(count || 0)
+        }
       } catch(e) { /* leave list empty on error */ }
     })()
     return ()=>{ cancelled = true }
@@ -13687,6 +13852,12 @@ function IncidentHubView({ user, setPage }) {
         {isCA && <Tile icon="📊" title="Incident register"
           sub="The full compliance record — trends, filters, and CSV / PDF export."
           onClick={()=>setPage('incident_register')}/>}
+        {isCA && <Tile icon="👤" title={pendingPeople>0 ? `People to review (${pendingPeople})` : 'People to review'}
+          color={pendingPeople>0 ? '#B45309' : undefined}
+          sub={pendingPeople>0
+            ? `${pendingPeople} ${pendingPeople===1?'person is':'people are'} waiting to be added to the register. Until then their incidents have no identified person.`
+            : 'Nobody waiting. Reporters who cannot find someone in the register send their details here.'}
+          onClick={()=>setPage('people_submissions')}/>}
       </div>
       {canReview && activeIncidents.length>0 && (
         <div style={{marginTop:22}}>
@@ -13771,8 +13942,78 @@ function IncidentReportView({ user }) {
   const [overrideReason, setOverrideReason] = useState('')
   const [affectedType, setAffectedType] = useState('')
   const [affectedInitials, setAffectedInitials] = useState('')
+  // REGISTER SEARCH (step 3). affectedPerson holds the CHOSEN row;
+  // affected_person_id is what reaches the database. The name is never
+  // sent - the whole point of store-by-ID.
+  const [personQuery, setPersonQuery] = useState('')
+  const [personResults, setPersonResults] = useState([])
+  const [personSearching, setPersonSearching] = useState(false)
+  const [personSearched, setPersonSearched] = useState(false)
+  const [personError, setPersonError] = useState('')
+  const [affectedPerson, setAffectedPerson] = useState(null)
+  // NO-MATCH CAPTURE (step 4). Only reaches the payload when the
+  // reporter has searched, found nothing, and typed a name.
+  const [noMatch, setNoMatch] = useState(false)
+  const [unmatchedName, setUnmatchedName] = useState('')
+  const [unmatchedEmail, setUnmatchedEmail] = useState('')
+  const [unmatchedDob, setUnmatchedDob] = useState('')
   // '' | 'known' | 'unknown'. Only meaningful when affectedType is set.
   const [affectedKnown, setAffectedKnown] = useState('')
+  // Debounced register search. 350ms is long enough that typing a name
+  // does not fire a query per keystroke, short enough to feel live.
+  // Every constraint below mirrors search_org_people's body - the RPC
+  // returns an empty set for all of them WITHOUT an error, so the form
+  // has to explain the emptiness or it reads as "not registered".
+  useEffect(() => {
+    if (!affectedType || affectedKnown !== 'known') return
+    if (affectedPerson) return
+    const q = personQuery.trim()
+    setPersonError('')
+    if (q.length === 0) { setPersonResults([]); setPersonSearched(false); return }
+    if (q.length < 3) {
+      setPersonResults([]); setPersonSearched(false)
+      setPersonError('Type at least 3 characters')
+      return
+    }
+    if (/[%_\\]/.test(q)) {
+      setPersonResults([]); setPersonSearched(false)
+      setPersonError('Remove the % _ or \\ character')
+      return
+    }
+    let cancelled = false
+    setPersonSearching(true)
+    const t = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.rpc('search_org_people', {
+          p_org: orgId, p_type: affectedType, p_query: q,
+        })
+        if (cancelled) return
+        if (error) {
+          setPersonResults([]); setPersonSearched(false)
+          setPersonError('Could not search the register: ' + error.message)
+        } else {
+          setPersonResults(data || []); setPersonSearched(true)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setPersonResults([]); setPersonSearched(false)
+          setPersonError('Could not search the register.')
+        }
+      }
+      if (!cancelled) setPersonSearching(false)
+    }, 350)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [personQuery, affectedType, affectedKnown, affectedPerson, orgId])
+
+  // Changing WHO was affected invalidates any chosen person: the
+  // register is scoped by person_type, so a Guest chosen under 'client'
+  // is not a valid answer once the type flips to 'workforce'.
+  useEffect(() => {
+    setAffectedPerson(null); setPersonQuery(''); setPersonResults([])
+    setPersonSearched(false); setPersonError(''); setNoMatch(false)
+    setUnmatchedName(''); setUnmatchedEmail(''); setUnmatchedDob('')
+  }, [affectedType])
+
   const [occurredAt, setOccurredAt] = useState(() => {
     const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,16)
   })
@@ -13892,9 +14133,13 @@ function IncidentReportView({ user }) {
   const categoryDomain = CATEGORY_DOMAINS[category] || null
   const isPeopleDomain = categoryDomain === 'people'
   const affectedTypeOk = !isPeopleDomain || !!affectedType
+  // Known now means EITHER a register match OR a typed name for a
+  // person who is not in the register yet. Initials are no longer
+  // collected here - decision 1, 6 Aug, do not reverse without also
+  // deciding what happens to affected_initials on new rows.
   const affectedIdentityOk = !affectedType ||
     (affectedKnown === 'unknown') ||
-    (affectedKnown === 'known' && affectedInitials.trim())
+    (affectedKnown === 'known' && (affectedPerson || (noMatch && unmatchedName.trim())))
   const canSubmit = category && outcome && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
@@ -13912,8 +14157,8 @@ function IncidentReportView({ user }) {
     : (overrideNeeded && !overrideReason.trim()) ? 'Give a reason for changing the severity'
     : (isPeopleDomain && !affectedType)            ? 'Say who was affected'
     : (affectedType && !affectedKnown)             ? 'Say whether the affected person is known'
-    : (affectedType && affectedKnown === 'known' && !affectedInitials.trim())
-                                                   ? "Add the affected person's initials"
+    : (affectedType && affectedKnown === 'known' && !affectedPerson && !(noMatch && unmatchedName.trim()))
+                                                   ? 'Find the affected person in the register, or add their name'
     : null
 
   const submit = async () => {
@@ -13927,8 +14172,17 @@ function IncidentReportView({ user }) {
       shift: shift||null, department: department||null, location_text: locationText||null,
       gps: gps||null, immediate_actions: immediateActions||null, hazard_present: hazardPresent,
       affected_type: affectedType||null,
-      // Never persist initials when the person was declared Not known.
-      affected_initials: (affectedType && affectedKnown==='known' && affectedInitials.trim()) ? affectedInitials.trim() : null,
+      // affected_initials is no longer written by this form. The column
+      // stays for historical rows. Identity is now store-by-ID.
+      affected_initials: null,
+      // STEP 3 — the register match. create_incident casts this to uuid.
+      affected_person_id: (affectedType && affectedKnown==='known' && affectedPerson) ? affectedPerson.id : null,
+      // STEP 4 — the no-match path. create_incident only creates a
+      // submission when a name is present AND affected_person_id is
+      // null, so these are mutually exclusive by construction.
+      unmatched_name:  (affectedType && affectedKnown==='known' && !affectedPerson && noMatch && unmatchedName.trim()) ? unmatchedName.trim() : null,
+      unmatched_email: (affectedType && affectedKnown==='known' && !affectedPerson && noMatch && unmatchedEmail.trim()) ? unmatchedEmail.trim() : null,
+      unmatched_dob:   (affectedType && affectedKnown==='known' && !affectedPerson && noMatch && unmatchedDob) ? unmatchedDob : null,
       outcome_level: outcome||null, harm_type: harmType||null,
       clinical: clinicalNote.trim() ? { note: clinicalNote.trim() } : null,
     }
@@ -14036,9 +14290,70 @@ function IncidentReportView({ user }) {
             )}
             {affectedType && affectedKnown==='known' && (
               <>
-                <span style={lbl}>Person's initials <span style={{fontWeight:400,color:'#9CA3AF'}}>(required — not full name, confidential)</span></span>
-                <input style={inp} value={affectedInitials} maxLength={6} placeholder="e.g. J.D."
-                  onChange={e=>setAffectedInitials(e.target.value)}/>
+                {affectedPerson ? (
+                  <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:8,
+                    border:'1px solid var(--brand,#4F46E5)',background:'rgba(79,70,229,.06)',marginBottom:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:14}}>{affectedPerson.full_name}</div>
+                      {affectedPerson.date_of_birth &&
+                        <div style={{fontSize:12,color:'var(--t2)'}}>DOB {affectedPerson.date_of_birth}</div>}
+                    </div>
+                    <button onClick={()=>{ setAffectedPerson(null); setPersonQuery(''); setPersonResults([]); setPersonSearched(false) }}
+                      style={{padding:'6px 10px',borderRadius:16,fontSize:12,cursor:'pointer',
+                        border:'1px solid rgba(0,0,0,.15)',background:'transparent'}}>Change</button>
+                  </div>
+                ) : (
+                  <>
+                    <span style={lbl}>Find the person <span style={{fontWeight:400,color:'#9CA3AF'}}>(required — search the register by name)</span></span>
+                    <input style={inp} value={personQuery} placeholder="Start typing a name…"
+                      onChange={e=>{ setPersonQuery(e.target.value); setNoMatch(false) }}/>
+                    {personSearching && <div style={{fontSize:12,color:'var(--t2)',marginTop:6}}>Searching…</div>}
+                    {personError && <div style={{fontSize:12,color:'#B45309',marginTop:6}}>{personError}</div>}
+                    {personResults.length > 0 && (
+                      <div style={{marginTop:8,border:'1px solid var(--border)',borderRadius:8,overflow:'hidden'}}>
+                        {personResults.map(p => (
+                          <div key={p.id} onClick={()=>{ setAffectedPerson(p); setNoMatch(false); setPersonError('') }}
+                            style={{padding:'10px 12px',cursor:'pointer',borderBottom:'1px solid var(--border)'}}>
+                            <div style={{fontWeight:600,fontSize:14}}>{p.full_name}</div>
+                            {p.date_of_birth && <div style={{fontSize:12,color:'var(--t2)'}}>DOB {p.date_of_birth}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* The RPC caps at 10. Without this the reporter cannot
+                        tell a complete result set from a truncated one. */}
+                    {personResults.length === 10 && (
+                      <div style={{fontSize:12,color:'var(--t2)',marginTop:6}}>
+                        Showing the first 10 — type more of the name to narrow it down.
+                      </div>
+                    )}
+                    {personSearched && personResults.length === 0 && !noMatch && (
+                      <div style={{marginTop:8,fontSize:13,color:'var(--t2)'}}>
+                        No one found in the register.{' '}
+                        <span onClick={()=>{ setNoMatch(true); if(!unmatchedName.trim()) setUnmatchedName(personQuery.trim()) }}
+                          style={{color:'var(--brand,#4F46E5)',fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>
+                          Add their details instead
+                        </span>
+                      </div>
+                    )}
+                    {noMatch && (
+                      <div style={{marginTop:10,padding:12,borderRadius:8,border:'1px solid var(--border)',background:'var(--s2,transparent)'}}>
+                        <div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>
+                          These details go to your administrator to add to the register. The incident is linked automatically once they do.
+                        </div>
+                        <span style={lbl}>Full name <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
+                        <input style={inp} value={unmatchedName} placeholder="Full name"
+                          onChange={e=>setUnmatchedName(e.target.value)}/>
+                        <span style={lbl}>Email <span style={{fontWeight:400,color:'#9CA3AF'}}>(optional)</span></span>
+                        <input style={inp} value={unmatchedEmail} type="email" placeholder="Email if known"
+                          onChange={e=>setUnmatchedEmail(e.target.value)}/>
+                        <span style={lbl}>Date of birth <span style={{fontWeight:400,color:'#9CA3AF'}}>(optional)</span></span>
+                        <input style={inp} value={unmatchedDob} type="date"
+                          onChange={e=>setUnmatchedDob(e.target.value)}/>
+                      </div>
+                    )}
+                  </>
+                )}
               </>
             )}
           </div>
@@ -14494,8 +14809,15 @@ function IncidentRegisterView({ user, setPage }) {
   const tHarmRows = Object.entries(tHarmMap).sort((a,b)=>b[1]-a[1])
   const tAffMap = {}; tInc6m.forEach(i=>{ if(i.affected_type) tAffMap[i.affected_type]=(tAffMap[i.affected_type]||0)+1 })
   const tAffRows = Object.entries(tAffMap).sort((a,b)=>b[1]-a[1])
-  const tInitMap = {}; tInc6m.forEach(i=>{ const k=(i.affected_initials||'').trim().toUpperCase(); if(k) tInitMap[k]=(tInitMap[k]||0)+1 })
-  const tRepeatPeople = Object.values(tInitMap).filter(n=>n>=2).length
+  // REPEAT PEOPLE. Initials collided - two different people sharing
+  // "J.D." counted as one repeat. affected_person_id is exact.
+  // Rows predating the register have no person id, so both are counted
+  // and summed: an honest transition rather than dropping the history.
+  // Only the COUNT is rendered, never the keys, so no name is exposed.
+  const tPersonMap = {}; tInc6m.forEach(i=>{ if(i.affected_person_id) tPersonMap[i.affected_person_id]=(tPersonMap[i.affected_person_id]||0)+1 })
+  const tInitMap = {}; tInc6m.forEach(i=>{ if(i.affected_person_id) return; const k=(i.affected_initials||'').trim().toUpperCase(); if(k) tInitMap[k]=(tInitMap[k]||0)+1 })
+  const tRepeatPeople = Object.values(tPersonMap).filter(n=>n>=2).length
+                      + Object.values(tInitMap).filter(n=>n>=2).length
   const tOutInc = tInc6m.filter(i=>i.outcome_domain==='people'&&i.outcome_level)
   const tOutMap = {}; tOutInc.forEach(i=>{ tOutMap[i.outcome_level]=(tOutMap[i.outcome_level]||0)+1 })
   const tOutRows = Object.keys(tOutMap).map(k=>[Number(k),tOutMap[k]]).sort((a,b)=>a[0]-b[0])
@@ -17017,6 +17339,7 @@ export default function App() {
                 {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user} setPage={setPage}/>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='incident_hub' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentHubView user={user} setPage={setPage}/>}
+                {page==='people_submissions' && user.role==='client_admin' && <PeopleSubmissionsView user={user} setPage={setPage}/>}
                 {page==='report_incident' && <IncidentReportView user={user}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
               </>
