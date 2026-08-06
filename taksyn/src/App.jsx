@@ -13727,6 +13727,12 @@ function IncidentReportView({ user }) {
   // text column.
   const [CATEGORIES, setCategories] = useState([])
   const [catsLoading, setCatsLoading] = useState(true)
+  // AFFECTED TYPES — per-industry labels over the three REGISTER keys.
+  // The form shows the LABEL, the database stores the KEY. Confirmed
+  // 6 Aug, do not reverse: 14461 buckets the trend report by key, and
+  // search_org_people matches person_type against the key.
+  const AFFECTED_FALLBACK = [['workforce','Staff'],['client','Client'],['contractor','Contractor']]
+  const [AFFECTED_TYPES, setAffectedTypes] = useState(AFFECTED_FALLBACK)
   // outcome ladder -> suggested severity (1-5)
   const OUTCOMES = [
     [1,'No treatment needed',1],
@@ -13798,13 +13804,13 @@ function IncidentReportView({ user }) {
   // excludes outcome rows (report-only) and legacy rows.
   useEffect(() => {
     if (!orgResolved) return
-    if (!orgId) { setCategories([]); setCatsLoading(false); return }
+    if (!orgId) { setCategories([]); setAffectedTypes(AFFECTED_FALLBACK); setCatsLoading(false); return }
     ;(async()=>{
       try {
         const { data: org } = await supabase.from('organisations')
           .select('industry_id').eq('id', orgId).maybeSingle()
         const industryId = org?.industry_id
-        const [packsRes, ownRes] = await Promise.all([
+        const [packsRes, ownRes, affRes] = await Promise.all([
           industryId
             ? supabase.from('incident_category_packs')
                 .select('category_key,label,sort_order')
@@ -13813,7 +13819,19 @@ function IncidentReportView({ user }) {
           supabase.from('org_incident_categories')
             .select('category_key,label,sort_order,overrides_key')
             .eq('org', orgId).eq('is_active', true),
+          industryId
+            ? supabase.from('incident_category_packs')
+                .select('category_key,label,sort_order')
+                .eq('industry_id', industryId).eq('source','affected_type').eq('is_active', true)
+            : Promise.resolve({ data: [] }),
         ])
+        const affRows = (affRes?.data || [])
+          .slice()
+          .sort((a,b) => (a.sort_order||0) - (b.sort_order||0))
+          .map(r => [r.category_key, r.label])
+        // FALLBACK, not an empty list. Zero pack rows would render zero
+        // buttons and the reporter could not record an affected party.
+        setAffectedTypes(affRows.length ? affRows : AFFECTED_FALLBACK)
         const own = ownRes?.data || []
         const suppressed = new Set(own.filter(r=>r.overrides_key).map(r=>r.overrides_key))
         const merged = [
@@ -13823,6 +13841,7 @@ function IncidentReportView({ user }) {
         setCategories(merged.map(r => [r.category_key, r.label, '']))
       } catch (e) {
         setCategories([])
+        setAffectedTypes(AFFECTED_FALLBACK)
       }
       setCatsLoading(false)
     })()
@@ -13980,11 +13999,11 @@ function IncidentReportView({ user }) {
             </div>
             <span style={lbl}>Who was affected? <span style={{fontWeight:400,color:'#9CA3AF'}}>(if applicable)</span></span>
             <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
-              {['staff','client','visitor','contractor'].map(t => (
-                <button key={t} onClick={()=>setAffectedType(t)}
-                  style={{padding:'8px 12px',borderRadius:20,fontSize:13,textTransform:'capitalize',cursor:'pointer',
-                    border: affectedType===t ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
-                    background: affectedType===t ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
+              {AFFECTED_TYPES.map(([k,t]) => (
+                <button key={k} onClick={()=>setAffectedType(k)}
+                  style={{padding:'8px 12px',borderRadius:20,fontSize:13,cursor:'pointer',
+                    border: affectedType===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
+                    background: affectedType===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
               ))}
             </div>
             {affectedType && (
