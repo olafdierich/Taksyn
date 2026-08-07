@@ -298,10 +298,15 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
     const isAssigneeOnLeave = onLeaveToday.has(t.assigned_user_id)
     if(isAssigneeOnLeave) return // skip — worker on leave
 
-    // Alert 1: Worker hasn't done task on due date — alert supervisor
-    if(isOverdueOneOff(t,today)&&t.assigned_role==='worker') {
+    // Alert 1: any org task overdue on its due date — surfaced to supervisor and above.
+    // Not limited to workers: a supervisor's, manager's or self-assigned task counts too.
+    if(isOverdueOneOff(t,today)) {
       if(['supervisor','manager','client_admin'].includes(user.role)) {
-        alerts.push({ type:'overdue_worker', task:t, msg:`Staff Member task overdue: "${t.title}" assigned to ${t.assigned_user_name||'staff member'}`, level:'red' })
+        const _mine = user.id===t.assigned_user_id || user.name===t.assigned_user_name
+        const _msg = _mine
+          ? `Your task is overdue: "${t.title}"`
+          : `Task overdue: "${t.title}" assigned to ${t.assigned_user_name||'staff member'}`
+        alerts.push({ type:'overdue_worker', task:t, msg:_msg, level:'red' })
       }
     }
 
