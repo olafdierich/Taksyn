@@ -3466,17 +3466,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // Delete is irreversible and the "This and future" scope destroys a whole recurrence,
   // so it is gated harder than review: the creator, or client_admin and above.
   //
-  // FAILS CLOSED on the stated intent. "Creator AND ABOVE" needs the creator's ROLE, and
-  // created_by holds a display NAME, so a manager cannot delete a supervisor-created task
-  // even though they outrank them. Deliberate: for a destructive action, refusing someone
-  // who should be allowed is cheaper than allowing someone who should not.
+  // Compares created_by_id (uuid), not the display name. NO name fallback: a task
+  // with a null created_by_id is deletable only via hasAccess(4). Fails closed by
+  // design - for a destructive action, refusing someone who should be allowed is
+  // cheaper than allowing someone who should not.
   //
-  // Unlike canReviewTask, the name comparison here does REAL work — a user whose display
-  // name matches the creator's would gain delete rights. Accepted only because the status
-  // quo (every supervisor can delete everything) is worse. Resolve with created_by_id.
+  // Still unresolved: "creator AND ABOVE" needs the creator ROLE, so a manager
+  // still cannot delete a supervisor-created task even though they outrank them.
+  //
+  // canReviewTask above still compares the NAME. Harmless there: it can only grant
+  // an exemption to someone already blocked, never grant rights canApprove refused.
   //
   // CLIENT-SIDE ONLY — hides the control, does not stop a crafted request. Needs RLS.
-  const canDeleteTask = (t) => canApprove && !!t && (t.created_by === user.name || hasAccess(user.role, 4))
+  const canDeleteTask = (t) => canApprove && !!t && (t.created_by_id === user.id || hasAccess(user.role, 4))
   // Each role can only assign to roles below them
   const assignableRoles = user.role==='client_admin' ? ['manager','supervisor','worker']
     : user.role==='manager' ? ['supervisor','worker']
