@@ -2937,6 +2937,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     if ('assigned_user_id' in changes) {
       const prev = tasks.find(t=>t.id===id)
       if (prev && String(changes.assigned_user_id||'')!==String(prev.assigned_user_id||'')) {
+        if (prev.created_by_id && String(changes.assigned_user_id||'')!==String(prev.created_by_id)) { changes.requires_approval = true }
         const toName = changes.assigned_user_name||teamUsers.find(u=>u.id===changes.assigned_user_id)?.name||'—'
         const rEntry = mkAuditEntry('task_reassigned', user, prev?.org||user?.org, {}, id, prev?.title||id, prev.assigned_user_name||'Unassigned', toName)
         setAuditLog(log=>[rEntry,...log])
@@ -3386,7 +3387,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       const teamIds = [...new Set((tmRows||[]).map(r=>r.team_id).filter(Boolean))]
       if (teamIds.length === 1) { const tm = taskOrgTeams.find(t=>t.id===teamIds[0]); taskData.team_id = teamIds[0]; taskData.team_name = tm?.name || '' }
     }
-    const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, created_by_id:user.id, org:user.org, created_at:new Date().toISOString() }
+    const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, created_by_id:user.id, requires_approval:(taskData.assigned_user_id===user.id?false:true), org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
       const { data, error } = await supabase.from('tasks').insert(payload).select().single()
@@ -3486,7 +3487,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
   const myTime = workerTimes.find(r=>r.user_id===user.id) || null
-  const amAssigned = !!sel && user.role!=='client_admin' && user.role!=='super_admin' && ((Array.isArray(sel.assigned_user_ids)&&sel.assigned_user_ids.includes(user.id)) || sel.assigned_user_id===user.id || (sel.assigned_user_name&&sel.assigned_user_name.toLowerCase()===user.name?.toLowerCase()) || (sel.team_id&&userTeamIds.includes(sel.team_id)))
+  const _isMySelfTask = !!sel && !!sel.created_by_id && sel.created_by_id===user.id && sel.assigned_user_id===user.id
+  const amAssigned = !!sel && user.role!=='super_admin' && (user.role!=='client_admin' || _isMySelfTask) && ((Array.isArray(sel.assigned_user_ids)&&sel.assigned_user_ids.includes(user.id)) || sel.assigned_user_id===user.id || (sel.assigned_user_name&&sel.assigned_user_name.toLowerCase()===user.name?.toLowerCase()) || (sel.team_id&&userTeamIds.includes(sel.team_id)))
   // Gentle worker reminders: Time In on open, Time Out+Submit when the checklist is finished.
   const [reminder, setReminder] = useState(null)
   const _remTimer = useRef(null)
@@ -3750,6 +3752,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       <input className="form-input" placeholder="Search staff…" value={userSearch} onChange={e=>setUserSearch(e.target.value)} style={{marginBottom:6}}/>
                       <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
                         <option value="">— Select a staff member —</option>
+                        <option value={user.id}>Myself ({user.name})</option>
                         {teamUsers.filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position)&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
                       </select>
                       {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
