@@ -4598,12 +4598,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
                     // ── CLIENT ADMIN VIEW ─────────────────────────────
                     const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                    const attention = activeFiltered.filter(t=>['overdue','escalated'].includes(t.status)||t.escalation).sort(byDate)
+                    const _caToday = orgToday(orgTz)
+                    const _isOver = t => !!orgTz && isOverdueOneOff(t, _caToday)
+                    const attention = activeFiltered.filter(t=>['overdue','escalated'].includes(t.status)||t.escalation||_isOver(t)).sort(byDate)
                     const iAssigned = activeFiltered.filter(t=>t.created_by===user.name).sort(byDate)
                     const assignedToMgr = iAssigned.filter(t=>t.assigned_role==='manager'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='manager')
                     const assignedToSup = iAssigned.filter(t=>t.assigned_role==='supervisor'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='supervisor')
                     const assignedToWkr = iAssigned.filter(t=>t.assigned_role==='worker'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='worker')
-                    const oneOffAll = activeFiltered.filter(t=>isOneOff(t)).filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation).sort(byDate)
+                    const oneOffAll = activeFiltered.filter(t=>isOneOff(t)).filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation&&!_isOver(t)).sort(byDate)
                     const recurringAll = activeFiltered.filter(t=>isRecurring(t)).filter(t=>t.status!=='awaiting_review'&&!['overdue','escalated'].includes(t.status)&&!t.escalation).sort(byDate)
                     return (
                       <div>
