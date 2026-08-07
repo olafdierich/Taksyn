@@ -7249,7 +7249,7 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Complaints & Feedback','clipboard'],['incident_hub','Incidents','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Complaints & Feedback','clipboard'],['incident_hub','Incidents','alert'],['contacts','Contacts','users']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents','alert']],
   worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag']],
@@ -13649,6 +13649,9 @@ function PeopleSubmissionsView({ user, setPage }) {
   // the row whose create hit the duplicate guard, and the guard's text
   const [dupId, setDupId] = useState(null)
   const [dupMsg, setDupMsg] = useState('')
+  // The rows the guard actually matched. A count is not enough — an
+  // archived match needs a different action from an active one.
+  const [dupRows, setDupRows] = useState([])
 
   const load = async (oid) => {
     setLoading(true)
@@ -13708,16 +13711,43 @@ function PeopleSubmissionsView({ user, setPage }) {
       // burying it in a generic error.
       if (/refusing to create/i.test(error.message||'')) {
         setDupId(row.id); setDupMsg(error.message)
+        // Fetch what it matched. Same rule as the RPC: normalised name
+        // equality OR matching DOB, within the same person_type.
+        // Archived rows are INCLUDED — they are the whole point here.
+        try {
+          const { data: cands } = await supabase.from('org_people')
+            .select('id,full_name,person_type,status,date_of_birth')
+            .eq('org', row.org).eq('person_type', row.person_type)
+          const norm = (s)=>String(s||'').trim().replace(/\s+/g,' ').toLowerCase()
+          const n = norm(row.submitted_name)
+          setDupRows((cands||[]).filter(c =>
+            norm(c.full_name) === n ||
+            (row.date_of_birth && c.date_of_birth && c.date_of_birth === row.date_of_birth)))
+        } catch (e) { setDupRows([]) }
       } else {
         setErr(error.message || 'Could not resolve this submission.')
       }
     } else {
       const ref = data?.incident_id ? ` Incident ${data.incident_id} now has an identified person.` : ''
       setNote(action==='dismiss' ? 'Dismissed.' : `Done.${ref}`)
-      setOpenMatch(null); setMQuery(''); setMResults([])
+      setOpenMatch(null); setMQuery(''); setMResults([]); setDupRows([])
       if(orgId) await load(orgId)
     }
     setBusyId(null)
+  }
+
+  // Reactivate an archived person, then link the submission to them.
+  // Two steps, both already permitted: the org_people UPDATE policy is
+  // client_admin, and resolve(...,'match') does the rest. Kept as one
+  // button because to the admin it is one decision.
+  const restoreAndLink = async (row, person) => {
+    setBusyId(row.id); setErr(''); setNote('')
+    const res = await supabase.from('org_people')
+      .update({ status:'active', archived_at:null }).eq('id', person.id).select()
+    if (res.error) { setErr('Could not restore: ' + res.error.message); setBusyId(null); return }
+    if (!res.data || !res.data.length) { setErr('Restore matched no rows — nothing was saved.'); setBusyId(null); return }
+    setBusyId(null)
+    await resolve(row, 'match', person.id)
   }
 
   const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:16, marginBottom:14 }
@@ -13748,9 +13778,33 @@ function PeopleSubmissionsView({ user, setPage }) {
           </div>
           {dupId===r.id && (
             <div style={{padding:10,borderRadius:8,border:'1px solid #B45309',background:'rgba(180,83,9,.06)',marginBottom:10}}>
-              <div style={{fontSize:13,color:'#B45309',marginBottom:8}}>{dupMsg}</div>
-              <button style={btn('#B45309','#fff')} disabled={busyId===r.id}
-                onClick={()=>resolve(r,'create',null,true)}>Create anyway</button>
+              <div style={{fontSize:13,color:'#B45309',marginBottom:8}}>
+                {dupRows.some(d=>d.status==='archived')
+                  ? 'This person may already be in the register but archived. Restoring them keeps their history instead of starting a second record.'
+                  : 'This person may already be in the register.'}
+              </div>
+              {dupRows.map(d => (
+                <div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',
+                  border:'1px solid var(--border)',borderRadius:8,marginBottom:6,background:'var(--card)'}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:600,fontSize:14}}>{d.full_name}</div>
+                    <div style={{fontSize:12,color:'var(--t2)'}}>
+                      {d.status === 'archived' ? 'Archived' : 'Active'}
+                      {d.date_of_birth ? ` · DOB ${d.date_of_birth}` : ''}
+                    </div>
+                  </div>
+                  {d.status === 'archived'
+                    ? <button style={btn('var(--brand,#4F46E5)','#fff')} disabled={busyId===r.id}
+                        onClick={()=>restoreAndLink(r, d)}>Restore and link</button>
+                    : <button style={btn('var(--brand,#4F46E5)','#fff')} disabled={busyId===r.id}
+                        onClick={()=>resolve(r,'match',d.id)}>Link to this person</button>}
+                </div>
+              ))}
+              {dupRows.length === 0 && (
+                <div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>{dupMsg}</div>
+              )}
+              <button style={btn()} disabled={busyId===r.id}
+                onClick={()=>resolve(r,'create',null,true)}>Create a separate record anyway</button>
             </div>
           )}
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -13778,6 +13832,243 @@ function PeopleSubmissionsView({ user, setPage }) {
               {mResults.length===10 && <div style={{fontSize:12,color:'var(--t2)'}}>Showing the first 10 — narrow the search.</div>}
             </div>
           )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ============ CONTACTS REGISTER ============
+// The people an incident can be recorded against. Same table the
+// incident form searches; this is where they are managed.
+function ContactsView({ user, setPage }) {
+  const FALLBACK = [['workforce','Staff'],['client','Client'],['contractor','Contractor']]
+  const [orgId, setOrgId] = useState('')
+  const [types, setTypes] = useState(FALLBACK)
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  const [note, setNote] = useState('')
+  const [filterType, setFilterType] = useState('')      // '' = all
+  const [showArchived, setShowArchived] = useState(false)
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // add / edit form. editing holds the row id, or 'new'.
+  const [editing, setEditing] = useState(null)
+  const [fName, setFName] = useState('')
+  const [fType, setFType] = useState('client')
+  const [fEmail, setFEmail] = useState('')
+  const [fPhone, setFPhone] = useState('')
+  const [fDob, setFDob] = useState('')
+  const [fRef, setFRef] = useState('')
+  const [dupWarn, setDupWarn] = useState('')
+
+  const load = async (oid) => {
+    setLoading(true)
+    const { data, error } = await supabase.from('org_people')
+      .select('id,person_type,full_name,contact_email,contact_phone,date_of_birth,external_ref,status,created_at')
+      .eq('org', oid).order('full_name')
+    if (error) setErr('Could not load contacts: ' + error.message)
+    else setRows(data || [])
+    setLoading(false)
+  }
+
+  useEffect(()=>{
+    ;(async()=>{
+      try {
+        const { data: sess } = await supabase.auth.getSession()
+        const authId = sess?.session?.user?.id
+        if(!authId){ setLoading(false); return }
+        const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
+        const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+        if(!oid){ setLoading(false); return }
+        setOrgId(oid)
+        // Type labels come from the SAME pack rows the incident form
+        // uses, so Kemrose sees Team / Guest / Contractor here too.
+        const { data: org } = await supabase.from('organisations').select('industry_id').eq('id', oid).maybeSingle()
+        if (org?.industry_id) {
+          const { data: packs } = await supabase.from('incident_category_packs')
+            .select('category_key,label,sort_order')
+            .eq('industry_id', org.industry_id).eq('source','affected_type').eq('is_active', true)
+          const t = (packs||[]).slice().sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(r=>[r.category_key,r.label])
+          if (t.length) setTypes(t)
+        }
+        await load(oid)
+      } catch(e){ setErr('Could not load contacts.'); setLoading(false) }
+    })()
+  },[user])
+
+  const labelFor = (k) => (types.find(t=>t[0]===k)||[k,k])[1]
+
+  const resetForm = () => {
+    setEditing(null); setFName(''); setFType('client'); setFEmail('')
+    setFPhone(''); setFDob(''); setFRef(''); setDupWarn('')
+  }
+
+  const openEdit = (r) => {
+    setEditing(r.id); setFName(r.full_name||''); setFType(r.person_type||'client')
+    setFEmail(r.contact_email||''); setFPhone(r.contact_phone||'')
+    setFDob(r.date_of_birth||''); setFRef(r.external_ref||''); setDupWarn('')
+  }
+
+  // CLIENT-SIDE duplicate check. Mirrors the RPC's rule - normalised
+  // name equality OR matching DOB - but it is a read-then-write, so it
+  // is advisory, not a guarantee. See the header note.
+  const findDuplicates = (name, dob, excludeId) => {
+    const norm = (s)=>String(s||'').trim().replace(/\s+/g,' ').toLowerCase()
+    const n = norm(name)
+    // Archived rows are INCLUDED. Warning only on active ones meant
+    // re-adding someone who had been archived produced no warning at
+    // all — the case most likely to create a duplicate.
+    return rows.filter(r => r.id !== excludeId &&
+      (norm(r.full_name) === n || (dob && r.date_of_birth && r.date_of_birth === dob)))
+  }
+
+  const save = async (override) => {
+    setErr(''); setNote('')
+    if (!fName.trim()) { setErr('A name is required.'); return }
+    if (!override) {
+      const dupes = findDuplicates(fName, fDob||null, editing==='new'?null:editing)
+      if (dupes.length) {
+        const arch = dupes.filter(d=>d.status==='archived')
+        setDupWarn(
+          `${dupes.length} existing ${dupes.length===1?'entry matches':'entries match'} this name or date of birth: ` +
+          dupes.map(d=>`${d.full_name}${d.status==='archived'?' (archived)':''}`).join(', ') + '. ' +
+          (arch.length
+            ? 'Restore the archived entry from the archived view instead of adding a second record.'
+            : 'Review before adding.'))
+        return
+      }
+    }
+    setBusy(true)
+    const payload = {
+      person_type: fType, full_name: fName.trim(),
+      contact_email: fEmail.trim()||null, contact_phone: fPhone.trim()||null,
+      date_of_birth: fDob||null, external_ref: fRef.trim()||null,
+    }
+    let error
+    if (editing === 'new') {
+      const { data: sess } = await supabase.auth.getSession()
+      const uid = sess?.session?.user?.id
+      const res = await supabase.from('org_people').insert({ ...payload, org: orgId, status:'active', created_by: uid }).select()
+      error = res.error
+      // PostgREST returns no error when an INSERT is blocked by RLS in
+      // some paths, so check that a row actually came back.
+      if (!error && (!res.data || !res.data.length)) error = { message: 'The insert matched no rows — check you are a client_admin of this organisation.' }
+    } else {
+      const res = await supabase.from('org_people').update(payload).eq('id', editing).select()
+      error = res.error
+      if (!error && (!res.data || !res.data.length)) error = { message: 'The update matched no rows — nothing was saved.' }
+    }
+    if (error) setErr(error.message)
+    else { setNote(editing==='new' ? 'Contact added.' : 'Contact updated.'); resetForm(); if(orgId) await load(orgId) }
+    setBusy(false)
+  }
+
+  // Archive, never delete - org_people_block_delete raises on DELETE.
+  // Archived people drop out of search_org_people, so this removes them
+  // from the incident form without destroying history.
+  const setStatus = async (r, status) => {
+    setBusy(true); setErr(''); setNote('')
+    const res = await supabase.from('org_people')
+      .update({ status, archived_at: status==='archived' ? new Date().toISOString() : null })
+      .eq('id', r.id).select()
+    if (res.error) setErr(res.error.message)
+    else if (!res.data || !res.data.length) setErr('Nothing was saved — the update matched no rows.')
+    else { setNote(status==='archived' ? 'Contact archived.' : 'Contact restored.'); if(orgId) await load(orgId) }
+    setBusy(false)
+  }
+
+  const visible = rows.filter(r =>
+    (showArchived ? r.status==='archived' : r.status==='active') &&
+    (!filterType || r.person_type===filterType) &&
+    (!q.trim() || String(r.full_name||'').toLowerCase().includes(q.trim().toLowerCase())))
+
+  const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:16, marginBottom:14 }
+  const inp  = { width:'100%', padding:'9px 11px', borderRadius:8, border:'1px solid var(--border)', fontSize:14, marginBottom:8, background:'var(--card)', color:'var(--text)' }
+  const lbl  = { display:'block', fontSize:12, fontWeight:700, color:'var(--t2)', marginBottom:6, textTransform:'uppercase', letterSpacing:.3 }
+  const chip = (on) => ({ padding:'7px 12px', borderRadius:20, fontSize:13, cursor:'pointer',
+    border: on ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
+    background: on ? 'rgba(79,70,229,.06)' : 'transparent' })
+  const btn = (bg,fg) => ({ padding:'8px 12px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer',
+    border:'1px solid var(--border)', background:bg||'transparent', color:fg||'var(--text)' })
+
+  return (
+    <div className="page-wrap anim">
+      <div className="ph"><div className="ph-title">Contacts</div>
+        <div className="ph-sub">The people an incident can be recorded against. Reporters search this register by name; only the reference is stored on the incident.</div></div>
+
+      {err  && <div style={{...card, borderColor:'#DC2626', color:'#DC2626'}}>{err}</div>}
+      {note && <div style={{...card, borderColor:'#10B981'}}>{note}</div>}
+
+      <div style={card}>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+          <button onClick={()=>setFilterType('')} style={chip(!filterType)}>All</button>
+          {types.map(([k,t])=>(
+            <button key={k} onClick={()=>setFilterType(k)} style={chip(filterType===k)}>{t}</button>
+          ))}
+        </div>
+        <input style={inp} value={q} placeholder="Search by name…" onChange={e=>setQ(e.target.value)}/>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+          <button style={btn('var(--brand,#4F46E5)','#fff')} onClick={()=>{ resetForm(); setEditing('new') }}>Add a contact</button>
+          <button style={btn()} onClick={()=>setShowArchived(v=>!v)}>
+            {showArchived ? 'Show active' : 'Show archived'}
+          </button>
+          <span style={{fontSize:13,color:'var(--t2)'}}>{visible.length} shown</span>
+        </div>
+      </div>
+
+      {editing && (
+        <div style={card}>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:10}}>{editing==='new' ? 'Add a contact' : 'Edit contact'}</div>
+          <span style={lbl}>Type</span>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+            {types.map(([k,t])=>(<button key={k} onClick={()=>setFType(k)} style={chip(fType===k)}>{t}</button>))}
+          </div>
+          <span style={lbl}>Full name (required)</span>
+          <input style={inp} value={fName} onChange={e=>{ setFName(e.target.value); setDupWarn('') }}/>
+          <span style={lbl}>Email</span>
+          <input style={inp} type="email" value={fEmail} onChange={e=>setFEmail(e.target.value)}/>
+          <span style={lbl}>Phone</span>
+          <input style={inp} value={fPhone} onChange={e=>setFPhone(e.target.value)}/>
+          <span style={lbl}>Date of birth</span>
+          <input style={inp} type="date" value={fDob} onChange={e=>{ setFDob(e.target.value); setDupWarn('') }}/>
+          <span style={lbl}>Reference (your own ID for this person)</span>
+          <input style={inp} value={fRef} onChange={e=>setFRef(e.target.value)}/>
+          {dupWarn && (
+            <div style={{padding:10,borderRadius:8,border:'1px solid #B45309',background:'rgba(180,83,9,.06)',marginBottom:10}}>
+              <div style={{fontSize:13,color:'#B45309',marginBottom:8}}>{dupWarn}</div>
+              <button style={btn('#B45309','#fff')} disabled={busy} onClick={()=>save(true)}>Add anyway</button>
+            </div>
+          )}
+          <div style={{display:'flex',gap:8}}>
+            <button style={btn('var(--brand,#4F46E5)','#fff')} disabled={busy} onClick={()=>save(false)}>Save</button>
+            <button style={btn()} disabled={busy} onClick={resetForm}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {loading && <div style={card}>Loading…</div>}
+      {!loading && visible.length===0 && (
+        <div style={card}>{showArchived ? 'No archived contacts.' : 'No contacts yet. Add one above, or they will appear here as reporters submit them from incidents.'}</div>
+      )}
+      {visible.map(r => (
+        <div key={r.id} style={card}>
+          <div style={{fontWeight:700,fontSize:15}}>{r.full_name}</div>
+          <div style={{fontSize:13,color:'var(--t2)',marginBottom:10}}>
+            {labelFor(r.person_type)}
+            {r.date_of_birth ? ` · DOB ${r.date_of_birth}` : ''}
+            {r.contact_email ? ` · ${r.contact_email}` : ''}
+            {r.contact_phone ? ` · ${r.contact_phone}` : ''}
+            {r.external_ref ? ` · ref ${r.external_ref}` : ''}
+          </div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <button style={btn()} disabled={busy} onClick={()=>openEdit(r)}>Edit</button>
+            {r.status==='active'
+              ? <button style={btn()} disabled={busy} onClick={()=>setStatus(r,'archived')}>Archive</button>
+              : <button style={btn()} disabled={busy} onClick={()=>setStatus(r,'active')}>Restore</button>}
+          </div>
         </div>
       ))}
     </div>
@@ -17339,6 +17630,7 @@ export default function App() {
                 {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user} setPage={setPage}/>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='incident_hub' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentHubView user={user} setPage={setPage}/>}
+                {page==='contacts' && user.role==='client_admin' && <ContactsView user={user} setPage={setPage}/>}
                 {page==='people_submissions' && user.role==='client_admin' && <PeopleSubmissionsView user={user} setPage={setPage}/>}
                 {page==='report_incident' && <IncidentReportView user={user}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
