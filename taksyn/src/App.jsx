@@ -3386,7 +3386,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       const teamIds = [...new Set((tmRows||[]).map(r=>r.team_id).filter(Boolean))]
       if (teamIds.length === 1) { const tm = taskOrgTeams.find(t=>t.id===teamIds[0]); taskData.team_id = teamIds[0]; taskData.team_name = tm?.name || '' }
     }
-    const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, org:user.org, created_at:new Date().toISOString() }
+    const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, created_by_id:user.id, org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
       const { data, error } = await supabase.from('tasks').insert(payload).select().single()
