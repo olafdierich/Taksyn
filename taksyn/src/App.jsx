@@ -14200,6 +14200,25 @@ function IncidentReportView({ user }) {
   // site destructures [key,label,sub] positionally and a fourth element
   // there would be a standing invitation to an off-by-one.
   const [CATEGORY_DOMAINS, setCategoryDomains] = useState({})
+  // Per-domain vocabularies, same pack table as the categories and
+  // affected types. No fallback list: unlike affected_type, an empty
+  // damage vocabulary is not a form the reporter can still use, so the
+  // block says so rather than silently offering nothing.
+  const [DAMAGE_TYPES, setDamageTypes] = useState([])
+  const [BREACH_TYPES, setBreachTypes] = useState([])
+  const [damageType, setDamageType] = useState('')
+  const [damagedItem, setDamagedItem] = useState('')
+  const [breachType, setBreachType] = useState('')
+  const [dataDescription, setDataDescription] = useState('')
+  // yes | no | not_assessed. Defaults to not_assessed because that is
+  // the truthful answer when an incident is first reported.
+  const [notifiable, setNotifiable] = useState('not_assessed')
+  // Outcome ladders for the non-people domains. Same [value,label,sev]
+  // shape as the hardcoded medical OUTCOMES so the render site does not
+  // have to care which ladder it is drawing. value is the POSITION in
+  // the ladder, which is what reaches incidents.outcome_level.
+  const [OUTCOME_PROPERTY, setOutcomeProperty] = useState([])
+  const [OUTCOME_INFO, setOutcomeInfo] = useState([])
   // outcome ladder -> suggested severity (1-5)
   const OUTCOMES = [
     [1,'No treatment needed',1],
@@ -14305,6 +14324,19 @@ function IncidentReportView({ user }) {
     setUnmatchedName(''); setUnmatchedEmail(''); setUnmatchedDob('')
   }, [affectedType])
 
+  // Changing the category can change the DOMAIN, and an answer given
+  // under one domain is not an answer under another. A damage type left
+  // behind after switching to a people category would be written into
+  // domain_detail on an incident that has no damage.
+  useEffect(() => {
+    setDamageType(''); setDamagedItem('')
+    setBreachType(''); setDataDescription(''); setNotifiable('not_assessed')
+    // Outcome too: 3 means "seen by GP" on one ladder and "beyond
+    // repair" on another. Carrying it across a domain change would
+    // store a number that means something nobody chose.
+    setOutcome(0); setSeverity(0)
+  }, [category])
+
   const [occurredAt, setOccurredAt] = useState(() => {
     const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,16)
   })
@@ -14341,13 +14373,13 @@ function IncidentReportView({ user }) {
   // excludes outcome rows (report-only) and legacy rows.
   useEffect(() => {
     if (!orgResolved) return
-    if (!orgId) { setCategories([]); setAffectedTypes(AFFECTED_FALLBACK); setCategoryDomains({}); setCatsLoading(false); return }
+    if (!orgId) { setCategories([]); setAffectedTypes(AFFECTED_FALLBACK); setCategoryDomains({}); setDamageTypes([]); setBreachTypes([]); setOutcomeProperty([]); setOutcomeInfo([]); setCatsLoading(false); return }
     ;(async()=>{
       try {
         const { data: org } = await supabase.from('organisations')
           .select('industry_id').eq('id', orgId).maybeSingle()
         const industryId = org?.industry_id
-        const [packsRes, ownRes, affRes] = await Promise.all([
+        const [packsRes, ownRes, affRes, dmgRes, brcRes, outPropRes, outInfoRes] = await Promise.all([
           industryId
             ? supabase.from('incident_category_packs')
                 .select('category_key,label,sort_order,outcome_domain')
@@ -14361,6 +14393,26 @@ function IncidentReportView({ user }) {
                 .select('category_key,label,sort_order')
                 .eq('industry_id', industryId).eq('source','affected_type').eq('is_active', true)
             : Promise.resolve({ data: [] }),
+          industryId
+            ? supabase.from('incident_category_packs')
+                .select('category_key,label,sort_order')
+                .eq('industry_id', industryId).eq('source','damage_type').eq('is_active', true)
+            : Promise.resolve({ data: [] }),
+          industryId
+            ? supabase.from('incident_category_packs')
+                .select('category_key,label,sort_order')
+                .eq('industry_id', industryId).eq('source','breach_type').eq('is_active', true)
+            : Promise.resolve({ data: [] }),
+          industryId
+            ? supabase.from('incident_category_packs')
+                .select('category_key,label,sort_order,suggested_severity')
+                .eq('industry_id', industryId).eq('source','outcome_property').eq('is_active', true)
+            : Promise.resolve({ data: [] }),
+          industryId
+            ? supabase.from('incident_category_packs')
+                .select('category_key,label,sort_order,suggested_severity')
+                .eq('industry_id', industryId).eq('source','outcome_information').eq('is_active', true)
+            : Promise.resolve({ data: [] }),
         ])
         const affRows = (affRes?.data || [])
           .slice()
@@ -14369,6 +14421,19 @@ function IncidentReportView({ user }) {
         // FALLBACK, not an empty list. Zero pack rows would render zero
         // buttons and the reporter could not record an affected party.
         setAffectedTypes(affRows.length ? affRows : AFFECTED_FALLBACK)
+        const bySort = (rows) => (rows||[]).slice()
+          .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+          .map(r => [r.category_key, r.label])
+        setDamageTypes(bySort(dmgRes?.data))
+        setBreachTypes(bySort(brcRes?.data))
+        // [position, label, suggested severity]. Position, not the key,
+        // because outcome_level is an integer column. Order comes from
+        // sort_order, so the ladder reads worst-to-best as seeded.
+        const asLadder = (rows) => (rows||[]).slice()
+          .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+          .map((r,i) => [i+1, r.label, r.suggested_severity || 0])
+        setOutcomeProperty(asLadder(outPropRes?.data))
+        setOutcomeInfo(asLadder(outInfoRes?.data))
         const own = ownRes?.data || []
         const suppressed = new Set(own.filter(r=>r.overrides_key).map(r=>r.overrides_key))
         const merged = [
@@ -14382,13 +14447,27 @@ function IncidentReportView({ user }) {
         setCategories([])
         setAffectedTypes(AFFECTED_FALLBACK)
         setCategoryDomains({})
+        setDamageTypes([]); setBreachTypes([]); setOutcomeProperty([]); setOutcomeInfo([])
       }
       setCatsLoading(false)
     })()
   }, [orgId, orgResolved])
 
   // suggested severity from the outcome ladder
-  const suggested = outcome ? (OUTCOMES.find(o=>o[0]===outcome)||[])[2] : 0
+  // Declared here, not further down, because `suggested` needs them and
+  // runs first. Moved rather than duplicated — a second copy would drift.
+  const categoryDomain = CATEGORY_DOMAINS[category] || null
+  const isPeopleDomain = categoryDomain === 'people'
+  const isPropertyDomain = categoryDomain === 'property'
+  const isInfoDomain = categoryDomain === 'information'
+  // Which ladder this incident uses. People keeps the hardcoded medical
+  // one; the others come from the pack rows. An unknown or missing
+  // domain falls back to medical, which is the pre-existing behaviour.
+  const activeOutcomes =
+      isPropertyDomain ? OUTCOME_PROPERTY
+    : isInfoDomain     ? OUTCOME_INFO
+    : OUTCOMES
+  const suggested = outcome ? (activeOutcomes.find(o=>o[0]===outcome)||[])[2] || 0 : 0
 
   const grabGps = () => {
     if (!navigator.geolocation) return
@@ -14421,9 +14500,14 @@ function IncidentReportView({ user }) {
   // STEP 2. A people-domain incident with no affected party recorded is
   // the gap the register cannot close later — there is nothing to search
   // for and nothing to resolve. Property and information are untouched.
-  const categoryDomain = CATEGORY_DOMAINS[category] || null
-  const isPeopleDomain = categoryDomain === 'people'
+  // (The domain flags themselves are declared above, next to `suggested`.)
   const affectedTypeOk = !isPeopleDomain || !!affectedType
+  // Property and information must answer their own domain's questions,
+  // for the same reason people must name an affected party: without it
+  // the record cannot support the report it exists to feed.
+  const domainDetailOk =
+    (!isPropertyDomain || (damageType && damagedItem.trim())) &&
+    (!isInfoDomain     || (breachType && dataDescription.trim()))
   // Known now means EITHER a register match OR a typed name for a
   // person who is not in the register yet. Initials are no longer
   // collected here - decision 1, 6 Aug, do not reverse without also
@@ -14434,7 +14518,7 @@ function IncidentReportView({ user }) {
   const canSubmit = category && outcome && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
-    affectedTypeOk && affectedIdentityOk
+    affectedTypeOk && affectedIdentityOk && domainDetailOk
 
   // The first thing still missing, in the same order canSubmit tests them,
   // so the message cannot drift away from the condition it explains.
@@ -14446,6 +14530,10 @@ function IncidentReportView({ user }) {
     : !facts.trim()                             ? 'Describe what happened'
     : !immediateActions.trim()                  ? 'Add the immediate actions taken'
     : (overrideNeeded && !overrideReason.trim()) ? 'Give a reason for changing the severity'
+    : (isPropertyDomain && !damageType)            ? 'Choose the kind of damage'
+    : (isPropertyDomain && !damagedItem.trim())    ? 'Say what was damaged'
+    : (isInfoDomain && !breachType)                ? 'Choose the nature of the breach'
+    : (isInfoDomain && !dataDescription.trim())    ? 'Say what information was involved'
     : (isPeopleDomain && !affectedType)            ? 'Say who was affected'
     : (affectedType && !affectedKnown)             ? 'Say whether the affected person is known'
     : (affectedType && affectedKnown === 'known' && !affectedPerson && !(noMatch && unmatchedName.trim()))
@@ -14474,6 +14562,13 @@ function IncidentReportView({ user }) {
       unmatched_name:  (affectedType && affectedKnown==='known' && !affectedPerson && noMatch && unmatchedName.trim()) ? unmatchedName.trim() : null,
       unmatched_email: (affectedType && affectedKnown==='known' && !affectedPerson && noMatch && unmatchedEmail.trim()) ? unmatchedEmail.trim() : null,
       unmatched_dob:   (affectedType && affectedKnown==='known' && !affectedPerson && noMatch && unmatchedDob) ? unmatchedDob : null,
+      // Per-domain answers. null, not {}, when the domain asks nothing —
+      // null reads as "no domain detail applies", an empty object would
+      // read as "asked and answered with nothing".
+      domain_detail:
+        isPropertyDomain ? { damage_type: damageType||null, damaged_item: damagedItem.trim()||null }
+      : isInfoDomain     ? { breach_type: breachType||null, data_description: dataDescription.trim()||null, notifiable }
+      : null,
       outcome_level: outcome||null, harm_type: harmType||null,
       clinical: clinicalNote.trim() ? { note: clinicalNote.trim() } : null,
     }
@@ -14545,9 +14640,12 @@ function IncidentReportView({ user }) {
       </div>
 
       {category && (<>
-        {/* Harm fork */}
-        {true && (
+        {/* People and information both involve a person — information
+            because a breach has a data subject, and that is the same
+            register. Property does not, and gets its own block below. */}
+        {(isPeopleDomain || isInfoDomain) && (
           <div style={card}>
+            {isPeopleDomain && (<>
             <span style={lbl}>Type of harm <span style={{fontWeight:400,color:'#9CA3AF'}}>(if anyone was harmed)</span></span>
             <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
               {HARM_TYPES.map(([k,t]) => (
@@ -14557,7 +14655,8 @@ function IncidentReportView({ user }) {
                     background: harmType===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
               ))}
             </div>
-            <span style={lbl}>Who was affected? <span style={{fontWeight:400,color:'#9CA3AF'}}>{isPeopleDomain ? '(required)' : '(if applicable)'}</span></span>
+            </>)}
+            <span style={lbl}>{isInfoDomain ? 'Whose information was it?' : 'Who was affected?'} <span style={{fontWeight:400,color:'#9CA3AF'}}>{isPeopleDomain ? '(required)' : '(if applicable)'}</span></span>
             <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
               {AFFECTED_TYPES.map(([k,t]) => (
                 <button key={k} onClick={()=>setAffectedType(k)}
@@ -14650,14 +14749,83 @@ function IncidentReportView({ user }) {
           </div>
         )}
 
+        {/* PROPERTY. Kind of damage from the pack vocabulary, what was
+            damaged as free text — an asset register was considered and
+            deferred; free text is honest about what we can validate. */}
+        {isPropertyDomain && (
+          <div style={card}>
+            <span style={lbl}>Kind of damage <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
+            {DAMAGE_TYPES.length === 0 ? (
+              <div style={{fontSize:13,color:'#B45309',marginBottom:12}}>
+                No damage types are set up for your industry. Tell your administrator — the report needs this.
+              </div>
+            ) : (
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                {DAMAGE_TYPES.map(([k,t]) => (
+                  <button key={k} onClick={()=>setDamageType(k)}
+                    style={{padding:'8px 12px',borderRadius:20,fontSize:13,cursor:'pointer',
+                      border: damageType===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
+                      background: damageType===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
+                ))}
+              </div>
+            )}
+            <span style={lbl}>What was damaged? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
+            <input style={inp} value={damagedItem} placeholder="e.g. Ice machine in the main kitchen"
+              onChange={e=>setDamagedItem(e.target.value)}/>
+          </div>
+        )}
+
+        {/* INFORMATION. notifiable is the field with a regulatory clock
+            behind it — OAIC allows 30 days to assess — so it defaults to
+            "not yet assessed" rather than to No. */}
+        {isInfoDomain && (
+          <div style={card}>
+            <span style={lbl}>Nature of the breach <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
+            {BREACH_TYPES.length === 0 ? (
+              <div style={{fontSize:13,color:'#B45309',marginBottom:12}}>
+                No breach types are set up for your industry. Tell your administrator — the report needs this.
+              </div>
+            ) : (
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                {BREACH_TYPES.map(([k,t]) => (
+                  <button key={k} onClick={()=>setBreachType(k)}
+                    style={{padding:'8px 12px',borderRadius:20,fontSize:13,cursor:'pointer',
+                      border: breachType===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
+                      background: breachType===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
+                ))}
+              </div>
+            )}
+            <span style={lbl}>What information was involved? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
+            <input style={inp} value={dataDescription} placeholder="e.g. Guest booking list with contact details"
+              onChange={e=>setDataDescription(e.target.value)}/>
+            <span style={lbl}>Notifiable? <span style={{fontWeight:400,color:'#9CA3AF'}}>(assess later if unsure)</span></span>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:6}}>
+              {[['not_assessed','Not yet assessed'],['yes','Yes'],['no','No']].map(([k,t]) => (
+                <button key={k} onClick={()=>setNotifiable(k)}
+                  style={{padding:'8px 12px',borderRadius:20,fontSize:13,cursor:'pointer',
+                    border: notifiable===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
+                    background: notifiable===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
+              ))}
+            </div>
+            <div style={{fontSize:12,color:'var(--t2)'}}>
+              If a breach is notifiable there is a limited window to assess and report it. Leave this as “Not yet assessed” if you are unsure — your administrator will review.
+            </div>
+          </div>
+        )}
+
         {/* Outcome ladder */}
         {showLadder && (
           <div style={card}>
             <span style={lbl}>What was the outcome? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
             <select style={inp} value={outcome} onChange={e=>{setOutcome(+e.target.value); setSeverity(0)}}>
               <option value={0}>— select —</option>
-              {OUTCOMES.map(([v,t]) => <option key={v} value={v}>{t}</option>)}
+              {activeOutcomes.map(([v,t]) => <option key={v} value={v}>{t}</option>)}
             </select>
+            {activeOutcomes.length === 0 && (
+              <div style={{marginTop:8,fontSize:13,color:'#B45309'}}>
+                No outcomes are set up for this kind of incident. Tell your administrator — the report needs this.
+              </div>
+            )}
             {suggested>0 && (
               <div style={{marginTop:10,fontSize:13,padding:'8px 12px',borderRadius:8,background:'rgba(79,70,229,.06)'}}>
                 Suggested severity: <strong>{suggested} – {SEVERITY[suggested-1][1]}</strong>
@@ -14957,6 +15125,9 @@ function IncidentRegisterView({ user, setPage }) {
   const [fStatus, setFStatus] = useState('all')
   const [breachedOnly, setBreachedOnly] = useState(false)
   const [categoryLabels, setCategoryLabels] = useState({}) // category_key -> label
+  // domain -> { level: label }, for the ladders that live in the packs
+  // table. The medical ladder is hardcoded below and is not in here.
+  const [outcomeLabels, setOutcomeLabels] = useState({})
 
   const fmtDay = (d) => d ? new Date(d).toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'}) : ''
   const daysBetween = (a,b) => { if(!a) return null; const end=b?new Date(b):new Date(); return Math.max(0, Math.round((end-new Date(a))/86400000)) }
@@ -14989,10 +15160,22 @@ function IncidentRegisterView({ user, setPage }) {
     try {
       const { data: orgRow } = await supabase.from('organisations').select('industry_id').eq('id', id).maybeSingle()
       const indId = orgRow?.industry_id
-      const [pkRes, ownRes] = await Promise.all([
+      const [pkRes, ownRes, outPropRes, outInfoRes] = await Promise.all([
         indId ? supabase.from('incident_category_packs').select('category_key,label').eq('industry_id', indId).eq('source','category').eq('is_active',true) : Promise.resolve({data:[]}),
         supabase.from('org_incident_categories').select('category_key,label,overrides_key').eq('org', id).eq('is_active',true),
+        indId ? supabase.from('incident_category_packs').select('label,sort_order').eq('industry_id', indId).eq('source','outcome_property').eq('is_active',true) : Promise.resolve({data:[]}),
+        indId ? supabase.from('incident_category_packs').select('label,sort_order').eq('industry_id', indId).eq('source','outcome_information').eq('is_active',true) : Promise.resolve({data:[]}),
       ])
+      // outcome_level holds the POSITION in the domain's ladder, so the
+      // label map is built the same way the form built the ladder:
+      // sort by sort_order, index from 1.
+      const byPos = (rows) => Object.fromEntries((rows||[]).slice()
+        .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+        .map((r,i)=>[i+1, r.label]))
+      setOutcomeLabels({
+        property: byPos(outPropRes?.data),
+        information: byPos(outInfoRes?.data),
+      })
       const own = ownRes?.data || []
       const suppressed = new Set(own.filter(r=>r.overrides_key).map(r=>r.overrides_key))
       const merged = [
@@ -15002,7 +15185,7 @@ function IncidentRegisterView({ user, setPage }) {
       const labels = {...INC_CATEGORY_LABEL}
       merged.forEach(r=>{ labels[r.category_key] = r.label })
       setCategoryLabels(labels)
-    } catch(e) { setCategoryLabels(INC_CATEGORY_LABEL) }
+    } catch(e) { setCategoryLabels(INC_CATEGORY_LABEL); setOutcomeLabels({}) }
     setLoading(false)
   }
   useEffect(()=>{ load() },[])
@@ -15109,9 +15292,22 @@ function IncidentRegisterView({ user, setPage }) {
   const tInitMap = {}; tInc6m.forEach(i=>{ if(i.affected_person_id) return; const k=(i.affected_initials||'').trim().toUpperCase(); if(k) tInitMap[k]=(tInitMap[k]||0)+1 })
   const tRepeatPeople = Object.values(tPersonMap).filter(n=>n>=2).length
                       + Object.values(tInitMap).filter(n=>n>=2).length
-  const tOutInc = tInc6m.filter(i=>i.outcome_domain==='people'&&i.outcome_level)
-  const tOutMap = {}; tOutInc.forEach(i=>{ tOutMap[i.outcome_level]=(tOutMap[i.outcome_level]||0)+1 })
-  const tOutRows = Object.keys(tOutMap).map(k=>[Number(k),tOutMap[k]]).sort((a,b)=>a[0]-b[0])
+  // A level is only meaningful with its domain: 2 is "First aid only" on
+  // a people incident and "Minor, repairable" on a property one.
+  const DOMAIN_LABEL = { people:'People', property:'Property', information:'Information' }
+  const outcomeLabelFor = (domain, lvl) =>
+    domain === 'people'
+      ? (OUTCOME_LABEL[lvl] || ('Level '+lvl))
+      : ((outcomeLabels[domain]||{})[lvl] || ('Level '+lvl))
+  // No domain filter — property and information were previously dropped
+  // from this chart entirely.
+  const tOutInc = tInc6m.filter(i=>i.outcome_domain&&i.outcome_level)
+  const tOutMap = {}
+  tOutInc.forEach(i=>{ const k=i.outcome_domain+'|'+i.outcome_level; tOutMap[k]=(tOutMap[k]||0)+1 })
+  const tOutRows = Object.keys(tOutMap)
+    .map(k=>{ const [d,l]=k.split('|'); return [k, tOutMap[k], d, Number(l)] })
+    // Domain first so the three groups read as blocks, then by level.
+    .sort((a,b)=> String(a[2]).localeCompare(String(b[2])) || a[3]-b[3])
   const tNotifReq = tInc6m.filter(i=>i.external_notification_required)
   const tNotifDone= tNotifReq.filter(i=>i.notified_at)
   const tNotifRate= tNotifReq.length ? Math.round(tNotifDone.length/tNotifReq.length*100) : null
@@ -15235,7 +15431,8 @@ function IncidentRegisterView({ user, setPage }) {
       line('No individual had more than one incident in the period.',9,false,[120,120,120])
     }
     gap(2); rule()
-    axisBlock('Outcome (6 months, people domain)', tOutRows, k=>k+'. '+(OUTCOME_LABEL[k]||('Level '+k)))
+    axisBlock('Outcome (6 months)', tOutRows.map(r=>[r[0], r[1]]),
+      k=>{ const [d,l]=String(k).split('|'); return (DOMAIN_LABEL[d]||d)+' · '+outcomeLabelFor(d, Number(l)) })
     // top categories
     if(tTopCats.length>0){
       line('Top Categories (6 months)',12,true)
@@ -15405,11 +15602,14 @@ function IncidentRegisterView({ user, setPage }) {
                 {tRepeatPeople>0&&<div style={{fontSize:11,color:'var(--t2)',marginTop:8,paddingTop:8,borderTop:'1px solid var(--border)'}}>{tRepeatPeople} individual{tRepeatPeople!==1?'s':''} with 2+ incidents — see register for detail</div>}
               </div>
               <div style={{...trCard,flex:'1 1 200px'}}>
-                <div style={trH}>Outcome (6 months, people)</div>
+                <div style={trH}>Outcome (6 months)</div>
                 {tOutRows.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No outcome recorded</div>}
-                {tOutRows.map(([lvl,n])=>{ const tot=tOutRows.reduce((s,r)=>s+r[1],0)||1; const pc=Math.round(n/tot*100); return <div key={lvl} style={{marginBottom:6}}>
+                {tOutRows.map(([key,n,dom,lvl])=>{ const tot=tOutRows.reduce((s,r)=>s+r[1],0)||1; const pc=Math.round(n/tot*100); return <div key={key} style={{marginBottom:6}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
-                    <span style={{color:'var(--text)',fontWeight:500}}>{lvl}. {OUTCOME_LABEL[lvl]||('Level '+lvl)}</span>
+                    <span style={{color:'var(--text)',fontWeight:500}}>
+                      <span style={{color:'var(--t2)'}}>{DOMAIN_LABEL[dom]||dom} · </span>
+                      {outcomeLabelFor(dom, lvl)}
+                    </span>
                     <span style={{color:'var(--t2)',fontWeight:700}}>{n} ({pc}%)</span>
                   </div>
                   <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:pc+'%',background:'var(--brand)',borderRadius:2}}/></div>
