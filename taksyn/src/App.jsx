@@ -16172,6 +16172,47 @@ function IncidentsAdminView({ user, setPage }) {
           {sel.closure_note && <div style={{fontSize:13,color:'var(--t2)',marginTop:8}}>Closure: {sel.closure_note}</div>}
         </div>
 
+        {/* workflow progress (read-only, step 1) */}
+        {(()=>{
+          const INC_STEPS = [
+            ['reported','Lodged'],
+            ['assessing','Assessment'],
+            ['investigating','Investigation'],
+            ['actions_open','Action'],
+            ['review','Review'],
+            ['closed','Resolved'],
+          ]
+          const cur = INC_STEPS.findIndex(s=>s[0]===sel.status)
+          return (
+            <div style={card}>
+              <span style={lbl}>Workflow progress</span>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {INC_STEPS.map(([key,label],i)=>{
+                  const done = cur>=0 && i<=cur
+                  const isCur = i===cur
+                  return (
+                    <div key={key} style={{
+                      flex:'1 1 92px',minWidth:92,padding:'8px 6px',borderRadius:8,
+                      textAlign:'center',boxSizing:'border-box',
+                      border:'2px solid '+(isCur?'var(--brand)':done?'var(--green)':'var(--border)'),
+                      background:done?'var(--green)':'var(--card)',
+                      color:done?'#fff':'var(--t2)',
+                      fontSize:11,fontWeight:isCur?700:500,
+                    }}>
+                      <div style={{fontSize:10,opacity:.85,marginBottom:2}}>{i+1}</div>
+                      {label}
+                    </div>
+                  )
+                })}
+              </div>
+              {cur<0 && (
+                <div style={{fontSize:11,color:'var(--t3)',marginTop:6}}>
+                  Status not recognised: {String(sel.status)}
+                </div>
+              )}
+            </div>
+          )
+        })()}
         {/* audit timeline */}
         <div style={card}>
           <span style={lbl}>Timeline (audit trail)</span>
