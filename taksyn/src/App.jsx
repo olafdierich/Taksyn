@@ -16187,30 +16187,46 @@ function IncidentsAdminView({ user, setPage }) {
 
         {/* lifecycle */}
         <div style={card}>
-          <span style={lbl}>Status</span>
+          <span style={lbl}>Confirm status</span>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {sel.status!=='closed' && [
-              ['assessing','Mark assessing'],['investigating','Start investigation'],
-              ['actions_open','Actions open'],['review','Move to review'],
-            ].map(([s,l])=>(
-              <button key={s} className="btn btn-secondary btn-sm" disabled={busy||sel.status===s}
-                onClick={()=>patchIncident({ status:s }, s==='investigating'?'investigation_started':'status_changed',
-                  { from: sel.status, to: s })}>{l}</button>
-            ))}
-            {isAdmin && (sel.status!=='closed'
-              ? <button className="btn btn-primary btn-sm" disabled={busy} onClick={()=>{
-                  const note=prompt('Closure note (what resolved this incident?)')
-                  if(note===null) return
-                  patchIncident({ status:'closed', closed_at:new Date().toISOString(), closure_note:note||null },
-                    'closed', { from: sel.status, to:'closed', details:{note} })
-                }}>Close incident</button>
-              : <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>
-                  patchIncident({ status:'review', closed_at:null }, 'reopened', { from:'closed', to:'review' })
-                }>Reopen</button>)}
+            {(()=>{
+              const ORDER=['reported','assessing','investigating','actions_open','review','closed']
+              const NEXT_LBL={assessing:'Mark assessing',investigating:'Start investigation',
+                actions_open:'Actions open',review:'Move to review',closed:'Close incident'}
+              const ix=ORDER.indexOf(sel.status)
+              const nxt=ix>=0&&ix<ORDER.length-1?ORDER[ix+1]:null
+              const prv=ix>0?ORDER[ix-1]:null
+              const mine=isAdmin||sel.assigned_to===user.id||sel.investigator_id===user.id
+              const askNote=(q)=>{const t=prompt(q); if(t===null) return undefined
+                if(!t.trim()){alert('A note is required.'); return undefined} return t}
+              const out=[]
+              if(sel.status==='closed'){
+                if(isAdmin) out.push(
+                  <button key="reopen" className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>{
+                    const t=askNote('Why is this incident being reopened?')
+                    if(t!==undefined) transitionIncident('review',t)
+                  }}>Reopen</button>)
+              } else {
+                if(nxt&&nxt!=='closed'&&mine) out.push(
+                  <button key={nxt} className="btn btn-secondary btn-sm" disabled={busy}
+                    onClick={()=>transitionIncident(nxt)}>{NEXT_LBL[nxt]}</button>)
+                if(nxt==='closed'&&isAdmin) out.push(
+                  <button key="close" className="btn btn-primary btn-sm" disabled={busy} onClick={()=>{
+                    const t=askNote('Closure note (what resolved this incident?)')
+                    if(t!==undefined) transitionIncident('closed',t)
+                  }}>Close incident</button>)
+                if(prv&&isAdmin) out.push(
+                  <button key={prv} className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>{
+                    const t=askNote('Why is this step being reverted?')
+                    if(t!==undefined) transitionIncident(prv,t)
+                  }}>{'Back to '+(INC_STATUS_CFG[prv]||{}).label}</button>)
+              }
+              return out
+            })()}
             {!isAdmin && sel.status!=='closed' && <span style={{fontSize:12,color:'var(--t3)',alignSelf:'center'}}>Move to review, then a client admin signs off closure.</span>}
             {!isAdmin && sel.status==='closed' && <span style={{fontSize:12,color:'var(--t3)',alignSelf:'center'}}>Closed by client admin.</span>}
           </div>
-          {sel.closure_note && <div style={{fontSize:13,color:'var(--t2)',marginTop:8}}>Closure: {sel.closure_note}</div>}
+          {sel.closure_note && <div style={{fontSize:13,color:'var(--t2)',marginTop:8}}>{sel.status==='closed'?'Closure: ':'Previous closure: '}{sel.closure_note}</div>}
         </div>
 
         {/* workflow progress (read-only, step 1) */}
@@ -16267,6 +16283,7 @@ function IncidentsAdminView({ user, setPage }) {
                     {!ev.from_value&&ev.to_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.to_value}</span>}
                   </div>
                   <div style={{fontSize:11,color:'var(--t3)'}}>{ev.by_name||'—'} ({ev.by_role||'—'}) · {fmtDate(ev.at)}</div>
+                  {ev.details&&ev.details.note&&<div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{ev.details.note}</div>}
                 </div>
               </div>
             ))}
