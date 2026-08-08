@@ -15758,6 +15758,7 @@ const INC_EVENT_LABEL = {
   risk_rated:'Risk rated', action_created:'Action created', action_completed:'Action completed',
   action_verified:'Action verified', regulator_notified:'Regulator notified',
   reopened:'Reopened', closed:'Closed', status_changed:'Status changed',
+  status_reverted:'Step reverted',
   residual_risk_rated:'Residual risk rated',
   no_action_decided:'No action required',
 }
@@ -15897,6 +15898,25 @@ function IncidentsAdminView({ user, setPage }) {
   }
 
   // ---- derived list ----
+  // status write path: delegates order, authority and audit to the DB function
+  const transitionIncident = async (toStatus, note=null) => {
+    if (!sel) return
+    setBusy(true)
+    const { data, error } = await supabase.rpc('incident_transition', {
+      p_incident_id: sel.id, p_to_status: toStatus, p_note: note,
+    })
+    if (error) {
+      alert(error.message)
+    } else if (data) {
+      setSel(data)
+      setIncidents(prev=>prev.map(i=>i.id===data.id?data:i))
+      const { data: ev } = await supabase.from('incident_events')
+        .select('*').eq('incident_id', sel.id).order('at',{ascending:false})
+      setEvents(ev||[])
+    }
+    setBusy(false)
+  }
+
   const isOpenStatus = (s) => s !== 'closed'
   const breached = (i) => {
     const now = Date.now()
