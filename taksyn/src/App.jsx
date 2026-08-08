@@ -16187,7 +16187,7 @@ function IncidentsAdminView({ user, setPage }) {
 
         {/* lifecycle */}
         <div style={card}>
-          <span style={lbl}>Status</span>
+          <span style={lbl}>Confirm status</span>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             {(()=>{
               const ORDER=['reported','assessing','investigating','actions_open','review','closed']
