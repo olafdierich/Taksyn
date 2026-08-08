@@ -15758,6 +15758,8 @@ const INC_EVENT_LABEL = {
   risk_rated:'Risk rated', action_created:'Action created', action_completed:'Action completed',
   action_verified:'Action verified', regulator_notified:'Regulator notified',
   reopened:'Reopened', closed:'Closed', status_changed:'Status changed',
+  residual_risk_rated:'Residual risk rated',
+  no_action_decided:'No action required',
 }
 
 function IncidentsAdminView({ user, setPage }) {
@@ -16043,7 +16045,26 @@ function IncidentsAdminView({ user, setPage }) {
               'risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
           }}>Save risk rating</button>
           {sel.risk_rating && (()=>{ const r=sel.risk_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Risk rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.risk_likelihood}×{sel.risk_consequence})</span></div> })()}
-          {sel.risk_rating && (<div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--border2)'}}>
+          {sel.risk_rating && isAdmin && (
+            <div style={{marginTop:14,paddingTop:12,borderTop:'1px solid var(--border2)'}}>
+              <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:busy?'default':'pointer',fontSize:13}}>
+                <input type="checkbox" style={{marginTop:2}} disabled={busy}
+                  checked={!!sel.no_action_required}
+                  onChange={e=>{
+                    const v = e.target.checked
+                    patchIncident({ no_action_required: v }, 'no_action_decided',
+                      { from: sel.no_action_required?'true':'false', to: v?'true':'false' })
+                  }}/>
+                <span>
+                  <strong>No corrective action required</strong>
+                  <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>
+                    Tick to record a decision that this incident needs no corrective action.
+                    Residual risk can be rated once an action has been created or this is ticked.
+                  </div>
+                </span>
+              </label>
+            </div>)}
+          {sel.risk_rating && (actions.length>0 || sel.no_action_required) && (<div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--border2)'}}>
             <div style={{fontSize:12,color:'var(--t3)',marginBottom:6,fontWeight:600}}>Residual risk (after corrective actions)</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               <div>
