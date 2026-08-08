@@ -16226,7 +16226,7 @@ function IncidentsAdminView({ user, setPage }) {
             {!isAdmin && sel.status!=='closed' && <span style={{fontSize:12,color:'var(--t3)',alignSelf:'center'}}>Move to review, then a client admin signs off closure.</span>}
             {!isAdmin && sel.status==='closed' && <span style={{fontSize:12,color:'var(--t3)',alignSelf:'center'}}>Closed by client admin.</span>}
           </div>
-          {sel.closure_note && <div style={{fontSize:13,color:'var(--t2)',marginTop:8}}>Closure: {sel.closure_note}</div>}
+          {sel.closure_note && <div style={{fontSize:13,color:'var(--t2)',marginTop:8}}>{sel.status==='closed'?'Closure: ':'Previous closure: '}{sel.closure_note}</div>}
         </div>
 
         {/* workflow progress (read-only, step 1) */}
