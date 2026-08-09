@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
-import { uploadEvidence, signedEvidenceUrl } from './lib/evidenceStorage'
+import { uploadEvidence, uploadIncidentEvidence, signedEvidenceUrl } from './lib/evidenceStorage'
 import { isSameOrgDay, orgToday, orgDayOf } from './lib/orgTime'
 
 // Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
@@ -15776,6 +15776,7 @@ function IncidentsAdminView({ user, setPage }) {
   const [sel, setSel] = useState(null)          // selected incident (full row)
   const [events, setEvents] = useState([])
   const [actions, setActions] = useState([])
+  const [incEvidence, setIncEvidence] = useState([])
   const [capaStaff, setCapaStaff] = useState([])
   const [busy, setBusy] = useState(false)
 
@@ -15828,10 +15829,11 @@ function IncidentsAdminView({ user, setPage }) {
   },[incidents])
 
   const openIncident = async (inc) => {
-    setSel(inc); setEvents([]); setActions([])
-    let [{ data: ev }, { data: act }] = await Promise.all([
+    setSel(inc); setEvents([]); setActions([]); setIncEvidence([])
+    let [{ data: ev }, { data: act }, { data: evd }] = await Promise.all([
       supabase.from('incident_events').select('*').eq('incident_id', inc.id).order('at',{ascending:false}),
       supabase.from('incident_actions').select('*').eq('incident_id', inc.id).order('created_at',{ascending:true}),
+      supabase.from('incident_evidence').select('*').eq('incident_id', inc.id).order('ts',{ascending:true}),
     ])
     // CAPA "Back": reconcile actions whose linked task is approved -> flip to completed (idempotent, audit-accurate)
     try {
@@ -15868,7 +15870,7 @@ function IncidentsAdminView({ user, setPage }) {
         }
       }
     } catch (e) { /* reconcile is best-effort; never block opening the incident */ }
-    setEvents(ev||[]); setActions(act||[])
+    setEvents(ev||[]); setActions(act||[]); setIncEvidence(evd||[])
   }
 
   // write helper: patch the incident AND append an audit event, then refresh
@@ -16185,6 +16187,77 @@ function IncidentsAdminView({ user, setPage }) {
             }}/>
         </div>
 
+        {/* evidence -- content, sits before the lifecycle card */}
+        <div style={card}>
+          <span style={lbl}>Evidence</span>
+          {incEvidence.length === 0 && (
+            <div style={{fontSize:13,color:'var(--t3)',marginBottom:10}}>No evidence attached yet.</div>
+          )}
+          {incEvidence.length > 0 && (
+            <div style={{display:'flex',flexWrap:'wrap',gap:10,marginBottom:12}}>
+              {incEvidence.map(e => (
+                <div key={e.id} style={{width:120}}>
+                  <EvidenceThumb entry={e}
+                    containerStyle={{width:120,height:120,borderRadius:8,overflow:'hidden',border:'1px solid var(--border2)'}}
+                    imgStyle={{width:'100%',height:'100%',objectFit:'cover'}}
+                    title={e.name||''} />
+                  <div style={{fontSize:11,color:'var(--t3)',marginTop:4,lineHeight:1.35}}>
+                    <span style={{textTransform:'uppercase',fontWeight:700,letterSpacing:.3}}>
+                      {e.stage === 'investigation' ? 'Investigation' : 'Report'}
+                    </span>
+                    <div>{e.by_name || 'Unknown'}</div>
+                    <div>{fmtDate(e.ts)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {(isAdmin || sel.assigned_to === user.id || sel.investigator_id === user.id) && (
+            <>
+              <button className="btn btn-secondary btn-sm" disabled={busy}
+                onClick={()=>document.getElementById('inc-evd-input-'+sel.id).click()}>
+                📎 Attach evidence
+              </button>
+              <div style={{fontSize:11,color:'var(--t3)',marginTop:6}}>
+                Images and PDFs. Stored privately and visible only to this organisation.
+              </div>
+              <input id={'inc-evd-input-'+sel.id} type="file" accept="image/*,application/pdf"
+                style={{display:'none'}} onChange={async e=>{
+                const inp = e.target
+                const f = inp.files && inp.files[0]
+                if (!f) return
+                if (incEvidence.length >= 10) { alert('Maximum 10 evidence items reached.'); inp.value=''; return }
+                if (!orgId) { alert('Could not resolve the organisation -- evidence not uploaded.'); inp.value=''; return }
+                setBusy(true)
+                try {
+                  const isImage = (f.type||'').startsWith('image/')
+                  let file = f
+                  if (isImage) {
+                    const compressed = await compressImage(f)
+                    if (!compressed) throw new Error('could not read the image')
+                    file = await dataUrlToFile(compressed, 'incident_'+sel.id+'_'+Date.now())
+                  }
+                  // stage follows the incident's CURRENT step -- not a user choice.
+                  const stage = sel.status === 'investigating' ? 'investigation' : 'report'
+                  const { path } = await uploadIncidentEvidence(file, orgId, sel.id)
+                  // org / by_id / by_name / by_role are set by the DB trigger. Do not send them.
+                  const { data: row, error: insErr } = await supabase.from('incident_evidence')
+                    .insert({ incident_id: sel.id, kind: isImage ? 'photo' : 'document',
+                              path, name: f.name, stage })
+                    .select().maybeSingle()
+                  if (insErr) throw insErr
+                  // PostgREST returns 200 with error null when RLS blocks a write.
+                  if (!row) throw new Error('the evidence record was not saved')
+                  setIncEvidence(prev => [...prev, row])
+                } catch (err) {
+                  alert('Evidence not saved -- ' + (err?.message || 'upload failed') + '. Please try again.')
+                }
+                setBusy(false)
+                inp.value=''
+              }}/>
+            </>
+          )}
+        </div>
         {/* lifecycle */}
         <div style={card}>
           <span style={lbl}>Confirm status</span>
