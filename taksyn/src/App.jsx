@@ -15794,6 +15794,7 @@ function IncidentsAdminView({ user, setPage }) {
   const [actions, setActions] = useState([])
   const [incEvidence, setIncEvidence] = useState([])
   const [incFindings, setIncFindings] = useState([])
+  const [openFind, setOpenFind] = useState({})   // findings id -> explicitly opened/closed
   const [capaStaff, setCapaStaff] = useState([])
   const [busy, setBusy] = useState(false)
 
@@ -16318,9 +16319,32 @@ function IncidentsAdminView({ user, setPage }) {
                     {outstanding ? outstanding + ' not examined' : 'Complete'}
                   </span>
                 </div>
-                {items.map(f => (
-                  <div key={f.id} style={{marginBottom:12,paddingBottom:12,borderBottom:'1px solid var(--border2)'}}>
-                    <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>{INC_FINDING_LABEL[f.item_key]||f.item_key}</div>
+                {items.map(f => {
+                  // Default: open while not_examined, closed once answered. An
+                  // explicit toggle wins in either direction.
+                  const answered = f.state !== 'not_examined'
+                  const open = openFind[f.id] === undefined ? !answered : openFind[f.id]
+                  const stateTxt = (STATES[section].find(s => s[0] === f.state) || [null, f.state])[1]
+                  const stateBg = f.state === 'contributing' ? '#DC2626'
+                                : f.state === 'not_examined' ? 'var(--t3)' : '#16A34A'
+                  return (
+                  <div key={f.id} style={{marginBottom:open?12:6,paddingBottom:open?12:6,borderBottom:'1px solid var(--border2)'}}>
+                    <div onClick={()=>setOpenFind(p=>({...p,[f.id]:!open}))}
+                      style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:open?6:0}}>
+                      <span style={{fontSize:11,color:'var(--t3)',width:10,flexShrink:0}}>{open?'\u25be':'\u25b8'}</span>
+                      <span style={{fontSize:13,fontWeight:600,flex:1}}>{INC_FINDING_LABEL[f.item_key]||f.item_key}</span>
+                      {!open && (
+                        <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,color:'#fff',background:stateBg,flexShrink:0}}>
+                          {stateTxt}
+                        </span>
+                      )}
+                    </div>
+                    {!open && f.comment && (
+                      <div style={{fontSize:11,color:'var(--t3)',marginLeft:18,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                        {f.comment}
+                      </div>
+                    )}
+                    {open && (<>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
                       {STATES[section].map(([val,txt]) => (
                         <button key={val} disabled={busy||!canEdit}
@@ -16348,8 +16372,10 @@ function IncidentsAdminView({ user, setPage }) {
                     {f.by_name && (
                       <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>{f.by_name} · {fmtDate(f.at)}</div>
                     )}
+                    </>)}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )
           }
