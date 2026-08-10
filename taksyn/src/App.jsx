@@ -14697,8 +14697,6 @@ function IncidentReportView({ user }) {
                     border:'1px solid var(--brand,#4F46E5)',background:'rgba(79,70,229,.06)',marginBottom:8}}>
                     <div style={{flex:1}}>
                       <div style={{fontWeight:700,fontSize:14}}>{affectedPerson.full_name}</div>
-                      {affectedPerson.date_of_birth &&
-                        <div style={{fontSize:12,color:'var(--t2)'}}>DOB {affectedPerson.date_of_birth}</div>}
                     </div>
                     <button onClick={()=>{ setAffectedPerson(null); setPersonQuery(''); setPersonResults([]); setPersonSearched(false) }}
                       style={{padding:'6px 10px',borderRadius:16,fontSize:12,cursor:'pointer',
@@ -14717,7 +14715,6 @@ function IncidentReportView({ user }) {
                           <div key={p.id} onClick={()=>{ setAffectedPerson(p); setNoMatch(false); setPersonError('') }}
                             style={{padding:'10px 12px',cursor:'pointer',borderBottom:'1px solid var(--border)'}}>
                             <div style={{fontWeight:600,fontSize:14}}>{p.full_name}</div>
-                            {p.date_of_birth && <div style={{fontSize:12,color:'var(--t2)'}}>DOB {p.date_of_birth}</div>}
                           </div>
                         ))}
                       </div>
