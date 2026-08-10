@@ -7261,9 +7261,9 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Complaints & Feedback','clipboard'],['incident_hub','Incidents','alert'],['contacts','Contacts','users']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['audit','Audit Log','audit'],['users','Workforce','user'],['teams','Teams','users'],['projects','Projects 🔜','tasks'],['leave','Team Leave','clock'],['performance','Performance','chart'],['sla','Response Time','clock'],['tiers','Plans','tier'],['roles_departments','Roles & Positions','shield'],['company_settings','Company Settings','settings'],['help','Help & Support','alert'],['issue_reports','Complaints & Feedback','clipboard'],['incident_hub','Incidents & Risk','alert'],['contacts','Contacts','users']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents & Risk','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents & Risk','alert']],
   worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag']],
 }
 
@@ -14144,7 +14144,7 @@ function IncidentHubView({ user, setPage }) {
   )
   return (
     <div>
-      <div className="ph"><div className="ph-title">Incidents</div><div className="ph-sub">Report a new incident, or review and manage existing ones</div></div>
+      <div className="ph"><div className="ph-title">Incidents &amp; Risk</div><div className="ph-sub">Report a new incident, or review and manage existing ones</div></div>
       <div style={{display:'flex',flexWrap:'wrap',gap:16,marginTop:8}}>
         <Tile icon="➕" title="Report an incident" color="#DC2626"
           sub="Log a new incident — injury, near miss, damage or other. Takes a couple of minutes."
