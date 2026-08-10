@@ -15795,6 +15795,7 @@ function IncidentsAdminView({ user, setPage }) {
   const [incEvidence, setIncEvidence] = useState([])
   const [incFindings, setIncFindings] = useState([])
   const [openFind, setOpenFind] = useState({})   // findings id -> explicitly opened/closed
+  const [incTasks, setIncTasks] = useState({})   // task id -> {id,status,reviewed_at}
   const [capaStaff, setCapaStaff] = useState([])
   const [busy, setBusy] = useState(false)
 
@@ -15847,7 +15848,7 @@ function IncidentsAdminView({ user, setPage }) {
   },[incidents])
 
   const openIncident = async (inc) => {
-    setSel(inc); setEvents([]); setActions([]); setIncEvidence([]); setIncFindings([])
+    setSel(inc); setEvents([]); setActions([]); setIncEvidence([]); setIncFindings([]); setIncTasks({})
     let [{ data: ev }, { data: act }, { data: evd }, { data: fnd }] = await Promise.all([
       supabase.from('incident_events').select('*').eq('incident_id', inc.id).order('at',{ascending:false}),
       supabase.from('incident_actions').select('*').eq('incident_id', inc.id).order('created_at',{ascending:true}),
@@ -15890,8 +15891,36 @@ function IncidentsAdminView({ user, setPage }) {
       }
     } catch (e) { /* reconcile is best-effort; never block opening the incident */ }
     setEvents(ev||[]); setActions(act||[]); setIncEvidence(evd||[]); setIncFindings(fnd||[])
+    // Linked task statuses, for display only. Deliberately NOT the reconcile's
+    // fetch above -- that one covers only non-terminal actions, so a completed
+    // action would show no task status, which is the one most worth seeing.
+    const tids = [...new Set((act||[]).map(a => a.task_id).filter(Boolean))]
+    if (tids.length) {
+      const { data: tk } = await supabase.from('tasks').select('id,status,reviewed_at').in('id', tids)
+      setIncTasks(Object.fromEntries((tk||[]).map(t => [t.id, t])))
+    }
   }
 
+  // Effectiveness assessment on a corrective action. client_admin only, and that
+  // is enforced by a DATABASE TRIGGER (incident_actions_effectiveness_attribution)
+  // rather than by hiding the box -- a supervisor calling the API directly gets
+  // 42501. Every other column on the row stays writable by supervisors so the
+  // CAPA reconcile keeps working. Proven by probe on sandbox, 10 Aug.
+  const saveEffectiveness = async (a, text) => {
+    setBusy(true)
+    try {
+      const { data: row, error } = await supabase.from('incident_actions')
+        .update({ effectiveness: (text||'').trim() ? text : null })
+        .eq('id', a.id).select().maybeSingle()
+      if (error) throw error
+      // PostgREST returns 200 with error null when RLS blocks a write.
+      if (!row) throw new Error('the assessment was not saved')
+      setActions(prev => prev.map(x => x.id === row.id ? row : x))
+    } catch (err) {
+      alert('Not saved -- ' + (err?.message || 'update failed'))
+    }
+    setBusy(false)
+  }
   // write helper: patch the incident AND append an audit event, then refresh
   const patchIncident = async (patch, eventType, extra={}) => {
     if (!sel) return
@@ -16188,14 +16217,44 @@ function IncidentsAdminView({ user, setPage }) {
         <div style={card}>
           <span style={lbl}>Corrective / preventive actions</span>
           {actions.length===0 && <div style={{fontSize:13,color:'var(--t3)',marginBottom:8}}>No actions yet.</div>}
-          {actions.map(a=>(
+          {actions.map(a=>{
+            const t = a.task_id ? incTasks[a.task_id] : null
+            // Three distinct cases, all worth distinguishing on a compliance record.
+            const taskTxt = !a.task_id ? 'No linked task' : t ? ('Task ' + t.status) : 'Task not found'
+            const taskBg  = !a.task_id ? 'var(--t3)'
+                          : !t ? '#DC2626'
+                          : t.status === 'approved' ? '#16A34A' : '#EAB308'
+            return (
             <div key={a.id} style={{padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
               <div style={{fontWeight:600}}>{a.description}</div>
-              <div style={{fontSize:11,color:'var(--t3)'}}>
+              <div style={{fontSize:11,color:'var(--t3)',marginBottom:6}}>
                 {a.action_type} · {a.status}{a.owner_name?` · ${a.owner_name}`:''}{a.due_date?` · due ${fmtDay(a.due_date)}`:''}
               </div>
+              <div style={{marginBottom:6}}>
+                <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,color:'#fff',background:taskBg}}>
+                  {taskTxt}
+                </span>
+              </div>
+              {isAdmin ? (
+                <div>
+                  <div style={{fontSize:11,color:'var(--t3)',marginBottom:4}}>Effectiveness assessment</div>
+                  <textarea id={'act-eff-'+a.id} defaultValue={a.effectiveness||''} disabled={busy}
+                    placeholder="Did this action work? Leave blank until it can be judged."
+                    onBlur={e=>{ if ((e.target.value||'') !== (a.effectiveness||'')) saveEffectiveness(a, e.target.value) }}
+                    style={{width:'100%',minHeight:40,padding:8,borderRadius:8,border:'1px solid var(--border2)',
+                      background:'var(--card)',color:'var(--text)',fontSize:13,fontFamily:'inherit',boxSizing:'border-box'}}/>
+                </div>
+              ) : (a.effectiveness ? (
+                <div style={{fontSize:12}}>
+                  <span style={{fontSize:11,color:'var(--t3)'}}>Effectiveness · </span>{a.effectiveness}
+                </div>
+              ) : null)}
+              {a.effectiveness_by_name && (
+                <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>{a.effectiveness_by_name} · {fmtDate(a.effectiveness_at)}</div>
+              )}
             </div>
-          ))}
+            )
+          })}
           <CapaActionForm sel={sel} orgId={orgId} user={user} busy={busy} setBusy={setBusy}
             capaStaff={capaStaff} isAdmin={isAdmin}
             onDone={async ()=>{
