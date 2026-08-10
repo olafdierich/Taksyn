@@ -16255,6 +16255,45 @@ function IncidentsAdminView({ user, setPage }) {
             </div>
             )
           })}
+          {(()=>{
+            // Step 7 verification readout. Derived; nothing here is stored.
+            const total = actions.length
+            if (total === 0) {
+              return sel.no_action_required ? (
+                <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border2)',fontSize:12,fontWeight:700,color:'#16A34A'}}>
+                  Verification complete — no corrective action required
+                </div>
+              ) : (
+                <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border2)',fontSize:12,color:'var(--t3)'}}>
+                  Not started — no corrective action recorded, and "no corrective action required" is not ticked.
+                </div>
+              )
+            }
+            const approved = a => a.task_id && (incTasks[a.task_id]||{}).status === 'approved'
+            const assessed = a => !!(a.effectiveness||'').trim()
+            const verified = actions.filter(a => approved(a) && assessed(a)).length
+            const done = verified === total
+            // The three reasons OVERLAP deliberately -- one action can be both
+            // awaiting approval and awaiting assessment. They are reasons, not a
+            // partition, and a reviewer wants to see every outstanding thing.
+            const reasons = []
+            const noTask = actions.filter(a => !a.task_id).length
+            const notAppr = actions.filter(a => a.task_id && !approved(a)).length
+            const noEff = actions.filter(a => !assessed(a)).length
+            if (noTask)  reasons.push(noTask + ' not linked to a task')
+            if (notAppr) reasons.push(notAppr + ' awaiting task approval')
+            if (noEff)   reasons.push(noEff + ' awaiting effectiveness assessment')
+            return (
+              <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border2)'}}>
+                <div style={{fontSize:12,fontWeight:700,color:done?'#16A34A':'var(--t2)'}}>
+                  {done ? 'Verification complete' : ('Verification — ' + verified + ' of ' + total + ' actions verified')}
+                </div>
+                {!done && reasons.length > 0 && (
+                  <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>{reasons.join(' · ')}</div>
+                )}
+              </div>
+            )
+          })()}
           <CapaActionForm sel={sel} orgId={orgId} user={user} busy={busy} setBusy={setBusy}
             capaStaff={capaStaff} isAdmin={isAdmin}
             onDone={async ()=>{
