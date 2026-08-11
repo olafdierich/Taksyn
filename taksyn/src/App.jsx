@@ -7456,12 +7456,16 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   }
 
   const createOrg = async () => {
-    if (!newOrg.name.trim()) return
+    if (!newOrg.name.trim()) { alert('Organisation name is required.'); return }
+    if (!newOrg.industry) { alert('Industry is required — it determines the position list for this organisation.'); return }
+    // No default. A wrong timezone is worse than an empty one: it looks correct.
+    if (!newOrg.timezone) { alert('Timezone is required — dates, reminders and evidence day-boundaries all depend on it.'); return }
     setLoading(true)
     const entry = {
       id: 'ORG'+Date.now(),
       name: newOrg.name.trim(),
-      industry: newOrg.industry||'Other',
+      industry: newOrg.industry,
+      timezone: newOrg.timezone,
       plan: (newOrg.tier||'Starter').toLowerCase(),
       tier: newOrg.tier||'Growth',
       notes: newOrg.notes.trim(),
@@ -7475,7 +7479,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     }
     setOrgs(prev=>[entry,...prev])
     setShowCreate(false)
-    setNewOrg({ name:'', industry:'', tier:'Growth', notes:'' })
+    setNewOrg({ name:'', industry:'', tier:'Growth', notes:'', timezone:'' })
     setLoading(false)
   }
 
@@ -8205,11 +8209,19 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                 <input className="form-input" placeholder="e.g. Sunrise Aged Care" value={newOrg.name} onChange={e=>setNewOrg({...newOrg,name:e.target.value})}/>
               </div>
               <div className="form-field">
-                <label className="form-label">Industry</label>
+                <label className="form-label">Industry <span style={{color:'var(--red)'}}>*</span></label>
                 <select className="form-input" value={newOrg.industry} onChange={e=>setNewOrg({...newOrg,industry:e.target.value})}>
                   <option value="">Select industry...</option>
                   {INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}
                 </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Timezone <span style={{color:'var(--red)'}}>*</span></label>
+                <select className="form-input" value={newOrg.timezone} onChange={e=>setNewOrg({...newOrg,timezone:e.target.value})}>
+                  <option value="">Select timezone...</option>
+                  {TIMEZONES.map(tz=><option key={tz} value={tz}>{tz==='UTC'?'UTC (Coordinated Universal Time)':tz.split('/').pop().replace(/_/g,' ')+' — '+tz}</option>)}
+                </select>
+                <div style={{fontSize:12,color:'var(--t2)',marginTop:4}}>Sets the organisation's day boundary for due dates, reminders and evidence. Cannot be guessed later.</div>
               </div>
               <div className="form-field">
                 <label className="form-label">Plan / Tier</label>
@@ -8223,7 +8235,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowCreate(false)}>Cancel</button>
-                <button className="btn btn-primary" disabled={!newOrg.name.trim()||loading} onClick={createOrg}>
+                <button className="btn btn-primary" disabled={!newOrg.name.trim()||!newOrg.industry||!newOrg.timezone||loading} onClick={createOrg}>
                   {loading?'Creating...':'Create Organisation'}
                 </button>
               </div>
