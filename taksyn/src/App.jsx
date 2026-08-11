@@ -4621,6 +4621,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     const _mySelf = t => !!t.created_by_id && t.created_by_id===user.id && t.assigned_user_id===user.id
                     const myOwn = activeFiltered.filter(_mySelf).sort(byDate)
                     const myAssigned = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&!_mySelf(t)&&t.status!=='awaiting_review').sort(byDate)
+                    const myAssignedOneOff = myAssigned.filter(t=>isOneOff(t))
+                    const myAssignedRecurring = myAssigned.filter(t=>isRecurring(t))
                     const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&!_mySelf(t)).sort(byDate)
                     const assignedToMgr = iAssigned.filter(t=>t.assigned_role==='manager'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='manager')
                     const assignedToSup = iAssigned.filter(t=>t.assigned_role==='supervisor'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='supervisor')
@@ -4640,7 +4642,16 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           (myOwn.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:myOwn.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                         {renderSection('ca-assigned-me', '📋 Assigned Tasks', myAssigned.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                          (myAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myAssigned.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          (myAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:(
+                            <div>
+                              {renderSection('ca-assigned-me-oneoff', '📋 One-off', myAssignedOneOff.length,
+                                {marginBottom:10}, 'var(--t2)',
+                                (myAssignedOneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myAssignedOneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                              {renderSection('ca-assigned-me-recurring', '🔁 Recurring', myAssignedRecurring.length,
+                                {marginBottom:0}, 'var(--t2)',
+                                (myAssignedRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myAssignedRecurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            </div>
+                          )))}
                         {renderSection('ca-assigned', '📤 Tasks I Assigned', iAssigned.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
