@@ -2712,7 +2712,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // Seed the action-priority section of each role EXPANDED (rest collapsed): worker→Action Needed + To Do,
   // supervisor/manager/client_admin→Needs My Review, plus client_admin→Needs Attention (only rendered
   // when >0). Keys are unique per role, so listing all is safe — only the current role's sections exist.
-  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','wk-todo','sv-review','sv-mine','mg-review','mg-mine','ca-review','ca-attention']))
+  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','wk-todo','sv-review','sv-self','sv-mine','mg-review','mg-self','mg-mine','ca-review','ca-attention','ca-mine','ca-assigned-me']))
   const toggleSection = (sk) => setExpandedSections(prev => { const n = new Set(prev); n.has(sk) ? n.delete(sk) : n.add(sk); return n })
   // Render one task-list section with a clickable, keyboard-activatable header (▸ collapsed / ▾ expanded,
   // plus label + count). The count always shows; the body renders only when expanded. Display-only — this
@@ -4528,7 +4528,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── SUPERVISOR VIEW ───────────────────────────────
                     if(user.role==='supervisor') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const _mySelf = t => !!t.created_by_id && t.created_by_id===user.id && t.assigned_user_id===user.id
+                      const _myAll = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const mySelfTasks = _myAll.filter(_mySelf)
+                      const myTasks = _myAll.filter(t=>!_mySelf(t))
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
@@ -4537,7 +4540,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {renderSection('sv-review', '🔍 Needs My Review', needsReview.length,
                             {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
                             (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
-                          {renderSection('sv-mine', '📋 My Own Tasks', myTasks.length,
+                          {renderSection('sv-self', '👤 Self-Tasks', mySelfTasks.length,
+                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            (mySelfTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:mySelfTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('sv-mine', '📋 Assigned Tasks', myTasks.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('sv-oneoff', '📤 One-off Tasks I Assigned', oneOff.length,
@@ -4566,7 +4572,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── MANAGER VIEW ──────────────────────────────────
                     if(user.role==='manager') {
                       const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
-                      const myTasks = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const _mySelf = t => !!t.created_by_id && t.created_by_id===user.id && t.assigned_user_id===user.id
+                      const _myAll = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review'&&isOneOff(t)).sort(byDate)
+                      const mySelfTasks = _myAll.filter(_mySelf)
+                      const myTasks = _myAll.filter(t=>!_mySelf(t))
                       const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
@@ -4575,7 +4584,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {renderSection('mg-review', '🔍 Needs My Review', needsReview.length,
                             {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
                             (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
-                          {renderSection('mg-mine', '📋 My Own Tasks', myTasks.length,
+                          {renderSection('mg-self', '👤 Self-Tasks', mySelfTasks.length,
+                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            (mySelfTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:mySelfTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          {renderSection('mg-mine', '📋 Assigned Tasks', myTasks.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('mg-oneoff', '📤 One-off Tasks I Assigned', oneOff.length,
@@ -4608,6 +4620,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     const attention = activeFiltered.filter(t=>['overdue','escalated'].includes(t.status)||t.escalation||_isOver(t)).sort(byDate)
                     const _mySelf = t => !!t.created_by_id && t.created_by_id===user.id && t.assigned_user_id===user.id
                     const myOwn = activeFiltered.filter(_mySelf).sort(byDate)
+                    const myAssigned = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&!_mySelf(t)&&t.status!=='awaiting_review').sort(byDate)
+                    const myAssignedOneOff = myAssigned.filter(t=>isOneOff(t))
+                    const myAssignedRecurring = myAssigned.filter(t=>isRecurring(t))
                     const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&!_mySelf(t)).sort(byDate)
                     const assignedToMgr = iAssigned.filter(t=>t.assigned_role==='manager'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='manager')
                     const assignedToSup = iAssigned.filter(t=>t.assigned_role==='supervisor'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='supervisor')
@@ -4622,9 +4637,21 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         {attention.length>0&&renderSection('ca-attention', '⚠️ Needs Attention — Overdue & Escalated', attention.length,
                           {background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}, 'var(--red)',
                           attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
-                        {renderSection('ca-mine', '📋 My Own Tasks', myOwn.length,
+                        {renderSection('ca-mine', '👤 Self-Tasks', myOwn.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                          (myOwn.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myOwn.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          (myOwn.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:myOwn.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                        {renderSection('ca-assigned-me', '📋 Assigned Tasks', myAssigned.length,
+                          {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                          (myAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:(
+                            <div>
+                              {renderSection('ca-assigned-me-oneoff', '📋 One-off', myAssignedOneOff.length,
+                                {marginBottom:10}, 'var(--t2)',
+                                (myAssignedOneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myAssignedOneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                              {renderSection('ca-assigned-me-recurring', '🔁 Recurring', myAssignedRecurring.length,
+                                {marginBottom:0}, 'var(--t2)',
+                                (myAssignedRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myAssignedRecurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            </div>
+                          )))}
                         {renderSection('ca-assigned', '📤 Tasks I Assigned', iAssigned.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
