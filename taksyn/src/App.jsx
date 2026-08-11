@@ -3491,6 +3491,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     : user.role==='supervisor' ? ['worker']
     : []
   const sel = selected ? tasks.find(t=>t.id===selected) : null
+  // Position lookup for the task header. Matches on ID first because LIVE
+  // has multiple profiles sharing a display name; name is the fallback only.
+  const _posOf = (id, name) => {
+    const u = (id && teamUsers.find(x=>x.id===id)) || (name && teamUsers.find(x=>x.name===name)) || null
+    return u?.position || ''
+  }
+  const _who = (id, name) => { const p = _posOf(id, name); return p ? name+' ('+p+')' : name }
   const myTime = workerTimes.find(r=>r.user_id===user.id) || null
   const _isMySelfTask = !!sel && !!sel.created_by_id && sel.created_by_id===user.id && sel.assigned_user_id===user.id
   const amAssigned = !!sel && user.role!=='super_admin' && (user.role!=='client_admin' || _isMySelfTask) && ((Array.isArray(sel.assigned_user_ids)&&sel.assigned_user_ids.includes(user.id)) || sel.assigned_user_id===user.id || (sel.assigned_user_name&&sel.assigned_user_name.toLowerCase()===user.name?.toLowerCase()) || (sel.team_id&&userTeamIds.includes(sel.team_id)))
@@ -3876,7 +3883,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 {sel.recurrence&&sel.recurrence!=='once'&&<span className="recurrence-tag">🔁 {RECURRENCE_LABELS[sel.recurrence]}</span>}
               </div>
               <div style={{fontSize:17,fontWeight:800,letterSpacing:'-.5px'}}>{sel.title}</div>
-              <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>{sel.id} · Due {sel.due_date}{dueTimeSuffix(sel)}{sel.created_by&&' · Created by '+sel.created_by}</div>
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>{sel.id} · Due {sel.due_date}{dueTimeSuffix(sel)}</div>
+              {(sel.created_by||sel.approver_name)&&<div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>
+                {sel.created_by&&<span>Assigned by <strong style={{fontWeight:600}}>{_who(sel.created_by_id, sel.created_by)}</strong></span>}
+                {sel.created_by&&sel.approver_name&&<span> · </span>}
+                {sel.approver_name&&<span>Approver <strong style={{fontWeight:600}}>{_who(sel.approver_id, sel.approver_name)}</strong></span>}
+              </div>}
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:5,alignItems:'flex-end'}}><StatusBadge status={sel.status}/><PriBadge priority={sel.priority}/></div>
           </div>
