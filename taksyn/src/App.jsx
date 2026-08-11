@@ -3779,6 +3779,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               )}
               <div className="form-field">
                 <label className="form-label">Approver <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— reviews the task on completion</span></label>
+                {teamUsers.length>0&&!newTask.approver_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4,marginBottom:4}}>⚠️ Every task needs an approver — please select who reviews this on completion</div>}
                 <select className="form-select" value={newTask.approver_id||''} onChange={e=>{ const a=teamUsers.find(u=>u.id===e.target.value); setNewTask({...newTask,approver_id:a?.id||'',approver_name:a?.name||''}) }}>
                   <option value="">{user.role==='client_admin'?'— Select approver —':'— Me —'}</option>
                   {teamUsers.filter(u=>(ROLE_LEVEL[u.role]||0)>(ROLE_LEVEL[newTask.assigned_role]||0)||(u.id===newTask.assigned_user_id&&(ROLE_LEVEL[newTask.assigned_role]||0)>=3)||(u.id===newTask.assigned_user_id&&newTask.assigned_user_id===user.id)).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
@@ -3851,7 +3852,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {createError&&<div style={{color:'var(--red)',fontSize:12,marginBottom:6,padding:'6px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6}}>{createError}</div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null); setCreateError(''); setTaskTeamMembers([]); setUserSearch(''); setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[],team_id:'',team_name:''}) }}>Cancel</button>
-                <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id&&!newTask.team_id)} onClick={createTask}>{creating?'Creating…':'Submit Task'}</button>
+                <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id&&!newTask.team_id)||(teamUsers.length>0&&!newTask.approver_id)} onClick={createTask}>{creating?'Creating…':'Submit Task'}</button>
               </div>
             </div>
           </div>
