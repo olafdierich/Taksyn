@@ -2712,7 +2712,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // Seed the action-priority section of each role EXPANDED (rest collapsed): worker→Action Needed + To Do,
   // supervisor/manager/client_admin→Needs My Review, plus client_admin→Needs Attention (only rendered
   // when >0). Keys are unique per role, so listing all is safe — only the current role's sections exist.
-  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','wk-todo','sv-review','sv-self','sv-mine','mg-review','mg-self','mg-mine','ca-review','ca-attention','ca-mine','ca-assigned-me']))
+  const [expandedSections, setExpandedSections] = useState(() => new Set(['wk-action','wk-todo','sv-review','sv-self','sv-mine','sv-others','mg-review','mg-self','mg-mine','mg-others','ca-review','ca-attention','ca-mine','ca-assigned-me']))
   const toggleSection = (sk) => setExpandedSections(prev => { const n = new Set(prev); n.has(sk) ? n.delete(sk) : n.add(sk); return n })
   // Render one task-list section with a clickable, keyboard-activatable header (▸ collapsed / ▾ expanded,
   // plus label + count). The count always shows; the body renders only when expanded. Display-only — this
@@ -4535,9 +4535,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       const myTasks = _myAll.filter(t=>!_mySelf(t))
                       const myTasksOneOff = myTasks.filter(t=>isOneOff(t))
                       const myTasksRecurring = myTasks.filter(t=>isRecurring(t))
-                      const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
+                      const _iOwn = t => (!!t.approver_id && t.approver_id===user.id) || t.created_by===user.name
+                      const iAssigned = activeFiltered.filter(t=>_iOwn(t)&&!_mySelf(t)).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
-                      const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
+                      const recurring = iAssigned.filter(t=>isRecurring(t))
                       return (
                         <div>
                           {renderSection('sv-review', '🔍 Needs My Review', needsReview.length,
@@ -4558,24 +4559,29 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                   (myTasksRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksRecurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                               </div>
                             )))}
-                          {renderSection('sv-oneoff', '📤 One-off Tasks I Assigned', oneOff.length,
-                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                            (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                           {(()=>{
-                            // Point 3: default Tasks view surfaces only recurring tasks in their
-                            // current due window; out-of-window ones move to a collapsed Scheduled
-                            // section. Nothing is hidden — the filter tabs still reach everything.
+                            // Tasks Assigned to Others: everything this user is accountable for
+                            // following up - they are the named approver, or they created it.
+                            // Three sub-groups preserve the Point 3 behaviour (recurring due now
+                            // vs scheduled) inside the parent rather than as siblings.
                             const _today = orgToday(orgTz)
                             const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
                             const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
-                            return (<>
-                              {renderSection('sv-recurring', '🔁 Recurring Tasks I Assigned', recurringInWin.length,
-                                {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
-                                (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
-                              {recurringSched.length>0&&renderSection('sv-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
-                                {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                                recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
-                            </>)
+                            return renderSection('sv-others', '📤 Tasks Assigned to Others', iAssigned.length,
+                              {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                              (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned to others</div>:(
+                                <div>
+                                  {renderSection('sv-others-oneoff', '📋 One-off', oneOff.length,
+                                    {marginBottom:10}, 'var(--t2)',
+                                    (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                  {renderSection('sv-others-recurring', '🔁 Recurring', recurringInWin.length,
+                                    {marginBottom:10}, 'var(--t2)',
+                                    (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                  {renderSection('sv-others-scheduled', '🕓 Scheduled — not due yet', recurringSched.length,
+                                    {marginBottom:0}, 'var(--t2)',
+                                    (recurringSched.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None scheduled</div>:recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                </div>
+                              )))
                           })()}
                         </div>
                       )
@@ -4590,9 +4596,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       const myTasks = _myAll.filter(t=>!_mySelf(t))
                       const myTasksOneOff = myTasks.filter(t=>isOneOff(t))
                       const myTasksRecurring = myTasks.filter(t=>isRecurring(t))
-                      const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&t.assigned_user_name!==user.name).sort(byDate)
+                      const _iOwn = t => (!!t.approver_id && t.approver_id===user.id) || t.created_by===user.name
+                      const iAssigned = activeFiltered.filter(t=>_iOwn(t)&&!_mySelf(t)).sort(byDate)
                       const oneOff = iAssigned.filter(t=>isOneOff(t))
-                      const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
+                      const recurring = iAssigned.filter(t=>isRecurring(t))
                       return (
                         <div>
                           {renderSection('mg-review', '🔍 Needs My Review', needsReview.length,
@@ -4613,24 +4620,29 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                   (myTasksRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksRecurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                               </div>
                             )))}
-                          {renderSection('mg-oneoff', '📤 One-off Tasks I Assigned', oneOff.length,
-                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                            (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No one-off tasks assigned</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                           {(()=>{
-                            // Point 3: default Tasks view surfaces only recurring tasks in their
-                            // current due window; out-of-window ones move to a collapsed Scheduled
-                            // section. Nothing is hidden — the filter tabs still reach everything.
+                            // Tasks Assigned to Others: everything this user is accountable for
+                            // following up - they are the named approver, or they created it.
+                            // Three sub-groups preserve the Point 3 behaviour (recurring due now
+                            // vs scheduled) inside the parent rather than as siblings.
                             const _today = orgToday(orgTz)
                             const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
                             const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
-                            return (<>
-                              {renderSection('mg-recurring', '🔁 Recurring Tasks I Assigned', recurringInWin.length,
-                                {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
-                                (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
-                              {recurringSched.length>0&&renderSection('mg-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
-                                {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                                recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
-                            </>)
+                            return renderSection('mg-others', '📤 Tasks Assigned to Others', iAssigned.length,
+                              {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                              (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned to others</div>:(
+                                <div>
+                                  {renderSection('mg-others-oneoff', '📋 One-off', oneOff.length,
+                                    {marginBottom:10}, 'var(--t2)',
+                                    (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                  {renderSection('mg-others-recurring', '🔁 Recurring', recurringInWin.length,
+                                    {marginBottom:10}, 'var(--t2)',
+                                    (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                  {renderSection('mg-others-scheduled', '🕓 Scheduled — not due yet', recurringSched.length,
+                                    {marginBottom:0}, 'var(--t2)',
+                                    (recurringSched.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None scheduled</div>:recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                </div>
+                              )))
                           })()}
                         </div>
                       )
