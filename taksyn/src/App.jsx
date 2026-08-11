@@ -8730,6 +8730,7 @@ function RolesPositionsView({ user }) {
   const [editGlobalId, setEditGlobalId] = useState(null)
   const [editGlobalName, setEditGlobalName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [rpMsg, setRpMsg] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(()=>{
@@ -8788,8 +8789,10 @@ function RolesPositionsView({ user }) {
   }
   const deleteOrgIndustry = async (id,name) => {
     if(!window.confirm(`Delete "${name}"? Roles assigned to this industry will be removed.`)) return
+    setRpMsg('')
     await supabase.from('org_industries').delete().eq('id',id)
-    await supabase.from('org_custom_roles').delete().eq('industry_name',name).eq('organisation_id',orgId)
+    const {error:rErr} = await supabase.from('org_custom_roles').delete().eq('industry_name',name).eq('organisation_id',orgId).select()
+    if(rErr){ setRpMsg('✗ '+rErr.message); return }
     setOrgIndustryObjs(prev=>prev.filter(i=>i.id!==id))
     if(selectedIndustry===name) setSelectedIndustry('')
   }
@@ -8817,13 +8820,17 @@ function RolesPositionsView({ user }) {
     try {
       const maxOrder = roles.reduce((m,r)=>Math.max(m,r.sort_order||0),0)
       const {error} = await supabase.from('org_custom_roles').insert({role_name:name,organisation_id:orgId,industry_name:selectedIndustry,sort_order:maxOrder+1})
-      if(!error) { await refreshRoles(); setNewRoleName('') }
+      if(error){ setRpMsg(error.code==='42501'?'✗ Only an administrator can change roles and positions.':'✗ '+error.message); return }
+      await refreshRoles(); setNewRoleName('')
     } finally {
       setSaving(false)
     }
   }
   const deleteRole = async (id) => {
-    await supabase.from('org_custom_roles').delete().eq('id',id)
+    setRpMsg('')
+    const {data,error} = await supabase.from('org_custom_roles').delete().eq('id',id).select()
+    if(error){ setRpMsg('✗ '+error.message); return }
+    if(!data||data.length===0){ setRpMsg('✗ Only an administrator can change roles and positions.'); return }
     setRoles(prev=>prev.filter(r=>r.id!==id))
   }
   const saveRoleEdit = async () => {
@@ -8831,8 +8838,10 @@ function RolesPositionsView({ user }) {
     if(!name||!editRoleId) return
     setSaving(true)
     try {
-      const {error} = await supabase.from('org_custom_roles').update({role_name:name}).eq('id',editRoleId)
-      if(!error) { await refreshRoles(); setEditRoleId(null); setEditRoleName('') }
+      const {data,error} = await supabase.from('org_custom_roles').update({role_name:name}).eq('id',editRoleId).select()
+      if(error){ setRpMsg('✗ '+error.message); return }
+      if(!data||data.length===0){ setRpMsg('✗ Only an administrator can change roles and positions.'); return }
+      await refreshRoles(); setEditRoleId(null); setEditRoleName('')
     } finally {
       setSaving(false)
     }
@@ -8841,7 +8850,9 @@ function RolesPositionsView({ user }) {
     const idx=roles.findIndex(r=>r.id===id); if(idx<0) return
     const swap=roles[idx+dir]; if(!swap) return
     const a=roles[idx],b=swap,aO=a.sort_order??idx,bO=b.sort_order??(idx+dir)
-    await Promise.all([supabase.from('org_custom_roles').update({sort_order:bO}).eq('id',a.id),supabase.from('org_custom_roles').update({sort_order:aO}).eq('id',b.id)]).catch(()=>{})
+    setRpMsg('')
+    const mvR = await Promise.all([supabase.from('org_custom_roles').update({sort_order:bO}).eq('id',a.id).select(),supabase.from('org_custom_roles').update({sort_order:aO}).eq('id',b.id).select()]).catch(()=>null)
+    if(!mvR||mvR.some(r=>r.error||!r.data||r.data.length===0)){ setRpMsg('✗ Only an administrator can change roles and positions.'); return }
     setRoles(prev=>{const n=[...prev];n[idx]={...a,sort_order:bO};n[idx+dir]={...b,sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))})
   }
 
@@ -8852,19 +8863,26 @@ function RolesPositionsView({ user }) {
     if([...DEFAULT_POSITIONS,...customPositions.map(p=>p.position_name)].find(n=>n.toLowerCase()===name.toLowerCase())) return
     setSaving(true)
     const maxOrder = customPositions.reduce((m,p)=>Math.max(m,p.sort_order||0),0)
+    setRpMsg('')
     const {data,error} = await supabase.from('org_custom_positions').insert({position_name:name,organisation_id:orgId,sort_order:maxOrder+1}).select().single()
-    if(!error&&data) { setCustomPositions(prev=>[...prev,data]); setNewPositionName('') }
+    if(error){ setRpMsg(error.code==='42501'?'✗ Only an administrator can change roles and positions.':'✗ '+error.message); setSaving(false); return }
+    if(data) { setCustomPositions(prev=>[...prev,data]); setNewPositionName('') }
     setSaving(false)
   }
   const deletePosition = async (id) => {
-    await supabase.from('org_custom_positions').delete().eq('id',id)
+    setRpMsg('')
+    const {data,error} = await supabase.from('org_custom_positions').delete().eq('id',id).select()
+    if(error){ setRpMsg('✗ '+error.message); return }
+    if(!data||data.length===0){ setRpMsg('✗ Only an administrator can change roles and positions.'); return }
     setCustomPositions(prev=>prev.filter(p=>p.id!==id))
   }
   const savePosEdit = async () => {
     const name = editPosName.trim()
     if(!name||!editPosId) return
-    setSaving(true)
-    await supabase.from('org_custom_positions').update({position_name:name}).eq('id',editPosId)
+    setSaving(true); setRpMsg('')
+    const {data,error} = await supabase.from('org_custom_positions').update({position_name:name}).eq('id',editPosId).select()
+    if(error){ setRpMsg('✗ '+error.message); setSaving(false); return }
+    if(!data||data.length===0){ setRpMsg('✗ Only an administrator can change roles and positions.'); setSaving(false); return }
     setCustomPositions(prev=>prev.map(p=>p.id===editPosId?{...p,position_name:name}:p))
     setEditPosId(null); setEditPosName(''); setSaving(false)
   }
@@ -8872,7 +8890,9 @@ function RolesPositionsView({ user }) {
     const idx=customPositions.findIndex(p=>p.id===id); if(idx<0) return
     const swap=customPositions[idx+dir]; if(!swap) return
     const a=customPositions[idx],b=swap,aO=a.sort_order??idx,bO=b.sort_order??(idx+dir)
-    await Promise.all([supabase.from('org_custom_positions').update({sort_order:bO}).eq('id',a.id),supabase.from('org_custom_positions').update({sort_order:aO}).eq('id',b.id)]).catch(()=>{})
+    setRpMsg('')
+    const mvP = await Promise.all([supabase.from('org_custom_positions').update({sort_order:bO}).eq('id',a.id).select(),supabase.from('org_custom_positions').update({sort_order:aO}).eq('id',b.id).select()]).catch(()=>null)
+    if(!mvP||mvP.some(r=>r.error||!r.data||r.data.length===0)){ setRpMsg('✗ Only an administrator can change roles and positions.'); return }
     setCustomPositions(prev=>{const n=[...prev];n[idx]={...a,sort_order:bO};n[idx+dir]={...b,sort_order:aO};return [...n].sort((x,y)=>(x.sort_order??999)-(y.sort_order??999))})
   }
 
@@ -8921,6 +8941,8 @@ function RolesPositionsView({ user }) {
       <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16}}>
         {TABS.map(([k,l])=><button key={k} onClick={()=>setActiveTab(k)} style={{flex:'1 1 auto',padding:'6px 10px',borderRadius:6,border:'none',background:activeTab===k?'#fff':'transparent',color:activeTab===k?'var(--text)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:activeTab===k?'0 1px 4px rgba(0,0,0,.1)':'none'}}>{l}</button>)}
       </div>
+
+      {rpMsg&&<div style={{padding:'8px 14px',borderRadius:8,marginBottom:12,fontSize:12,fontWeight:600,background:rpMsg.startsWith('✓')?'rgba(16,185,129,.1)':'rgba(239,68,68,.1)',color:rpMsg.startsWith('✓')?'#10B981':'#EF4444',border:'1px solid '+(rpMsg.startsWith('✓')?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)')}}>{rpMsg}</div>}
 
       {/* ── GLOBAL INDUSTRIES (super_admin) ── */}
       {activeTab==='global_industries'&&(
@@ -9493,7 +9515,9 @@ function CompanySettingsView({ user }) {
   }
   const tmDeleteInd = async (id,name) => {
     if(!window.confirm('Delete "'+name+'"? All its roles will also be deleted.')) return
-    await supabase.from('org_custom_roles').delete().eq('organisation_id',orgId).eq('industry_name',name)
+    setMsg('')
+    const {error:tmRErr} = await supabase.from('org_custom_roles').delete().eq('organisation_id',orgId).eq('industry_name',name).select()
+    if(tmRErr){ setMsg('✗ '+tmRErr.message); return }
     await supabase.from('org_industries').delete().eq('id',id)
     setTmOrgInds(prev=>prev.filter(i=>i.id!==id))
     setTmAllRoles(prev=>prev.filter(r=>r.industry_name!==name))
@@ -9511,16 +9535,23 @@ function CompanySettingsView({ user }) {
     setTmSaving(true)
     const maxO=tmRolesFor(industryName).reduce((m,r)=>Math.max(m,r.sort_order||0),0)
     const {data,error}=await supabase.from('org_custom_roles').insert({role_name:name,organisation_id:orgId,industry_name:industryName,sort_order:maxO+1}).select().single()
-    if(!error&&data){setTmAllRoles(prev=>[...prev,data]);setTmNewRoleName(prev=>({...prev,[industryName]:''}))}
+    if(error){ setMsg(error.code==='42501'?'✗ Only an administrator can change roles and positions.':'✗ '+error.message); setTmSaving(false); return }
+    if(data){setTmAllRoles(prev=>[...prev,data]);setTmNewRoleName(prev=>({...prev,[industryName]:''}))}
     setTmSaving(false)
   }
   const tmDeleteRole = async (id) => {
-    await supabase.from('org_custom_roles').delete().eq('id',id)
+    setMsg('')
+    const {data,error} = await supabase.from('org_custom_roles').delete().eq('id',id).select()
+    if(error){ setMsg('✗ '+error.message); return }
+    if(!data||data.length===0){ setMsg('✗ Only an administrator can change roles and positions.'); return }
     setTmAllRoles(prev=>prev.filter(r=>r.id!==id))
   }
   const tmSaveRole = async () => {
     if(!tmEditRole?.role_name?.trim()) return; setTmSaving(true)
-    await supabase.from('org_custom_roles').update({role_name:tmEditRole.role_name.trim()}).eq('id',tmEditRole.id)
+    setMsg('')
+    const {data,error} = await supabase.from('org_custom_roles').update({role_name:tmEditRole.role_name.trim()}).eq('id',tmEditRole.id).select()
+    if(error){ setMsg('✗ '+error.message); setTmSaving(false); return }
+    if(!data||data.length===0){ setMsg('✗ Only an administrator can change roles and positions.'); setTmSaving(false); return }
     setTmAllRoles(prev=>prev.map(r=>r.id===tmEditRole.id?{...r,role_name:tmEditRole.role_name.trim()}:r))
     setTmEditRole(null); setTmSaving(false)
   }
@@ -9528,7 +9559,9 @@ function CompanySettingsView({ user }) {
     const list=tmRolesFor(industryName); const idx=list.findIndex(r=>r.id===id); if(idx<0) return
     const swap=list[idx+dir]; if(!swap) return
     const aO=list[idx].sort_order??idx, bO=swap.sort_order??(idx+dir)
-    await Promise.all([supabase.from('org_custom_roles').update({sort_order:bO}).eq('id',id),supabase.from('org_custom_roles').update({sort_order:aO}).eq('id',swap.id)]).catch(()=>{})
+    setMsg('')
+    const tmMvR = await Promise.all([supabase.from('org_custom_roles').update({sort_order:bO}).eq('id',id).select(),supabase.from('org_custom_roles').update({sort_order:aO}).eq('id',swap.id).select()]).catch(()=>null)
+    if(!tmMvR||tmMvR.some(r=>r.error||!r.data||r.data.length===0)){ setMsg('✗ Only an administrator can change roles and positions.'); return }
     setTmAllRoles(prev=>prev.map(r=>r.id===id?{...r,sort_order:bO}:r.id===swap.id?{...r,sort_order:aO}:r))
   }
 
@@ -9539,16 +9572,23 @@ function CompanySettingsView({ user }) {
     setTmSaving(true)
     const maxO=tmCustomPos.reduce((m,p)=>Math.max(m,p.sort_order||0),0)
     const {data,error}=await supabase.from('org_custom_positions').insert({position_name:name,organisation_id:orgId,sort_order:maxO+1}).select().single()
-    if(!error&&data){setTmCustomPos(prev=>[...prev,data]);setTmNewPosName('')}
+    if(error){ setMsg(error.code==='42501'?'✗ Only an administrator can change roles and positions.':'✗ '+error.message); setTmSaving(false); return }
+    if(data){setTmCustomPos(prev=>[...prev,data]);setTmNewPosName('')}
     setTmSaving(false)
   }
   const tmDeletePos = async (id) => {
-    await supabase.from('org_custom_positions').delete().eq('id',id)
+    setMsg('')
+    const {data,error} = await supabase.from('org_custom_positions').delete().eq('id',id).select()
+    if(error){ setMsg('✗ '+error.message); return }
+    if(!data||data.length===0){ setMsg('✗ Only an administrator can change roles and positions.'); return }
     setTmCustomPos(prev=>prev.filter(p=>p.id!==id))
   }
   const tmSavePos = async () => {
     if(!tmEditPos?.position_name?.trim()) return; setTmSaving(true)
-    await supabase.from('org_custom_positions').update({position_name:tmEditPos.position_name.trim()}).eq('id',tmEditPos.id)
+    setMsg('')
+    const {data,error} = await supabase.from('org_custom_positions').update({position_name:tmEditPos.position_name.trim()}).eq('id',tmEditPos.id).select()
+    if(error){ setMsg('✗ '+error.message); setTmSaving(false); return }
+    if(!data||data.length===0){ setMsg('✗ Only an administrator can change roles and positions.'); setTmSaving(false); return }
     setTmCustomPos(prev=>prev.map(p=>p.id===tmEditPos.id?{...p,position_name:tmEditPos.position_name.trim()}:p))
     setTmEditPos(null); setTmSaving(false)
   }
@@ -9557,7 +9597,9 @@ function CompanySettingsView({ user }) {
     const idx=sorted.findIndex(p=>p.id===id); if(idx<0) return
     const swap=sorted[idx+dir]; if(!swap) return
     const aO=sorted[idx].sort_order??idx, bO=swap.sort_order??(idx+dir)
-    await Promise.all([supabase.from('org_custom_positions').update({sort_order:bO}).eq('id',id),supabase.from('org_custom_positions').update({sort_order:aO}).eq('id',swap.id)]).catch(()=>{})
+    setMsg('')
+    const tmMvP = await Promise.all([supabase.from('org_custom_positions').update({sort_order:bO}).eq('id',id).select(),supabase.from('org_custom_positions').update({sort_order:aO}).eq('id',swap.id).select()]).catch(()=>null)
+    if(!tmMvP||tmMvP.some(r=>r.error||!r.data||r.data.length===0)){ setMsg('✗ Only an administrator can change roles and positions.'); return }
     setTmCustomPos(prev=>prev.map(p=>p.id===id?{...p,sort_order:bO}:p.id===swap.id?{...p,sort_order:aO}:p))
   }
 
