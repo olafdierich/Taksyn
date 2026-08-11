@@ -4606,7 +4606,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     const _caToday = orgToday(orgTz)
                     const _isOver = t => !!orgTz && isOverdueOneOff(t, _caToday)
                     const attention = activeFiltered.filter(t=>['overdue','escalated'].includes(t.status)||t.escalation||_isOver(t)).sort(byDate)
-                    const iAssigned = activeFiltered.filter(t=>t.created_by===user.name).sort(byDate)
+                    const _mySelf = t => !!t.created_by_id && t.created_by_id===user.id && t.assigned_user_id===user.id
+                    const myOwn = activeFiltered.filter(_mySelf).sort(byDate)
+                    const iAssigned = activeFiltered.filter(t=>t.created_by===user.name&&!_mySelf(t)).sort(byDate)
                     const assignedToMgr = iAssigned.filter(t=>t.assigned_role==='manager'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='manager')
                     const assignedToSup = iAssigned.filter(t=>t.assigned_role==='supervisor'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='supervisor')
                     const assignedToWkr = iAssigned.filter(t=>t.assigned_role==='worker'||teamUsers.find(u=>u.id===t.assigned_user_id)?.role==='worker')
@@ -4620,6 +4622,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         {attention.length>0&&renderSection('ca-attention', '⚠️ Needs Attention — Overdue & Escalated', attention.length,
                           {background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}, 'var(--red)',
                           attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
+                        {renderSection('ca-mine', '📋 My Own Tasks', myOwn.length,
+                          {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                          (myOwn.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:myOwn.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                         {renderSection('ca-assigned', '📤 Tasks I Assigned', iAssigned.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
