@@ -6820,7 +6820,8 @@ function UsersView({ user, setAuditLog }) {
               </div>
               <div className="form-field">
                 <label className="form-label">Email</label>
-                <input className="form-input" type="email" value={editForm.email||''} onChange={e=>setEditForm({...editForm,email:e.target.value})} placeholder="email@example.com"/>
+                <input className="form-input" type="email" value={editForm.email||''} readOnly style={{background:'var(--s3)',color:'var(--t2)',cursor:'not-allowed'}} placeholder="email@example.com"/>
+                <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>Sign-in email. Only the account holder can change this, via My Profile → Update Email.</div>
                 <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates the display email — user must change their own login email via Profile</div>
                 {['client_admin','manager'].includes(user.role)&&editForm.email&&(
                   <div style={{marginTop:6}}>
@@ -8081,7 +8082,8 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                   <div className="form-field"><label className="form-label">Organisation</label><div className="form-input" style={{background:'var(--s3)',color:'var(--t2)',cursor:'default'}}>{editingMember.org}</div></div>
                 </div>
                 <div className="form-field"><label className="form-label">Email</label>
-                  <input className="form-input" type="email" value={memberEditForm.email||''} onChange={e=>setMemberEditForm({...memberEditForm,email:e.target.value})} placeholder="email@example.com"/>
+                  <input className="form-input" type="email" value={memberEditForm.email||''} readOnly style={{background:'var(--s3)',color:'var(--t2)',cursor:'not-allowed'}} placeholder="email@example.com"/>
+                  <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>Sign-in email. Only the account holder can change this, via My Profile → Update Email.</div>
                   <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Updates display email — user changes login email via their own Profile</div>
                   {memberEditForm.email&&(
                     <div style={{marginTop:6}}>
