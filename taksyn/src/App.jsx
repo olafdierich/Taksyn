@@ -14128,7 +14128,8 @@ function ContactsView({ user, setPage }) {
   const visible = rows.filter(r =>
     (showArchived ? r.status==='archived' : r.status==='active') &&
     (!filterType || r.person_type===filterType) &&
-    (!q.trim() || String(r.full_name||'').toLowerCase().includes(q.trim().toLowerCase())))
+    (!q.trim() || String(r.full_name||'').toLowerCase().includes(q.trim().toLowerCase())
+               || String(r.id||'').toLowerCase().startsWith(q.trim().toLowerCase())))
 
   const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:16, marginBottom:14 }
   const inp  = { width:'100%', padding:'9px 11px', borderRadius:8, border:'1px solid var(--border)', fontSize:14, marginBottom:8, background:'var(--card)', color:'var(--text)' }
@@ -14154,7 +14155,7 @@ function ContactsView({ user, setPage }) {
             <button key={k} onClick={()=>setFilterType(k)} style={chip(filterType===k)}>{t}</button>
           ))}
         </div>
-        <input style={inp} value={q} placeholder="Search by name…" onChange={e=>setQ(e.target.value)}/>
+        <input style={inp} value={q} placeholder="Search by name or ID…" onChange={e=>setQ(e.target.value)}/>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
           <button style={btn('var(--brand,#4F46E5)','#fff')} onClick={()=>{ resetForm(); setEditing('new') }}>Add a contact</button>
           <button style={btn()} onClick={()=>setShowArchived(v=>!v)}>
@@ -14207,6 +14208,11 @@ function ContactsView({ user, setPage }) {
             {r.contact_email ? ` · ${r.contact_email}` : ''}
             {r.contact_phone ? ` · ${r.contact_phone}` : ''}
             {r.external_ref ? ` · ref ${r.external_ref}` : ''}
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:10}}>
+            <span style={{fontSize:11,color:'var(--t2)',fontWeight:600}}>ID</span>
+            <code style={{fontSize:11,color:'var(--t2)',background:'var(--s3)',padding:'3px 7px',borderRadius:5,wordBreak:'break-all'}}>{r.id}</code>
+            <button style={{...btn(),padding:'3px 9px',fontSize:11}} onClick={()=>{ try{ navigator.clipboard.writeText(r.id) }catch(e){} }}>Copy</button>
           </div>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             <button style={btn()} disabled={busy} onClick={()=>openEdit(r)}>Edit</button>
