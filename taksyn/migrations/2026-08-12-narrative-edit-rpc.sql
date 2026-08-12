@@ -108,19 +108,19 @@ begin
 
   -- RULING 4 -- record both sides of every field that actually changed.
   if v_facts is distinct from v_inc.facts then
-    v_fields  := v_fields || 'facts';
+    v_fields  := v_fields || array['facts'];
     v_changes := v_changes || jsonb_build_object(
       'facts', jsonb_build_object('from', v_inc.facts, 'to', v_facts));
   end if;
 
   if v_imm is distinct from v_inc.immediate_actions then
-    v_fields  := v_fields || 'immediate_actions';
+    v_fields  := v_fields || array['immediate_actions'];
     v_changes := v_changes || jsonb_build_object(
       'immediate_actions', jsonb_build_object('from', v_inc.immediate_actions, 'to', v_imm));
   end if;
 
   if v_root is distinct from v_inc.root_cause then
-    v_fields  := v_fields || 'root_cause';
+    v_fields  := v_fields || array['root_cause'];
     v_changes := v_changes || jsonb_build_object(
       'root_cause', jsonb_build_object('from', v_inc.root_cause, 'to', v_root));
   end if;
