@@ -17266,6 +17266,7 @@ export default function App() {
   const [showNotifSettings, setShowNotifSettings] = useState(false)
   const [showCalPanel, setShowCalPanel] = useState(false)
   const [calRange, setCalRange] = useState('today')
+  const [calIncidents, setCalIncidents] = useState([])
   const notifPrefsRef = useRef(notifPrefs)
   useEffect(()=>{ notifPrefsRef.current = notifPrefs },[notifPrefs])
   const notifIdsRef = useRef(new Set())
@@ -17924,13 +17925,16 @@ export default function App() {
         const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
         if(!oid) return
         const { data: rows } = await supabase.from('incidents')
-          .select('status,assigned_at,root_cause,assign_due_at,investigate_due_at,close_due_at,closed_at')
+          .select('id,ref,category,severity,status,assigned_at,root_cause,assign_due_at,investigate_due_at,close_due_at,closed_at')
           .eq('org', oid)
         if(cancelled) return
         const now = Date.now(); const od=(d)=>d&&new Date(d).getTime()<now
         const active = (rows||[]).filter(i=>i.status!=='closed')
         const breached = active.filter(i=>(od(i.assign_due_at)&&!i.assigned_at)||(od(i.investigate_due_at)&&!i.root_cause)||od(i.close_due_at))
         setIncidentBlob(breached.length>0 ? 'warn' : (active.length>0 ? 'ok' : 'none'))
+        // Same rows drive the calendar - no second query. Only ACTIVE
+        // incidents: a closed one has no live deadline to show.
+        setCalIncidents(active)
       } catch(e) { /* leave blob as-is on error */ }
     })()
     return ()=>{ cancelled = true }
@@ -18069,6 +18073,10 @@ export default function App() {
                     const s = t.escalation ? 'escalated' : t.status
                     return _calAttention.includes(s) ? STATUS_CFG[s] : null
                   }
+                  // Escalation overrides kind: "act now" reads before "what is it".
+                  // Same detection _tint uses, kept in one place.
+                  const _isEsc = (t)=> !!t.escalation || t.status==='escalated'
+                  const _kindCol = (it)=> it.k==='incident' ? '#8B5CF6' : (_isEsc(it.t) ? '#F97316' : (it.k==='review' ? '#EF4444' : '#10B981'))
                   const days = {}
                   const add = (date,item)=>{ if(!date||date<from||date>to) return; (days[date]=days[date]||[]).push(item) }
                   ;(tasks||[]).filter(_mine).forEach(t=>{
@@ -18089,6 +18097,16 @@ export default function App() {
                       add(orgDayOf(_due.toISOString(),orgTimezone),{k:'review',t})
                     }
                   })
+                  // Incidents sit on their NEXT UNMET deadline. Stage order and
+                  // done-conditions copied from the existing breach rule
+                  // (2304 / 14250 / 15350 / 16193 / 17932) rather than restated.
+                  ;(calIncidents||[]).forEach(i=>{
+                    let _due = null
+                    if(!i.assigned_at) _due = i.assign_due_at
+                    else if(!i.root_cause) _due = i.investigate_due_at
+                    else _due = i.close_due_at
+                    if(_due) add(orgDayOf(_due,orgTimezone),{k:'incident',t:{ id:i.id, title:(i.ref||i.category||'Incident') }})
+                  })
                   const dates = Object.keys(days).sort()
                   if(dates.length===0) return <div>Nothing scheduled.</div>
                   const _DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
@@ -18099,7 +18117,7 @@ export default function App() {
                           const items = days[d]||[]
                           return (
                             <div key={d} style={{display:'flex',gap:10,padding:'9px 6px',borderBottom:'1px solid var(--border)',borderRadius:4,
-                              background:items.length===0?'transparent':(items.some(x=>x.k==='review')?'rgba(239,68,68,.05)':'rgba(16,185,129,.05)')}}>
+                              background:items.length===0?'transparent':(items.some(x=>x.k==='incident')?'rgba(139,92,246,.06)':(items.some(x=>_isEsc(x.t))?'rgba(249,115,22,.07)':(items.some(x=>x.k==='review')?'rgba(239,68,68,.05)':'rgba(16,185,129,.05)')))}}>
                               <div style={{width:46,flexShrink:0,fontSize:11,color:d===_d?'var(--brand)':'var(--t2)',fontWeight:d===_d?600:400}}>
                                 {_DOW[i]} {Number(d.slice(8,10))}
                               </div>
@@ -18107,8 +18125,8 @@ export default function App() {
                                 {items.length===0
                                   ? <span style={{color:'var(--t2)',opacity:.6}}>Nothing scheduled</span>
                                   : items.map((it,j)=>(
-                                      <div key={j} style={{color:it.k==='review'?'#EF4444':'#10B981',marginBottom:j===items.length-1?0:3}}>
-                                        {it.t.title}{it.k==='review'?' · review':''}
+                                      <div key={j} style={{color:_kindCol(it),marginBottom:j===items.length-1?0:3}}>
+                                        {it.t.title}{it.k==='incident'?' · incident':(_isEsc(it.t)?' · escalated':(it.k==='review'?' · review':''))}
                                       </div>
                                     ))}
                               </div>
@@ -18135,14 +18153,18 @@ export default function App() {
                             const _its = days[d]||[]
                             // One dot per KIND, never per item: at most one green
                             // and one red however many items fall on the day.
-                            const _hasTask = _its.some(x=>x.k!=='review')
-                            const _hasRev  = _its.some(x=>x.k==='review')
+                            const _hasInc  = _its.some(x=>x.k==='incident')
+                            const _hasEsc  = _its.some(x=>x.k!=='incident'&&_isEsc(x.t))
+                            const _hasTask = _its.some(x=>x.k!=='incident'&&!_isEsc(x.t)&&x.k!=='review')
+                            const _hasRev  = _its.some(x=>x.k!=='incident'&&!_isEsc(x.t)&&x.k==='review')
                             return (
                               <div key={d} style={{..._cell, boxShadow:d===_d?'0 0 0 1px var(--brand)':'none'}}>
                                 <div style={{fontSize:10,color:'var(--t2)',lineHeight:1.1}}>{i+1}</div>
                                 <div style={{display:'flex',gap:2,marginTop:2,height:6,alignItems:'center'}}>
                                   {_hasTask&&<div style={{width:6,height:6,borderRadius:'50%',background:'#10B981'}}/>}
                                   {_hasRev&&<div style={{width:6,height:6,borderRadius:'50%',background:'#EF4444'}}/>}
+                                  {_hasEsc&&<div style={{width:6,height:6,borderRadius:'50%',background:'#F97316'}}/>}
+                                  {_hasInc&&<div style={{width:6,height:6,borderRadius:'50%',background:'#8B5CF6'}}/>}
                                 </div>
                               </div>
                             )
@@ -18151,6 +18173,8 @@ export default function App() {
                         <div style={{marginTop:10,fontSize:10,color:'var(--t2)',display:'flex',gap:12}}>
                           <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#10B981',marginRight:4}}/>Tasks</span>
                           <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#EF4444',marginRight:4}}/>Reviews</span>
+                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#F97316',marginRight:4}}/>Escalated</span>
+                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#8B5CF6',marginRight:4}}/>Incidents</span>
                         </div>
                       </div>
                     )
@@ -18160,10 +18184,10 @@ export default function App() {
                       {(days[_d]||[]).map((it,i)=>(
                         <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',
                           background:(_tint(it.t)||{}).bg||'transparent',
-                          borderLeft:'3px solid '+(it.k==='review'?'#EF4444':'#10B981')}}>
+                          borderLeft:'3px solid '+_kindCol(it)}}>
                           <div style={{fontSize:13,color:'var(--text)',fontWeight:500}}>{it.t.title}</div>
                           <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>
-                            {it.k==='review' ? 'Awaiting review' : (it.t.recurrence&&it.t.recurrence!=='once' ? it.t.recurrence : 'One-off')}
+                            {it.k==='incident' ? 'Incident deadline' : (it.k==='review' ? 'Awaiting review' : (it.t.recurrence&&it.t.recurrence!=='once' ? it.t.recurrence : 'One-off'))}
                             {it.t.assigned_user_name ? ' · '+it.t.assigned_user_name : ''}
                           </div>
                         </div>
