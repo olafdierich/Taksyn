@@ -16360,33 +16360,6 @@ function IncidentsAdminView({ user, setPage }) {
                 </span>
               </label>
             </div>)}
-          {sel.risk_rating && (actions.length>0 || sel.no_action_required) && (<div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--border2)'}}>
-            <div style={{fontSize:12,color:'var(--t3)',marginBottom:6,fontWeight:600}}>Residual risk (after corrective actions)</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <div>
-                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4,display:'flex',alignItems:'center'}}>Likelihood (1–5)<InfoDot kind="likelihood" /></div>
-                <select id="inc-res-likelihood" defaultValue={sel.residual_likelihood||''}
-                  style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
-                  <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
-                </select>
-              </div>
-              <div>
-                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4,display:'flex',alignItems:'center'}}>Consequence (1–5)<InfoDot kind="consequence" /></div>
-                <select id="inc-res-consequence" defaultValue={sel.residual_consequence||''}
-                  style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
-                  <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
-                </select>
-              </div>
-            </div>
-            <button className="btn btn-secondary btn-sm" style={{marginTop:8}} disabled={busy} onClick={()=>{
-              const l=+document.getElementById('inc-res-likelihood').value||null
-              const c=+document.getElementById('inc-res-consequence').value||null
-              const rating=(l&&c)?l*c:null
-              patchIncident({ residual_likelihood:l, residual_consequence:c, residual_rating:rating },
-                'residual_risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
-            }}>Save residual risk</button>
-            {sel.residual_rating && (()=>{ const r=sel.residual_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Residual rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.residual_likelihood}×{sel.residual_consequence})</span></div> })()}
-          </div>)}
         </div>
 
         {/* NOTIFY ACTION — the write side of external notification (F7).
@@ -16717,6 +16690,40 @@ function IncidentsAdminView({ user, setPage }) {
             </div>
           )
         })()}
+        {/* RESIDUAL RISK — deliberately placed LAST, immediately before the
+            status block. Rated after the corrective actions have been created
+            and verified, so the number reflects what the actions actually
+            achieved. Sitting under the initial rating (where this lived until
+            12 Aug 2026) invited a residual figure to be recorded before any
+            action had done anything. Gate is unchanged. */}
+        {sel.risk_rating && (actions.length>0 || sel.no_action_required) && (
+          <div style={card}>
+            <span style={lbl}>Residual risk (after corrective actions)</span>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <div>
+                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4,display:'flex',alignItems:'center'}}>Likelihood (1–5)<InfoDot kind="likelihood" /></div>
+                <select id="inc-res-likelihood" defaultValue={sel.residual_likelihood||''}
+                  style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+                  <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4,display:'flex',alignItems:'center'}}>Consequence (1–5)<InfoDot kind="consequence" /></div>
+                <select id="inc-res-consequence" defaultValue={sel.residual_consequence||''}
+                  style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+                  <option value="">—</option>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </div>
+            <button className="btn btn-secondary btn-sm" style={{marginTop:8}} disabled={busy} onClick={()=>{
+              const l=+document.getElementById('inc-res-likelihood').value||null
+              const c=+document.getElementById('inc-res-consequence').value||null
+              const rating=(l&&c)?l*c:null
+              patchIncident({ residual_likelihood:l, residual_consequence:c, residual_rating:rating },
+                'residual_risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
+            }}>Save residual risk</button>
+            {sel.residual_rating && (()=>{ const r=sel.residual_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Residual rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.residual_likelihood}×{sel.residual_consequence})</span></div> })()}
+          </div>)}
         {/* lifecycle */}
         <div style={card}>
           <span style={lbl}>Confirm status</span>
