@@ -16811,11 +16811,12 @@ function IncidentsAdminView({ user, setPage }) {
                 <div style={{width:8,height:8,borderRadius:4,background:'var(--brand)',marginTop:5,flexShrink:0}}/>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:600}}>{INC_EVENT_LABEL[ev.event_type]||ev.event_type}
-                    {ev.from_value&&ev.to_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.from_value} → {ev.to_value}</span>}
+                    {ev.event_type!=='narrative_edited'&&ev.from_value&&ev.to_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.from_value} → {ev.to_value}</span>}
+                    {ev.event_type==='narrative_edited'&&ev.from_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.from_value}</span>}
                     {!ev.from_value&&ev.to_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.to_value}</span>}
                   </div>
                   <div style={{fontSize:11,color:'var(--t3)'}}>{ev.by_name||'—'} ({ev.by_role||'—'}) · {fmtDate(ev.at)}</div>
-                  {ev.details&&ev.details.note&&<div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{ev.details.note}</div>}
+                  {ev.details&&(ev.details.note||ev.details.reason)&&<div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{ev.details.note||ev.details.reason}</div>}
                 </div>
               </div>
             ))}
