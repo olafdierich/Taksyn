@@ -16480,7 +16480,7 @@ function IncidentsAdminView({ user, setPage }) {
                   </span>
                 </div>
               )}
-              {isAdmin ? (
+              {(isAdmin && !isVoid) ? (
                 <div>
                   <div style={{fontSize:11,color:'var(--t3)',marginBottom:4}}>Effectiveness assessment</div>
                   <textarea id={'act-eff-'+a.id} defaultValue={a.effectiveness||''} disabled={busy}
@@ -18077,8 +18077,16 @@ export default function App() {
                     } else if(t.due_date){
                       add(String(t.due_date).slice(0,10),{k:'task',t})
                     }
-                    if(t.status==='awaiting_review'&&t.submitted_at){
-                      add(orgDayOf(t.submitted_at,orgTimezone),{k:'review',t})
+                    // Reviews are an approver obligation. A worker who has
+                    // submitted has done their part; if it is rejected it
+                    // returns to them as a TASK, which is the right signal.
+                    if(user?.role!=='worker'&&t.status==='awaiting_review'&&t.submitted_at){
+                      // Placed on the review DUE day, not the submission day:
+                      // submitted_at + the task's SLA. orgSLA is per-org and
+                      // configurable, so it is read rather than hardcoded.
+                      const _slaMs = getSLAMinutes(t.priority, orgSLA) * 60000
+                      const _due = new Date(new Date(t.submitted_at).getTime() + _slaMs)
+                      add(orgDayOf(_due.toISOString(),orgTimezone),{k:'review',t})
                     }
                   })
                   const dates = Object.keys(days).sort()
@@ -18090,7 +18098,8 @@ export default function App() {
                         {Array.from({length:7},(_,k)=>_plus(from,k)).map((d,i)=>{
                           const items = days[d]||[]
                           return (
-                            <div key={d} style={{display:'flex',gap:10,padding:'9px 0',borderBottom:'1px solid var(--border)'}}>
+                            <div key={d} style={{display:'flex',gap:10,padding:'9px 6px',borderBottom:'1px solid var(--border)',borderRadius:4,
+                              background:items.length===0?'transparent':(items.some(x=>x.k==='review')?'rgba(239,68,68,.05)':'rgba(16,185,129,.05)')}}>
                               <div style={{width:46,flexShrink:0,fontSize:11,color:d===_d?'var(--brand)':'var(--t2)',fontWeight:d===_d?600:400}}>
                                 {_DOW[i]} {Number(d.slice(8,10))}
                               </div>
@@ -18098,7 +18107,7 @@ export default function App() {
                                 {items.length===0
                                   ? <span style={{color:'var(--t2)',opacity:.6}}>Nothing scheduled</span>
                                   : items.map((it,j)=>(
-                                      <div key={j} style={{color:'var(--text)',marginBottom:j===items.length-1?0:3}}>
+                                      <div key={j} style={{color:it.k==='review'?'#EF4444':'#10B981',marginBottom:j===items.length-1?0:3}}>
                                         {it.t.title}{it.k==='review'?' · review':''}
                                       </div>
                                     ))}
@@ -18123,19 +18132,25 @@ export default function App() {
                           {Array.from({length:_lead},(_,i)=><div key={'b'+i}/>)}
                           {Array.from({length:_len},(_,i)=>{
                             const d = from.slice(0,8)+String(i+1).padStart(2,'0')
-                            const n = (days[d]||[]).length
+                            const _its = days[d]||[]
+                            // One dot per KIND, never per item: at most one green
+                            // and one red however many items fall on the day.
+                            const _hasTask = _its.some(x=>x.k!=='review')
+                            const _hasRev  = _its.some(x=>x.k==='review')
                             return (
                               <div key={d} style={{..._cell, boxShadow:d===_d?'0 0 0 1px var(--brand)':'none'}}>
                                 <div style={{fontSize:10,color:'var(--t2)',lineHeight:1.1}}>{i+1}</div>
-                                <div style={{width:6,height:6,borderRadius:'50%',marginTop:2,
-                                  background: n===0?'transparent':(n>=3?'var(--text)':'var(--brand)')}}/>
+                                <div style={{display:'flex',gap:2,marginTop:2,height:6,alignItems:'center'}}>
+                                  {_hasTask&&<div style={{width:6,height:6,borderRadius:'50%',background:'#10B981'}}/>}
+                                  {_hasRev&&<div style={{width:6,height:6,borderRadius:'50%',background:'#EF4444'}}/>}
+                                </div>
                               </div>
                             )
                           })}
                         </div>
                         <div style={{marginTop:10,fontSize:10,color:'var(--t2)',display:'flex',gap:12}}>
-                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'var(--brand)',marginRight:4}}/>1–2 items</span>
-                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'var(--text)',marginRight:4}}/>3+ items</span>
+                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#10B981',marginRight:4}}/>Tasks</span>
+                          <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#EF4444',marginRight:4}}/>Reviews</span>
                         </div>
                       </div>
                     )
@@ -18145,7 +18160,7 @@ export default function App() {
                       {(days[_d]||[]).map((it,i)=>(
                         <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',
                           background:(_tint(it.t)||{}).bg||'transparent',
-                          borderLeft:_tint(it.t)?('3px solid '+_tint(it.t).color):'1px solid var(--border)'}}>
+                          borderLeft:'3px solid '+(it.k==='review'?'#EF4444':'#10B981')}}>
                           <div style={{fontSize:13,color:'var(--text)',fontWeight:500}}>{it.t.title}</div>
                           <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>
                             {it.k==='review' ? 'Awaiting review' : (it.t.recurrence&&it.t.recurrence!=='once' ? it.t.recurrence : 'One-off')}
