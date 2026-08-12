@@ -15985,6 +15985,20 @@ function IncidentsAdminView({ user, setPage }) {
       const target=incidents.find(i=>i.ref===ref); if(target) openIncident(target) }
   },[incidents])
 
+  // Linked task statuses, for display only. Deliberately NOT the reconcile's
+  // fetch -- that one covers only non-terminal actions, so a completed action
+  // would show no task status, which is the one most worth seeing.
+  // Called from BOTH openIncident and the CapaActionForm onDone callback: a
+  // newly created action carries a task_id the map has not seen, and without
+  // this the render falls through to a red "Task not found" until reload.
+  // Rebuilds the whole map rather than appending, so the two call sites stay
+  // identical and pick up status changes on the other actions' tasks too.
+  const loadIncTasks = async (act) => {
+    const tids = [...new Set((act||[]).map(a => a.task_id).filter(Boolean))]
+    if (!tids.length) { setIncTasks({}); return }
+    const { data: tk } = await supabase.from('tasks').select('id,status,reviewed_at').in('id', tids)
+    setIncTasks(Object.fromEntries((tk||[]).map(t => [t.id, t])))
+  }
   const openIncident = async (inc) => {
     setSel(inc); setEvents([]); setActions([]); setIncEvidence([]); setIncFindings([]); setIncTasks({})
     let [{ data: ev }, { data: act }, { data: evd }, { data: fnd }] = await Promise.all([
@@ -16029,14 +16043,7 @@ function IncidentsAdminView({ user, setPage }) {
       }
     } catch (e) { /* reconcile is best-effort; never block opening the incident */ }
     setEvents(ev||[]); setActions(act||[]); setIncEvidence(evd||[]); setIncFindings(fnd||[])
-    // Linked task statuses, for display only. Deliberately NOT the reconcile's
-    // fetch above -- that one covers only non-terminal actions, so a completed
-    // action would show no task status, which is the one most worth seeing.
-    const tids = [...new Set((act||[]).map(a => a.task_id).filter(Boolean))]
-    if (tids.length) {
-      const { data: tk } = await supabase.from('tasks').select('id,status,reviewed_at').in('id', tids)
-      setIncTasks(Object.fromEntries((tk||[]).map(t => [t.id, t])))
-    }
+    await loadIncTasks(act)
   }
 
   // Effectiveness assessment on a corrective action. client_admin only, and that
@@ -16437,6 +16444,7 @@ function IncidentsAdminView({ user, setPage }) {
             onDone={async ()=>{
               const { data: act } = await supabase.from('incident_actions').select('*').eq('incident_id',sel.id).order('created_at',{ascending:true})
               setActions(act||[])
+              await loadIncTasks(act)
               const { data: ev } = await supabase.from('incident_events').select('*').eq('incident_id',sel.id).order('at',{ascending:false})
               setEvents(ev||[])
             }}/>
