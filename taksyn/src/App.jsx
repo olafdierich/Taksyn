@@ -15893,6 +15893,7 @@ const INC_EVENT_LABEL = {
   reported:'Reported', severity_set:'Severity set', severity_overridden:'Severity overridden',
   assigned:'Assigned', reassigned:'Reassigned', notified:'Notified', assessed:'Assessed',
   investigation_started:'Investigation started', root_cause_recorded:'Root cause recorded',
+  narrative_edited:'Record corrected',
   risk_rated:'Risk rated', action_created:'Action created', action_completed:'Action completed',
   action_verified:'Action verified', regulator_notified:'Regulator notified',
   reopened:'Reopened', closed:'Closed', status_changed:'Status changed',
@@ -15935,6 +15936,8 @@ function IncidentsAdminView({ user, setPage }) {
   const [openFind, setOpenFind] = useState({})   // findings id -> explicitly opened/closed
   const [incTasks, setIncTasks] = useState({})   // task id -> {id,status,reviewed_at}
   const [capaStaff, setCapaStaff] = useState([])
+  const [editNarr, setEditNarr] = useState(false)   // "what happened" card unlocked
+  const [editRoot, setEditRoot] = useState(false)   // investigation root cause unlocked
   const [busy, setBusy] = useState(false)
 
   const fmtDate = (d) => d ? new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
@@ -16092,6 +16095,45 @@ function IncidentsAdminView({ user, setPage }) {
     setBusy(false)
   }
 
+  // Narrative write path. Delegates authority, the mandatory reason and the
+  // audit event to incident_edit_narrative() -- update and event land in ONE
+  // server-side transaction, so neither can exist without the other.
+  //
+  // Deliberately NOT patchIncident: that path tests only upErr, so an RLS
+  // denial (200 / error null / zero rows) takes the success branch and writes
+  // an event claiming a change that never happened.
+  //
+  // The RPC takes all three fields every time and records only what actually
+  // differs, so each editor passes current values for the fields it does not
+  // own. A stale form therefore overwrites a concurrent edit rather than
+  // merging with it -- the row lock serialises the writes, it does not
+  // reconcile them. Acceptable at single-operator scale; revisit if two people
+  // routinely edit one incident.
+  const editNarrative = async (fields, question) => {
+    if (!sel) return
+    const reason = prompt(question)
+    if (reason === null) return                       // cancelled -- do nothing
+    if (!reason.trim()) { alert('A reason is required.'); return }
+    setBusy(true)
+    const { data, error } = await supabase.rpc('incident_edit_narrative', {
+      p_incident_id: sel.id,
+      p_facts:       fields.facts       !== undefined ? fields.facts       : sel.facts,
+      p_immediate:   fields.immediate   !== undefined ? fields.immediate   : sel.immediate_actions,
+      p_root_cause:  fields.root_cause  !== undefined ? fields.root_cause  : sel.root_cause,
+      p_reason:      reason,
+    })
+    if (error) {
+      alert(error.message)
+    } else if (data) {
+      setSel(data)
+      setIncidents(prev=>prev.map(i=>i.id===data.id?data:i))
+      const { data: ev } = await supabase.from('incident_events')
+        .select('*').eq('incident_id', sel.id).order('at',{ascending:false})
+      setEvents(ev||[])
+      setEditNarr(false); setEditRoot(false)
+    }
+    setBusy(false)
+  }
   // ---- derived list ----
   // status write path: delegates order, authority and audit to the DB function
   const transitionIncident = async (toStatus, note=null) => {
@@ -16207,10 +16249,33 @@ function IncidentsAdminView({ user, setPage }) {
 
         {/* what happened */}
         <div style={card}>
-          <span style={lbl}>What happened</span>
-          <div style={{fontSize:14,lineHeight:1.5,whiteSpace:'pre-wrap',marginBottom:10}}>{sel.facts}</div>
-          {sel.immediate_actions && <><span style={lbl}>Immediate actions taken</span>
-            <div style={{fontSize:14,marginBottom:10}}>{sel.immediate_actions}</div></>}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span style={lbl}>What happened</span>
+            {!editNarr && <button className="btn btn-secondary btn-sm" disabled={busy}
+              onClick={()=>setEditNarr(true)}>Edit</button>}
+          </div>
+          {editNarr ? (<>
+            <textarea defaultValue={sel.facts||''} id="inc-edit-facts"
+              style={{width:'100%',minHeight:90,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8,fontSize:14}}/>
+            <span style={lbl}>Immediate actions taken</span>
+            <textarea defaultValue={sel.immediate_actions||''} id="inc-edit-immediate"
+              style={{width:'100%',minHeight:70,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8,fontSize:14}}/>
+            <div style={{fontSize:12,color:'var(--t3)',marginBottom:8}}>
+              Corrections are recorded in the audit trail with what changed, who changed it and why.
+            </div>
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={()=>{
+              editNarrative({
+                facts:     document.getElementById('inc-edit-facts').value,
+                immediate: document.getElementById('inc-edit-immediate').value,
+              }, 'Why is this being corrected? (recorded in the audit trail)')
+            }}>Save changes</button>
+            <button className="btn btn-secondary btn-sm" disabled={busy} style={{marginLeft:8}}
+              onClick={()=>setEditNarr(false)}>Cancel</button>
+          </>) : (<>
+            <div style={{fontSize:14,lineHeight:1.5,whiteSpace:'pre-wrap',marginBottom:10}}>{sel.facts}</div>
+            {sel.immediate_actions && <><span style={lbl}>Immediate actions taken</span>
+              <div style={{fontSize:14,marginBottom:10}}>{sel.immediate_actions}</div></>}
+          </>)}
           {sel.hazard_present && <div style={{...pill('#fff','var(--red)'),display:'inline-block',marginBottom:8}}>⚠ Hazard still present</div>}
           {(sel.affected_type||sel.affected_initials) &&
             <div style={{fontSize:13,color:'var(--t2)'}}>Affected: {sel.affected_type||'—'}{sel.affected_initials?` (${sel.affected_initials})`:''}</div>}
@@ -16228,13 +16293,29 @@ function IncidentsAdminView({ user, setPage }) {
 
         {/* investigation + risk */}
         <div style={card}>
-          <span style={lbl}>Investigation</span>
-          <textarea defaultValue={sel.root_cause||''} placeholder="Root cause…" id="inc-rootcause"
-            style={{width:'100%',minHeight:70,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8}}/>
-          <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>{
-            const v=document.getElementById('inc-rootcause').value.trim()
-            patchIncident({ root_cause:v||null }, 'root_cause_recorded', { to: v?'recorded':null })
-          }}>Save root cause</button>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span style={lbl}>Investigation</span>
+            {!editRoot && <button className="btn btn-secondary btn-sm" disabled={busy}
+              onClick={()=>setEditRoot(true)}>{sel.root_cause ? 'Edit' : 'Add root cause'}</button>}
+          </div>
+          {editRoot ? (<>
+            <textarea defaultValue={sel.root_cause||''} placeholder="Root cause…" id="inc-rootcause"
+              style={{width:'100%',minHeight:70,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8}}/>
+            <div style={{fontSize:12,color:'var(--t3)',marginBottom:8}}>
+              Recorded in the audit trail with what changed, who changed it and why.
+            </div>
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={()=>{
+              editNarrative({ root_cause: document.getElementById('inc-rootcause').value },
+                sel.root_cause ? 'Why is the root cause being changed? (recorded in the audit trail)'
+                               : 'Note for the audit trail (what this root cause is based on)')
+            }}>Save root cause</button>
+            <button className="btn btn-secondary btn-sm" disabled={busy} style={{marginLeft:8}}
+              onClick={()=>setEditRoot(false)}>Cancel</button>
+          </>) : (
+            <div style={{fontSize:14,lineHeight:1.5,whiteSpace:'pre-wrap',marginBottom:8,color:sel.root_cause?'var(--text)':'var(--t3)'}}>
+              {sel.root_cause || 'No root cause recorded yet.'}
+            </div>
+          )}
 
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:14}}>
             <div>
