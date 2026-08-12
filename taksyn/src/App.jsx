@@ -15893,7 +15893,7 @@ const INC_EVENT_LABEL = {
   reported:'Reported', severity_set:'Severity set', severity_overridden:'Severity overridden',
   assigned:'Assigned', reassigned:'Reassigned', notified:'Notified', assessed:'Assessed',
   investigation_started:'Investigation started', root_cause_recorded:'Root cause recorded',
-  narrative_edited:'Record corrected',
+  narrative_edited:'Record corrected', action_voided:'Action voided',
   risk_rated:'Risk rated', action_created:'Action created', action_completed:'Action completed',
   action_verified:'Action verified', regulator_notified:'Regulator notified',
   reopened:'Reopened', closed:'Closed', status_changed:'Status changed',
@@ -16131,6 +16131,37 @@ function IncidentsAdminView({ user, setPage }) {
         .select('*').eq('incident_id', sel.id).order('at',{ascending:false})
       setEvents(ev||[])
       setEditNarr(false); setEditRoot(false)
+    }
+    setBusy(false)
+  }
+  // Withdraw a corrective action raised in error. Authority, the mandatory
+  // reason and the audit event all live in incident_void_action() -- update
+  // and event in ONE server-side transaction.
+  //
+  // Void is NOT reversible and the function refuses once the linked task is
+  // approved: that work was done and verified, so withdrawing it would be
+  // rewriting the record rather than correcting it.
+  const voidAction = async (a) => {
+    if (!sel) return
+    if (!window.confirm('Void this corrective action?\n\n"' + (a.description||'') +
+        '"\n\nIt stays on the record, struck through, and stops counting towards ' +
+        'verification. This cannot be undone.')) return
+    const reason = prompt('Why is this action being voided? (recorded in the audit trail)')
+    if (reason === null) return
+    if (!reason.trim()) { alert('A reason is required.'); return }
+    setBusy(true)
+    const { data, error } = await supabase.rpc('incident_void_action', {
+      p_action_id: a.id, p_reason: reason,
+    })
+    if (error) {
+      alert(error.message)
+    } else if (data) {
+      const [{ data: act }, { data: ev }] = await Promise.all([
+        supabase.from('incident_actions').select('*').eq('incident_id', sel.id).order('created_at',{ascending:true}),
+        supabase.from('incident_events').select('*').eq('incident_id', sel.id).order('at',{ascending:false}),
+      ])
+      setActions(act||[]); setEvents(ev||[])
+      await loadIncTasks(act)
     }
     setBusy(false)
   }
@@ -16423,17 +16454,32 @@ function IncidentsAdminView({ user, setPage }) {
             const taskBg  = !a.task_id ? 'var(--t3)'
                           : !t ? '#DC2626'
                           : t.status === 'approved' ? '#16A34A' : '#EAB308'
+            const isVoid = a.status === 'void'
             return (
-            <div key={a.id} style={{padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:13}}>
-              <div style={{fontWeight:600}}>{a.description}</div>
+            <div key={a.id} style={{padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:13,opacity:isVoid?0.55:1}}>
+              <div style={{fontWeight:600,textDecoration:isVoid?'line-through':'none'}}>{a.description}</div>
               <div style={{fontSize:11,color:'var(--t3)',marginBottom:6}}>
                 {a.action_type} · {a.status}{a.owner_name?` · ${a.owner_name}`:''}{a.due_date?` · due ${fmtDay(a.due_date)}`:''}
               </div>
               <div style={{marginBottom:6}}>
-                <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,color:'#fff',background:taskBg}}>
-                  {taskTxt}
-                </span>
+                {isVoid ? (
+                  <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,color:'#fff',background:'var(--t3)'}}>
+                    Void — withdrawn
+                  </span>
+                ) : (
+                  <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,color:'#fff',background:taskBg}}>
+                    {taskTxt}
+                  </span>
+                )}
               </div>
+              {!isVoid && isAdmin && (
+                <div style={{marginBottom:6}}>
+                  <span onClick={()=>{ if(!busy) voidAction(a) }}
+                    style={{fontSize:11,color:'var(--t3)',textDecoration:'underline',cursor:busy?'default':'pointer'}}>
+                    Void this action
+                  </span>
+                </div>
+              )}
               {isAdmin ? (
                 <div>
                   <div style={{fontSize:11,color:'var(--t3)',marginBottom:4}}>Effectiveness assessment</div>
@@ -16456,7 +16502,11 @@ function IncidentsAdminView({ user, setPage }) {
           })}
           {(()=>{
             // Step 7 verification readout. Derived; nothing here is stored.
-            const total = actions.length
+            // Voided actions are excluded from EVERY derivation below. One
+            // `live` list rather than five separate filters, so they cannot
+            // drift apart and make the panel contradict itself.
+            const live = actions.filter(a => a.status !== 'void')
+            const total = live.length
             if (total === 0) {
               return sel.no_action_required ? (
                 <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border2)',fontSize:12,fontWeight:700,color:'#16A34A'}}>
@@ -16470,15 +16520,15 @@ function IncidentsAdminView({ user, setPage }) {
             }
             const approved = a => a.task_id && (incTasks[a.task_id]||{}).status === 'approved'
             const assessed = a => !!(a.effectiveness||'').trim()
-            const verified = actions.filter(a => approved(a) && assessed(a)).length
+            const verified = live.filter(a => approved(a) && assessed(a)).length
             const done = verified === total
             // The three reasons OVERLAP deliberately -- one action can be both
             // awaiting approval and awaiting assessment. They are reasons, not a
             // partition, and a reviewer wants to see every outstanding thing.
             const reasons = []
-            const noTask = actions.filter(a => !a.task_id).length
-            const notAppr = actions.filter(a => a.task_id && !approved(a)).length
-            const noEff = actions.filter(a => !assessed(a)).length
+            const noTask = live.filter(a => !a.task_id).length
+            const notAppr = live.filter(a => a.task_id && !approved(a)).length
+            const noEff = live.filter(a => !assessed(a)).length
             if (noTask)  reasons.push(noTask + ' not linked to a task')
             if (notAppr) reasons.push(notAppr + ' awaiting task approval')
             if (noEff)   reasons.push(noEff + ' awaiting effectiveness assessment')
