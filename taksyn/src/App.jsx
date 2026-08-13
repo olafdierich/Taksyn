@@ -16206,6 +16206,40 @@ function IncidentsAdminView({ user, setPage }) {
     }
     setBusy(false)
   }
+  // Risk rating write path, initial and residual. Delegates validation, the
+  // reason rule and the audit event to incident_rate_risk().
+  //
+  // Not patchIncident: that recorded only the new number, so a revised rating
+  // left two events with no record of what the figure had been or why it
+  // moved -- and the trajectory is the story a regulator reads.
+  //
+  // A first assessment needs no justification; changing a recorded judgement
+  // does. The prompt appears only when a rating already exists, and the
+  // function is the authority on whether a reason was required.
+  const rateRisk = async (kind, l, c, hasExisting) => {
+    if (!sel) return
+    let reason = null
+    if (hasExisting) {
+      reason = prompt('This rating has already been recorded. Why is it being changed? (recorded in the audit trail)')
+      if (reason === null) return
+      if (!reason.trim()) { alert('A reason is required.'); return }
+    }
+    setBusy(true)
+    const { data, error } = await supabase.rpc('incident_rate_risk', {
+      p_incident_id: sel.id, p_kind: kind,
+      p_likelihood: l, p_consequence: c, p_reason: reason,
+    })
+    if (error) {
+      alert(error.message)
+    } else if (data) {
+      setSel(data)
+      setIncidents(prev=>prev.map(i=>i.id===data.id?data:i))
+      const { data: ev } = await supabase.from('incident_events')
+        .select('*').eq('incident_id', sel.id).order('at',{ascending:false})
+      setEvents(ev||[])
+    }
+    setBusy(false)
+  }
   // ---- derived list ----
   // status write path: delegates order, authority and audit to the DB function
   const transitionIncident = async (toStatus, note=null) => {
@@ -16408,9 +16442,7 @@ function IncidentsAdminView({ user, setPage }) {
           <button className="btn btn-secondary btn-sm" style={{marginTop:8}} disabled={busy} onClick={()=>{
             const l=+document.getElementById('inc-likelihood').value||null
             const c=+document.getElementById('inc-consequence').value||null
-            const rating=(l&&c)?l*c:null
-            patchIncident({ risk_likelihood:l, risk_consequence:c, risk_rating:rating },
-              'risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
+            rateRisk('initial', l, c, !!sel.risk_rating)
           }}>Save risk rating</button>
           {sel.risk_rating && (()=>{ const r=sel.risk_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Risk rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.risk_likelihood}×{sel.risk_consequence})</span></div> })()}
           {sel.risk_rating && isAdmin && (
@@ -16847,9 +16879,7 @@ function IncidentsAdminView({ user, setPage }) {
             <button className="btn btn-secondary btn-sm" style={{marginTop:8}} disabled={busy} onClick={()=>{
               const l=+document.getElementById('inc-res-likelihood').value||null
               const c=+document.getElementById('inc-res-consequence').value||null
-              const rating=(l&&c)?l*c:null
-              patchIncident({ residual_likelihood:l, residual_consequence:c, residual_rating:rating },
-                'residual_risk_rated', { to: rating?String(rating):null, details:{likelihood:l,consequence:c} })
+              rateRisk('residual', l, c, !!sel.residual_rating)
             }}>Save residual risk</button>
             {sel.residual_rating && (()=>{ const r=sel.residual_rating; const band=r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'; const bg=r>=15?'#DC2626':r>=9?'#EA580C':r>=4?'#EAB308':'#16A34A'; return <div style={{marginTop:8,fontSize:13,display:'flex',alignItems:'center',gap:8}}>Residual rating: <strong>{r}</strong> <span style={{background:bg,color:'#fff',fontWeight:700,fontSize:12,padding:'2px 8px',borderRadius:12}}>{band}</span> <span style={{color:'var(--t2)',fontSize:12}}>({sel.residual_likelihood}×{sel.residual_consequence})</span></div> })()}
           </div>)}
