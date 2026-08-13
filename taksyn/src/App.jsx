@@ -15894,6 +15894,7 @@ const INC_EVENT_LABEL = {
   assigned:'Assigned', reassigned:'Reassigned', notified:'Notified', assessed:'Assessed',
   investigation_started:'Investigation started', root_cause_recorded:'Root cause recorded',
   narrative_edited:'Record corrected', action_voided:'Action voided',
+  action_edited:'Action changed',
   risk_rated:'Risk rated', action_created:'Action created', action_completed:'Action completed',
   action_verified:'Action verified', regulator_notified:'Regulator notified',
   reopened:'Reopened', closed:'Closed', status_changed:'Status changed',
@@ -15938,6 +15939,7 @@ function IncidentsAdminView({ user, setPage }) {
   const [capaStaff, setCapaStaff] = useState([])
   const [editNarr, setEditNarr] = useState(false)   // "what happened" card unlocked
   const [editRoot, setEditRoot] = useState(false)   // investigation root cause unlocked
+  const [editAct, setEditAct] = useState(null)     // action id currently unlocked, or null
   const [busy, setBusy] = useState(false)
 
   const fmtDate = (d) => d ? new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
@@ -16162,6 +16164,45 @@ function IncidentsAdminView({ user, setPage }) {
       ])
       setActions(act||[]); setEvents(ev||[])
       await loadIncTasks(act)
+    }
+    setBusy(false)
+  }
+  // Correct a corrective action. Authority, the mandatory reason, the audit
+  // event AND the linked task's title all move together inside
+  // incident_edit_action() -- one server-side transaction.
+  //
+  // The description and the task title are the same sentence stored twice. If
+  // they drift, the incident record and the worker's task disagree about what
+  // was asked for, and the worker's copy is the one that gets acted on.
+  //
+  // Refused once the linked task is approved, mirroring the void rule: that
+  // work was done and signed off, and amending it afterwards rewrites what was
+  // verified.
+  const editAction = async (a, fields) => {
+    if (!sel) return
+    const desc = (fields.description||'').trim()
+    if (!desc) { alert('The action description cannot be empty.'); return }
+    const reason = prompt('Why is this action being changed? (recorded in the audit trail)')
+    if (reason === null) return
+    if (!reason.trim()) { alert('A reason is required.'); return }
+    setBusy(true)
+    const { data, error } = await supabase.rpc('incident_edit_action', {
+      p_action_id:   a.id,
+      p_description: desc,
+      p_owner_id:    fields.owner_id || null,
+      p_due_date:    fields.due_date || null,
+      p_reason:      reason,
+    })
+    if (error) {
+      alert(error.message)
+    } else if (data) {
+      const [{ data: act }, { data: ev }] = await Promise.all([
+        supabase.from('incident_actions').select('*').eq('incident_id', sel.id).order('created_at',{ascending:true}),
+        supabase.from('incident_events').select('*').eq('incident_id', sel.id).order('at',{ascending:false}),
+      ])
+      setActions(act||[]); setEvents(ev||[])
+      await loadIncTasks(act)
+      setEditAct(null)
     }
     setBusy(false)
   }
@@ -16472,12 +16513,50 @@ function IncidentsAdminView({ user, setPage }) {
                   </span>
                 )}
               </div>
-              {!isVoid && isAdmin && (
-                <div style={{marginBottom:6}}>
+              {!isVoid && isAdmin && editAct !== a.id && (
+                <div style={{marginBottom:6,display:'flex',gap:12}}>
+                  {t?.status !== 'approved' && (
+                    <span onClick={()=>{ if(!busy) setEditAct(a.id) }}
+                      style={{fontSize:11,color:'var(--t3)',textDecoration:'underline',cursor:busy?'default':'pointer'}}>
+                      Edit
+                    </span>
+                  )}
                   <span onClick={()=>{ if(!busy) voidAction(a) }}
                     style={{fontSize:11,color:'var(--t3)',textDecoration:'underline',cursor:busy?'default':'pointer'}}>
                     Void this action
                   </span>
+                </div>
+              )}
+              {!isVoid && isAdmin && editAct === a.id && (
+                <div style={{marginBottom:8,padding:'8px',borderRadius:8,border:'1px solid var(--border2)'}}>
+                  <div style={{fontSize:11,color:'#DC2626',background:'rgba(220,38,38,.08)',padding:'6px 8px',borderRadius:6,marginBottom:8}}>
+                    ⚠️ This title is visible to the assigned worker — do not include incident detail (category, people involved, or clinical information).
+                  </div>
+                  <textarea id={'act-ed-desc-'+a.id} defaultValue={a.description||''} disabled={busy}
+                    style={{width:'100%',minHeight:52,padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',
+                      background:'var(--card)',color:'var(--text)',fontSize:13,fontFamily:'inherit',boxSizing:'border-box',marginBottom:8}}/>
+                  <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
+                    <select id={'act-ed-owner-'+a.id} defaultValue={a.owner_id||''} disabled={busy}
+                      style={{flex:'1 1 180px',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+                      <option value="">— Assign to —</option>
+                      {capaStaff.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({ROLE_LABELS[m.role]||m.role})</option>)}
+                    </select>
+                    <input type="date" id={'act-ed-due-'+a.id} defaultValue={a.due_date||''} disabled={busy}
+                      style={{padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}/>
+                  </div>
+                  <div style={{fontSize:11,color:'var(--t3)',marginBottom:8}}>
+                    The linked task's title and due date follow this change. Changing who is accountable here does
+                    not reassign the task itself — that is a separate act with its own history.
+                  </div>
+                  <button className="btn btn-primary btn-sm" disabled={busy} onClick={()=>{
+                    editAction(a, {
+                      description: document.getElementById('act-ed-desc-'+a.id).value,
+                      owner_id:    document.getElementById('act-ed-owner-'+a.id).value,
+                      due_date:    document.getElementById('act-ed-due-'+a.id).value,
+                    })
+                  }}>Save changes</button>
+                  <button className="btn btn-secondary btn-sm" disabled={busy} style={{marginLeft:8}}
+                    onClick={()=>setEditAct(null)}>Cancel</button>
                 </div>
               )}
               {(isAdmin && !isVoid) ? (
