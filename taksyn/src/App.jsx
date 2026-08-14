@@ -15939,6 +15939,7 @@ function IncidentsAdminView({ user, setPage }) {
   const [capaStaff, setCapaStaff] = useState([])
   const [editNarr, setEditNarr] = useState(false)   // "what happened" card unlocked
   const [editRoot, setEditRoot] = useState(false)   // investigation root cause unlocked
+  const [incOrgLogo, setIncOrgLogo] = useState('')
   const [editAct, setEditAct] = useState(null)     // action id currently unlocked, or null
   const [busy, setBusy] = useState(false)
 
@@ -15980,6 +15981,10 @@ function IncidentsAdminView({ user, setPage }) {
         .map(m=>({ ...m, name: nameMap[m.user_id]||'—' })))
       setCapaStaff(mem.map(m=>({ ...m, name: nameMap[m.user_id]||'—' })))
     }
+    try {
+      const { data: _og } = await supabase.from('organisations').select('logo').eq('id', id).single()
+      if (_og && _og.logo) setIncOrgLogo(_og.logo)
+    } catch(e) { }
     setLoading(false)
   }
   useEffect(()=>{ load() },[])
@@ -16279,7 +16284,16 @@ function IncidentsAdminView({ user, setPage }) {
                 not_a_factor:'Not a factor',contributing:'CONTRIBUTING'}
 
       // ---- header ----
-      line('Incident Record',16,true)
+      const hx = lm
+      if (incOrgLogo) {
+        try {
+          const _ip = pdf.getImageProperties(incOrgLogo)
+          const _ih = 14, _iw = Math.min(45, (_ip.width/_ip.height)*_ih)
+          pdf.addImage(incOrgLogo, lm+rw-_iw, y-4, _iw, _ih)
+        } catch(e) { }
+      }
+      const hline=(t2,s2,b2,c2)=>{ pdf.setFontSize(s2); pdf.setFont(undefined,b2?'bold':'normal'); pdf.setTextColor(...(c2||[30,30,30])); pdf.text(String(t2||''),hx,y); y+=s2*0.45 }
+      hline('Incident Record',16,true)
       gap(1)
       line((sel.ref||('Incident '+sel.id))+' · '+(user.org||'Organisation'),11,false,[80,80,80])
       line('Status: CLOSED · '+dt(sel.closed_at),10,false,[80,80,80])
