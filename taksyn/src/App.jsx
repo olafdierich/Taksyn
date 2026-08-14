@@ -16398,11 +16398,11 @@ function IncidentsAdminView({ user, setPage }) {
 
       // ---- timeline, in full ----
       head('Audit trail')
-      ;(events||[]).slice().reverse().forEach(ev=>{
+      ;(events||[]).slice().reverse().forEach((ev,ei)=>{
         if(y>ph-10) addPage()
         pdf.setFontSize(9); pdf.setFont(undefined,'bold'); pdf.setTextColor(30,30,30)
-        const lbl=(INC_EVENT_LABEL[ev.event_type]||ev.event_type)
-          +(ev.from_value&&ev.to_value&&ev.event_type!=='narrative_edited'?' · '+ev.from_value+' → '+ev.to_value
+        const lbl=String(ei+1).padStart(2,'0')+'. '+(INC_EVENT_LABEL[ev.event_type]||ev.event_type)
+          +(ev.from_value&&ev.to_value&&ev.event_type!=='narrative_edited'?' · '+ev.from_value+' -> '+ev.to_value
             :(ev.from_value?' · '+ev.from_value:(ev.to_value?' · '+ev.to_value:'')))
         const w=pdf.splitTextToSize(lbl,rw); pdf.text(w,lm,y); y+=w.length*4.4
         pdf.setFontSize(8); pdf.setFont(undefined,'normal'); pdf.setTextColor(130,130,130)
@@ -17174,11 +17174,11 @@ function IncidentsAdminView({ user, setPage }) {
         <div style={card}>
           <span style={lbl}>Timeline (audit trail)</span>
           {events.length===0 ? <div style={{fontSize:13,color:'var(--t3)'}}>No events.</div> :
-            events.map(ev=>(
+            events.map((ev,ei)=>(
               <div key={ev.id} style={{display:'flex',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
                 <div style={{width:8,height:8,borderRadius:4,background:'var(--brand)',marginTop:5,flexShrink:0}}/>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600}}>{INC_EVENT_LABEL[ev.event_type]||ev.event_type}
+                  <div style={{fontSize:13,fontWeight:600}}><span style={{color:'var(--t3)',fontWeight:400,marginRight:6}}>{String(events.length-ei).padStart(2,'0')}.</span>{INC_EVENT_LABEL[ev.event_type]||ev.event_type}
                     {ev.event_type!=='narrative_edited'&&ev.from_value&&ev.to_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.from_value} → {ev.to_value}</span>}
                     {ev.event_type==='narrative_edited'&&ev.from_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.from_value}</span>}
                     {!ev.from_value&&ev.to_value&&<span style={{fontWeight:400,color:'var(--t2)'}}> · {ev.to_value}</span>}
