@@ -16240,6 +16240,193 @@ function IncidentsAdminView({ user, setPage }) {
     }
     setBusy(false)
   }
+  // Single-incident PDF. The full compliance record for ONE incident: the
+  // artifact a regulator or an auditor actually asks for.
+  //
+  // Closed incidents only, by ruling -- there is no interim snapshot, because
+  // a partial record can be mistaken for a complete one.
+  //
+  // Items never examined are printed EXPLICITLY rather than omitted. An
+  // absence is evidence: dropping those rows would misrepresent the
+  // investigation as more thorough than it was.
+  //
+  // Follows exportTrendPDF's layout conventions so the two documents read as
+  // siblings. All data comes from state already loaded for this incident.
+  const exportIncidentPDF = () => {
+    if (!sel) return
+    try {
+      const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'})
+      const lm=14, rw=182
+      let y=14
+      const ph=277
+      const addPage=()=>{ pdf.addPage(); y=14 }
+      const line=(txt,size,bold,color)=>{ if(y>ph) addPage(); pdf.setFontSize(size); pdf.setFont(undefined,bold?'bold':'normal'); if(color) pdf.setTextColor(...color); else pdf.setTextColor(30,30,30); pdf.text(String(txt||''),lm,y); y+=size*0.45 }
+      const wrap=(txt,size,indent)=>{ const x=lm+(indent||0); pdf.setFontSize(size||10); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
+        const w=pdf.splitTextToSize(String(txt||'—'),rw-(indent||0))
+        w.forEach(l=>{ if(y>ph) addPage(); pdf.text(l,x,y); y+=(size||10)*0.5 }) }
+      const gap=(n=4)=>{ y+=n; if(y>ph) addPage() }
+      const rule=()=>{ if(y>ph) addPage(); pdf.setDrawColor(200,200,200); pdf.line(lm,y,lm+rw,y); y+=4 }
+      const head=(t)=>{ gap(3); if(y>ph-10) addPage(); line(t,12,true); gap(2) }
+      const field=(k,v)=>{ if(y>ph) addPage(); pdf.setFontSize(9); pdf.setFont(undefined,'bold'); pdf.setTextColor(90,90,90); pdf.text(String(k),lm,y)
+        pdf.setFont(undefined,'normal'); pdf.setTextColor(30,30,30)
+        const w=pdf.splitTextToSize(String(v==null||v===''?'—':v),rw-42); pdf.text(w,lm+42,y); y+=Math.max(1,w.length)*4.6 }
+
+      const dt=(d)=>d?new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'
+      const dd=(d)=>d?new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'—'
+      const SEV={1:'1 · Minor',2:'2 · Moderate',3:'3 · Major',4:'4 · Severe',5:'5 · Critical'}
+      const band=(r)=>r>=15?'Extreme':r>=9?'High':r>=4?'Moderate':'Low'
+      const ST={not_examined:'NOT EXAMINED',not_applicable:'Not applicable',done:'Done',
+                not_a_factor:'Not a factor',contributing:'CONTRIBUTING'}
+
+      // ---- header ----
+      line('Incident Record',16,true)
+      gap(1)
+      line((sel.ref||('Incident '+sel.id))+' · '+(user.org||'Organisation'),11,false,[80,80,80])
+      line('Status: CLOSED · '+dt(sel.closed_at),10,false,[80,80,80])
+      line('Generated: '+new Date().toLocaleString('en-AU'),9,false,[120,120,120])
+      gap(2); rule()
+
+      // ---- summary ----
+      head('Summary')
+      field('Reference', sel.ref||('#'+sel.id))
+      field('Category', INC_CATEGORY_LABEL[sel.category]||sel.category)
+      field('Severity', SEV[sel.severity]||sel.severity)
+      field('Occurred', dt(sel.occurred_at))
+      field('Location', sel.location_text)
+      field('Department', sel.department)
+      field('Shift', sel.shift)
+      field('Reported by', sel.reported_by_name)
+      field('Assigned to', sel.assigned_to_name)
+      field('Investigator', sel.investigator_name)
+      field('Closed by', names[sel.closed_by]||sel.closed_by)
+
+      // ---- what happened ----
+      head('What happened')
+      wrap(sel.facts,10)
+      gap(2)
+      line('Immediate actions taken',10,true,[90,90,90]); gap(1)
+      wrap(sel.immediate_actions,10)
+      gap(2)
+      field('Affected', (sel.affected_type||'—')+(sel.affected_initials?' ('+sel.affected_initials+')':''))
+      field('Hazard still present', sel.hazard_present?'Yes':'No')
+
+      // ---- assessment ----
+      head('Assessment')
+      field('Outcome domain', sel.outcome_domain)
+      field('Harm type', sel.harm_type?String(sel.harm_type).replace(/_/g,' '):null)
+      field('Outcome level', sel.outcome_level?sel.outcome_level+'/8':null)
+      field('External notification', sel.external_notification_required?'Required':'Not required')
+      if (sel.external_notification_required) {
+        field('Notified', sel.notified_at?dt(sel.notified_at):'NOT RECORDED')
+        field('Notified to', sel.notified_to)
+        field('Their reference', sel.notified_ref)
+      }
+
+      // ---- investigation + RCA ----
+      // not_examined printed explicitly. See the header comment.
+      ;[['Investigation','investigation'],['Root cause analysis','rca']].forEach(([title,sect])=>{
+        const rows=(incFindings||[]).filter(f=>f.section===sect).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+        if (!rows.length) return
+        head(title)
+        rows.forEach(f=>{
+          if(y>ph-8) addPage()
+          pdf.setFontSize(10); pdf.setFont(undefined,'bold'); pdf.setTextColor(30,30,30)
+          pdf.text(String(INC_FINDING_LABEL[f.item_key]||f.item_key),lm,y)
+          const s=ST[f.state]||f.state||'—'
+          const red=(f.state==='not_examined'||f.state==='contributing')
+          pdf.setFont(undefined,'bold'); pdf.setTextColor(...(red?[192,57,43]:[90,90,90]))
+          pdf.text(s,lm+rw,y,{align:'right'})
+          y+=5
+          if (f.comment) wrap(f.comment,9,4)
+          if (f.by_name) { pdf.setFontSize(8); pdf.setFont(undefined,'normal'); pdf.setTextColor(140,140,140)
+            if(y>ph) addPage(); pdf.text(f.by_name+' · '+dt(f.at),lm+4,y); y+=4 }
+          gap(1)
+        })
+      })
+
+      if (sel.root_cause) { head('Root cause (narrative)'); wrap(sel.root_cause,10) }
+
+      // ---- corrective actions ----
+      head('Corrective / preventive actions')
+      if (!(actions||[]).length) {
+        wrap(sel.no_action_required
+          ? 'No corrective action required — recorded as a deliberate decision.'
+          : 'No corrective action was recorded.',10)
+      } else {
+        actions.forEach(a=>{
+          if(y>ph-14) addPage()
+          const isV=a.status==='void'
+          const t=a.task_id?incTasks[a.task_id]:null
+          pdf.setFontSize(10); pdf.setFont(undefined,'bold'); pdf.setTextColor(...(isV?[150,150,150]:[30,30,30]))
+          const w=pdf.splitTextToSize(String(a.description||''),rw-20)
+          pdf.text(w,lm,y)
+          if (isV) { pdf.setTextColor(192,57,43); pdf.setFontSize(9); pdf.text('VOID',lm+rw,y,{align:'right'}) }
+          y+=w.length*5
+          pdf.setFontSize(9); pdf.setFont(undefined,'normal'); pdf.setTextColor(90,90,90)
+          if(y>ph) addPage()
+          pdf.text([a.action_type,a.owner_name||'unassigned',a.due_date?'due '+dd(a.due_date):null,
+                    t?('task '+t.status):(a.task_id?'task not found':'no linked task')].filter(Boolean).join(' · '),lm+4,y)
+          y+=5
+          if (a.effectiveness) {
+            pdf.setTextColor(60,60,60); if(y>ph) addPage()
+            pdf.text('Effectiveness:',lm+4,y); y+=4.5
+            wrap(a.effectiveness,9,8)
+            if (a.effectiveness_by_name) { pdf.setFontSize(8); pdf.setTextColor(140,140,140); if(y>ph) addPage()
+              pdf.text(a.effectiveness_by_name+' · '+dt(a.effectiveness_at),lm+8,y); y+=4 }
+          } else if (!isV) {
+            pdf.setTextColor(192,57,43); if(y>ph) addPage()
+            pdf.text('Effectiveness not assessed.',lm+4,y); y+=5
+          }
+          gap(2)
+        })
+      }
+
+      // ---- risk ----
+      head('Risk assessment')
+      field('Initial rating', sel.risk_rating
+        ? sel.risk_rating+' ('+band(sel.risk_rating)+') — likelihood '+sel.risk_likelihood+' × consequence '+sel.risk_consequence
+        : 'NOT RATED')
+      field('Residual rating', sel.residual_rating
+        ? sel.residual_rating+' ('+band(sel.residual_rating)+') — likelihood '+sel.residual_likelihood+' × consequence '+sel.residual_consequence
+        : 'NOT RATED')
+
+      // ---- closure ----
+      head('Closure')
+      field('Closed at', dt(sel.closed_at))
+      gap(1)
+      wrap(sel.closure_note,10)
+
+      // ---- timeline, in full ----
+      head('Audit trail')
+      ;(events||[]).slice().reverse().forEach(ev=>{
+        if(y>ph-10) addPage()
+        pdf.setFontSize(9); pdf.setFont(undefined,'bold'); pdf.setTextColor(30,30,30)
+        const lbl=(INC_EVENT_LABEL[ev.event_type]||ev.event_type)
+          +(ev.from_value&&ev.to_value&&ev.event_type!=='narrative_edited'?' · '+ev.from_value+' → '+ev.to_value
+            :(ev.from_value?' · '+ev.from_value:(ev.to_value?' · '+ev.to_value:'')))
+        const w=pdf.splitTextToSize(lbl,rw); pdf.text(w,lm,y); y+=w.length*4.4
+        pdf.setFontSize(8); pdf.setFont(undefined,'normal'); pdf.setTextColor(130,130,130)
+        if(y>ph) addPage()
+        pdf.text((ev.by_name||'—')+' ('+(ev.by_role||'—')+') · '+dt(ev.at),lm,y); y+=4
+        const note=ev.details&&(ev.details.note||ev.details.reason)
+        if (note) wrap(note,8,4)
+        gap(1)
+      })
+
+      // ---- footer on every page ----
+      const pages=pdf.getNumberOfPages()
+      for (let i=1;i<=pages;i++){
+        pdf.setPage(i)
+        pdf.setFontSize(8); pdf.setFont(undefined,'normal'); pdf.setTextColor(150,150,150)
+        pdf.text((sel.ref||('#'+sel.id))+' · '+(user.org||''),lm,290)
+        pdf.text('Page '+i+' of '+pages,lm+rw,290,{align:'right'})
+      }
+
+      pdf.save('Incident-'+(sel.ref||sel.id)+'.pdf')
+    } catch(e) {
+      alert('Could not generate the PDF: '+(e&&e.message?e.message:'unknown error'))
+    }
+  }
   // ---- derived list ----
   // status write path: delegates order, authority and audit to the DB function
   const transitionIncident = async (toStatus, note=null) => {
@@ -16968,6 +17155,21 @@ function IncidentsAdminView({ user, setPage }) {
             </div>
           )
         })()}
+        {/* export — closed incidents only. Deliberately its own card, after the
+            workflow progress and before the trail: the record reads as
+            complete, and only then is it exported. Not a status control. */}
+        {sel.status==='closed' && (
+          <div style={card}>
+            <span style={lbl}>Export</span>
+            <div style={{fontSize:13,color:'var(--t2)',marginBottom:8}}>
+              The complete record — assessment, investigation and root cause
+              (including anything not examined), corrective actions, risk
+              ratings, closure and the full audit trail.
+            </div>
+            <button className="btn btn-secondary btn-sm" disabled={busy}
+              onClick={exportIncidentPDF}>Export PDF</button>
+          </div>
+        )}
         {/* audit timeline */}
         <div style={card}>
           <span style={lbl}>Timeline (audit trail)</span>
