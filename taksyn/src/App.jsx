@@ -15374,13 +15374,16 @@ function IncidentRegisterView({ user, setPage }) {
       affected:i.affected_type||'', assigned:names[i.assigned_to]||i.assigned_to_name||'',
       rootCause:i.root_cause?'Yes':'No', actions:`${ac.total-ac.open}/${ac.total}`,
       closed:i.closed_at?fmtDay(i.closed_at):'', daysOpen:i.status==='closed'?daysBetween(i.occurred_at,i.closed_at):daysBetween(i.occurred_at,null),
+      riskInit:i.risk_rating??'', riskRes:i.residual_rating??'',
+      domain:i.outcome_domain||'', harm:i.harm_type?String(i.harm_type).replace(/_/g,' '):'',
+      outcome:i.outcome_level??'', closureNote:i.closure_note||'',
       target:targetMet(i)?'Met':'Breached', regulator:i.external_notification_required?(i.notified_at?'Notified':'Required'):'—',
     }
   }
 
   const exportCSV = () => {
-    const head=['Ref','Date','Category','Severity','Status','Affected','Assigned To','Root Cause','Actions Closed/Total','Date Closed','Days Open','Target','Regulator']
-    const lines=rows.map(i=>{ const r=rowData(i); return [r.ref,r.date,r.category,r.severity,r.status,r.affected,r.assigned,r.rootCause,r.actions,r.closed,r.daysOpen,r.target,r.regulator].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',') })
+    const head=['Ref','Date','Category','Severity','Status','Affected','Assigned To','Root Cause','Actions Closed/Total','Date Closed','Days Open','Target','Regulator','Initial Risk','Residual Risk','Outcome Domain','Harm Type','Outcome Level','Closure Note']
+    const lines=rows.map(i=>{ const r=rowData(i); return [r.ref,r.date,r.category,r.severity,r.status,r.affected,r.assigned,r.rootCause,r.actions,r.closed,r.daysOpen,r.target,r.regulator,r.riskInit,r.riskRes,r.domain,r.harm,r.outcome,r.closureNote].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',') })
     const csv=[head.join(','),...lines].join('\n')
     const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv)
     a.download=`incident-register-${new Date().toISOString().slice(0,10)}.csv`; a.click()
