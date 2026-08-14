@@ -2254,6 +2254,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   const [openIssuesCount, setOpenIssuesCount] = useState(0)
   const [openIncidents, setOpenIncidents] = useState(0)
   const [breachedIncidents, setBreachedIncidents] = useState(0)
+  const [overdueIncidents, setOverdueIncidents] = useState(0)
   const [myIncidents, setMyIncidents] = useState(0)
 
   const fetchPendingInvites = (oid) => {
@@ -2299,11 +2300,10 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         const now = Date.now(); const od=(d)=>d&&new Date(d).getTime()<now
         const open = (rows||[]).filter(i=>i.status!=='closed')
         setOpenIncidents(open.length)
-        const breached = (rows||[]).filter(i=>{
-          if(i.status==='closed') return i.close_due_at&&i.closed_at&&new Date(i.closed_at)>new Date(i.close_due_at)
-          return (od(i.assign_due_at)&&!i.assigned_at)||(od(i.investigate_due_at)&&!i.root_cause)||od(i.close_due_at)
-        })
+        const breached = (rows||[]).filter(i=>incTimeliness(i)==='breached')
+        const lateOnly = (rows||[]).filter(i=>incTimeliness(i)==='overdue')
         setBreachedIncidents(breached.length)
+        setOverdueIncidents(lateOnly.length)
       }
       if (isMgr||isSup) {
         // RLS scopes to assigned/investigator, so a plain count is "my incidents"
@@ -2375,7 +2375,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         <div className="ph-sub">{isWkr?'Hello '+user.name.split(' ')[0]+' — your tasks for today':user.org+(user.industry?' · 🏭 '+user.industry:'')+' · '+visible.length+' tasks'}</div>
       </div>
       <div className="stat-grid">
-        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋" onClick={()=>go('all')}/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Completion" val={rate+"%"} sub={done+" done"} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>setPage('reports')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨" onClick={()=>setPage('users')}/>{isCA&&<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div>}<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">Open Incidents</span><div className="sc-icon" style={{background:openIncidents>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIncidents>0?'#EF4444':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:openIncidents>0?'#EF4444':'#6B7280'}}>{openIncidents}</div><div className="sc-sub">being handled</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incident_register')}><div className="sc-top"><span className="sc-label">Breached</span><div className="sc-icon" style={{background:breachedIncidents>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)',color:breachedIncidents>0?'#EF4444':'#10B981'}}>⏱</div></div><div className="sc-val" style={{color:breachedIncidents>0?'#EF4444':'#10B981'}}>{breachedIncidents}</div><div className="sc-sub">target missed</div></div></>}
+        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋" onClick={()=>go('all')}/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Completion" val={rate+"%"} sub={done+" done"} color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>setPage('reports')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨" onClick={()=>setPage('users')}/>{isCA&&<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div>}<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">Open Incidents</span><div className="sc-icon" style={{background:openIncidents>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIncidents>0?'#EF4444':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:openIncidents>0?'#EF4444':'#6B7280'}}>{openIncidents}</div><div className="sc-sub">being handled</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incident_register')}><div className="sc-top"><span className="sc-label">Breached</span><div className="sc-icon" style={{background:breachedIncidents>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)',color:breachedIncidents>0?'#EF4444':'#10B981'}}>⏱</div></div><div className="sc-val" style={{color:breachedIncidents>0?'#EF4444':overdueIncidents>0?'#EA580C':'#10B981'}}>{breachedIncidents}<span style={{fontSize:'0.5em',fontWeight:500,color:'var(--t3)'}}> / {overdueIncidents}</span></div><div className="sc-sub">breached / overdue</div></div></>}
         {isSup&&<><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={done} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Escalated" val={esc} sub={esc>0?'Active':'None'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.1)" icon="⚠️" onClick={()=>go('escalated')}/><Stat label="Overdue" val={overdue} sub="Needs attention" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">My Incidents</span><div className="sc-icon" style={{background:myIncidents>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)',color:myIncidents>0?'#F59E0B':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:myIncidents>0?'#F59E0B':'#6B7280'}}>{myIncidents}</div><div className="sc-sub">assigned to me</div></div></>}
         {isWkr&&<><Stat label="My Tasks" val={visible.filter(t=>!['awaiting_review','approved','completed'].includes(t.status)||isRecurring(t)).length} sub="remaining to do" icon="📋" onClick={()=>go('all')}/><Stat label="Submitted" val={visible.filter(t=>['awaiting_review','approved','completed'].includes(t.status)).length} sub="done or in review" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('awaiting_review')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Complete soon':'All good'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Rejected" val={rejected} sub={rejected>0?'Action needed':'All good'} color={rejected>0?'#EF4444':'#6B7280'} bg={rejected>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)'} icon="✗" onClick={()=>go('rejected')}/></>}
       </div>
@@ -14247,10 +14247,14 @@ function IncidentHubView({ user, setPage }) {
         const { data } = await supabase.from('incidents').select('*').eq('org', oid).order('created_at',{ascending:false})
         if(cancelled) return
         const now = Date.now(); const od=(d)=>d&&new Date(d).getTime()<now
-        const isBreached=(i)=> i.status!=='closed' && ((od(i.assign_due_at)&&!i.assigned_at)||(od(i.investigate_due_at)&&!i.root_cause)||od(i.close_due_at))
-        const active = (data||[]).filter(i=>i.status!=='closed').map(i=>({...i,_breached:isBreached(i)}))
+        const active = (data||[]).filter(i=>i.status!=='closed').map(i=>{
+          const _t = incTimeliness(i)
+          return { ...i, _time:_t, _breached:_t==='breached', _late:_t!=='met' }
+        })
         // Option B: breached first, then newest-first within each group.
-        active.sort((a,b)=> (b._breached?1:0)-(a._breached?1:0) || new Date(b.created_at)-new Date(a.created_at))
+        // Breached first, then overdue, then the rest -- newest-first within each.
+        const rank=(x)=> x._breached?2 : x._late?1 : 0
+        active.sort((a,b)=> rank(b)-rank(a) || new Date(b.created_at)-new Date(a.created_at))
         setActiveIncidents(active)
         // Pending register submissions. client_admin only - RLS denies
         // everyone else, so asking would return 0 and read as "none
@@ -14314,15 +14318,16 @@ function IncidentHubView({ user, setPage }) {
               return (
                 <div key={i.id} onClick={()=>openIncidentBar(i.ref)}
                   style={{cursor:'pointer',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',
-                    background:'var(--card)',border:'1px solid '+(i._breached?'#EF4444':'var(--border)'),
-                    borderLeft:'4px solid '+(i._breached?'#EF4444':sev.color),borderRadius:10,padding:'10px 14px',
+                    background:'var(--card)',border:'1px solid '+(i._breached?'#EF4444':i._late?'#EA580C':'var(--border)'),
+                    borderLeft:'4px solid '+(i._breached?'#EF4444':i._late?'#EA580C':sev.color),borderRadius:10,padding:'10px 14px',
                     transition:'box-shadow .15s'}}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 3px 12px rgba(0,0,0,.09)'}
                   onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
                   <span style={{fontWeight:800,fontSize:13,flexShrink:0}}>{i.ref}</span>
                   <span style={pill(sev.color,sev.bg)}>{i.severity} · {sev.label}</span>
                   <span style={pill(st.color)}>{st.label}</span>
-                  {i._breached && <span style={pill('#fff','#EF4444')}>⚠ Breached</span>}
+                  {i._late && <span style={pill('#fff', i._breached?'#EF4444':'#EA580C')}>
+                    {i._breached ? '⚠ Breached' : '⏳ Overdue'}</span>}
                   <span style={{fontSize:12,color:'var(--t3)',marginLeft:'auto',flexShrink:0}}>{relAge(i.created_at)}</span>
                 </div>
               )
@@ -15340,15 +15345,9 @@ function IncidentRegisterView({ user, setPage }) {
   }
   useEffect(()=>{ load() },[])
 
-  const targetMet = (i) => {
-    // breached if any stamped due date passed without the corresponding milestone
-    const now=Date.now(); const overdue=(d)=>d&&new Date(d).getTime()<now
-    if(i.status==='closed') {
-      // was it closed on time?
-      return !(i.close_due_at && i.closed_at && new Date(i.closed_at)>new Date(i.close_due_at))
-    }
-    return !(overdue(i.assign_due_at)&&!i.assigned_at) && !(overdue(i.investigate_due_at)&&!i.root_cause) && !overdue(i.close_due_at)
-  }
+  // Kept as a thin wrapper so existing callers read naturally. The real rule
+  // lives in incTimeliness, shared with the active list and the dashboard.
+  const targetMet = (i) => incTimeliness(i) === 'met'
 
   const rows = incidents.filter(i=>{
     if(fFrom && new Date(i.occurred_at) < new Date(fFrom)) return false
@@ -15356,7 +15355,9 @@ function IncidentRegisterView({ user, setPage }) {
     if(fCategory!=='all' && i.category!==fCategory) return false
     if(fSeverity!=='all' && String(i.severity)!==fSeverity) return false
     if(fStatus!=='all' && i.status!==fStatus) return false
-    if(breachedOnly && targetMet(i)) return false
+    // Catches BOTH late states: someone filtering for problems wants the
+    // overdue ones too, not only the abandoned ones.
+    if(breachedOnly && incTimeliness(i)==='met') return false
     return true
   })
 
@@ -15377,7 +15378,7 @@ function IncidentRegisterView({ user, setPage }) {
       riskInit:i.risk_rating??'', riskRes:i.residual_rating??'',
       domain:i.outcome_domain||'', harm:i.harm_type?String(i.harm_type).replace(/_/g,' '):'',
       outcome:i.outcome_level??'', closureNote:i.closure_note||'',
-      target:targetMet(i)?'Met':'Breached', regulator:i.external_notification_required?(i.notified_at?'Notified':'Required'):'—',
+      target:INC_TIMELINESS_CFG[incTimeliness(i)].label, regulator:i.external_notification_required?(i.notified_at?'Notified':'Required'):'—',
     }
   }
 
@@ -15911,6 +15912,40 @@ const INC_EVENT_LABEL = {
 // trend reporting can group across orgs and the wording can change without
 // orphaning history. Rendered with the same MAP[key] || key fallback as
 // INC_EVENT_LABEL, so an unknown key degrades to visible rather than blank.
+// PATCH-MARKER-THREE-STATE-TIMELINESS
+// Timeliness of ONE incident: 'met' | 'overdue' | 'breached'.
+//
+// BREACHED means a deadline passed and the milestone it guards is STILL
+// unmet -- nobody took it, or nobody found a cause. OVERDUE means the work
+// has been done in order but the incident is past its close date and still
+// open. The distinction matters because a label everything carries is a
+// label nobody reads.
+//
+// Reflects the CURRENT state, not the history: an incident assigned late but
+// since assigned reads overdue, not breached. The register answers "where
+// does this stand now"; the audit trail carries what happened.
+//
+// ONE definition, called from the register, the active list and the
+// dashboard. It previously existed as three separate copies.
+const incTimeliness = (i) => {
+  const now = Date.now()
+  const od = (d) => d && new Date(d).getTime() < now
+  if (i.status === 'closed') {
+    return (i.close_due_at && i.closed_at && new Date(i.closed_at) > new Date(i.close_due_at))
+      ? 'breached' : 'met'
+  }
+  // A passed deadline whose milestone was never reached.
+  if ((od(i.assign_due_at) && !i.assigned_at) ||
+      (od(i.investigate_due_at) && !i.root_cause)) return 'breached'
+  // Milestones kept, but past the close date and still open.
+  if (od(i.close_due_at)) return 'overdue'
+  return 'met'
+}
+const INC_TIMELINESS_CFG = {
+  met:      { label: 'Met',      color: '#16A34A' },
+  overdue:  { label: 'Overdue',  color: '#EA580C' },
+  breached: { label: 'Breached', color: '#EF4444' },
+}
 const INC_FINDING_LABEL = {
   collect_statements:'Collect statements',
   review_records:'Review records, CCTV, photos, maintenance logs',
@@ -16465,14 +16500,10 @@ function IncidentsAdminView({ user, setPage }) {
   }
 
   const isOpenStatus = (s) => s !== 'closed'
-  const breached = (i) => {
-    const now = Date.now()
-    const overdue = (d) => d && new Date(d).getTime() < now
-    if (i.status==='closed') return false
-    return overdue(i.assign_due_at) && !i.assigned_at
-        || overdue(i.investigate_due_at) && !i.root_cause
-        || overdue(i.close_due_at)
-  }
+  // Thin wrapper on the shared rule. Returns true for BOTH late states, so
+  // the detail pill still lights up on an overdue incident -- the caller
+  // wanting the distinction should use incTimeliness directly.
+  const breached = (i) => incTimeliness(i) !== 'met'
   // Which target was missed, and when. Returns the EARLIEST breach —
   // where several have been missed it is the one to act on, and usually
   // the reason the later ones slipped. Mirrors breached() exactly; if
@@ -18258,7 +18289,7 @@ export default function App() {
         if(cancelled) return
         const now = Date.now(); const od=(d)=>d&&new Date(d).getTime()<now
         const active = (rows||[]).filter(i=>i.status!=='closed')
-        const breached = active.filter(i=>(od(i.assign_due_at)&&!i.assigned_at)||(od(i.investigate_due_at)&&!i.root_cause)||od(i.close_due_at))
+        const breached = active.filter(i=>incTimeliness(i)==='breached')
         setIncidentBlob(breached.length>0 ? 'warn' : (active.length>0 ? 'ok' : 'none'))
         // Same rows drive the calendar - no second query. Only ACTIVE
         // incidents: a closed one has no live deadline to show.
