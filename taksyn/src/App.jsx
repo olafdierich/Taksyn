@@ -16121,9 +16121,14 @@ function IncidentsAdminView({ user, setPage }) {
     const { data: sess } = await supabase.auth.getSession()
     const uid = sess?.session?.user?.id
     const now = new Date().toISOString()
-    const { error: upErr } = await supabase.from('incidents')
-      .update({ ...patch, updated_at: now }).eq('id', sel.id)
-    if (!upErr) {
+    // .select() is NOT optional. PostgREST returns HTTP 200 with error null
+    // and ZERO ROWS when RLS blocks an update, so testing the error alone
+    // takes the success branch and writes an audit event asserting a change
+    // that never happened. On an append-only spine that is the worst failure
+    // available: the log lies and the screen agrees with it.
+    const { data: upRows, error: upErr } = await supabase.from('incidents')
+      .update({ ...patch, updated_at: now }).eq('id', sel.id).select()
+    if (upErr === null && (upRows||[]).length > 0) {
       await supabase.from('incident_events').insert({
         incident_id: sel.id, org: orgId, event_type: eventType,
         by_id: uid, by_name: user.name, by_role: user.role,
@@ -16135,7 +16140,8 @@ function IncidentsAdminView({ user, setPage }) {
       const { data: ev } = await supabase.from('incident_events').select('*').eq('incident_id', sel.id).order('at',{ascending:false})
       setEvents(ev||[])
     } else {
-      alert('Could not save: ' + upErr.message)
+      alert(upErr ? ('Could not save: ' + upErr.message)
+        : 'That change was not saved. You may not have permission to make it.')
     }
     setBusy(false)
   }
