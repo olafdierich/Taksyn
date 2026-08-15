@@ -16396,7 +16396,11 @@ function IncidentsAdminView({ user, setPage }) {
     ])
     // CAPA "Back": reconcile actions whose linked task is approved -> flip to completed (idempotent, audit-accurate)
     try {
-      const pending = (act||[]).filter(a => a.task_id && !['completed','done','verified'].includes(a.status))
+      // 'void' MUST be in this list. Without it, approving the linked task of a
+      // VOIDED action flips it back to completed and writes a
+      // corrective_action_completed event -- an audit entry asserting work was
+      // done that was explicitly withdrawn. Observed 15 Aug 2026.
+      const pending = (act||[]).filter(a => a.task_id && !['completed','done','verified','void'].includes(a.status))
       if (pending.length) {
         const ids = [...new Set(pending.map(a => a.task_id))]
         const { data: tks } = await supabase.from('tasks').select('id,status,reviewed_at,approver_id,approver_name').in('id', ids)
@@ -16552,6 +16556,43 @@ function IncidentsAdminView({ user, setPage }) {
     if (error) {
       alert(error.message)
     } else if (data) {
+      // Send the linked task back for review rather than leaving the worker
+      // chasing withdrawn work.
+      //
+      // NOT a delete: the task may carry logged time, photos or a part-done
+      // checklist, and that is the same reason an action is voided rather
+      // than deleted. NOT a new 'cancelled' status either: tasks has no such
+      // value, and the worker's list is filtered by ASSIGNMENT not status
+      // (see ~line 2223), so a new status would not remove it from view.
+      //
+      // awaiting_review DOES remove it: the worker's "My Tasks" count
+      // excludes it, and a human then decides. completed_by stays NULL
+      // because nobody completed it -- the comment explains the blank.
+      // submitted_at is set because the SLA alerts key on it and "when it
+      // was sent for review" is genuinely true.
+      //
+      // Two writes, not one transaction: if this fails the action is still
+      // voided and the task is not. Same exposure as the action-edit path.
+      if (a.task_id) {
+        try {
+          const { data: tk } = await supabase.from('tasks')
+            .select('status,comments').eq('id', a.task_id).single()
+          if (tk && tk.status !== 'approved') {
+            const note = {
+              id: Date.now()+'', author: user.name, authorId: user.id,
+              text: 'Withdrawn \u2014 the corrective action on ' + (sel.ref || 'this incident') +
+                    ' was voided. Reason: ' + reason.trim() +
+                    '. No work is required; approve to close this task.',
+              timestamp: new Date().toISOString(), edits: [],
+            }
+            await supabase.from('tasks').update({
+              status: 'awaiting_review',
+              submitted_at: new Date().toISOString(),
+              comments: [...(parseSafe(tk.comments, []) || []), note],
+            }).eq('id', a.task_id)
+          }
+        } catch(e) { /* the action is voided regardless; the task is a courtesy */ }
+      }
       const [{ data: act }, { data: ev }] = await Promise.all([
         supabase.from('incident_actions').select('*').eq('incident_id', sel.id).order('created_at',{ascending:true}),
         supabase.from('incident_events').select('*').eq('incident_id', sel.id).order('at',{ascending:false}),
