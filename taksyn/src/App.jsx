@@ -18041,6 +18041,9 @@ export default function App() {
   const [showNotifSettings, setShowNotifSettings] = useState(false)
   const [showCalPanel, setShowCalPanel] = useState(false)
   const [calRange, setCalRange] = useState('today')
+  // Selected day for the drill-down view. null = show the current range.
+  // Deliberately does NOT change calRange, so Back needs no extra state.
+  const [calDay, setCalDay] = useState(null)
   const [calIncidents, setCalIncidents] = useState([])
   const notifPrefsRef = useRef(notifPrefs)
   useEffect(()=>{ notifPrefsRef.current = notifPrefs },[notifPrefs])
@@ -18815,7 +18818,7 @@ export default function App() {
               </div>
               <div style={{padding:'10px 14px',display:'flex',gap:6,borderBottom:'1px solid var(--border)',flexShrink:0}}>
                 {[['today','Today'],['weekly','Weekly'],['monthly','Monthly']].map(([k,label])=>(
-                  <button key={k} onClick={()=>setCalRange(k)}
+                  <button key={k} onClick={()=>{ setCalDay(null); setCalRange(k) }}
                     style={{fontSize:12,padding:'4px 10px',borderRadius:6,border:'none',cursor:'pointer',fontFamily:'inherit',
                       background:calRange===k?'var(--brand)':'transparent',
                       color:calRange===k?'#fff':'var(--t2)',
@@ -18882,6 +18885,44 @@ export default function App() {
                     else _due = i.close_due_at
                     if(_due) add(orgDayOf(_due,orgTimezone),{k:'incident',t:{ id:i.id, title:(i.ref||i.category||'Incident') }})
                   })
+                  // One definition of a day's cards, used by BOTH the drill-down
+                  // view and the Today view, so the two cannot drift apart.
+                  const _dayCards = (dateStr) => {
+                    const _its = days[dateStr]||[]
+                    if(_its.length===0) return <div style={{fontSize:13,color:'var(--t2)'}}>Nothing scheduled</div>
+                    return (
+                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        {_its.map((it,i)=>(
+                          <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',
+                            background:(_tint(it.t)||{}).bg||'transparent',
+                            borderLeft:'3px solid '+_kindCol(it)}}>
+                            <div style={{fontSize:13,color:'var(--text)',fontWeight:500}}>{it.t.title}</div>
+                            <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>
+                              {it.k==='incident' ? 'Incident deadline' : (it.k==='review' ? 'Awaiting review' : (it.t.recurrence&&it.t.recurrence!=='once' ? it.t.recurrence : 'One-off'))}
+                              {it.t.assigned_user_name ? ' · '+it.t.assigned_user_name : ''}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  }
+                  // Drill-down. Checked BEFORE the range branches so it wins,
+                  // while calRange still governs from/to underneath.
+                  if(calDay){
+                    const _lbl = new Date(calDay+'T00:00:00Z').toLocaleDateString('en-AU',
+                      {weekday:'long',day:'numeric',month:'short',timeZone:'UTC'})
+                    return (
+                      <div>
+                        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
+                          <button onClick={()=>setCalDay(null)}
+                            style={{fontSize:12,padding:'4px 10px',borderRadius:6,border:'1px solid var(--border)',
+                              background:'transparent',color:'var(--t2)',cursor:'pointer',fontFamily:'inherit'}}>← Back</button>
+                          <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{_lbl}</div>
+                        </div>
+                        {_dayCards(calDay)}
+                      </div>
+                    )
+                  }
                   const dates = Object.keys(days).sort()
                   if(dates.length===0) return <div>Nothing scheduled.</div>
                   const _DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
@@ -18891,7 +18932,7 @@ export default function App() {
                         {Array.from({length:7},(_,k)=>_plus(from,k)).map((d,i)=>{
                           const items = days[d]||[]
                           return (
-                            <div key={d} style={{display:'flex',gap:10,padding:'9px 6px',borderBottom:'1px solid var(--border)',borderRadius:4,
+                            <div key={d} onClick={()=>setCalDay(d)} style={{cursor:'pointer',display:'flex',gap:10,padding:'9px 6px',borderBottom:'1px solid var(--border)',borderRadius:4,
                               background:items.length===0?'transparent':(items.some(x=>x.k==='incident')?'rgba(139,92,246,.06)':(items.some(x=>_isEsc(x.t))?'rgba(249,115,22,.07)':(items.some(x=>x.k==='review')?'rgba(239,68,68,.05)':'rgba(16,185,129,.05)')))}}>
                               <div style={{width:46,flexShrink:0,fontSize:11,color:d===_d?'var(--brand)':'var(--t2)',fontWeight:d===_d?600:400}}>
                                 {_DOW[i]} {Number(d.slice(8,10))}
@@ -18933,7 +18974,7 @@ export default function App() {
                             const _hasTask = _its.some(x=>x.k!=='incident'&&!_isEsc(x.t)&&x.k!=='review')
                             const _hasRev  = _its.some(x=>x.k!=='incident'&&!_isEsc(x.t)&&x.k==='review')
                             return (
-                              <div key={d} style={{..._cell, boxShadow:d===_d?'0 0 0 1px var(--brand)':'none'}}>
+                              <div key={d} onClick={()=>setCalDay(d)} style={{..._cell, cursor:'pointer', boxShadow:d===_d?'0 0 0 1px var(--brand)':'none'}}>
                                 <div style={{fontSize:10,color:'var(--t2)',lineHeight:1.1}}>{i+1}</div>
                                 <div style={{display:'flex',gap:2,marginTop:2,height:6,alignItems:'center'}}>
                                   {_hasTask&&<div style={{width:6,height:6,borderRadius:'50%',background:'#10B981'}}/>}
@@ -18954,21 +18995,7 @@ export default function App() {
                       </div>
                     )
                   }
-                  return (
-                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                      {(days[_d]||[]).map((it,i)=>(
-                        <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',
-                          background:(_tint(it.t)||{}).bg||'transparent',
-                          borderLeft:'3px solid '+_kindCol(it)}}>
-                          <div style={{fontSize:13,color:'var(--text)',fontWeight:500}}>{it.t.title}</div>
-                          <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>
-                            {it.k==='incident' ? 'Incident deadline' : (it.k==='review' ? 'Awaiting review' : (it.t.recurrence&&it.t.recurrence!=='once' ? it.t.recurrence : 'One-off'))}
-                            {it.t.assigned_user_name ? ' · '+it.t.assigned_user_name : ''}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
+                  return _dayCards(_d)
                 })()}
               </div>
             </div>
