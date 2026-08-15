@@ -15380,7 +15380,7 @@ function IncidentRegisterView({ user, setPage }) {
   const rowData = (i) => {
     const ac = actionCounts[i.id]||{open:0,total:0}
     return {
-      ref:i.ref, date:fmtDay(i.occurred_at), category:(INC_CATEGORY_LABEL[i.category]||i.category),
+      ref:i.ref, date:fmtDay(i.occurred_at), category:(categoryLabels[i.category]||INC_CATEGORY_LABEL[i.category]||i.category),
       severity:`${i.severity} ${(INC_SEVERITY_CFG[i.severity]||{}).label||''}`.trim(),
       status:(INC_STATUS_CFG[i.status]||{}).label||i.status,
       affected:i.affected_type||'', assigned:names[i.assigned_to]||i.assigned_to_name||'',
@@ -15831,7 +15831,7 @@ function IncidentRegisterView({ user, setPage }) {
         <div><div style={{fontSize:10,color:'var(--t3)'}}>To</div><input type="date" style={sel} value={fTo} onChange={e=>setFTo(e.target.value)}/></div>
         <div><div style={{fontSize:10,color:'var(--t3)'}}>Category</div>
           <select style={sel} value={fCategory} onChange={e=>setFCategory(e.target.value)}>
-            <option value="all">All</option>{Object.entries(INC_CATEGORY_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            <option value="all">All</option>{Object.entries(categoryLabels).sort((a,b)=>a[1].localeCompare(b[1])).map(([k,v])=><option key={k} value={k}>{v}</option>)}
           </select></div>
         <div><div style={{fontSize:10,color:'var(--t3)'}}>Severity</div>
           <select style={sel} value={fSeverity} onChange={e=>setFSeverity(e.target.value)}>
