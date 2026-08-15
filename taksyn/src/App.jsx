@@ -18041,6 +18041,8 @@ export default function App() {
   const [showNotifSettings, setShowNotifSettings] = useState(false)
   const [showCalPanel, setShowCalPanel] = useState(false)
   const [calRange, setCalRange] = useState('today')
+  // FIX-CAL-DAYCLICK: selected day in the Monthly grid. Null = none open.
+  const [calSelDay, setCalSelDay] = useState(null)
   const [calIncidents, setCalIncidents] = useState([])
   const notifPrefsRef = useRef(notifPrefs)
   useEffect(()=>{ notifPrefsRef.current = notifPrefs },[notifPrefs])
@@ -18933,7 +18935,10 @@ export default function App() {
                             const _hasTask = _its.some(x=>x.k!=='incident'&&!_isEsc(x.t)&&x.k!=='review')
                             const _hasRev  = _its.some(x=>x.k!=='incident'&&!_isEsc(x.t)&&x.k==='review')
                             return (
-                              <div key={d} style={{..._cell, boxShadow:d===_d?'0 0 0 1px var(--brand)':'none'}}>
+                              <div key={d} onClick={()=>setCalSelDay(v=>v===d?null:d)}
+                                style={{..._cell, cursor:'pointer',
+                                  boxShadow:d===_d?'0 0 0 1px var(--brand)':'none',
+                                  background:calSelDay===d?'var(--brand)':'transparent'}}>
                                 <div style={{fontSize:10,color:'var(--t2)',lineHeight:1.1}}>{i+1}</div>
                                 <div style={{display:'flex',gap:2,marginTop:2,height:6,alignItems:'center'}}>
                                   {_hasTask&&<div style={{width:6,height:6,borderRadius:'50%',background:'#10B981'}}/>}
@@ -18951,6 +18956,23 @@ export default function App() {
                           <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#F97316',marginRight:4}}/>Escalated</span>
                           <span><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#8B5CF6',marginRight:4}}/>Incidents</span>
                         </div>
+                        {calSelDay && (() => {
+                          const _sel = days[calSelDay]||[]
+                          return (
+                            <div style={{marginTop:12,paddingTop:10,borderTop:'1px solid var(--border)'}}>
+                              <div style={{fontSize:11,color:'var(--t2)',marginBottom:6,fontWeight:600}}>
+                                {_DOW[(new Date(calSelDay+'T00:00:00Z').getUTCDay()+6)%7]} {Number(calSelDay.slice(8,10))}
+                              </div>
+                              {_sel.length===0
+                                ? <div style={{fontSize:12,color:'var(--t2)',opacity:.6}}>Nothing scheduled</div>
+                                : _sel.map((it,j)=>(
+                                    <div key={j} style={{fontSize:12,color:_kindCol(it),marginBottom:j===_sel.length-1?0:4}}>
+                                      {it.t.title}{it.k==='incident'?' \u00b7 incident':(_isEsc(it.t)?' \u00b7 escalated':(it.k==='review'?' \u00b7 review':''))}
+                                    </div>
+                                  ))}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )
                   }
