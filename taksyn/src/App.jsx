@@ -16187,8 +16187,14 @@ function IncidentsAdminView({ user, setPage }) {
     if (error) {
       alert(error.message)
     } else if (data) {
-      setSel(data)
-      setIncidents(prev=>prev.map(i=>i.id===data.id?data:i))
+      // Re-read rather than trusting the returned row: triggers fire AFTER
+      // the RPC's RETURNING clause is evaluated, so the row it hands back
+      // predates them. The revision counter in particular would be one
+      // behind, and it is printed on the PDF.
+      const { data: fresh } = await supabase.from('incidents').select('*').eq('id', data.id).single()
+      const row = fresh || data
+      setSel(row)
+      setIncidents(prev=>prev.map(i=>i.id===row.id?row:i))
       const { data: ev } = await supabase.from('incident_events')
         .select('*').eq('incident_id', sel.id).order('at',{ascending:false})
       setEvents(ev||[])
@@ -16292,8 +16298,14 @@ function IncidentsAdminView({ user, setPage }) {
     if (error) {
       alert(error.message)
     } else if (data) {
-      setSel(data)
-      setIncidents(prev=>prev.map(i=>i.id===data.id?data:i))
+      // Re-read rather than trusting the returned row: triggers fire AFTER
+      // the RPC's RETURNING clause is evaluated, so the row it hands back
+      // predates them. The revision counter in particular would be one
+      // behind, and it is printed on the PDF.
+      const { data: fresh } = await supabase.from('incidents').select('*').eq('id', data.id).single()
+      const row = fresh || data
+      setSel(row)
+      setIncidents(prev=>prev.map(i=>i.id===row.id?row:i))
       const { data: ev } = await supabase.from('incident_events')
         .select('*').eq('incident_id', sel.id).order('at',{ascending:false})
       setEvents(ev||[])
@@ -16352,6 +16364,7 @@ function IncidentsAdminView({ user, setPage }) {
       gap(1)
       line((sel.ref||('Incident '+sel.id))+' · '+(user.org||'Organisation'),11,false,[80,80,80])
       line('Status: CLOSED · '+dt(sel.closed_at),10,false,[80,80,80])
+      line('Revision '+(sel.revision||1)+' - a later revision supersedes this copy',10,false,[80,80,80])
       line('Generated: '+new Date().toLocaleString('en-AU'),9,false,[120,120,120])
       gap(2); rule()
 
@@ -16507,8 +16520,14 @@ function IncidentsAdminView({ user, setPage }) {
     if (error) {
       alert(error.message)
     } else if (data) {
-      setSel(data)
-      setIncidents(prev=>prev.map(i=>i.id===data.id?data:i))
+      // Re-read rather than trusting the returned row: triggers fire AFTER
+      // the RPC's RETURNING clause is evaluated, so the row it hands back
+      // predates them. The revision counter in particular would be one
+      // behind, and it is printed on the PDF.
+      const { data: fresh } = await supabase.from('incidents').select('*').eq('id', data.id).single()
+      const row = fresh || data
+      setSel(row)
+      setIncidents(prev=>prev.map(i=>i.id===row.id?row:i))
       const { data: ev } = await supabase.from('incident_events')
         .select('*').eq('incident_id', sel.id).order('at',{ascending:false})
       setEvents(ev||[])
