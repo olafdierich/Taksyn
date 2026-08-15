@@ -1664,7 +1664,11 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           window.__taksyn_registering = true
           const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email, password,
-            options: { data: { name: (firstName + ' ' + lastName).trim(), role: assignedRole } }
+            // FIX-ORGID-META: handle_new_user() needs orgId to resolve the org name at
+            // INSERT time. Without it profiles.org lands as UNASSIGNED and the trigger
+            // skips its org_members insert entirely. Prefer the validated invite_links
+            // org over the URL-supplied one.
+            options: { data: { name: (firstName + ' ' + lastName).trim(), role: assignedRole, orgId: (linkOrgId || inviteOrgId) } }
           })
           if (signUpError) { window.__taksyn_registering = false; throw signUpError }
 
