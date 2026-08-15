@@ -104,6 +104,25 @@ Deno.serve(async (req) => {
       return json({ success: true }, 200)
     }
 
+    // FIX-IL-ROW: handle_new_user() resolves the role from invite_links at INSERT
+    // time. The trigger fires DURING inviteUserByEmail, so this row must exist
+    // first or the role degrades to worker via the CHK-36 clamp. Writing
+    // profiles.role afterwards does NOT work - profiles_guard_biu is BEFORE
+    // UPDATE and pins it back (auth.uid() is null on a service_role connection).
+    if (orgId && role) {
+      const { error: ilErr } = await supabaseAdmin.from('invite_links').insert({
+        organisation_id: orgId,
+        invited_email: email,
+        invited_name: name || null,
+        invited_role: role,
+        invited_industry: industry || null,
+        role: role,
+        created_by: caller.id,
+        is_active: true,
+      })
+      if (ilErr) console.error('[invite-user] invite_links insert failed:', ilErr)
+    }
+
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: inviteUrl || undefined,
       data: { name, role, org, orgId, industry },
