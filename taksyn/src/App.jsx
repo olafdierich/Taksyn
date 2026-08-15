@@ -15326,9 +15326,9 @@ function IncidentRegisterView({ user, setPage }) {
     try {
       const { data: orgRow } = await supabase.from('organisations').select('industry_id').eq('id', id).maybeSingle()
       const indId = orgRow?.industry_id
-      const [pkRes, ownRes, outPropRes, outInfoRes] = await Promise.all([
-        indId ? supabase.from('incident_category_packs').select('category_key,label').eq('industry_id', indId).eq('source','category').eq('is_active',true) : Promise.resolve({data:[]}),
-        supabase.from('org_incident_categories').select('category_key,label,overrides_key').eq('org', id).eq('is_active',true),
+      // Categories come from the shared loader; only the OUTCOME ladders are
+      // loaded here, because only this view uses them.
+      const [outPropRes, outInfoRes] = await Promise.all([
         indId ? supabase.from('incident_category_packs').select('label,sort_order').eq('industry_id', indId).eq('source','outcome_property').eq('is_active',true) : Promise.resolve({data:[]}),
         indId ? supabase.from('incident_category_packs').select('label,sort_order').eq('industry_id', indId).eq('source','outcome_information').eq('is_active',true) : Promise.resolve({data:[]}),
       ])
@@ -15342,15 +15342,7 @@ function IncidentRegisterView({ user, setPage }) {
         property: byPos(outPropRes?.data),
         information: byPos(outInfoRes?.data),
       })
-      const own = ownRes?.data || []
-      const suppressed = new Set(own.filter(r=>r.overrides_key).map(r=>r.overrides_key))
-      const merged = [
-        ...(pkRes?.data||[]).filter(r=>!suppressed.has(r.category_key)),
-        ...own.filter(r=>!r.overrides_key),
-      ]
-      const labels = {...INC_CATEGORY_LABEL}
-      merged.forEach(r=>{ labels[r.category_key] = r.label })
-      setCategoryLabels(labels)
+      setCategoryLabels(await loadCategoryLabels(id))
     } catch(e) { setCategoryLabels(INC_CATEGORY_LABEL); setOutcomeLabels({}) }
     setLoading(false)
   }
@@ -15380,7 +15372,7 @@ function IncidentRegisterView({ user, setPage }) {
   const rowData = (i) => {
     const ac = actionCounts[i.id]||{open:0,total:0}
     return {
-      ref:i.ref, date:fmtDay(i.occurred_at), category:(categoryLabels[i.category]||INC_CATEGORY_LABEL[i.category]||i.category),
+      ref:i.ref, date:fmtDay(i.occurred_at), category:(categoryLabels[i.category]||i.category),
       severity:`${i.severity} ${(INC_SEVERITY_CFG[i.severity]||{}).label||''}`.trim(),
       status:(INC_STATUS_CFG[i.status]||{}).label||i.status,
       affected:i.affected_type||'', assigned:names[i.assigned_to]||i.assigned_to_name||'',
@@ -15897,6 +15889,44 @@ const INC_STATUS_CFG = {
   review:        { label:'In Review',     color:'var(--brand)' },
   closed:        { label:'Closed',        color:'var(--t3)' },
 }
+// PATCH-MARKER-CATEGORY-LABELS-SHARED
+// Category labels for ONE org, resolved in the order an organisation would
+// expect: their own wording, then their industry's standard set, then the
+// hardcoded fallback below, then the raw key.
+//
+// overrides_key is how an org replaces a pack category rather than adding
+// alongside it -- the pack row it names is suppressed, not shown twice.
+//
+// The hardcoded fallback is NOT vestigial: six orgs on LIVE have no
+// industry_id, and without it their incidents would show raw keys.
+//
+// Failure is silent and returns the fallback. A label is a courtesy; it must
+// never stop an incident loading.
+const loadCategoryLabels = async (orgId) => {
+  const labels = { ...INC_CATEGORY_LABEL }
+  if (!orgId) return labels
+  try {
+    const { data: orgRow } = await supabase.from('organisations')
+      .select('industry_id').eq('id', orgId).maybeSingle()
+    const indId = orgRow?.industry_id
+    const [pkRes, ownRes] = await Promise.all([
+      indId ? supabase.from('incident_category_packs')
+                .select('category_key,label').eq('industry_id', indId)
+                .eq('source','category').eq('is_active',true)
+            : Promise.resolve({ data: [] }),
+      supabase.from('org_incident_categories')
+        .select('category_key,label,overrides_key').eq('org', orgId).eq('is_active',true),
+    ])
+    const own = ownRes?.data || []
+    const suppressed = new Set(own.filter(r=>r.overrides_key).map(r=>r.overrides_key))
+    const merged = [
+      ...(pkRes?.data||[]).filter(r=>!suppressed.has(r.category_key)),
+      ...own.filter(r=>!r.overrides_key),
+    ]
+    merged.forEach(r=>{ labels[r.category_key] = r.label })
+  } catch(e) { /* a label is a courtesy; never block on it */ }
+  return labels
+}
 const INC_CATEGORY_LABEL = {
   injury_harm:'Injury / Harm', near_miss:'Near miss', property_damage:'Property damage',
   complaint:'Complaint', service_quality:'Service quality', clinical_care:'Clinical / Care',
@@ -15989,6 +16019,7 @@ function IncidentsAdminView({ user, setPage }) {
   const [editNarr, setEditNarr] = useState(false)   // "what happened" card unlocked
   const [editRoot, setEditRoot] = useState(false)   // investigation root cause unlocked
   const [incOrgLogo, setIncOrgLogo] = useState('')
+  const [catLabels, setCatLabels] = useState(INC_CATEGORY_LABEL)
   const [editAct, setEditAct] = useState(null)     // action id currently unlocked, or null
   const [busy, setBusy] = useState(false)
 
@@ -16034,6 +16065,7 @@ function IncidentsAdminView({ user, setPage }) {
       const { data: _og } = await supabase.from('organisations').select('logo').eq('id', id).single()
       if (_og && _og.logo) setIncOrgLogo(_og.logo)
     } catch(e) { }
+    setCatLabels(await loadCategoryLabels(id))
     setLoading(false)
   }
   useEffect(()=>{ load() },[])
@@ -16371,7 +16403,7 @@ function IncidentsAdminView({ user, setPage }) {
       // ---- summary ----
       head('Summary')
       field('Reference', sel.ref||('#'+sel.id))
-      field('Category', INC_CATEGORY_LABEL[sel.category]||sel.category)
+      field('Category', catLabels[sel.category]||sel.category)
       field('Severity', SEV[sel.severity]||sel.severity)
       field('Occurred', dt(sel.occurred_at))
       field('Location', sel.location_text)
@@ -16591,7 +16623,7 @@ function IncidentsAdminView({ user, setPage }) {
             {breached(sel) && <span style={pill('#fff','var(--red)')}>⚠ {breachLabel(sel) || 'Target breached'}</span>}
           </div>
           <div style={{fontSize:13,color:'var(--t2)'}}>
-            {INC_CATEGORY_LABEL[sel.category]||sel.category} · {fmtDate(sel.occurred_at)}
+            {catLabels[sel.category]||sel.category} · {fmtDate(sel.occurred_at)}
             {sel.department && ' · '+sel.department}{sel.location_text && ' · '+sel.location_text}
             {sel.gps && ` · 📍 ${sel.gps.lat},${sel.gps.lng}`}
           </div>
@@ -17313,7 +17345,7 @@ function IncidentsAdminView({ user, setPage }) {
                         <span style={pill(st.color)}>{st.label}</span>
                         {breached(inc) && <span style={pill('#fff','var(--red)')}>⚠ Breached</span>}
                       </div>
-                      <div style={{fontSize:13,color:'var(--t2)',marginBottom:4}}>{INC_CATEGORY_LABEL[inc.category]||inc.category}</div>
+                      <div style={{fontSize:13,color:'var(--t2)',marginBottom:4}}>{catLabels[inc.category]||inc.category}</div>
                       <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
                         <span>📅 {fmtDay(inc.occurred_at)}</span>
                         {inc.affected_type && <span>👤 {inc.affected_type}</span>}
