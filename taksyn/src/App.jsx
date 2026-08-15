@@ -14311,6 +14311,9 @@ function IncidentHubView({ user, setPage }) {
         {isCA && <Tile icon="📊" title="Incident register"
           sub="The full compliance record — trends, filters, and CSV / PDF export."
           onClick={()=>setPage('incident_register')}/>}
+        {isCA && <Tile icon="🛠" title="Corrective actions"
+          sub="Every action across the organisation — what was committed to, what is overdue, and whether it worked."
+          onClick={()=>setPage('capa_register')}/>}
         {isCA && <Tile icon="👤" title={pendingPeople>0 ? `People to review (${pendingPeople})` : 'People to review'}
           color={pendingPeople>0 ? '#B45309' : undefined}
           sub={pendingPeople>0
@@ -15278,6 +15281,299 @@ function ReportIssueView({ user, embedded }) {
 }
 
 // ============ INCIDENT REGISTER (client_admin — compliance artefact) ============
+// PATCH-MARKER-CAPA-REGISTER
+// Every corrective action across the organisation, with the incident it came
+// from and the task it became. Read-only: this is a place to review and
+// export, not to act. Acting happens on the incident, where the context is.
+function CapaRegisterView({ user, setPage }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [orgId, setOrgId] = useState('')
+  const [catLabels, setCatLabels] = useState(INC_CATEGORY_LABEL)
+  const [fStatus, setFStatus] = useState('outstanding')  // outstanding | all | overdue | completed | void
+  const [fOwner, setFOwner] = useState('all')
+  const [fFrom, setFFrom] = useState('')
+  const [fTo, setFTo] = useState('')
+
+  useEffect(()=>{ (async()=>{
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const authId = sess?.session?.user?.id
+      if (!authId) { setLoading(false); return }
+      const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
+      const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+      if (!oid) { setLoading(false); return }
+      setOrgId(oid)
+      setCatLabels(await loadCategoryLabels(oid))
+      // ONE query. Both foreign keys exist, so the incident and the task come
+      // back embedded rather than as two more round trips.
+      const { data } = await supabase.from('incident_actions')
+        .select('*, incidents(ref,category,severity,status,occurred_at), tasks(status,assigned_user_name,evidence,reviewed_at,approver_name,completed_at)')
+        .eq('org', oid)
+        .order('due_date', { ascending: true, nullsFirst: false })
+      setRows(data||[])
+    } catch(e) { /* leave empty on failure; the page renders its own empty state */ }
+    setLoading(false)
+  })() },[])
+
+  const fmtDay = (d) => d ? new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : ''
+  const isOverdue = (r) => {
+    if (r.status === 'void') return false
+    if (r.tasks && r.tasks.status === 'approved') return false
+    return !!r.due_date && new Date(r.due_date) < new Date()
+  }
+  const taskState = (r) => r.status === 'void' ? 'Void'
+    : !r.task_id ? 'No task'
+    : !r.tasks ? 'Task missing'
+    : r.tasks.status
+  const evidenceCount = (r) => {
+    try { const e = r.tasks && r.tasks.evidence
+      const p = typeof e === 'string' ? JSON.parse(e) : e
+      return Array.isArray(p) ? p.length : 0 } catch(x) { return 0 }
+  }
+
+  // Same route the incident register uses: stash the ref, switch page, and
+  // IncidentsAdminView opens it on load. A register you cannot navigate out of
+  // is a dead end -- the whole point is to find the action, then go and act.
+  const openIncident = (ref) => {
+    if (!ref) return
+    try { sessionStorage.setItem('taksyn-open-incident', ref) } catch(e){}
+    setPage('incidents')
+  }
+
+  const owners = [...new Set(rows.map(r=>r.owner_name).filter(Boolean))].sort()
+
+  const shown = rows.filter(r=>{
+    if (fStatus==='outstanding' && (r.status==='completed'||r.status==='void')) return false
+    if (fStatus==='overdue' && !isOverdue(r)) return false
+    if (fStatus==='completed' && r.status!=='completed') return false
+    if (fStatus==='void' && r.status!=='void') return false
+    if (fOwner!=='all' && r.owner_name!==fOwner) return false
+    if (fFrom && r.due_date && new Date(r.due_date) < new Date(fFrom)) return false
+    if (fTo && r.due_date && new Date(r.due_date) > new Date(fTo+'T23:59:59')) return false
+    return true
+  })
+
+  const HEAD = ['Incident','Category','Action','Owner','Due','Action status','Task status',
+                'Assigned to','Completed','Evidence','Approved by','Effectiveness','Verified']
+  const rowCells = (r) => [
+    r.incidents?.ref || '',
+    catLabels[r.incidents?.category] || r.incidents?.category || '',
+    r.description || '',
+    r.owner_name || '',
+    fmtDay(r.due_date),
+    r.status || '',
+    taskState(r),
+    r.tasks?.assigned_user_name || '',
+    fmtDay(r.tasks?.completed_at),
+    String(evidenceCount(r)),
+    r.tasks?.approver_name || '',
+    r.effectiveness || '',
+    fmtDay(r.verified_at),
+  ]
+
+  const filterLabel = () => {
+    const bits = []
+    bits.push(fStatus==='all' ? 'All actions'
+      : fStatus==='outstanding' ? 'Outstanding only'
+      : fStatus==='overdue' ? 'Overdue only'
+      : fStatus==='completed' ? 'Completed only' : 'Voided only')
+    if (fOwner!=='all') bits.push('Owner: '+fOwner)
+    if (fFrom) bits.push('Due from '+fmtDay(fFrom))
+    if (fTo) bits.push('Due to '+fmtDay(fTo))
+    return bits.join(' · ')
+  }
+
+  const exportCSV = () => {
+    const esc = v => '"'+String(v??'').replace(/"/g,'""')+'"'
+    const csv = [HEAD.join(','), ...shown.map(r=>rowCells(r).map(esc).join(','))].join('\n')
+    const a = document.createElement('a')
+    a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv)
+    a.download = `capa-register-${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+  }
+
+  const exportPDF = () => {
+    try {
+      // Landscape: fourteen columns do not fit portrait, and a wrapped table
+      // is harder to read than a wide one.
+      const pdf = new jsPDF({orientation:'landscape',unit:'mm',format:'a4'})
+      const lm=10, rw=277, ph=190
+      let y=14
+      const addPage=()=>{ pdf.addPage(); y=14 }
+      pdf.setFontSize(15); pdf.setFont(undefined,'bold'); pdf.setTextColor(30,30,30)
+      pdf.text('Corrective and Preventive Actions',lm,y); y+=7
+      pdf.setFontSize(10); pdf.setFont(undefined,'normal'); pdf.setTextColor(80,80,80)
+      pdf.text((user.org||'Organisation')+' · '+filterLabel(),lm,y); y+=5
+      pdf.setFontSize(8); pdf.setTextColor(120,120,120)
+      pdf.text('Generated: '+new Date().toLocaleString('en-AU')+' · '+shown.length+' action'+(shown.length===1?'':'s'),lm,y); y+=6
+      pdf.setDrawColor(200,200,200); pdf.line(lm,y,lm+rw,y); y+=5
+
+      // Narrower set for the page: the long free text does not belong in a
+      // landscape grid and is unreadable at this width.
+      const cols = [
+        ['Incident',22],['Category',30],['Action',60],['Owner',26],['Due',20],
+        ['Action',18],['Task',20],['Assigned to',26],['Done',20],['Ev',8],['Verified',20],
+      ]
+      const cellIdx = [0,1,2,3,4,5,6,7,8,9,12]
+      const header = () => {
+        pdf.setFontSize(7.5); pdf.setFont(undefined,'bold'); pdf.setTextColor(80,80,80)
+        let x=lm
+        cols.forEach(([label,w])=>{ pdf.text(label,x,y); x+=w })
+        y+=3.5
+        pdf.setDrawColor(220,220,220); pdf.line(lm,y-2.5,lm+rw,y-2.5)
+      }
+      header()
+      pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
+      shown.forEach(r=>{
+        if (y > ph) { addPage(); header(); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40) }
+        const cells = rowCells(r)
+        const over = isOverdue(r)
+        const isVoid = r.status === 'void'
+        pdf.setFontSize(7.5)
+        pdf.setTextColor(...(isVoid ? [150,150,150] : over ? [192,57,43] : [40,40,40]))
+        let x=lm
+        cols.forEach(([_l,w],i)=>{
+          const raw = String(cells[cellIdx[i]] ?? '')
+          const txt = pdf.splitTextToSize(raw, w-2)[0] || ''
+          pdf.text(txt, x, y)
+          x += w
+        })
+        y += 4.2
+      })
+      const pages = pdf.getNumberOfPages()
+      for (let i=1;i<=pages;i++){
+        pdf.setPage(i)
+        pdf.setFontSize(7.5); pdf.setTextColor(150,150,150)
+        pdf.text((user.org||''),lm,200)
+        pdf.text('Page '+i+' of '+pages,lm+rw,200,{align:'right'})
+      }
+      pdf.save(`capa-register-${new Date().toISOString().slice(0,10)}.pdf`)
+    } catch(e) {
+      alert('Could not generate the PDF: '+(e&&e.message?e.message:'unknown error'))
+    }
+  }
+
+  const card = {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:16}
+  const overdueCount = rows.filter(isOverdue).length
+  const outstanding = rows.filter(r=>r.status!=='completed'&&r.status!=='void').length
+
+  if (loading) return <div style={{padding:20,color:'var(--t3)'}}>Loading…</div>
+
+  return (
+    <div>
+      <button className="btn btn-secondary btn-sm" style={{marginBottom:12}}
+        onClick={()=>setPage('incidents_hub')}>← Back to Incidents</button>
+      <div className="ph">
+        <div className="ph-title">Corrective &amp; Preventive Actions</div>
+        <div className="ph-sub">Every action across the organisation — what was committed to, and whether it was delivered</div>
+      </div>
+
+      <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:16}}>
+        <div style={{...card,flex:'1 1 140px',marginBottom:0}}>
+          <div style={{fontSize:12,color:'var(--t3)'}}>Outstanding</div>
+          <div style={{fontSize:26,fontWeight:700}}>{outstanding}</div>
+        </div>
+        <div style={{...card,flex:'1 1 140px',marginBottom:0}}>
+          <div style={{fontSize:12,color:'var(--t3)'}}>Overdue</div>
+          <div style={{fontSize:26,fontWeight:700,color:overdueCount>0?'#EF4444':'#16A34A'}}>{overdueCount}</div>
+        </div>
+        <div style={{...card,flex:'1 1 140px',marginBottom:0}}>
+          <div style={{fontSize:12,color:'var(--t3)'}}>Total recorded</div>
+          <div style={{fontSize:26,fontWeight:700}}>{rows.length}</div>
+        </div>
+      </div>
+
+      <div style={{...card,display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-end'}}>
+        <div>
+          <div style={{fontSize:11,color:'var(--t3)',marginBottom:3}}>Show</div>
+          <select value={fStatus} onChange={e=>setFStatus(e.target.value)}
+            style={{padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
+            <option value="outstanding">Outstanding</option>
+            <option value="overdue">Overdue</option>
+            <option value="completed">Completed</option>
+            <option value="void">Voided</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:'var(--t3)',marginBottom:3}}>Owner</div>
+          <select value={fOwner} onChange={e=>setFOwner(e.target.value)}
+            style={{padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',minWidth:150}}>
+            <option value="all">Anyone</option>
+            {owners.map(o=><option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:'var(--t3)',marginBottom:3}}>Due from</div>
+          <input type="date" value={fFrom} onChange={e=>setFFrom(e.target.value)}
+            style={{padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}/>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:'var(--t3)',marginBottom:3}}>Due to</div>
+          <input type="date" value={fTo} onChange={e=>setFTo(e.target.value)}
+            style={{padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}/>
+        </div>
+        <div style={{marginLeft:'auto',display:'flex',gap:8}}>
+          <button className="btn btn-secondary btn-sm" onClick={exportCSV}>⬇ CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={exportPDF}>📄 PDF</button>
+        </div>
+      </div>
+
+      <div style={{...card,padding:0,overflowX:'auto'}}>
+        {shown.length===0 ? (
+          <div style={{padding:20,fontSize:13,color:'var(--t3)'}}>
+            No corrective actions match this filter.
+          </div>
+        ) : (
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead>
+            <tr style={{background:'var(--bg2)'}}>
+              {HEAD.map(h=><th key={h} style={{textAlign:'left',padding:'10px 12px',fontSize:11,
+                color:'var(--t3)',fontWeight:700,whiteSpace:'nowrap',textTransform:'uppercase'}}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map(r=>{
+              const over = isOverdue(r)
+              const isVoid = r.status === 'void'
+              return (
+                <tr key={r.id} style={{borderTop:'1px solid var(--border)',opacity:isVoid?0.55:1}}>
+                  <td style={{padding:'10px 12px',whiteSpace:'nowrap',fontWeight:600}}>
+                    {r.incidents?.ref
+                      ? <span onClick={()=>openIncident(r.incidents.ref)}
+                          style={{color:'var(--brand)',cursor:'pointer',textDecoration:'underline'}}>
+                          {r.incidents.ref}</span>
+                      : '—'}
+                  </td>
+                  <td style={{padding:'10px 12px'}}>{catLabels[r.incidents?.category]||r.incidents?.category||'—'}</td>
+                  <td style={{padding:'10px 12px',maxWidth:280,textDecoration:isVoid?'line-through':'none'}}>{r.description}</td>
+                  <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>{r.owner_name||'—'}</td>
+                  <td style={{padding:'10px 12px',whiteSpace:'nowrap',color:over?'#EF4444':'inherit',fontWeight:over?600:400}}>
+                    {fmtDay(r.due_date)||'—'}{over?' ⚠':''}
+                  </td>
+                  <td style={{padding:'10px 12px'}}>{r.status}</td>
+                  <td style={{padding:'10px 12px'}}>{taskState(r)}</td>
+                  <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>{r.tasks?.assigned_user_name||'—'}</td>
+                  <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>{fmtDay(r.tasks?.completed_at)||'—'}</td>
+                  <td style={{padding:'10px 12px',textAlign:'center'}}>{evidenceCount(r)||'—'}</td>
+                  <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>{r.tasks?.approver_name||'—'}</td>
+                  <td style={{padding:'10px 12px',maxWidth:220,color:'var(--t2)'}}>{r.effectiveness||'—'}</td>
+                  <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>{fmtDay(r.verified_at)||'—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        )}
+      </div>
+      <div style={{fontSize:11,color:'var(--t3)',marginBottom:24}}>
+        Showing {shown.length} of {rows.length}. Voided actions are shown struck through rather than
+        hidden — a withdrawn commitment is part of the record.
+      </div>
+    </div>
+  )
+}
 function IncidentRegisterView({ user, setPage }) {
   const [orgId, setOrgId] = useState('')
   const [incidents, setIncidents] = useState([])
@@ -19035,6 +19331,7 @@ export default function App() {
                 {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser} darkMode={darkMode} toggleDarkMode={toggleDarkMode}/>}
                 {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
                 {page==='incident_register' && user.role==='client_admin' && <IncidentRegisterView user={user} setPage={setPage}/>}
+                {page==='capa_register' && user.role==='client_admin' && <CapaRegisterView user={user} setPage={setPage}/>}
                 {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user} setPage={setPage}/>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='incident_hub' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentHubView user={user} setPage={setPage}/>}
