@@ -16826,9 +16826,18 @@ function IncidentsAdminView({ user, setPage }) {
           {actions.map(a=>{
             const t = a.task_id ? incTasks[a.task_id] : null
             // Three distinct cases, all worth distinguishing on a compliance record.
-            const taskTxt = !a.task_id ? 'No linked task' : t ? ('Task ' + t.status) : 'Task not found'
+            // A super admin cannot read tenant tasks at all - the RLS policy on
+            // tasks matches the caller's own org, which is Taksyn. That is a
+            // deliberate boundary (incident_transition refuses them any change
+            // to a tenant workflow), so the pill should read as a limit rather
+            // than a fault.
+            const _plat = user.role === 'super_admin'
+            const taskTxt = !a.task_id ? 'No linked task'
+                          : t ? ('Task ' + t.status)
+                          : _plat ? 'Task not visible at platform level'
+                          : 'Task not found'
             const taskBg  = !a.task_id ? 'var(--t3)'
-                          : !t ? '#DC2626'
+                          : !t ? (_plat ? 'var(--t3)' : '#DC2626')
                           : t.status === 'approved' ? '#16A34A' : '#EAB308'
             const isVoid = a.status === 'void'
             return (
