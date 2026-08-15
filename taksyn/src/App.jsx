@@ -1664,7 +1664,11 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           window.__taksyn_registering = true
           const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email, password,
-            options: { data: { name: (firstName + ' ' + lastName).trim(), role: assignedRole } }
+            // FIX-ORGID-META: handle_new_user() needs orgId to resolve the org name at
+            // INSERT time. Without it profiles.org lands as UNASSIGNED and the trigger
+            // skips its org_members insert entirely. Prefer the validated invite_links
+            // org over the URL-supplied one.
+            options: { data: { name: (firstName + ' ' + lastName).trim(), role: assignedRole, orgId: (linkOrgId || inviteOrgId) } }
           })
           if (signUpError) { window.__taksyn_registering = false; throw signUpError }
 
@@ -7724,7 +7728,11 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   const removeMemberFromOrg = async (m) => {
     if (!confirm('Remove '+m.name+' from '+selectedOrgView?.name+'?\n\nTheir Taksyn profile is preserved — only their org membership is removed.')) return
     if (isConfigured()) {
-      await supabase.from('org_members').delete().eq('user_id', m.id).eq('org', selectedOrgView.name)
+      // FIX-OM-ID: org_members.org stores the org ID, not the name.
+      const { data: delRows, error: delErr } = await supabase.from('org_members').delete()
+        .eq('user_id', m.id).eq('org', selectedOrgView.id).select()
+      if (delErr) { alert('Remove failed: ' + delErr.message); return }
+      if (!delRows || delRows.length === 0) { alert('Remove failed: no membership row matched. Nothing was changed.'); return }
     }
     setOrgMembers(prev => prev.filter(mem => mem.id !== m.id))
   }
@@ -13760,8 +13768,11 @@ function CapaActionForm({ sel, orgId, user, busy, setBusy, capaStaff, isAdmin, o
           <option value="">— Assign to —</option>
           {capaStaff.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({ROLE_LABELS[m.role]||m.role})</option>)}
         </select>
-        <input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}
-          style={{flex:'0 1 150px',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}/>
+        <div style={{flex:'0 1 150px'}}>
+          <div style={{fontSize:11,color:'var(--t3)',marginBottom:2}}>Due date</div>
+          <input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)} title="Due date for this corrective action"
+            style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box'}}/>
+        </div>
       </div>
       <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,marginBottom:8,cursor:'pointer'}}>
         <input type="checkbox" checked={evidence} onChange={e=>setEvidence(e.target.checked)}/>
@@ -16901,6 +16912,8 @@ function IncidentsAdminView({ user, setPage }) {
               const { data: act } = await supabase.from('incident_actions').select('*').eq('incident_id',sel.id).order('created_at',{ascending:true})
               setActions(act||[])
               await loadIncTasks(act)
+              const { data: freshInc } = await supabase.from("incidents").select("*").eq("id",sel.id).single()
+              if (freshInc) { setSel(freshInc); setIncidents(prev=>prev.map(i=>i.id===freshInc.id?freshInc:i)) }
               const { data: ev } = await supabase.from('incident_events').select('*').eq('incident_id',sel.id).order('at',{ascending:false})
               setEvents(ev||[])
             }}/>
