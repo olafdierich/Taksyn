@@ -4,6 +4,8 @@ import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import { uploadEvidence, uploadIncidentEvidence, signedEvidenceUrl } from './lib/evidenceStorage'
 import { isSameOrgDay, orgToday, orgDayOf } from './lib/orgTime'
+// [PATCH:import-panel]
+import ImportPanel from './ImportPanel.jsx'
 
 // Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
 // Declared here (outside all components) so it is always in scope everywhere in this file.
@@ -14021,6 +14023,13 @@ function ContactsView({ user, setPage }) {
   const [fDob, setFDob] = useState('')
   const [fRef, setFRef] = useState('')
   const [dupWarn, setDupWarn] = useState('')
+  // Bulk import. orgName and orgDateFormat are read alongside the
+  // industry pack below; date_format is null for every organisation
+  // that predates that column, and the panel asks rather than
+  // assuming a format.
+  const [showImport, setShowImport] = useState(false)
+  const [orgName, setOrgName] = useState('')
+  const [orgDateFormat, setOrgDateFormat] = useState(null)
 
   const load = async (oid) => {
     setLoading(true)
@@ -14044,7 +14053,9 @@ function ContactsView({ user, setPage }) {
         setOrgId(oid)
         // Type labels come from the SAME pack rows the incident form
         // uses, so Kemrose sees Team / Guest / Contractor here too.
-        const { data: org } = await supabase.from('organisations').select('industry_id').eq('id', oid).maybeSingle()
+        // date_format and name are read here too, for bulk import.
+        const { data: org } = await supabase.from('organisations').select('industry_id,name,date_format').eq('id', oid).maybeSingle()
+        if (org) { setOrgName(org.name || ''); setOrgDateFormat(org.date_format || null) }
         if (org?.industry_id) {
           const { data: packs } = await supabase.from('incident_category_packs')
             .select('category_key,label,sort_order')
@@ -14171,12 +14182,26 @@ function ContactsView({ user, setPage }) {
         <input style={inp} value={q} placeholder="Search by name or ID…" onChange={e=>setQ(e.target.value)}/>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
           <button style={btn('var(--brand,#4F46E5)','#fff')} onClick={()=>{ resetForm(); setEditing('new') }}>Add a contact</button>
+          <button style={btn()} onClick={()=>{ resetForm(); setShowImport(v=>!v) }}>
+            {showImport ? 'Close import' : 'Import from a file'}
+          </button>
           <button style={btn()} onClick={()=>setShowArchived(v=>!v)}>
             {showArchived ? 'Show active' : 'Show archived'}
           </button>
           <span style={{fontSize:13,color:'var(--t2)'}}>{visible.length} shown</span>
         </div>
       </div>
+
+      {showImport && orgId && (
+        <ImportPanel
+          org={orgId}
+          orgName={orgName}
+          orgDateFormat={orgDateFormat}
+          supabase={supabase}
+          onClose={()=>setShowImport(false)}
+          onImported={()=>{ setOrgDateFormat(f=>f); load(orgId) }}
+        />
+      )}
 
       {editing && (
         <div style={card}>
@@ -18044,6 +18069,8 @@ export default function App() {
   // Selected day for the drill-down view. null = show the current range.
   // Deliberately does NOT change calRange, so Back needs no extra state.
   const [calDay, setCalDay] = useState(null)
+  // Periods away from now: months in Monthly, weeks in Weekly. 0 = current.
+  const [calOffset, setCalOffset] = useState(0)
   const [calIncidents, setCalIncidents] = useState([])
   const notifPrefsRef = useRef(notifPrefs)
   useEffect(()=>{ notifPrefsRef.current = notifPrefs },[notifPrefs])
@@ -18818,13 +18845,46 @@ export default function App() {
               </div>
               <div style={{padding:'10px 14px',display:'flex',gap:6,borderBottom:'1px solid var(--border)',flexShrink:0}}>
                 {[['today','Today'],['weekly','Weekly'],['monthly','Monthly']].map(([k,label])=>(
-                  <button key={k} onClick={()=>{ setCalDay(null); setCalRange(k) }}
+                  <button key={k} onClick={()=>{ setCalDay(null); setCalOffset(0); setCalRange(k) }}
                     style={{fontSize:12,padding:'4px 10px',borderRadius:6,border:'none',cursor:'pointer',fontFamily:'inherit',
                       background:calRange===k?'var(--brand)':'transparent',
                       color:calRange===k?'#fff':'var(--t2)',
                       fontWeight:calRange===k?600:400}}>{label}</button>
                 ))}
               </div>
+              {calRange!=='today'&&!calDay&&orgTimezone&&(()=>{
+                // Date maths duplicated from the body deliberately: this bar must
+                // render even when the body has nothing to show.
+                const _t = orgToday(orgTimezone)
+                const [_yy,_mm] = _t.split('-').map(Number)
+                const _shift = (d,n)=> new Date(new Date(d+'T00:00:00Z').getTime()+n*86400000)
+                let _label = ''
+                if(calRange==='monthly'){
+                  _label = new Date(Date.UTC(_yy,_mm-1+calOffset,1))
+                    .toLocaleDateString('en-AU',{month:'long',year:'numeric',timeZone:'UTC'})
+                } else {
+                  const _dw = new Date(_t+'T00:00:00Z').getUTCDay()
+                  const _f = _shift(_t, -((_dw+6)%7) + calOffset*7)
+                  const _l = new Date(_f.getTime()+6*86400000)
+                  const _fmt = (dt,withMon)=> dt.toLocaleDateString('en-AU',
+                    withMon?{day:'numeric',month:'short',timeZone:'UTC'}:{day:'numeric',timeZone:'UTC'})
+                  _label = _fmt(_f, _f.getUTCMonth()!==_l.getUTCMonth()) + ' – ' + _fmt(_l,true)
+                }
+                const _btn = (enabled)=>({fontSize:15,lineHeight:1,padding:'2px 9px',borderRadius:6,
+                  border:'1px solid var(--border)',background:'transparent',fontFamily:'inherit',
+                  color:enabled?'var(--t2)':'var(--border)',cursor:enabled?'pointer':'default'})
+                const _canBack = calOffset > -12, _canFwd = calOffset < 12
+                return (
+                  <div style={{padding:'8px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',
+                    borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                    <button disabled={!_canBack} onClick={()=>setCalOffset(o=>o-1)} style={_btn(_canBack)}>‹</button>
+                    <div style={{fontSize:12,fontWeight:600,color:'var(--text)'}}>
+                      {_label}{calOffset===0?'':''}
+                    </div>
+                    <button disabled={!_canFwd} onClick={()=>setCalOffset(o=>o+1)} style={_btn(_canFwd)}>›</button>
+                  </div>
+                )
+              })()}
               <div style={{padding:'16px 14px',fontSize:13,color:'var(--t2)',overflowY:'auto',flex:1,minHeight:0}}>
                 {(()=>{
                   if(!orgTimezone) return <div>Loading…</div>
@@ -18832,11 +18892,14 @@ export default function App() {
                   const _plus = (d,n)=> new Date(new Date(d+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
                   const _dow = new Date(_d+'T00:00:00Z').getUTCDay()
                   let from=_d, to=_d
-                  if(calRange==='weekly'){ from=_plus(_d,-((_dow+6)%7)); to=_plus(from,6) }
+                  if(calRange==='weekly'){ from=_plus(_d,-((_dow+6)%7)+calOffset*7); to=_plus(from,6) }
                   if(calRange==='monthly'){
                     const [_y,_m] = _d.split('-').map(Number)
-                    from = _d.slice(0,8)+'01'
-                    to = new Date(Date.UTC(_y,_m,0)).toISOString().slice(0,10)
+                    // Date.UTC normalises month overflow, so +13 or -5 both work.
+                    const _base = new Date(Date.UTC(_y,_m-1+calOffset,1))
+                    from = _base.toISOString().slice(0,10)
+                    to = new Date(Date.UTC(_base.getUTCFullYear(),_base.getUTCMonth()+1,0))
+                          .toISOString().slice(0,10)
                   }
                   const _mine = (t)=>{
                     if(user?.role!=='worker') return true
@@ -18923,8 +18986,10 @@ export default function App() {
                       </div>
                     )
                   }
-                  const dates = Object.keys(days).sort()
-                  if(dates.length===0) return <div>Nothing scheduled.</div>
+                  // No early return on an empty range: it would strand the user in a
+                  // month with no items and no way back. Every renderer below
+                  // handles emptiness on its own.
+                  Object.keys(days)
                   const _DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
                   if(calRange==='weekly'){
                     return (
