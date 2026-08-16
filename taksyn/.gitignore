@@ -6,3 +6,4 @@ dist/
 scripts/
 *.bak*
 supabase/.temp/
+src/*.bak-*
