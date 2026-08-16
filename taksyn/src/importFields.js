@@ -271,3 +271,43 @@ export function buildRowPayload(rows, { personType, dateFormat, firstNameFirst =
     return out
   })
 }
+
+// [PATCH:format-choices]
+// ---------- format choice ----------
+
+// For the prompt: render the same sample values under each
+// candidate format, so the user chooses between two concrete
+// readings of their own data rather than answering an abstract
+// question about formats.
+//
+// Returns one entry per candidate, each with the samples it
+// would produce. A sample that will not parse under a candidate
+// is reported as null, which is itself informative.
+export function buildFormatChoices(values, { limit = 3 } = {}) {
+  const samples = []
+  for (const v of values || []) {
+    if (v == null || v === '') continue
+    if (typeof v === 'number' || v instanceof Date) continue
+    samples.push(String(v).trim())
+    if (samples.length >= limit) break
+  }
+
+  const render = (iso) => {
+    if (!iso) return null
+    const [y, m, d] = iso.split('-').map(Number)
+    const MONTHS = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December']
+    return `${d} ${MONTHS[m - 1]} ${y}`
+  }
+
+  return ['DD/MM/YYYY', 'MM/DD/YYYY'].map(fmt => ({
+    format: fmt,
+    samples: samples.map(raw => {
+      const iso = parseDate(raw, fmt)
+      return { raw, iso, label: render(iso) }
+    }),
+    // A candidate that cannot read every sample is almost
+    // certainly the wrong one.
+    parsesAll: samples.length > 0 && samples.every(raw => parseDate(raw, fmt) !== null),
+  }))
+}
