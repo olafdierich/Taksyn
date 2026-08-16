@@ -251,7 +251,13 @@ export function buildRowPayload(rows, { personType, dateFormat, firstNameFirst =
     const out = {
       row_no: r.row_no != null ? r.row_no : i + 1,
       person_type: personType,
-      full_name: joinName(r.first_name, r.surname, firstNameFirst),
+      // [PATCH:single-name-column]
+      // A mapped single-column name wins over the split pair and is
+      // used verbatim. Never split a full name: it guesses, and the
+      // guess fails silently.
+      full_name: (r.full_name != null && String(r.full_name).trim() !== '')
+        ? String(r.full_name).trim()
+        : joinName(r.first_name, r.surname, firstNameFirst),
     }
     const ref   = String(r.external_ref  == null ? '' : r.external_ref).trim()
     const email = String(r.contact_email == null ? '' : r.contact_email).trim()
