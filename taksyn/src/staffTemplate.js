@@ -15,23 +15,28 @@
 // ============================================================
 
 import { ACCESS_LEVELS, STAFF_FIELDS, STAFF_HEADERS } from './staffFields.js'
+import { DATE_FORMATS, DEFAULT_DATE_FORMAT } from './importFields.js'
 
 // jobRoles: the organisation's own list, from org_custom_roles.
 // May be empty — an org that has not configured roles yet should
 // still get a usable template.
-export function buildStaffTemplateSheets(orgName, jobRoles = []) {
+export function buildStaffTemplateSheets(orgName, jobRoles = [], dateFormat) {
   const roles = (jobRoles || []).map(r => String(r).trim()).filter(Boolean)
+  // The header states the organisation's own format, so a column
+  // pasted from their existing system matches on arrival.
+  const fmt = DATE_FORMATS[dateFormat] ? dateFormat : DEFAULT_DATE_FORMAT
+  const headers = STAFF_HEADERS.map(h => h === 'Date of birth' ? `Date of birth (${fmt})` : h)
 
   // Header row, then a reference block to the right of the data
   // columns. Column G is left blank as a gutter so the reference
   // is visibly separate from anything to be filled in.
-  const header = [...STAFF_HEADERS, '', 'ACCESS LEVELS →', ...ACCESS_LEVELS.map(l => l.label)]
+  const header = [...headers, '', 'ACCESS LEVELS →', ...ACCESS_LEVELS.map(l => l.label)]
 
   const rows = [header]
 
   // If the org has job roles, list them on the row below, same shape.
   if (roles.length) {
-    rows.push([...STAFF_HEADERS.map(() => ''), '', 'JOB ROLES →', ...roles])
+    rows.push([...headers.map(() => ''), '', 'JOB ROLES →', ...roles])
   }
 
   const guidance = [
@@ -41,7 +46,9 @@ export function buildStaffTemplateSheets(orgName, jobRoles = []) {
     ['They create their own password; you never see or set it.'],
     [],
     ['Email, First name, Surname and Access level are all required.'],
-    ['Job role is optional.'],
+    ['Job role and date of birth are optional.'],
+    [],
+    [`Dates must be written as ${fmt}, for example ${DATE_FORMATS[fmt].example}.`],
     [],
     ['ACCESS LEVEL controls what someone may do in Taksyn.'],
     ['Type one of these exactly:'],
@@ -60,8 +67,8 @@ export function buildStaffTemplateSheets(orgName, jobRoles = []) {
     [],
     ['Example:'],
     [],
-    STAFF_HEADERS,
-    ['judith@example.com', 'Judith', 'Rusoke', 'Staff Member', roles[0] || ''],
+    headers,
+    ['judith@example.com', 'Judith', 'Rusoke', 'Staff Member', roles[0] || '', DATE_FORMATS[fmt].example],
   ]
 
   return {
@@ -81,8 +88,8 @@ export function staffTemplateFilename(orgName) {
   return `taksyn-staff-invite-${safe}.xlsx`
 }
 
-export function buildStaffWorkbook(XLSX, orgName, jobRoles) {
-  const { sheets } = buildStaffTemplateSheets(orgName, jobRoles)
+export function buildStaffWorkbook(XLSX, orgName, jobRoles, dateFormat) {
+  const { sheets } = buildStaffTemplateSheets(orgName, jobRoles, dateFormat)
   const wb = XLSX.utils.book_new()
   for (const s of sheets) {
     const ws = XLSX.utils.aoa_to_sheet(s.rows)
@@ -93,8 +100,8 @@ export function buildStaffWorkbook(XLSX, orgName, jobRoles) {
   return wb
 }
 
-export async function downloadStaffTemplate({ orgName, jobRoles } = {}) {
+export async function downloadStaffTemplate({ orgName, jobRoles, dateFormat } = {}) {
   const XLSX = await import('xlsx')
-  const wb = buildStaffWorkbook(XLSX, orgName, jobRoles)
+  const wb = buildStaffWorkbook(XLSX, orgName, jobRoles, dateFormat)
   XLSX.writeFile(wb, staffTemplateFilename(orgName))
 }

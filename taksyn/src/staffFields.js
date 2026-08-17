@@ -10,6 +10,11 @@
 // ============================================================
 
 import { normaliseHeader } from './importParse.js'
+// parseDate is the SAME function the client import uses: both slash
+// formats, ISO, two-digit years and Excel serials, 37 assertions.
+// Duplicating it here would let the two imports read a date
+// differently, which is the one outcome worth avoiding.
+import { parseDate } from './importFields.js'
 
 // ---------- access levels ----------
 //
@@ -58,6 +63,7 @@ export const STAFF_FIELDS = [
   { key: 'surname',     header: 'Surname',      required: true,  width: 20 },
   { key: 'access_role', header: 'Access level', required: true,  width: 18 },
   { key: 'job_role',    header: 'Job role',     required: false, width: 22 },
+  { key: 'date_of_birth', header: 'Date of birth', required: false, width: 22, isDate: true },
 ]
 
 export const STAFF_HEADERS = STAFF_FIELDS.map(f => f.header)
@@ -69,6 +75,7 @@ export const STAFF_MAPPABLE = [
   { key: 'surname',     label: 'Surname' },
   { key: 'access_role', label: 'Access level' },
   { key: 'job_role',    label: 'Job role' },
+  { key: 'date_of_birth', label: 'Date of birth' },
 ]
 
 // Bare 'role' maps to JOB role, not access level. Another system's
@@ -83,6 +90,8 @@ export const STAFF_ALIASES = {
   access_role: ['access level', 'access', 'permission', 'permissions',
                 'taksyn role', 'user role', 'system role', 'level'],
   job_role:    ['job role', 'job title', 'position', 'occupation', 'title', 'role'],
+  date_of_birth: ['date of birth', 'dateofbirth', 'dob', 'birth date', 'birthdate',
+                  'date born', 'born'],
 }
 
 function scoreStaff(header, fieldKey) {
@@ -174,8 +183,9 @@ export function extractStaffRows(rows, headerRowIndex, mapping) {
       surname:     get(row, 'surname'),
       access_role: get(row, 'access_role'),
       job_role:    get(row, 'job_role'),
+      date_of_birth: get(row, 'date_of_birth'),
     }
-    const anything = ['email','full_name','first_name','surname','access_role','job_role']
+    const anything = ['email','full_name','first_name','surname','access_role','job_role','date_of_birth']
       .some(k => rec[k] !== '')
     if (anything) out.push(rec)
   }
@@ -188,7 +198,9 @@ export function extractStaffRows(rows, headerRowIndex, mapping) {
 // here so "Staff Member" from the template becomes 'worker'; an
 // unrecognised value is passed through unchanged so the server
 // reports it against the right row rather than silently blanking it.
-export function buildStaffPayload(rows) {
+// dateFormat is the organisation's own, resolved before this is
+// called, exactly as the client import does it.
+export function buildStaffPayload(rows, { dateFormat } = {}) {
   return (rows || []).map((r, i) => {
     const full = String(r.full_name || '').trim()
     const name = full || [String(r.first_name || '').trim(),
@@ -200,6 +212,14 @@ export function buildStaffPayload(rows) {
       full_name: name,
       access_role: access || String(r.access_role || '').trim(),
       job_role: String(r.job_role || '').trim() || null,
+      // Parsed to ISO here. An unparseable value is passed through
+      // raw so the server reports it against the right row rather
+      // than the row arriving silently without a date of birth.
+      date_of_birth: (() => {
+        const raw = r.date_of_birth
+        if (raw == null || String(raw).trim() === '') return null
+        return parseDate(raw, dateFormat) || String(raw).trim()
+      })(),
     }
   })
 }
