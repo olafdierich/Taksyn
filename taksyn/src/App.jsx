@@ -6,6 +6,8 @@ import { uploadEvidence, uploadIncidentEvidence, signedEvidenceUrl } from './lib
 import { isSameOrgDay, orgToday, orgDayOf } from './lib/orgTime'
 // [PATCH:import-panel]
 import ImportPanel from './ImportPanel.jsx'
+// [PATCH:staff-import-panel]
+import StaffImportPanel from './StaffImportPanel.jsx'
 
 // Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
 // Declared here (outside all components) so it is always in scope everywhere in this file.
@@ -14030,6 +14032,12 @@ function ContactsView({ user, setPage }) {
   const [showImport, setShowImport] = useState(false)
   const [orgName, setOrgName] = useState('')
   const [orgDateFormat, setOrgDateFormat] = useState(null)
+  // Staff import. Job roles come from org_custom_roles, which pairs
+  // industry_name with role_name — so the industry sent on an invite
+  // can be derived from the role the person was given.
+  const [showStaffImport, setShowStaffImport] = useState(false)
+  const [orgJobRoles, setOrgJobRoles] = useState([])
+  const [orgIndustry, setOrgIndustry] = useState('')
 
   const load = async (oid) => {
     setLoading(true)
@@ -14054,8 +14062,17 @@ function ContactsView({ user, setPage }) {
         // Type labels come from the SAME pack rows the incident form
         // uses, so Kemrose sees Team / Guest / Contractor here too.
         // date_format and name are read here too, for bulk import.
-        const { data: org } = await supabase.from('organisations').select('industry_id,name,date_format').eq('id', oid).maybeSingle()
-        if (org) { setOrgName(org.name || ''); setOrgDateFormat(org.date_format || null) }
+        const { data: org } = await supabase.from('organisations').select('industry_id,name,date_format,industry').eq('id', oid).maybeSingle()
+        if (org) {
+          setOrgName(org.name || '')
+          setOrgDateFormat(org.date_format || null)
+          setOrgIndustry(org.industry || '')
+        }
+        // Same query shape the invite form and settings use.
+        supabase.from('org_custom_roles')
+          .select('industry_name,role_name').eq('organisation_id', oid)
+          .order('sort_order',{nullsFirst:false}).order('role_name')
+          .then(({data})=>{ if(data) setOrgJobRoles(data) }).catch(()=>{})
         if (org?.industry_id) {
           const { data: packs } = await supabase.from('incident_category_packs')
             .select('category_key,label,sort_order')
@@ -14135,6 +14152,34 @@ function ContactsView({ user, setPage }) {
     setBusy(false)
   }
 
+  // Sends ONE staff invitation. Mirrors the invite at ~6718 exactly:
+  // same endpoint, same auth header, and org (NAME) and orgId (ORG
+  // id) sent separately. Reusing the existing mechanism rather than
+  // writing a second one that can drift out of step with it.
+  const sendStaffInvite = async ({ email, name, role, position }) => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
+    // The invite's industry comes from the role the person was given.
+    const roleRow = position
+      ? orgJobRoles.find(r => String(r.role_name||'').trim().toLowerCase() === String(position).trim().toLowerCase())
+      : null
+    const industry = roleRow?.industry_name || orgIndustry || ''
+    const res = await fetch(supabaseUrl + '/functions/v1/invite-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
+      body: JSON.stringify({
+        email, name, role,
+        org: orgName,
+        orgId: orgId,
+        industry,
+        position: position || null,
+        inviteUrl: window.location.origin + window.location.pathname,
+      })
+    })
+    const result = await res.json()
+    if (!res.ok) throw new Error(result.error || result.message || ('Invite failed (' + res.status + ')'))
+    return result
+  }
+
   // Archive, never delete - org_people_block_delete raises on DELETE.
   // Archived people drop out of search_org_people, so this removes them
   // from the incident form without destroying history.
@@ -14182,8 +14227,11 @@ function ContactsView({ user, setPage }) {
         <input style={inp} value={q} placeholder="Search by name or ID…" onChange={e=>setQ(e.target.value)}/>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
           <button style={btn('var(--brand,#4F46E5)','#fff')} onClick={()=>{ resetForm(); setEditing('new') }}>Add a contact</button>
-          <button style={btn()} onClick={()=>{ resetForm(); setShowImport(v=>!v) }}>
-            {showImport ? 'Close import' : 'Import from a file'}
+          <button style={btn()} onClick={()=>{ resetForm(); setShowStaffImport(false); setShowImport(v=>!v) }}>
+            {showImport ? 'Close import' : 'Import clients or contractors'}
+          </button>
+          <button style={btn()} onClick={()=>{ resetForm(); setShowImport(false); setShowStaffImport(v=>!v) }}>
+            {showStaffImport ? 'Close staff invites' : 'Invite staff from a file'}
           </button>
           <button style={btn()} onClick={()=>setShowArchived(v=>!v)}>
             {showArchived ? 'Show active' : 'Show archived'}
@@ -14200,6 +14248,18 @@ function ContactsView({ user, setPage }) {
           supabase={supabase}
           onClose={()=>setShowImport(false)}
           onImported={()=>{ setOrgDateFormat(f=>f); load(orgId) }}
+        />
+      )}
+
+      {showStaffImport && orgId && (
+        <StaffImportPanel
+          org={orgId}
+          orgName={orgName}
+          jobRoles={orgJobRoles.map(r=>r.role_name).filter(Boolean)}
+          supabase={supabase}
+          sendInvite={sendStaffInvite}
+          onClose={()=>setShowStaffImport(false)}
+          onDone={()=>{}}
         />
       )}
 
