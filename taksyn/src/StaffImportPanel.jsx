@@ -68,6 +68,10 @@ export default function StaffImportPanel({
   // point every remaining invite has already been sent.
   const stopRef = useRef(false)
   const [stopRequested, setStop] = useState(false)
+  // [PATCH:rate-limit]
+  // Set when the mail provider refuses further sends. The remaining
+  // rows stay staged, so Send simply resumes later.
+  const [rateLimited, setRateLimited] = useState(false)
 
   const sheet = (parsed?.sheets || []).find(s => s.name === sheetName)
   const headers = sheet?.rows?.[headerRow] || []
@@ -163,7 +167,7 @@ export default function StaffImportPanel({
   // reason about than a half-finished sequential one.
   const sendAll = async () => {
     setBusy(true); setErr('')
-    stopRef.current = false; setStop(false)
+    stopRef.current = false; setStop(false); setRateLimited(false)
     let done = 0, ok = 0, failed = 0
 
     for (const r of staged) {
@@ -183,6 +187,17 @@ export default function StaffImportPanel({
       }
 
       const succeeded = !sendErr && result && result.success
+
+      // Rate limiting is not a fault in the row. Stop, and leave
+      // everything after this one staged so it can be resumed.
+      const message = String(sendErr || result?.error || '')
+      if (!succeeded && /rate limit|too many requests|429/i.test(message)) {
+        setRateLimited(true)
+        setBusy(false)
+        setProgress({ done, ok, failed })
+        return
+      }
+
       try {
         await supabase.rpc('mark_staff_row', {
           p_row_id: r.id,
@@ -361,6 +376,19 @@ export default function StaffImportPanel({
               {progress.done} sent · {progress.ok} succeeded
               {progress.failed > 0 && <> · <strong style={{ color:'var(--danger,#b42318)' }}>
                 {progress.failed} failed</strong></>}
+            </div>
+          )}
+
+          {rateLimited && (
+            <div style={{ padding:10, borderRadius:8, border:'1px solid #B45309',
+                          background:'rgba(180,83,9,.06)', marginBottom:12,
+                          fontSize:13, lineHeight:1.6 }}>
+              <strong>Paused — the mail provider is limiting how fast invitations go out.</strong>
+              <div style={{ marginTop:6 }}>
+                {progress.ok} {progress.ok === 1 ? 'person has' : 'people have'} been invited.
+                The remaining {pending} are still on the list and nothing has been lost.
+                Come back in an hour and press Send again to continue where this left off.
+              </div>
             </div>
           )}
 
