@@ -45,8 +45,13 @@ const VERDICT = {
 }
 
 export default function StaffImportPanel({
-  org, orgName, jobRoles, supabase, sendInvite, onClose, onDone,
+  org, orgName, jobRoles, orgDateFormat, supabase, sendInvite, onClose, onDone,
 }) {
+  // PATCH:staff-dob-panel
+  // The organisation's own format, used to read the spreadsheet's
+  // dates and to label the template header. Falls back only for the
+  // template; an unrecognised date still reaches the server raw.
+  const dateFormat = orgDateFormat || 'DD/MM/YYYY'
   // choose | mapping | preview | sending | done
   const [step, setStep]       = useState('choose')
   const [parsed, setParsed]   = useState(null)
@@ -126,7 +131,7 @@ export default function StaffImportPanel({
     setRows(extracted)
     const { data, error } = await supabase.rpc('stage_staff_batch', {
       p_org: org,
-      p_rows: buildStaffPayload(extracted),
+      p_rows: buildStaffPayload(extracted, { dateFormat }),
       p_filename: filename || null,
       p_dry_run: true,
     })
@@ -141,7 +146,7 @@ export default function StaffImportPanel({
     setBusy(true); setErr('')
     const { data, error } = await supabase.rpc('stage_staff_batch', {
       p_org: org,
-      p_rows: buildStaffPayload(rows),
+      p_rows: buildStaffPayload(rows, { dateFormat }),
       p_filename: filename || null,
       p_dry_run: false,
     })
@@ -150,7 +155,7 @@ export default function StaffImportPanel({
 
     const { data: staffRows, error: readErr } = await supabase
       .from('import_staff_rows')
-      .select('id,row_no,email,full_name,access_role,job_role,status')
+      .select('id,row_no,email,full_name,access_role,job_role,date_of_birth,status')
       .eq('batch_id', data.batch_id).order('row_no')
     setBusy(false)
     if (readErr) { setErr(readErr.message); return }
@@ -181,6 +186,7 @@ export default function StaffImportPanel({
           name: r.full_name,
           role: r.access_role,
           position: r.job_role || null,
+          dateOfBirth: r.date_of_birth || null,
         })
       } catch (ex) {
         sendErr = ex?.message || String(ex)
@@ -251,7 +257,7 @@ export default function StaffImportPanel({
           <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
             <button style={btn()} onClick={async () => {
               setErr('')
-              try { await downloadStaffTemplate({ orgName, jobRoles }) }
+              try { await downloadStaffTemplate({ orgName, jobRoles, dateFormat }) }
               catch (ex) { setErr(ex?.message || String(ex)) }
             }}>Download staff template</button>
             <label style={{ ...btn('var(--brand,#4F46E5)','#fff'), display:'inline-block' }}>
@@ -322,6 +328,7 @@ export default function StaffImportPanel({
                 <th style={{ textAlign:'left', padding:'7px 9px' }}>Name</th>
                 <th style={{ textAlign:'left', padding:'7px 9px' }}>Email</th>
                 <th style={{ textAlign:'left', padding:'7px 9px' }}>Access</th>
+                <th style={{ textAlign:'left', padding:'7px 9px' }}>Born</th>
                 <th style={{ textAlign:'left', padding:'7px 9px' }}>Verdict</th>
                 <th style={{ textAlign:'left', padding:'7px 9px' }}>Reason</th>
               </tr></thead>
@@ -336,6 +343,7 @@ export default function StaffImportPanel({
                       <td style={{ padding:'6px 9px' }}>
                         {(ACCESS_LEVELS.find(l=>l.key===r.access_role)||{}).label || r.access_role}
                       </td>
+                      <td style={{ padding:'6px 9px', color:'var(--t2)' }}>{r.date_of_birth || ''}</td>
                       <td style={{ padding:'6px 9px', color:v.colour, fontWeight:600 }}>{v.label}</td>
                       <td style={{ padding:'6px 9px', color:'var(--t2)' }}>{r.reason || ''}</td>
                     </tr>

@@ -14181,7 +14181,7 @@ function ContactsView({ user, setPage }) {
   // same endpoint, same auth header, and org (NAME) and orgId (ORG
   // id) sent separately. Reusing the existing mechanism rather than
   // writing a second one that can drift out of step with it.
-  const sendStaffInvite = async ({ email, name, role, position }) => {
+  const sendStaffInvite = async ({ email, name, role, position, dateOfBirth }) => {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
     // The invite's industry comes from the role the person was given.
     const roleRow = position
@@ -14197,6 +14197,7 @@ function ContactsView({ user, setPage }) {
         orgId: orgId,
         industry,
         position: position || null,
+        dateOfBirth: dateOfBirth || null,
         inviteUrl: window.location.origin + window.location.pathname,
       })
     })
@@ -14286,6 +14287,7 @@ function ContactsView({ user, setPage }) {
           org={orgId}
           orgName={orgName}
           jobRoles={orgJobRoles.map(r=>r.role_name).filter(Boolean)}
+          orgDateFormat={orgDateFormat}
           supabase={supabase}
           sendInvite={sendStaffInvite}
           onClose={()=>setShowStaffImport(false)}
