@@ -14220,7 +14220,12 @@ function ContactsView({ user, setPage }) {
       <div style={card}>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
           <button onClick={()=>setFilterType('')} style={chip(!filterType)}>All</button>
-          {types.map(([k,t])=>(
+          // [PATCH:ui-defects]
+          {/* org_people permits only client and contractor, so a
+              workforce chip filters nothing and can never match. It
+              stays in the category pack, where workforce is a real
+              affected_type for incidents — it is only dropped here. */}
+          {types.filter(([k])=>k!=='workforce').map(([k,t])=>(
             <button key={k} onClick={()=>setFilterType(k)} style={chip(filterType===k)}>{t}</button>
           ))}
         </div>

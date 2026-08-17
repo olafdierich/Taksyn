@@ -344,12 +344,27 @@ export default function StaffImportPanel({
               </tbody>
             </table>
           </div>
+          // [PATCH:ui-defects]
+          {/* The button was disabled correctly but styled as though it
+              were live, so a blocked action read as a broken one. */}
           <div style={{ marginTop:14, display:'flex', gap:8 }}>
-            <button style={btn('var(--brand,#4F46E5)','#fff')}
-                    disabled={busy || check.counts.errors > 0 || check.counts.staged === 0}
-                    onClick={stageAll}>
-              {busy ? 'Preparing…' : `Prepare ${check.counts.staged} invitations`}
-            </button>
+            {(() => {
+              const blocked = busy || check.counts.errors > 0 || check.counts.staged === 0
+              return (
+                <button
+                  style={blocked
+                    ? { ...btn(), color:'var(--t2)', cursor:'default', opacity:.6 }
+                    : btn('var(--brand,#4F46E5)','#fff')}
+                  disabled={blocked}
+                  onClick={stageAll}>
+                  {busy
+                    ? 'Preparing…'
+                    : check.counts.errors > 0
+                      ? `Fix ${check.counts.errors} ${check.counts.errors === 1 ? 'error' : 'errors'} to continue`
+                      : `Prepare ${check.counts.staged} invitations`}
+                </button>
+              )
+            })()}
             <button style={btn()} disabled={busy} onClick={()=>setStep('mapping')}>Back</button>
           </div>
           <div style={{ fontSize:12, color:'var(--t2)', marginTop:8 }}>
@@ -432,10 +447,29 @@ export default function StaffImportPanel({
             {progress.ok} sent successfully{progress.failed > 0 && <>, {progress.failed} failed</>}.
           </div>
           {progress.failed > 0 && (
-            <div style={{ fontSize:12, color:'var(--t2)', lineHeight:1.5 }}>
-              The failures are listed above with their reason. They can be invited
-              individually from Workforce.
-            </div>
+            <>
+              <div style={{ fontSize:12, color:'var(--t2)', lineHeight:1.5, marginBottom:8 }}>
+                These could not be sent. Each reason is recorded against the person.
+                They can be invited individually from Workforce.
+              </div>
+              {/* The reason was recorded per row and then not shown,
+                  on a screen that said it had been. */}
+              <div style={{ border:'1px solid var(--border)', borderRadius:8, overflow:'hidden' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                  <tbody>
+                    {staged.filter(r => r.status === 'failed').map(r => (
+                      <tr key={r.id} style={{ borderTop:'1px solid var(--border)' }}>
+                        <td style={{ padding:'6px 9px' }}>{r.full_name}</td>
+                        <td style={{ padding:'6px 9px', color:'var(--t2)' }}>{r.email}</td>
+                        <td style={{ padding:'6px 9px', color:'var(--danger,#b42318)' }}>
+                          {r.error || 'no reason recorded'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}
