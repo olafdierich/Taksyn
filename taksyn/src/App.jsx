@@ -6296,7 +6296,7 @@ function UsersView({ user, setAuditLog }) {
         }
         if (assignments?.length) {
           const activeIds = assignments.filter(a => a.is_active == null || a.is_active !== false).map(a => a.user_id)
-          const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', activeIds)
+          const {data:profiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone,notes,date_of_birth').in('id', activeIds)
           if (profiles) setRealUsers(profiles.filter(p => p.role !== 'super_admin'))
         }
       } catch(_) {}
@@ -6321,7 +6321,7 @@ function UsersView({ user, setAuditLog }) {
     if(user.role==='super_admin') {
       ;(async()=>{
         const [profilesRes, membersRes, orgsRes] = await Promise.all([
-          supabase.from('profiles').select('id,name,email,org,role,position,phone').order('name'),
+          supabase.from('profiles').select('id,name,email,org,role,position,phone,notes,date_of_birth').order('name'),
           supabase.from('org_members').select('user_id, org, role, industry, position'),
           supabase.from('organisations').select('id, name').eq('status','active').order('name')
         ])
@@ -6355,7 +6355,7 @@ function UsersView({ user, setAuditLog }) {
         const inactiveAssignments = assignments.filter(a => a.is_active === false)
         const activeMemberIds = activeAssignments.map(a=>a.user_id)
         const inactiveMemberIds = inactiveAssignments.map(a=>a.user_id)
-        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', activeMemberIds)
+        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone,notes,date_of_birth').in('id', activeMemberIds)
         const workforceMembers = (profileData || []).filter(p=>p.role!=='super_admin')
         setRealUsers(workforceMembers)
         parsePositions(workforceMembers)
@@ -6366,7 +6366,7 @@ function UsersView({ user, setAuditLog }) {
         }
         setOrgAssignments(map)
         if (inactiveMemberIds.length) {
-          const {data:archivedProfiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', inactiveMemberIds)
+          const {data:archivedProfiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone,notes,date_of_birth').in('id', inactiveMemberIds)
           setArchivedUsers(archivedProfiles || [])
           const archMap = {}
           for (const a of inactiveAssignments) {
@@ -6377,7 +6377,7 @@ function UsersView({ user, setAuditLog }) {
         }
       } else {
         // Fallback: query profiles directly by org name (same as PerformanceView)
-        const {data:fallback} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').eq('org', user.org)
+        const {data:fallback} = await supabase.from('profiles').select('id,name,email,org,role,position,phone,notes,date_of_birth').eq('org', user.org)
         if (fallback?.length) { const fb=fallback.filter(p=>p.role!=='super_admin'); setRealUsers(fb); parsePositions(fb) }
       }
       setWorkforceOrgId(orgId)
@@ -6410,14 +6410,14 @@ function UsersView({ user, setAuditLog }) {
         const inactiveAssignments = assignments.filter(a => a.is_active === false)
         const activeMemberIds = activeAssignments.map(a => a.user_id)
         const inactiveMemberIds = inactiveAssignments.map(a => a.user_id)
-        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', activeMemberIds)
+        const {data:profileData} = await supabase.from('profiles').select('id,name,email,org,role,position,phone,notes,date_of_birth').in('id', activeMemberIds)
         const workforceMembers = (profileData || []).filter(p => p.role !== 'super_admin')
         setRealUsers(workforceMembers)
         const map = {}
         for (const a of activeAssignments) { if (!map[a.user_id]) map[a.user_id] = []; map[a.user_id].push(a) }
         setOrgAssignments(map)
         if (inactiveMemberIds.length) {
-          const {data:archivedProfiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone').in('id', inactiveMemberIds)
+          const {data:archivedProfiles} = await supabase.from('profiles').select('id,name,email,org,role,position,phone,notes,date_of_birth').in('id', inactiveMemberIds)
           setArchivedUsers(archivedProfiles || [])
           const archMap = {}
           for (const a of inactiveAssignments) { if (!archMap[a.user_id]) archMap[a.user_id] = []; archMap[a.user_id].push(a) }
@@ -6518,6 +6518,10 @@ function UsersView({ user, setAuditLog }) {
       phone: editForm.phone||'',
       notes: editForm.notes||'',
       email: editForm.email||'',
+      // Only a client_admin or super_admin can write this: profiles_guard
+      // pins it for everyone else. null rather than '' because the column
+      // is a date and '' is not a valid one.
+      date_of_birth: editForm.date_of_birth || null,
       roster: editRoster,
       regularly_rostered: !!editForm.regularly_rostered
     }
@@ -6825,6 +6829,16 @@ function UsersView({ user, setAuditLog }) {
                   <label className="form-label">Phone</label>
                   <input className="form-input" value={editForm.phone||''} onChange={e=>setEditForm({...editForm,phone:e.target.value})} placeholder="e.g. +61 400 000 000"/>
                 </div>
+                {/* [PATCH:workforce-dob]
+                    Shown only to roles that can actually write it. profiles_guard
+                    silently reverts a manager's change, so offering them the field
+                    would promise something that quietly does not happen. */}
+                {['client_admin','super_admin'].includes(user.role) && (
+                  <div className="form-field">
+                    <label className="form-label">Date of Birth</label>
+                    <input className="form-input" type="date" value={editForm.date_of_birth||''} onChange={e=>setEditForm({...editForm,date_of_birth:e.target.value})}/>
+                  </div>
+                )}
               </div>
               <div className="form-field">
                 <label className="form-label">Email</label>
@@ -7200,7 +7214,7 @@ function UsersView({ user, setAuditLog }) {
                       : orgAssignments[u.id]?.[0] || {}
                     setEditingUser(u)
                     setEditingOrgId(orgId)
-                    setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||u.industry||'', position:a.position||u.position||u.orgPosition||'', phone:u.phone||'', notes:u.notes||'', email:u.email||''})
+                    setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||u.industry||'', position:a.position||u.position||u.orgPosition||'', phone:u.phone||'', notes:u.notes||'', email:u.email||'', date_of_birth:u.date_of_birth||''})
                     setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster,regularly_rostered,industry,position').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs); setEditForm(prev=>({...prev,regularly_rostered:!!apData.regularly_rostered,industry:prev.industry||a.industry||apData.industry||'',position:prev.position||a.position||apData.position||''})) } catch(e) {} })()
                   }}>✏️ Edit</button>}
                   {user.role==='client_admin'&&<button className="btn btn-danger btn-sm" onClick={()=>deactivateUser(u.id)}>Deactivate</button>}
