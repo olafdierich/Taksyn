@@ -6869,6 +6869,17 @@ function UsersView({ user, setAuditLog }) {
                 <div className="form-field">
                   <label className="form-label">Role</label>
                   <select className="form-input" value={editForm.role||'worker'} onChange={e=>setEditForm({...editForm,role:e.target.value})}>
+                    {/* [PATCH:role-display] getInvitableRoles returns roles STRICTLY
+                        BELOW the caller's own, so a client_admin editing another
+                        client_admin got a list with no matching option and the
+                        browser displayed the first one — Manager — misstating that
+                        person's access level on the screen used to manage it.
+                        The current role is shown but disabled: only a super_admin
+                        may create or change an executive, deliberately, so that an
+                        org cannot expand its own executive tier. */}
+                    {editForm.role && !getInvitableRoles(user.role).includes(editForm.role) && (
+                      <option value={editForm.role} disabled>{ROLE_LABELS[editForm.role]||editForm.role}</option>
+                    )}
                     {getInvitableRoles(user.role).map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                 </div>
