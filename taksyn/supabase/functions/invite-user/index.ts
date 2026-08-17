@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     // [PATCH:invite-position-v2]
     // `position` is ONE name (Chef). `positions` is a display summary
     // built by the caller and is deliberately not written to any column.
-    const { action, email, name, role, org, orgId, industry, position, positions, inviteUrl } = await req.json()
+    const { action, email, name, role, org, orgId, industry, position, positions, dateOfBirth, inviteUrl } = await req.json()
 
     // NOTE: `secret` is intentionally no longer read or trusted.
     console.log('[invite-user] received fields:', { action, email, name, role, org, orgId })
@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: inviteUrl || undefined,
-      data: { name, role, org, orgId, industry },
+      data: { name, role, org, orgId, industry, dateOfBirth: dateOfBirth || null },
     })
 
     if (inviteError) {
