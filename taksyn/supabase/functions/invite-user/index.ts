@@ -116,6 +116,9 @@ Deno.serve(async (req) => {
         invited_name: name || null,
         invited_role: role,
         invited_industry: industry || null,
+        // [PATCH:invite-position] recorded only. handle_new_user()
+        // reads role and industry from this row, not position.
+        invited_position: positions || null,
         role: role,
         created_by: caller.id,
         is_active: true,
@@ -139,6 +142,7 @@ Deno.serve(async (req) => {
             org: orgId,
             role: role || 'member',
             industry: industry || null,
+            position: positions || null,
           }, { onConflict: 'user_id,org' })
         }
         return json({ success: true, alreadyExisted: true, userId: profileData?.id || null }, 200)
@@ -165,6 +169,9 @@ Deno.serve(async (req) => {
           org: orgId,
           role: role || 'member',
           industry: industry || null,
+          // Runs AFTER handle_new_user() has inserted this row with
+          // (user_id, org, role, industry), so this adds position.
+          position: positions || null,
         }, { onConflict: 'user_id,org' })
       }
     }
