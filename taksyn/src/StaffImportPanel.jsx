@@ -96,7 +96,7 @@ export default function StaffImportPanel({
     setErr(''); setBusy(true); setFilename(file.name)
     try {
       const XLSX = await import('xlsx')
-      const wb = parseWorkbook(XLSX, await file.arrayBuffer())
+      const wb = parseWorkbook(XLSX, await file.arrayBuffer(), { filename: file.name })
       const usable = wb.sheets.filter(s => !isGuidanceSheet(s.name) && (s.rows||[]).length > 0)
       if (!usable.length) {
         setErr('That file has no rows Taksyn can read. Check you saved it as .xlsx or .csv.')

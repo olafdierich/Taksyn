@@ -163,8 +163,23 @@ export function findHeaderRow(rows, { scan = 10 } = {}) {
 
 // ---------- workbook ----------
 
-export function parseWorkbook(XLSX, data) {
-  const wb = XLSX.read(data, { type: 'array', cellDates: true })
+// filename decides how dates are read, and the distinction matters.
+//
+// In a real .xlsx a date cell holds a SERIAL NUMBER. cellDates asks
+// SheetJS to turn that into a Date, which is unambiguous: the file
+// itself recorded which day was meant.
+//
+// A CSV has no date cells. It is text, and cellDates makes SheetJS
+// GUESS a format — it read 03/11/1990 as 11 March, US-style. Worse,
+// detectDateFormat then sees a Date object and reports 'excel',
+// meaning 'unambiguous, nothing to ask', so the guess is silently
+// trusted and never surfaced to the user.
+//
+// So: Dates from a spreadsheet, text from a CSV, and let the column
+// scan do its job on the text.
+export function parseWorkbook(XLSX, data, { filename } = {}) {
+  const isCsv = /\.csv$/i.test(String(filename || ''))
+  const wb = XLSX.read(data, { type: 'array', cellDates: !isCsv })
   return {
     sheets: wb.SheetNames.map(name => ({
       name,
@@ -172,8 +187,15 @@ export function parseWorkbook(XLSX, data) {
       // subsequent index, so row_no would no longer match the row
       // the user sees in Excel — and row_no is how every error and
       // skip is reported back to them.
+      // raw:false for a CSV returns the text as typed. raw:true would
+      // return SheetJS's interpretation — 03/11/1990 comes back as the
+      // serial 32943, its US-style guess, which detectDateFormat then
+      // treats as Excel-certain and never asks about.
+      //
+      // For a real .xlsx raw:true is correct: the serial IS the stored
+      // value, and cellDates has already turned date cells into Dates.
       rows: XLSX.utils.sheet_to_json(wb.Sheets[name], {
-        header: 1, blankrows: true, defval: '', raw: true,
+        header: 1, blankrows: true, defval: '', raw: !isCsv,
       }),
     })),
   }
