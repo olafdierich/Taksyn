@@ -15771,7 +15771,12 @@ function IncidentRegisterView({ user, setPage }) {
     const id = orgId || await resolveOrg()
     if (id && id!==orgId) setOrgId(id)
     if (!id) { setLoading(false); return }
-    const { data } = await supabase.from('incidents').select('*').eq('org', id).order('occurred_at',{ascending:false})
+    // v49: report counts outcome rows -- embed resolves through the FK
+    // on incident_outcomes. incidents is the only incident table with
+    // one, so this is the first embed available here.
+    const { data } = await supabase.from('incidents')
+      .select('*, incident_outcomes(outcome_key,outcome_label,suggested_severity,seq)')
+      .eq('org', id).order('occurred_at',{ascending:false})
     const list = data||[]
     setIncidents(list)
     const ids=[...new Set(list.map(i=>i.assigned_to).filter(Boolean))]
@@ -15917,11 +15922,20 @@ function IncidentRegisterView({ user, setPage }) {
       : ((outcomeLabels[domain]||{})[lvl] || ('Level '+lvl))
   // No domain filter — property and information were previously dropped
   // from this chart entirely.
-  const tOutInc = tInc6m.filter(i=>i.outcome_domain&&i.outcome_level)
-  const tOutMap = {}
-  tOutInc.forEach(i=>{ const k=i.outcome_domain+'|'+i.outcome_level; tOutMap[k]=(tOutMap[k]||0)+1 })
+  // One tally per OUTCOME ROW. An incident with an admission and
+  // antibiotics contributes to both rows, which is the whole point of
+  // the child table. tOutBase stays the INCIDENT count so percentages
+  // read "share of incidents", not "share of outcomes".
+  const tOutInc  = tInc6m.filter(i=>(i.incident_outcomes||[]).length>0)
+  const tOutBase = tInc6m.length || 1
+  const tOutMap = {}, tOutLbl = {}
+  tOutInc.forEach(i=>(i.incident_outcomes||[]).forEach(o=>{
+    const k=(i.outcome_domain||'')+'|'+(o.outcome_key||'')
+    tOutMap[k]=(tOutMap[k]||0)+1
+    if(!tOutLbl[k]) tOutLbl[k]=o.outcome_label||o.outcome_key||'Unknown'
+  }))
   const tOutRows = Object.keys(tOutMap)
-    .map(k=>{ const [d,l]=k.split('|'); return [k, tOutMap[k], d, Number(l)] })
+    .map(k=>{ const [d]=k.split('|'); return [k, tOutMap[k], d, tOutLbl[k]] })
     // Domain first so the three groups read as blocks, then by level.
     .sort((a,b)=> String(a[2]).localeCompare(String(b[2])) || a[3]-b[3])
   const tNotifReq = tInc6m.filter(i=>i.external_notification_required)
@@ -16011,7 +16025,7 @@ function IncidentRegisterView({ user, setPage }) {
     y+=6
     gap(2); rule()
     // breakdown axes: harm type / affected persons / outcome
-    const axisBlock = (title, rows, labelFn) => {
+    const axisBlock = (title, rows, labelFn, base) => {
       if(!rows) return
       line(title,12,true)
       gap(3)
@@ -16025,8 +16039,17 @@ function IncidentRegisterView({ user, setPage }) {
       // Share of the total, not of the largest. Matches the on-screen
       // breakdown; the old rw*n/(maxN*2) made every bar relative to the
       // biggest count AND capped that at half width.
-      const barTot=rows.reduce((s,r)=>s+r[1],0)||1
+      // v49: optional base. Defaults to sum-of-counts, so the harm-type
+      // and affected-persons blocks are byte-identical in behaviour.
+      // The outcome block passes the INCIDENT count instead, because an
+      // incident can appear in several rows and sum-of-counts would
+      // silently answer a different question.
+      const barTot=base||rows.reduce((s,r)=>s+r[1],0)||1
       rows.forEach(([key,n])=>{
+        // v49: row must fit before it starts -- label, bar and spacing
+        // are ~10mm, and pdf.text/rect bypass the y>ph guard that line()
+        // and rule() apply.
+        if(y>ph-12) addPage()
         const pc=Math.round(n/barTot*100)
         pdf.setFontSize(9); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
         pdf.text(String(labelFn(key)),lm,y)
@@ -16047,8 +16070,11 @@ function IncidentRegisterView({ user, setPage }) {
       line('No individual had more than one incident in the period.',9,false,[120,120,120])
     }
     gap(2); rule()
-    axisBlock('Outcome (6 months)', tOutRows.map(r=>[r[0], r[1]]),
-      k=>{ const [d,l]=String(k).split('|'); return (DOMAIN_LABEL[d]||d)+' · '+outcomeLabelFor(d, Number(l)) })
+    axisBlock('Outcome — share of incidents (an incident may have several)',
+      tOutRows.map(r=>[r[0], r[1]]),
+      k=>{ const r=tOutRows.find(x=>x[0]===k)||[]; const d=r[2]
+           return (DOMAIN_LABEL[d]||d)+' · '+(r[3]||String(k)) },
+      tOutBase)
     // top categories
     if(tTopCats.length>0){
       line('Top Categories (6 months)',12,true)
@@ -16220,11 +16246,11 @@ function IncidentRegisterView({ user, setPage }) {
               <div style={{...trCard,flex:'1 1 200px'}}>
                 <div style={trH}>Outcome (6 months)</div>
                 {tOutRows.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No outcome recorded</div>}
-                {tOutRows.map(([key,n,dom,lvl])=>{ const tot=tOutRows.reduce((s,r)=>s+r[1],0)||1; const pc=Math.round(n/tot*100); return <div key={key} style={{marginBottom:6}}>
+                {tOutRows.map(([key,n,dom,olbl])=>{ const pc=Math.round(n/tOutBase*100); return <div key={key} style={{marginBottom:6}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
                     <span style={{color:'var(--text)',fontWeight:500}}>
                       <span style={{color:'var(--t2)'}}>{DOMAIN_LABEL[dom]||dom} · </span>
-                      {outcomeLabelFor(dom, lvl)}
+                      {olbl}
                     </span>
                     <span style={{color:'var(--t2)',fontWeight:700}}>{n} ({pc}%)</span>
                   </div>
