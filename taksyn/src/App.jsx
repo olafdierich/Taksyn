@@ -14509,15 +14509,21 @@ function IncidentReportView({ user }) {
   const [OUTCOME_PROPERTY, setOutcomeProperty] = useState([])
   const [OUTCOME_INFO, setOutcomeInfo] = useState([])
   // outcome ladder -> suggested severity (1-5)
+  // v49: outcome keys — see incident_outcomes.outcome_key
+  // [position, label, suggested severity, KEY]. The key is what reaches
+  // incident_outcomes.outcome_key; position still reaches the deprecated
+  // incidents.outcome_level. antibiotic_usage and hospital_admission match
+  // the source=outcome pack report rows deliberately, so a report can join
+  // on key instead of on a hardcoded level number.
   const OUTCOMES = [
-    [1,'No treatment needed',1],
-    [2,'First aid only',2],
-    [3,'Seen by GP / clinic, no admission',3],
-    [4,'Antibiotics commenced',3],
-    [5,'Hospital presentation, no admission',3],
-    [6,'Hospital admission',4],
-    [7,'ICU / life-threatening / permanent harm',5],
-    [8,'Death',5],
+    [1,'No treatment needed',1,'no_treatment'],
+    [2,'First aid only',2,'first_aid'],
+    [3,'Seen by GP / clinic, no admission',3,'gp_clinic'],
+    [4,'Antibiotics commenced',3,'antibiotic_usage'],
+    [5,'Hospital presentation, no admission',3,'ed_presentation'],
+    [6,'Hospital admission',4,'hospital_admission'],
+    [7,'ICU / life-threatening / permanent harm',5,'icu_severe'],
+    [8,'Death',5,'death'],
   ]
   const SEVERITY = [
     [1,'Minor','No injury or negligible impact'],
@@ -14536,7 +14542,9 @@ function IncidentReportView({ user }) {
   const [orgResolved, setOrgResolved] = useState(false)
   const [category, setCategory] = useState('')
   const [harmType, setHarmType] = useState('')
-  const [outcome, setOutcome] = useState(0)
+  // v49: multi-outcome. Array of ladder POSITIONS in tap order; the
+  // order is what reaches incident_outcomes.seq.
+  const [outcomes, setOutcomes] = useState([])
   const [severity, setSeverity] = useState(0)
   const [overrideReason, setOverrideReason] = useState('')
   const [affectedType, setAffectedType] = useState('')
@@ -14623,7 +14631,7 @@ function IncidentReportView({ user }) {
     // Outcome too: 3 means "seen by GP" on one ladder and "beyond
     // repair" on another. Carrying it across a domain change would
     // store a number that means something nobody chose.
-    setOutcome(0); setSeverity(0)
+    setOutcomes([]); setSeverity(0)
   }, [category])
 
   const [occurredAt, setOccurredAt] = useState(() => {
@@ -14756,7 +14764,14 @@ function IncidentReportView({ user }) {
       isPropertyDomain ? OUTCOME_PROPERTY
     : isInfoDomain     ? OUTCOME_INFO
     : OUTCOMES
-  const suggested = outcome ? (activeOutcomes.find(o=>o[0]===outcome)||[])[2] || 0 : 0
+  // Worst outcome sets the suggestion. Sequence tells the story; the
+  // highest rung sets severity, so an admission plus antibiotics
+  // suggests the admission's severity, not the first one tapped.
+  const suggested = outcomes.reduce((m,v) =>
+    Math.max(m, (activeOutcomes.find(o=>o[0]===v)||[])[2] || 0), 0)
+  const outcomeMax = outcomes.length ? Math.max(...outcomes) : 0
+  const addOutcome = (v) => { if (v && !outcomes.includes(v)) { setOutcomes([...outcomes, v]); setSeverity(0) } }
+  const dropOutcome = (v) => { setOutcomes(outcomes.filter(x=>x!==v)); setSeverity(0) }
 
   const grabGps = () => {
     if (!navigator.geolocation) return
@@ -14804,7 +14819,7 @@ function IncidentReportView({ user }) {
   const affectedIdentityOk = !affectedType ||
     (affectedKnown === 'unknown') ||
     (affectedKnown === 'known' && (affectedPerson || (noMatch && unmatchedName.trim())))
-  const canSubmit = category && outcome && effectiveSeverity && facts.trim() &&
+  const canSubmit = category && outcomes.length && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
     affectedTypeOk && affectedIdentityOk && domainDetailOk
@@ -14813,7 +14828,7 @@ function IncidentReportView({ user }) {
   // so the message cannot drift away from the condition it explains.
   const missingField =
     !category                                   ? 'Choose what happened'
-    : !outcome                                  ? 'Choose the outcome'
+    : !outcomes.length                          ? 'Choose the outcome'
     : !effectiveSeverity                        ? 'Choose a severity'
     : !occurredAt                               ? 'Set when it happened'
     : !facts.trim()                             ? 'Describe what happened'
@@ -14858,7 +14873,14 @@ function IncidentReportView({ user }) {
         isPropertyDomain ? { damage_type: damageType||null, damaged_item: damagedItem.trim()||null }
       : isInfoDomain     ? { breach_type: breachType||null, data_description: dataDescription.trim()||null, notifiable }
       : null,
-      outcome_level: outcome||null, harm_type: harmType||null,
+      // DEPRECATED but still written: the highest rung, matching the
+      // v49 backfill rule so new rows agree with historical ones.
+      outcome_level: outcomeMax||null, harm_type: harmType||null,
+      outcomes: outcomes.map((v,idx) => {
+        const row = activeOutcomes.find(o=>o[0]===v) || []
+        return { key: row[3] || null, label: row[1] || null,
+                 suggested_severity: row[2] || null, seq: idx+1 }
+      }),
       clinical: clinicalNote.trim() ? { note: clinicalNote.trim() } : null,
     }
     try {
@@ -14893,7 +14915,7 @@ function IncidentReportView({ user }) {
           and quote the reference above.
         </p>
         <button className="cl-action-btn" style={{marginTop:20}} onClick={()=>{
-          setReceipt(null); setCategory(''); setHarmType(''); setOutcome(0); setSeverity(0)
+          setReceipt(null); setCategory(''); setHarmType(''); setOutcomes([]); setSeverity(0)
           setOverrideReason(''); setAffectedType(''); setAffectedInitials(''); setShift('')
           setDepartment(''); setLocationText(''); setGps(null); setFacts(''); setImmediateActions('')
           setHazardPresent(false); setClinicalNote(''); setEvidence([])
@@ -14918,7 +14940,7 @@ function IncidentReportView({ user }) {
       <div style={card}>
         <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
         {CATEGORIES.map(([k,title,sub]) => (
-          <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcome(0); setSeverity(0)}}
+          <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcomes([]); setSeverity(0)}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:8,borderRadius:10,
               border: category===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.12)',
               background: category===k ? 'rgba(79,70,229,.06)' : 'transparent', cursor:'pointer'}}>
@@ -15103,9 +15125,33 @@ function IncidentReportView({ user }) {
         {showLadder && (
           <div style={card}>
             <span style={lbl}>What was the outcome? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
-            <select style={inp} value={outcome} onChange={e=>{setOutcome(+e.target.value); setSeverity(0)}}>
-              <option value={0}>— select —</option>
-              {activeOutcomes.map(([v,t]) => <option key={v} value={v}>{t}</option>)}
+            {/* v49 multi-outcome. Chips ABOVE the picker so they stay
+                visible; tap order is seq. Nothing is auto-cleared -- a
+                contradictory pair is the reviewer's call, and silently
+                dropping a selection would be worse. */}
+            {outcomes.length > 0 && (
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+                {outcomes.map((v,idx) => {
+                  const row = activeOutcomes.find(o=>o[0]===v) || []
+                  return (
+                    <span key={v} style={{display:'inline-flex',alignItems:'center',gap:6,
+                      fontSize:13,padding:'5px 10px',borderRadius:999,
+                      background:'rgba(79,70,229,.08)',border:'1px solid rgba(79,70,229,.2)'}}>
+                      <span style={{opacity:.55,fontWeight:600}}>{idx+1}</span>
+                      {row[1] || ('Level '+v)}
+                      <button type="button" onClick={()=>dropOutcome(v)}
+                        aria-label={'Remove '+(row[1]||('level '+v))}
+                        style={{border:'none',background:'none',cursor:'pointer',
+                          fontSize:15,lineHeight:1,padding:0,opacity:.5}}>&times;</button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+            <select style={inp} value={0} onChange={e=>{addOutcome(+e.target.value)}}>
+              <option value={0}>{outcomes.length ? '— add another —' : '— select —'}</option>
+              {activeOutcomes.filter(([v]) => !outcomes.includes(v))
+                .map(([v,t]) => <option key={v} value={v}>{t}</option>)}
             </select>
             {activeOutcomes.length === 0 && (
               <div style={{marginTop:8,fontSize:13,color:'#B45309'}}>
@@ -15725,7 +15771,12 @@ function IncidentRegisterView({ user, setPage }) {
     const id = orgId || await resolveOrg()
     if (id && id!==orgId) setOrgId(id)
     if (!id) { setLoading(false); return }
-    const { data } = await supabase.from('incidents').select('*').eq('org', id).order('occurred_at',{ascending:false})
+    // v49: report counts outcome rows -- embed resolves through the FK
+    // on incident_outcomes. incidents is the only incident table with
+    // one, so this is the first embed available here.
+    const { data } = await supabase.from('incidents')
+      .select('*, incident_outcomes(outcome_key,outcome_label,suggested_severity,seq)')
+      .eq('org', id).order('occurred_at',{ascending:false})
     const list = data||[]
     setIncidents(list)
     const ids=[...new Set(list.map(i=>i.assigned_to).filter(Boolean))]
@@ -15871,11 +15922,20 @@ function IncidentRegisterView({ user, setPage }) {
       : ((outcomeLabels[domain]||{})[lvl] || ('Level '+lvl))
   // No domain filter — property and information were previously dropped
   // from this chart entirely.
-  const tOutInc = tInc6m.filter(i=>i.outcome_domain&&i.outcome_level)
-  const tOutMap = {}
-  tOutInc.forEach(i=>{ const k=i.outcome_domain+'|'+i.outcome_level; tOutMap[k]=(tOutMap[k]||0)+1 })
+  // One tally per OUTCOME ROW. An incident with an admission and
+  // antibiotics contributes to both rows, which is the whole point of
+  // the child table. tOutBase stays the INCIDENT count so percentages
+  // read "share of incidents", not "share of outcomes".
+  const tOutInc  = tInc6m.filter(i=>(i.incident_outcomes||[]).length>0)
+  const tOutBase = tInc6m.length || 1
+  const tOutMap = {}, tOutLbl = {}
+  tOutInc.forEach(i=>(i.incident_outcomes||[]).forEach(o=>{
+    const k=(i.outcome_domain||'')+'|'+(o.outcome_key||'')
+    tOutMap[k]=(tOutMap[k]||0)+1
+    if(!tOutLbl[k]) tOutLbl[k]=o.outcome_label||o.outcome_key||'Unknown'
+  }))
   const tOutRows = Object.keys(tOutMap)
-    .map(k=>{ const [d,l]=k.split('|'); return [k, tOutMap[k], d, Number(l)] })
+    .map(k=>{ const [d]=k.split('|'); return [k, tOutMap[k], d, tOutLbl[k]] })
     // Domain first so the three groups read as blocks, then by level.
     .sort((a,b)=> String(a[2]).localeCompare(String(b[2])) || a[3]-b[3])
   const tNotifReq = tInc6m.filter(i=>i.external_notification_required)
@@ -15965,7 +16025,7 @@ function IncidentRegisterView({ user, setPage }) {
     y+=6
     gap(2); rule()
     // breakdown axes: harm type / affected persons / outcome
-    const axisBlock = (title, rows, labelFn) => {
+    const axisBlock = (title, rows, labelFn, base) => {
       if(!rows) return
       line(title,12,true)
       gap(3)
@@ -15979,8 +16039,17 @@ function IncidentRegisterView({ user, setPage }) {
       // Share of the total, not of the largest. Matches the on-screen
       // breakdown; the old rw*n/(maxN*2) made every bar relative to the
       // biggest count AND capped that at half width.
-      const barTot=rows.reduce((s,r)=>s+r[1],0)||1
+      // v49: optional base. Defaults to sum-of-counts, so the harm-type
+      // and affected-persons blocks are byte-identical in behaviour.
+      // The outcome block passes the INCIDENT count instead, because an
+      // incident can appear in several rows and sum-of-counts would
+      // silently answer a different question.
+      const barTot=base||rows.reduce((s,r)=>s+r[1],0)||1
       rows.forEach(([key,n])=>{
+        // v49: row must fit before it starts -- label, bar and spacing
+        // are ~10mm, and pdf.text/rect bypass the y>ph guard that line()
+        // and rule() apply.
+        if(y>ph-12) addPage()
         const pc=Math.round(n/barTot*100)
         pdf.setFontSize(9); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
         pdf.text(String(labelFn(key)),lm,y)
@@ -16001,8 +16070,11 @@ function IncidentRegisterView({ user, setPage }) {
       line('No individual had more than one incident in the period.',9,false,[120,120,120])
     }
     gap(2); rule()
-    axisBlock('Outcome (6 months)', tOutRows.map(r=>[r[0], r[1]]),
-      k=>{ const [d,l]=String(k).split('|'); return (DOMAIN_LABEL[d]||d)+' · '+outcomeLabelFor(d, Number(l)) })
+    axisBlock('Outcome — share of incidents (an incident may have several)',
+      tOutRows.map(r=>[r[0], r[1]]),
+      k=>{ const r=tOutRows.find(x=>x[0]===k)||[]; const d=r[2]
+           return (DOMAIN_LABEL[d]||d)+' · '+(r[3]||String(k)) },
+      tOutBase)
     // top categories
     if(tTopCats.length>0){
       line('Top Categories (6 months)',12,true)
@@ -16174,11 +16246,11 @@ function IncidentRegisterView({ user, setPage }) {
               <div style={{...trCard,flex:'1 1 200px'}}>
                 <div style={trH}>Outcome (6 months)</div>
                 {tOutRows.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No outcome recorded</div>}
-                {tOutRows.map(([key,n,dom,lvl])=>{ const tot=tOutRows.reduce((s,r)=>s+r[1],0)||1; const pc=Math.round(n/tot*100); return <div key={key} style={{marginBottom:6}}>
+                {tOutRows.map(([key,n,dom,olbl])=>{ const pc=Math.round(n/tOutBase*100); return <div key={key} style={{marginBottom:6}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
                     <span style={{color:'var(--text)',fontWeight:500}}>
                       <span style={{color:'var(--t2)'}}>{DOMAIN_LABEL[dom]||dom} · </span>
-                      {outcomeLabelFor(dom, lvl)}
+                      {olbl}
                     </span>
                     <span style={{color:'var(--t2)',fontWeight:700}}>{n} ({pc}%)</span>
                   </div>
