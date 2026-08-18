@@ -14542,7 +14542,9 @@ function IncidentReportView({ user }) {
   const [orgResolved, setOrgResolved] = useState(false)
   const [category, setCategory] = useState('')
   const [harmType, setHarmType] = useState('')
-  const [outcome, setOutcome] = useState(0)
+  // v49: multi-outcome. Array of ladder POSITIONS in tap order; the
+  // order is what reaches incident_outcomes.seq.
+  const [outcomes, setOutcomes] = useState([])
   const [severity, setSeverity] = useState(0)
   const [overrideReason, setOverrideReason] = useState('')
   const [affectedType, setAffectedType] = useState('')
@@ -14629,7 +14631,7 @@ function IncidentReportView({ user }) {
     // Outcome too: 3 means "seen by GP" on one ladder and "beyond
     // repair" on another. Carrying it across a domain change would
     // store a number that means something nobody chose.
-    setOutcome(0); setSeverity(0)
+    setOutcomes([]); setSeverity(0)
   }, [category])
 
   const [occurredAt, setOccurredAt] = useState(() => {
@@ -14762,7 +14764,14 @@ function IncidentReportView({ user }) {
       isPropertyDomain ? OUTCOME_PROPERTY
     : isInfoDomain     ? OUTCOME_INFO
     : OUTCOMES
-  const suggested = outcome ? (activeOutcomes.find(o=>o[0]===outcome)||[])[2] || 0 : 0
+  // Worst outcome sets the suggestion. Sequence tells the story; the
+  // highest rung sets severity, so an admission plus antibiotics
+  // suggests the admission's severity, not the first one tapped.
+  const suggested = outcomes.reduce((m,v) =>
+    Math.max(m, (activeOutcomes.find(o=>o[0]===v)||[])[2] || 0), 0)
+  const outcomeMax = outcomes.length ? Math.max(...outcomes) : 0
+  const addOutcome = (v) => { if (v && !outcomes.includes(v)) { setOutcomes([...outcomes, v]); setSeverity(0) } }
+  const dropOutcome = (v) => { setOutcomes(outcomes.filter(x=>x!==v)); setSeverity(0) }
 
   const grabGps = () => {
     if (!navigator.geolocation) return
@@ -14810,7 +14819,7 @@ function IncidentReportView({ user }) {
   const affectedIdentityOk = !affectedType ||
     (affectedKnown === 'unknown') ||
     (affectedKnown === 'known' && (affectedPerson || (noMatch && unmatchedName.trim())))
-  const canSubmit = category && outcome && effectiveSeverity && facts.trim() &&
+  const canSubmit = category && outcomes.length && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
     affectedTypeOk && affectedIdentityOk && domainDetailOk
@@ -14819,7 +14828,7 @@ function IncidentReportView({ user }) {
   // so the message cannot drift away from the condition it explains.
   const missingField =
     !category                                   ? 'Choose what happened'
-    : !outcome                                  ? 'Choose the outcome'
+    : !outcomes.length                          ? 'Choose the outcome'
     : !effectiveSeverity                        ? 'Choose a severity'
     : !occurredAt                               ? 'Set when it happened'
     : !facts.trim()                             ? 'Describe what happened'
@@ -14864,7 +14873,14 @@ function IncidentReportView({ user }) {
         isPropertyDomain ? { damage_type: damageType||null, damaged_item: damagedItem.trim()||null }
       : isInfoDomain     ? { breach_type: breachType||null, data_description: dataDescription.trim()||null, notifiable }
       : null,
-      outcome_level: outcome||null, harm_type: harmType||null,
+      // DEPRECATED but still written: the highest rung, matching the
+      // v49 backfill rule so new rows agree with historical ones.
+      outcome_level: outcomeMax||null, harm_type: harmType||null,
+      outcomes: outcomes.map((v,idx) => {
+        const row = activeOutcomes.find(o=>o[0]===v) || []
+        return { key: row[3] || null, label: row[1] || null,
+                 suggested_severity: row[2] || null, seq: idx+1 }
+      }),
       clinical: clinicalNote.trim() ? { note: clinicalNote.trim() } : null,
     }
     try {
@@ -14899,7 +14915,7 @@ function IncidentReportView({ user }) {
           and quote the reference above.
         </p>
         <button className="cl-action-btn" style={{marginTop:20}} onClick={()=>{
-          setReceipt(null); setCategory(''); setHarmType(''); setOutcome(0); setSeverity(0)
+          setReceipt(null); setCategory(''); setHarmType(''); setOutcomes([]); setSeverity(0)
           setOverrideReason(''); setAffectedType(''); setAffectedInitials(''); setShift('')
           setDepartment(''); setLocationText(''); setGps(null); setFacts(''); setImmediateActions('')
           setHazardPresent(false); setClinicalNote(''); setEvidence([])
@@ -14924,7 +14940,7 @@ function IncidentReportView({ user }) {
       <div style={card}>
         <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
         {CATEGORIES.map(([k,title,sub]) => (
-          <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcome(0); setSeverity(0)}}
+          <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcomes([]); setSeverity(0)}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:8,borderRadius:10,
               border: category===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.12)',
               background: category===k ? 'rgba(79,70,229,.06)' : 'transparent', cursor:'pointer'}}>
@@ -15109,9 +15125,33 @@ function IncidentReportView({ user }) {
         {showLadder && (
           <div style={card}>
             <span style={lbl}>What was the outcome? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
-            <select style={inp} value={outcome} onChange={e=>{setOutcome(+e.target.value); setSeverity(0)}}>
-              <option value={0}>— select —</option>
-              {activeOutcomes.map(([v,t]) => <option key={v} value={v}>{t}</option>)}
+            {/* v49 multi-outcome. Chips ABOVE the picker so they stay
+                visible; tap order is seq. Nothing is auto-cleared -- a
+                contradictory pair is the reviewer's call, and silently
+                dropping a selection would be worse. */}
+            {outcomes.length > 0 && (
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+                {outcomes.map((v,idx) => {
+                  const row = activeOutcomes.find(o=>o[0]===v) || []
+                  return (
+                    <span key={v} style={{display:'inline-flex',alignItems:'center',gap:6,
+                      fontSize:13,padding:'5px 10px',borderRadius:999,
+                      background:'rgba(79,70,229,.08)',border:'1px solid rgba(79,70,229,.2)'}}>
+                      <span style={{opacity:.55,fontWeight:600}}>{idx+1}</span>
+                      {row[1] || ('Level '+v)}
+                      <button type="button" onClick={()=>dropOutcome(v)}
+                        aria-label={'Remove '+(row[1]||('level '+v))}
+                        style={{border:'none',background:'none',cursor:'pointer',
+                          fontSize:15,lineHeight:1,padding:0,opacity:.5}}>&times;</button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+            <select style={inp} value={0} onChange={e=>{addOutcome(+e.target.value)}}>
+              <option value={0}>{outcomes.length ? '— add another —' : '— select —'}</option>
+              {activeOutcomes.filter(([v]) => !outcomes.includes(v))
+                .map(([v,t]) => <option key={v} value={v}>{t}</option>)}
             </select>
             {activeOutcomes.length === 0 && (
               <div style={{marginTop:8,fontSize:13,color:'#B45309'}}>
