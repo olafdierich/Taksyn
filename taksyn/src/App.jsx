@@ -14509,15 +14509,21 @@ function IncidentReportView({ user }) {
   const [OUTCOME_PROPERTY, setOutcomeProperty] = useState([])
   const [OUTCOME_INFO, setOutcomeInfo] = useState([])
   // outcome ladder -> suggested severity (1-5)
+  // v49: outcome keys — see incident_outcomes.outcome_key
+  // [position, label, suggested severity, KEY]. The key is what reaches
+  // incident_outcomes.outcome_key; position still reaches the deprecated
+  // incidents.outcome_level. antibiotic_usage and hospital_admission match
+  // the source=outcome pack report rows deliberately, so a report can join
+  // on key instead of on a hardcoded level number.
   const OUTCOMES = [
-    [1,'No treatment needed',1],
-    [2,'First aid only',2],
-    [3,'Seen by GP / clinic, no admission',3],
-    [4,'Antibiotics commenced',3],
-    [5,'Hospital presentation, no admission',3],
-    [6,'Hospital admission',4],
-    [7,'ICU / life-threatening / permanent harm',5],
-    [8,'Death',5],
+    [1,'No treatment needed',1,'no_treatment'],
+    [2,'First aid only',2,'first_aid'],
+    [3,'Seen by GP / clinic, no admission',3,'gp_clinic'],
+    [4,'Antibiotics commenced',3,'antibiotic_usage'],
+    [5,'Hospital presentation, no admission',3,'ed_presentation'],
+    [6,'Hospital admission',4,'hospital_admission'],
+    [7,'ICU / life-threatening / permanent harm',5,'icu_severe'],
+    [8,'Death',5,'death'],
   ]
   const SEVERITY = [
     [1,'Minor','No injury or negligible impact'],
