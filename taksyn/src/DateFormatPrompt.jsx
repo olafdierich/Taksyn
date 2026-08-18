@@ -20,7 +20,7 @@
 // the resulting format and passes it to buildRowPayload.
 // ============================================================
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { buildFormatChoices } from './importFields.js'
 
 const card = {
@@ -54,6 +54,17 @@ export default function DateFormatPrompt({
   // Pre-select: what the data proved, else what the org uses.
   // If neither, nothing is pre-selected — the user must choose,
   // rather than being nudged toward a guess.
+  // This panel can mount underneath the cursor at the exact moment a
+  // click is being released — the button that triggered the check sits
+  // where this one appears — and the click-up then lands on 'Use this
+  // reading', resolving the question before it is seen. Ignore clicks
+  // until the event that mounted us has finished.
+  const armed = useRef(false)
+  useEffect(() => {
+    const t = setTimeout(() => { armed.current = true }, 250)
+    return () => clearTimeout(t)
+  }, [])
+
   const proven = det.format === 'DD/MM/YYYY' || det.format === 'MM/DD/YYYY'
   const [choice, setChoice] = useState(
     proven ? det.format : (orgDateFormat || null)
@@ -142,7 +153,7 @@ export default function DateFormatPrompt({
 
       {det.format !== 'conflict' && (
         <button
-          onClick={() => choice && onResolve(choice)}
+          onClick={() => { if (armed.current && choice) onResolve(choice) }}
           disabled={!choice}
           style={{
             marginTop: 4, padding: '9px 16px', borderRadius: 8, border: 'none',

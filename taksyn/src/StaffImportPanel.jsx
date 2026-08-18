@@ -26,6 +26,8 @@ import {
   buildStaffPayload, STAFF_MAPPABLE, ACCESS_LEVELS,
 } from './staffFields.js'
 import { downloadStaffTemplate } from './staffTemplate.js'
+import { detectDateFormat } from './importFields.js'
+import DateFormatPrompt from './DateFormatPrompt.jsx'
 import { parseWorkbook, findHeaderRow, isGuidanceSheet } from './importParse.js'
 
 const card = { background:'var(--card)', border:'1px solid var(--border)',
@@ -77,6 +79,11 @@ export default function StaffImportPanel({
   // Set when the mail provider refuses further sends. The remaining
   // rows stay staged, so Send simply resumes later.
   const [rateLimited, setRateLimited] = useState(false)
+  // The organisation's setting is only the DEFAULT answer. The column
+  // itself is the evidence: one date past the 12th settles the whole
+  // file, and the user is asked only when nothing in the data can.
+  const [detection, setDetect] = useState(null)
+  const [resolvedFmt, setResolvedFmt] = useState(null)
 
   const sheet = (parsed?.sheets || []).find(s => s.name === sheetName)
   const headers = sheet?.rows?.[headerRow] || []
@@ -125,13 +132,50 @@ export default function StaffImportPanel({
   }
 
   // ---- dry run ----
+  // Called by the date prompt with the format the user chose. Takes it
+  // as an ARGUMENT rather than reading state: setResolvedFmt has not
+  // landed yet at the moment this runs, so state would still hold the
+  // old value and the rows would be parsed the way the user rejected.
+  const runCheckWith = async (fmt) => {
+    setBusy(true); setErr('')
+    const { data, error } = await supabase.rpc('stage_staff_batch', {
+      p_org: org,
+      p_rows: buildStaffPayload(rows, { dateFormat: fmt }),
+      p_filename: filename || null,
+      p_dry_run: true,
+    })
+    setBusy(false)
+    if (error) { setErr(error.message || String(error)); return }
+    setCheck(data)
+    setStep('preview')
+  }
+
   const runCheck = async () => {
     setBusy(true); setErr('')
     const extracted = extractStaffRows(sheet.rows, headerRow, mapping)
     setRows(extracted)
+
+    // Nothing to ask when there are no dates, or when they were real
+    // date cells, or when the column proves its own format.
+    const det = detectDateFormat(extracted.map(r => r.date_of_birth))
+    setDetect(det)
+    if (det.format === 'DD/MM/YYYY' || det.format === 'MM/DD/YYYY') {
+      setResolvedFmt(det.format)
+    } else if (det.format === 'ambiguous' || det.format === 'conflict') {
+      setResolvedFmt(null)
+      setBusy(false)
+      // Deferred a tick so the click that triggered this check has
+      // finished dispatching. Mounting the prompt inside that same
+      // event lets the click-up land on its button, resolving the
+      // question before it can be read.
+      setTimeout(() => setStep('dates'), 0)
+      return
+    } else {
+      setResolvedFmt(dateFormat)
+    }
     const { data, error } = await supabase.rpc('stage_staff_batch', {
       p_org: org,
-      p_rows: buildStaffPayload(extracted, { dateFormat }),
+      p_rows: buildStaffPayload(extracted, { dateFormat: resolvedFmt || dateFormat }),
       p_filename: filename || null,
       p_dry_run: true,
     })
@@ -146,7 +190,7 @@ export default function StaffImportPanel({
     setBusy(true); setErr('')
     const { data, error } = await supabase.rpc('stage_staff_batch', {
       p_org: org,
-      p_rows: buildStaffPayload(rows, { dateFormat }),
+      p_rows: buildStaffPayload(rows, { dateFormat: resolvedFmt || dateFormat }),
       p_filename: filename || null,
       p_dry_run: false,
     })
@@ -305,6 +349,18 @@ export default function StaffImportPanel({
             {busy ? 'Checking…' : 'Check the list'}
           </button>
         </div>
+      )}
+
+      {step === 'dates' && (
+        <>
+          <DateFormatPrompt
+            detection={detection}
+            values={rows.map(r => r.date_of_birth)}
+            orgDateFormat={dateFormat}
+            onResolve={(f) => { setResolvedFmt(f); runCheckWith(f) }}
+          />
+          <button style={btn()} onClick={()=>setStep('mapping')}>Back to columns</button>
+        </>
       )}
 
       {/* ---- preview ---- */}
