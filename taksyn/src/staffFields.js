@@ -170,7 +170,15 @@ export function extractStaffRows(rows, headerRowIndex, mapping) {
   const get = (row, field) => {
     const col = mapping[field]
     if (col === undefined) return ''
-    return String(row[col] == null ? '' : row[col]).trim()
+    const v = row[col]
+    // Dates and numbers pass through untouched, mirroring
+    // importParse.extractRows. Stringifying a Date here turned
+    // 3 November 1990 into 'Sun Mar 11 1990 00:00:00 GMT+1000',
+    // which parseDate then correctly refused — and the row was
+    // reported as having an unreadable date of birth.
+    if (v instanceof Date) return v
+    if (typeof v === 'number') return v
+    return String(v == null ? '' : v).trim()
   }
 
   for (let i = headerRowIndex + 1; i < (rows || []).length; i++) {

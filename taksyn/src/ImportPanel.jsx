@@ -190,7 +190,7 @@ export default function ImportPanel({
           <div style={{ fontSize:12, color:'var(--t2)', marginTop:10, lineHeight:1.5 }}>
             Nothing is saved until you have seen exactly what will be added.
           </div>
-          // [PATCH:ui-defects]
+          {/* [PATCH:ui-defects] */}
           {/* Someone with a staff list will try this panel first. */}
           <div style={{ fontSize:12, color:'var(--t2)', marginTop:8, lineHeight:1.5 }}>
             Staff are not imported here. They need a login, so they are invited

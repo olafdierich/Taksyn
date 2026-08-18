@@ -352,7 +352,7 @@ export default function StaffImportPanel({
               </tbody>
             </table>
           </div>
-          // [PATCH:ui-defects]
+          {/* [PATCH:ui-defects] */}
           {/* The button was disabled correctly but styled as though it
               were live, so a blocked action read as a broken one. */}
           <div style={{ marginTop:14, display:'flex', gap:8 }}>

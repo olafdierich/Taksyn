@@ -14246,7 +14246,7 @@ function ContactsView({ user, setPage }) {
       <div style={card}>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
           <button onClick={()=>setFilterType('')} style={chip(!filterType)}>All</button>
-          // [PATCH:ui-defects]
+          {/* [PATCH:ui-defects] */}
           {/* org_people permits only client and contractor, so a
               workforce chip filters nothing and can never match. It
               stays in the category pack, where workforce is a real
