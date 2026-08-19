@@ -13770,11 +13770,15 @@ function CapaActionForm({ sel, orgId, user, busy, setBusy, capaStaff, isAdmin, o
         due_date: dueDate || null, status: 'open'
       })
       if (aErr) { setErr('Task created but link failed: ' + aErr.message); setBusy(false); return }
-      await supabase.from('incident_events').insert({
+      // audit insert must be checked -- the Supabase client RETURNS errors
+      // rather than throwing, so the catch below never sees them.
+      const { error: evErr } = await supabase.from('incident_events').insert({
         incident_id: sel.id, org: orgId, event_type: 'action_created',
         by_id: uid, by_name: user.name, by_role: user.role,
         to_value: d.slice(0, 60), details: { task_id: taskId, owner: ownerName }
       })
+      if (evErr) setErr('The action was created, but the audit entry could not be written: '
+        + evErr.message + '. Please tell your administrator.')
       setDesc(''); setOwnerId(''); setDueDate(''); setEvidence(true)
       if (onDone) await onDone()
     } catch (e) {
@@ -16638,12 +16642,14 @@ function IncidentsAdminView({ user, setPage }) {
               .eq('id', a.id)
             if (!uErr) {
               changed = true
-              await supabase.from('incident_events').insert({
+              // audit insert must be checked
+              const { error: evErr } = await supabase.from('incident_events').insert({
                 incident_id: inc.id, org: orgId, event_type:'corrective_action_completed',
                 by_id: t.approver_id || null, by_name: t.approver_name || 'System', by_role: 'client_admin',
                 to_value: (a.description||'').slice(0,60),
                 details: { task_id: a.task_id, action_id: a.id, verified_at: when }
               })
+              if (evErr) console.error('AUDIT EVENT NOT WRITTEN', evErr)
             }
           }
         }
@@ -16695,11 +16701,17 @@ function IncidentsAdminView({ user, setPage }) {
     const { data: upRows, error: upErr } = await supabase.from('incidents')
       .update({ ...patch, updated_at: now }).eq('id', sel.id).select()
     if (upErr === null && (upRows||[]).length > 0) {
-      await supabase.from('incident_events').insert({
+      // audit insert must be checked. The update above is confirmed with
+      // .select() and a row count; this was not checked at all, so the row
+      // could change while the trail stayed empty -- which is exactly what
+      // the notification toggle did from the day it shipped.
+      const { error: evErr } = await supabase.from('incident_events').insert({
         incident_id: sel.id, org: orgId, event_type: eventType,
         by_id: uid, by_name: user.name, by_role: user.role,
         from_value: extra.from ?? null, to_value: extra.to ?? null, details: extra.details ?? null,
       })
+      if (evErr) alert('The change was saved, but the audit entry could not be '
+        + 'written: ' + evErr.message + '. Please tell your administrator.')
       const updated = { ...sel, ...patch }
       setSel(updated)
       setIncidents(prev=>prev.map(i=>i.id===sel.id?updated:i))
