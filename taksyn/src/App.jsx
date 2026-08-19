@@ -16502,6 +16502,12 @@ function IncidentsAdminView({ user, setPage }) {
 
   const fmtDate = (d) => d ? new Date(d).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
   const fmtDay  = (d) => d ? new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}) : '—'
+  // Live outcomes in seq order. Voided rows are history, not current state.
+  const outcomeText = (i) => ((i?.incident_outcomes)||[])
+    .filter(o => !o.voided_at)
+    .sort((a,b) => (a.seq||0) - (b.seq||0))
+    .map(o => o.outcome_label)
+    .filter(Boolean).join(', ')
 
   // resolve org ID (incidents.org holds the ID, not user.org which is the NAME)
   const resolveOrg = async () => {
@@ -16519,7 +16525,12 @@ function IncidentsAdminView({ user, setPage }) {
     const id = orgId || await resolveOrg()
     if (id && id !== orgId) setOrgId(id)
     if (!id) { setLoading(false); return }
-    const { data } = await supabase.from('incidents').select('*').eq('org', id).order('created_at',{ascending:false})
+    // outcome labels, not a position -- the detail view needs the child
+    // rows. Also carried by the three single-row re-fetches below, or a
+    // patch would blank the outcome display.
+    const { data } = await supabase.from('incidents')
+      .select('*, incident_outcomes(outcome_label,seq,voided_at)')
+      .eq('org', id).order('created_at',{ascending:false})
     const list = data || []
     setIncidents(list)
     // resolve names for reporters/assignees/investigators
@@ -16704,7 +16715,7 @@ function IncidentsAdminView({ user, setPage }) {
       // the RPC's RETURNING clause is evaluated, so the row it hands back
       // predates them. The revision counter in particular would be one
       // behind, and it is printed on the PDF.
-      const { data: fresh } = await supabase.from('incidents').select('*').eq('id', data.id).single()
+      const { data: fresh } = await supabase.from('incidents').select('*, incident_outcomes(outcome_label,seq,voided_at)').eq('id', data.id).single()
       const row = fresh || data
       setSel(row)
       setIncidents(prev=>prev.map(i=>i.id===row.id?row:i))
@@ -16852,7 +16863,7 @@ function IncidentsAdminView({ user, setPage }) {
       // the RPC's RETURNING clause is evaluated, so the row it hands back
       // predates them. The revision counter in particular would be one
       // behind, and it is printed on the PDF.
-      const { data: fresh } = await supabase.from('incidents').select('*').eq('id', data.id).single()
+      const { data: fresh } = await supabase.from('incidents').select('*, incident_outcomes(outcome_label,seq,voided_at)').eq('id', data.id).single()
       const row = fresh || data
       setSel(row)
       setIncidents(prev=>prev.map(i=>i.id===row.id?row:i))
@@ -16946,7 +16957,7 @@ function IncidentsAdminView({ user, setPage }) {
       head('Assessment')
       field('Outcome domain', sel.outcome_domain)
       field('Harm type', sel.harm_type?String(sel.harm_type).replace(/_/g,' '):null)
-      field('Outcome level', sel.outcome_level?sel.outcome_level+'/8':null)
+      field('Outcome', outcomeText(sel) || null)
       field('External notification', sel.external_notification_required?'Required':'Not required')
       if (sel.external_notification_required) {
         field('Notified', sel.notified_at?dt(sel.notified_at):'NOT RECORDED')
@@ -17074,7 +17085,7 @@ function IncidentsAdminView({ user, setPage }) {
       // the RPC's RETURNING clause is evaluated, so the row it hands back
       // predates them. The revision counter in particular would be one
       // behind, and it is printed on the PDF.
-      const { data: fresh } = await supabase.from('incidents').select('*').eq('id', data.id).single()
+      const { data: fresh } = await supabase.from('incidents').select('*, incident_outcomes(outcome_label,seq,voided_at)').eq('id', data.id).single()
       const row = fresh || data
       setSel(row)
       setIncidents(prev=>prev.map(i=>i.id===row.id?row:i))
@@ -17213,7 +17224,7 @@ function IncidentsAdminView({ user, setPage }) {
           <div style={{...card,borderColor:'var(--amber)'}}>
             <span style={lbl}>Clinical details</span>
             {sel.harm_type && <div style={{fontSize:13,marginBottom:4}}>Harm type: {sel.harm_type.replace(/_/g,' ')}</div>}
-            {sel.outcome_level && <div style={{fontSize:13,marginBottom:4}}>Outcome level: {sel.outcome_level}/8</div>}
+            {outcomeText(sel) && <div style={{fontSize:13,marginBottom:4}}>Outcome: {outcomeText(sel)}</div>}
             {clinical.note && <div style={{fontSize:14,whiteSpace:'pre-wrap'}}>{clinical.note}</div>}
           </div>
         )}
