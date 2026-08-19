@@ -2308,14 +2308,16 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         const now = Date.now(); const od=(d)=>d&&new Date(d).getTime()<now
         const open = (rows||[]).filter(i=>i.status!=='closed')
         setOpenIncidents(open.length)
-        const breached = (rows||[]).filter(i=>incTimeliness(i)==='breached')
-        const lateOnly = (rows||[]).filter(i=>incTimeliness(i)==='overdue')
+        // excluded reports count in nothing
+        const counted = (rows||[]).filter(i=>!i.excluded_at)
+        const breached = counted.filter(i=>incTimeliness(i)==='breached')
+        const lateOnly = counted.filter(i=>incTimeliness(i)==='overdue')
         setBreachedIncidents(breached.length)
         setOverdueIncidents(lateOnly.length)
       }
       if (isMgr||isSup) {
         // RLS scopes to assigned/investigator, so a plain count is "my incidents"
-        const { count } = await supabase.from('incidents').select('id',{count:'exact',head:true}).eq('org', oid).neq('status','closed')
+        const { count } = await supabase.from('incidents').select('id',{count:'exact',head:true}).eq('org', oid).neq('status','closed').is('excluded_at', null)
         if (count!=null) setMyIncidents(count)
       }
     })().catch(()=>{})
@@ -15901,7 +15903,10 @@ function IncidentRegisterView({ user, setPage }) {
   const tYoy = tMonths.map(m=>({ year:m.year-1, month:m.month, label:m.label }))
   const tMonthlyCounts = tMonths.map(m=>incidents.filter(i=>tInMonth(i,m.year,m.month)).length)
   const tYoyCounts     = tYoy.map(m=>incidents.filter(i=>tInMonth(i,m.year,m.month)).length)
-  const tInc6m = incidents.filter(i=>{ const d=new Date(i.occurred_at); return tMonths.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) })
+  // excluded reports count in nothing. Filtered HERE because every count
+  // in the trend report derives from tInc6m -- one filter, not twenty.
+  const tInc6m = incidents.filter(i=>{ if(i.excluded_at) return false; const d=new Date(i.occurred_at); return tMonths.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) })
+  const tExcluded = incidents.filter(i=>{ if(!i.excluded_at) return false; const d=new Date(i.occurred_at); return tMonths.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) }).length
   const tTotal6m  = tInc6m.length
   const tTotalYoy = incidents.filter(i=>{ const d=new Date(i.occurred_at); return tYoy.some(m=>d.getFullYear()===m.year&&d.getMonth()===m.month) }).length
   const tDelta    = tTotal6m - tTotalYoy
@@ -17200,6 +17205,56 @@ function IncidentsAdminView({ user, setPage }) {
             {sel.gps && ` · 📍 ${sel.gps.lat},${sel.gps.lng}`}
           </div>
         </div>
+
+        {/* exclusion card */}
+        {sel.excluded_at ? (
+          <div style={{...card,borderColor:'#B45309',background:'rgba(180,83,9,.04)'}}>
+            <span style={lbl}>Excluded from reporting</span>
+            <div style={{fontSize:13,lineHeight:1.6}}>
+              <div>{sel.exclusion_reason}</div>
+              <div style={{color:'var(--t2)',marginTop:4}}>
+                Excluded by {sel.excluded_name || 'an administrator'} on {fmtDay(sel.excluded_at)}.
+                This report is not counted in any report or metric.
+              </div>
+            </div>
+            {isAdmin && (
+              <button className="btn btn-sm" style={{marginTop:10}} disabled={busy} onClick={async ()=>{
+                const why = (prompt('Why is this report being reinstated? (at least 10 characters)')||'').trim()
+                if (!why) return
+                setBusy(true)
+                const { data, error } = await supabase.rpc('incident_reinstate',
+                  { p_incident_id: sel.id, p_reason: why })
+                setBusy(false)
+                if (error) { alert(error.message); return }
+                if (data) setSel(data)
+                await load()
+              }}>Reinstate</button>
+            )}
+          </div>
+        ) : isAdmin ? (
+          <div style={card}>
+            <span style={lbl}>Exclusion</span>
+            <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>
+              If this was not actually an incident — a duplicate, a test, or a report
+              filed in error — exclude it. It stays on the register with its reason,
+              but is counted in no report or metric. This is not the same as deciding
+              that no corrective action is needed.
+            </div>
+            <button className="btn btn-sm" disabled={busy} onClick={async ()=>{
+              const why = (prompt('Why is this not an incident? (at least 10 characters)')||'').trim()
+              if (!why) return
+              setBusy(true)
+              const { data, error } = await supabase.rpc('incident_exclude',
+                { p_incident_id: sel.id, p_reason: why })
+              setBusy(false)
+              if (error) { alert(error.message); return }
+              // The RPC returns the updated row; load() refreshes the LIST but
+              // not sel, which is what this view renders.
+              if (data) setSel(data)
+              await load()
+            }}>Exclude from reporting</button>
+          </div>
+        ) : null}
 
         {/* who is responsible */}
         <div style={card}>
