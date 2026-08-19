@@ -14506,8 +14506,10 @@ function IncidentReportView({ user }) {
   // shape as the hardcoded medical OUTCOMES so the render site does not
   // have to care which ladder it is drawing. value is the POSITION in
   // the ladder, which is what reaches incidents.outcome_level.
-  const [OUTCOME_PROPERTY, setOutcomeProperty] = useState([])
-  const [OUTCOME_INFO, setOutcomeInfo] = useState([])
+  // C1: ladder_key -- LADDERS is { ladder_key: [[pos,label,sev,key],...] },
+  // CATEGORY_LADDERS is { category_key: ladder_key }.
+  const [LADDERS, setLadders] = useState({})
+  const [CATEGORY_LADDERS, setCategoryLadders] = useState({})
   // outcome ladder -> suggested severity (1-5)
   // v49: outcome keys — see incident_outcomes.outcome_key
   // [position, label, suggested severity, KEY]. The key is what reaches
@@ -14670,20 +14672,20 @@ function IncidentReportView({ user }) {
   // excludes outcome rows (report-only) and legacy rows.
   useEffect(() => {
     if (!orgResolved) return
-    if (!orgId) { setCategories([]); setAffectedTypes(AFFECTED_FALLBACK); setCategoryDomains({}); setDamageTypes([]); setBreachTypes([]); setOutcomeProperty([]); setOutcomeInfo([]); setCatsLoading(false); return }
+    if (!orgId) { setCategories([]); setAffectedTypes(AFFECTED_FALLBACK); setCategoryDomains({}); setCategoryLadders({}); setDamageTypes([]); setBreachTypes([]); setLadders({}); setCatsLoading(false); return }
     ;(async()=>{
       try {
         const { data: org } = await supabase.from('organisations')
           .select('industry_id').eq('id', orgId).maybeSingle()
         const industryId = org?.industry_id
-        const [packsRes, ownRes, affRes, dmgRes, brcRes, outPropRes, outInfoRes] = await Promise.all([
+        const [packsRes, ownRes, affRes, dmgRes, brcRes, laddersRes] = await Promise.all([
           industryId
             ? supabase.from('incident_category_packs')
-                .select('category_key,label,sort_order,outcome_domain')
+                .select('category_key,label,sort_order,outcome_domain,ladder_key')
                 .eq('industry_id', industryId).eq('source','category').eq('is_active', true)
             : Promise.resolve({ data: [] }),
           supabase.from('org_incident_categories')
-            .select('category_key,label,sort_order,overrides_key,outcome_domain')
+            .select('category_key,label,sort_order,overrides_key,outcome_domain,ladder_key')
             .eq('org', orgId).eq('is_active', true),
           industryId
             ? supabase.from('incident_category_packs')
@@ -14700,16 +14702,14 @@ function IncidentReportView({ user }) {
                 .select('category_key,label,sort_order')
                 .eq('industry_id', industryId).eq('source','breach_type').eq('is_active', true)
             : Promise.resolve({ data: [] }),
-          industryId
-            ? supabase.from('incident_category_packs')
-                .select('category_key,label,sort_order,suggested_severity')
-                .eq('industry_id', industryId).eq('source','outcome_property').eq('is_active', true)
-            : Promise.resolve({ data: [] }),
-          industryId
-            ? supabase.from('incident_category_packs')
-                .select('category_key,label,sort_order,suggested_severity')
-                .eq('industry_id', industryId).eq('source','outcome_information').eq('is_active', true)
-            : Promise.resolve({ data: [] }),
+          // C1: ladder_key -- ONE global fetch replaces the two
+          // per-industry ladder queries. incident_outcome_ladders has no
+          // industry dimension: the property and information ladders were
+          // byte-identical across all 21 industries and collapsed to one
+          // copy each. 33 rungs total.
+          supabase.from('incident_outcome_ladders')
+            .select('ladder_key,position,label,suggested_severity,outcome_key')
+            .eq('is_active', true),
         ])
         const affRows = (affRes?.data || [])
           .slice()
@@ -14723,14 +14723,16 @@ function IncidentReportView({ user }) {
           .map(r => [r.category_key, r.label])
         setDamageTypes(bySort(dmgRes?.data))
         setBreachTypes(bySort(brcRes?.data))
-        // [position, label, suggested severity]. Position, not the key,
-        // because outcome_level is an integer column. Order comes from
-        // sort_order, so the ladder reads worst-to-best as seeded.
-        const asLadder = (rows) => (rows||[]).slice()
-          .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
-          .map((r,i) => [i+1, r.label, r.suggested_severity || 0])
-        setOutcomeProperty(asLadder(outPropRes?.data))
-        setOutcomeInfo(asLadder(outInfoRes?.data))
+        // [position, label, suggested severity, outcome_key]. Position is
+        // now STORED, not derived from sort order -- reseeding a ladder can
+        // no longer silently re-point historical incidents.
+        const byLadder = {}
+        ;(laddersRes?.data || []).forEach(r => {
+          (byLadder[r.ladder_key] = byLadder[r.ladder_key] || [])
+            .push([r.position, r.label, r.suggested_severity || 0, r.outcome_key])
+        })
+        Object.values(byLadder).forEach(l => l.sort((a,b) => a[0] - b[0]))
+        setLadders(byLadder)
         const own = ownRes?.data || []
         const suppressed = new Set(own.filter(r=>r.overrides_key).map(r=>r.overrides_key))
         const merged = [
@@ -14740,11 +14742,14 @@ function IncidentReportView({ user }) {
         setCategories(merged.map(r => [r.category_key, r.label, '']))
         setCategoryDomains(Object.fromEntries(
           merged.map(r => [r.category_key, r.outcome_domain || null])))
+        setCategoryLadders(Object.fromEntries(
+          merged.map(r => [r.category_key, r.ladder_key || null])))
       } catch (e) {
         setCategories([])
         setAffectedTypes(AFFECTED_FALLBACK)
         setCategoryDomains({})
-        setDamageTypes([]); setBreachTypes([]); setOutcomeProperty([]); setOutcomeInfo([])
+        setCategoryLadders({})
+        setDamageTypes([]); setBreachTypes([]); setLadders({})
       }
       setCatsLoading(false)
     })()
@@ -14760,10 +14765,11 @@ function IncidentReportView({ user }) {
   // Which ladder this incident uses. People keeps the hardcoded medical
   // one; the others come from the pack rows. An unknown or missing
   // domain falls back to medical, which is the pre-existing behaviour.
+  // The category names its ladder. OUTCOMES stays as the fallback for a
+  // category whose ladder_key is missing or whose rungs failed to load --
+  // an empty picker blocks a report entirely.
   const activeOutcomes =
-      isPropertyDomain ? OUTCOME_PROPERTY
-    : isInfoDomain     ? OUTCOME_INFO
-    : OUTCOMES
+    LADDERS[CATEGORY_LADDERS[category]] || OUTCOMES
   // Worst outcome sets the suggestion. Sequence tells the story; the
   // highest rung sets severity, so an admission plus antibiotics
   // suggests the admission's severity, not the first one tapped.
@@ -15752,7 +15758,6 @@ function IncidentRegisterView({ user, setPage }) {
   const [categoryLabels, setCategoryLabels] = useState({}) // category_key -> label
   // domain -> { level: label }, for the ladders that live in the packs
   // table. The medical ladder is hardcoded below and is not in here.
-  const [outcomeLabels, setOutcomeLabels] = useState({})
 
   const fmtDay = (d) => d ? new Date(d).toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'}) : ''
   const daysBetween = (a,b) => { if(!a) return null; const end=b?new Date(b):new Date(); return Math.max(0, Math.round((end-new Date(a))/86400000)) }
@@ -15790,24 +15795,12 @@ function IncidentRegisterView({ user, setPage }) {
     try {
       const { data: orgRow } = await supabase.from('organisations').select('industry_id').eq('id', id).maybeSingle()
       const indId = orgRow?.industry_id
-      // Categories come from the shared loader; only the OUTCOME ladders are
-      // loaded here, because only this view uses them.
-      const [outPropRes, outInfoRes] = await Promise.all([
-        indId ? supabase.from('incident_category_packs').select('label,sort_order').eq('industry_id', indId).eq('source','outcome_property').eq('is_active',true) : Promise.resolve({data:[]}),
-        indId ? supabase.from('incident_category_packs').select('label,sort_order').eq('industry_id', indId).eq('source','outcome_information').eq('is_active',true) : Promise.resolve({data:[]}),
-      ])
-      // outcome_level holds the POSITION in the domain's ladder, so the
-      // label map is built the same way the form built the ladder:
-      // sort by sort_order, index from 1.
-      const byPos = (rows) => Object.fromEntries((rows||[]).slice()
-        .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
-        .map((r,i)=>[i+1, r.label]))
-      setOutcomeLabels({
-        property: byPos(outPropRes?.data),
-        information: byPos(outInfoRes?.data),
-      })
+      // C1: ladder_key -- the outcome label loader that lived here is gone.
+      // It fed a per-domain label helper whose call sites were removed when the trend
+      // report started reading incident_outcomes.outcome_label directly. It
+      // was fetching 10 rows per register load to populate unread state.
       setCategoryLabels(await loadCategoryLabels(id))
-    } catch(e) { setCategoryLabels(INC_CATEGORY_LABEL); setOutcomeLabels({}) }
+    } catch(e) { setCategoryLabels(INC_CATEGORY_LABEL) }
     setLoading(false)
   }
   useEffect(()=>{ load() },[])
@@ -15899,7 +15892,6 @@ function IncidentRegisterView({ user, setPage }) {
   const tTopCats  = Object.entries(tCatMap).sort((a,b)=>b[1]-a[1]).slice(0,5)
   // --- BREAKDOWN AXES (harm type / affected persons / outcome) ---
   const HARM_LABEL = { physical:'Physical', infection_illness:'Infection / Illness', mental_psychological:'Mental / Psychological' }
-  const OUTCOME_LABEL = { 1:'No treatment needed', 2:'First aid only', 3:'Seen by GP / clinic, no admission', 4:'Antibiotics commenced', 5:'Hospital presentation, no admission', 6:'Hospital admission', 7:'ICU / life-threatening / permanent harm', 8:'Death' }
   const tHarmMap = {}; tInc6m.forEach(i=>{ if(i.harm_type) tHarmMap[i.harm_type]=(tHarmMap[i.harm_type]||0)+1 })
   const tHarmRows = Object.entries(tHarmMap).sort((a,b)=>b[1]-a[1])
   const tAffMap = {}; tInc6m.forEach(i=>{ if(i.affected_type) tAffMap[i.affected_type]=(tAffMap[i.affected_type]||0)+1 })
@@ -15916,10 +15908,6 @@ function IncidentRegisterView({ user, setPage }) {
   // A level is only meaningful with its domain: 2 is "First aid only" on
   // a people incident and "Minor, repairable" on a property one.
   const DOMAIN_LABEL = { people:'People', property:'Property', information:'Information' }
-  const outcomeLabelFor = (domain, lvl) =>
-    domain === 'people'
-      ? (OUTCOME_LABEL[lvl] || ('Level '+lvl))
-      : ((outcomeLabels[domain]||{})[lvl] || ('Level '+lvl))
   // No domain filter — property and information were previously dropped
   // from this chart entirely.
   // One tally per OUTCOME ROW. An incident with an admission and
