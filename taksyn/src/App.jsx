@@ -14652,7 +14652,11 @@ function IncidentReportView({ user }) {
   const [receipt, setReceipt] = useState(null) // {ref}
   const [error, setError] = useState('')
 
-  // Resolve org ID (ORG...) from org_members — never the org name (gremlin-safe)
+  // D2: resolve the SELECTED org, not merely the first membership.
+  // profiles.org holds a NAME and org_members.org holds an ID, so the name
+  // is never used AS an id -- only to look one up. The result is then
+  // checked against the user's memberships, so the id that reaches state
+  // has still come from org_members either way.
   useEffect(() => {
     ;(async()=>{
       try {
@@ -14660,12 +14664,22 @@ function IncidentReportView({ user }) {
         const authId = sess?.session?.user?.id
         if (!authId) { setOrgResolved(true); return }
         const { data: members } = await supabase.from('org_members').select('org').eq('user_id', authId)
-        const id = (members||[]).map(m=>m.org).find(o => /^ORG/i.test(o||''))
+        const mine = (members||[]).map(m=>m.org).filter(o => /^ORG/i.test(o||''))
+        let id = null
+        if (user?.org) {
+          const { data: orgRow } = await supabase.from('organisations')
+            .select('id').eq('name', user.org).maybeSingle()
+          if (orgRow?.id && mine.includes(orgRow.id)) id = orgRow.id
+        }
+        // FALLBACK, not the primary path: the selection could not be
+        // resolved, or is not one this user belongs to. Single-org users
+        // reach the same answer by either route.
+        if (!id) id = mine[0] || null
         if (id) setOrgId(id)
       } catch(e) { /* leave blank -> guarded below */ }
       setOrgResolved(true)
     })()
-  }, [])
+  }, [user?.org])
 
   // CATEGORY PACKS — load once the org ID is known. Resolves the org's
   // industry_id, then reads packs ∪ org categories. source='category'
