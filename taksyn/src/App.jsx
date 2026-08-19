@@ -16487,6 +16487,11 @@ const INC_FINDING_LABEL = {
 
 function IncidentsAdminView({ user, setPage }) {
   const isAdmin = user.role === 'client_admin'
+  // outcome panel: all rungs (46, global reference data) and the org's
+  // category -> ladder_key map, so the add picker can offer the right
+  // ladder for whichever incident is open.
+  const [rungs, setRungs] = useState([])
+  const [catLadders, setCatLadders] = useState({})
   // notif-B: manual override. Wider than isAdmin -- a manager may flag or
   // unflag the requirement, but only a client_admin records the actual
   // notification.
@@ -16543,7 +16548,7 @@ function IncidentsAdminView({ user, setPage }) {
     // rows. Also carried by the three single-row re-fetches below, or a
     // patch would blank the outcome display.
     const { data } = await supabase.from('incidents')
-      .select('*, incident_outcomes(outcome_label,seq,voided_at)')
+      .select('*, incident_outcomes(id,outcome_key,outcome_label,seq,occurred_at,voided_at,recorded_by_name)')
       .eq('org', id).order('created_at',{ascending:false})
     const list = data || []
     setIncidents(list)
@@ -16552,6 +16557,18 @@ function IncidentsAdminView({ user, setPage }) {
     if (ids.length) {
       const { data: p } = await supabase.from('profiles').select('id,name').in('id', ids)
       if (p) setNames(Object.fromEntries(p.map(r=>[r.id,r.name])))
+    }
+    // outcome panel reference data
+    const { data: lad } = await supabase.from('incident_outcome_ladders')
+      .select('ladder_key,position,label,outcome_key').eq('is_active', true)
+    if (lad) setRungs(lad)
+    const { data: orgRow2 } = await supabase.from('organisations')
+      .select('industry_id').eq('id', id).maybeSingle()
+    if (orgRow2?.industry_id) {
+      const { data: cats } = await supabase.from('incident_category_packs')
+        .select('category_key,ladder_key').eq('industry_id', orgRow2.industry_id)
+        .eq('source','category').eq('is_active', true)
+      if (cats) setCatLadders(Object.fromEntries(cats.map(c=>[c.category_key,c.ladder_key])))
     }
     // org members for the assignee picker (supervisor/manager/client_admin only)
     const { data: mem } = await supabase.from('org_members').select('user_id,role').eq('org', id)
@@ -16729,7 +16746,7 @@ function IncidentsAdminView({ user, setPage }) {
       // the RPC's RETURNING clause is evaluated, so the row it hands back
       // predates them. The revision counter in particular would be one
       // behind, and it is printed on the PDF.
-      const { data: fresh } = await supabase.from('incidents').select('*, incident_outcomes(outcome_label,seq,voided_at)').eq('id', data.id).single()
+      const { data: fresh } = await supabase.from('incidents').select('*, incident_outcomes(id,outcome_key,outcome_label,seq,occurred_at,voided_at,recorded_by_name)').eq('id', data.id).single()
       const row = fresh || data
       setSel(row)
       setIncidents(prev=>prev.map(i=>i.id===row.id?row:i))
@@ -16877,7 +16894,7 @@ function IncidentsAdminView({ user, setPage }) {
       // the RPC's RETURNING clause is evaluated, so the row it hands back
       // predates them. The revision counter in particular would be one
       // behind, and it is printed on the PDF.
-      const { data: fresh } = await supabase.from('incidents').select('*, incident_outcomes(outcome_label,seq,voided_at)').eq('id', data.id).single()
+      const { data: fresh } = await supabase.from('incidents').select('*, incident_outcomes(id,outcome_key,outcome_label,seq,occurred_at,voided_at,recorded_by_name)').eq('id', data.id).single()
       const row = fresh || data
       setSel(row)
       setIncidents(prev=>prev.map(i=>i.id===row.id?row:i))
@@ -17099,7 +17116,7 @@ function IncidentsAdminView({ user, setPage }) {
       // the RPC's RETURNING clause is evaluated, so the row it hands back
       // predates them. The revision counter in particular would be one
       // behind, and it is printed on the PDF.
-      const { data: fresh } = await supabase.from('incidents').select('*, incident_outcomes(outcome_label,seq,voided_at)').eq('id', data.id).single()
+      const { data: fresh } = await supabase.from('incidents').select('*, incident_outcomes(id,outcome_key,outcome_label,seq,occurred_at,voided_at,recorded_by_name)').eq('id', data.id).single()
       const row = fresh || data
       setSel(row)
       setIncidents(prev=>prev.map(i=>i.id===row.id?row:i))
@@ -17238,7 +17255,63 @@ function IncidentsAdminView({ user, setPage }) {
           <div style={{...card,borderColor:'var(--amber)'}}>
             <span style={lbl}>Clinical details</span>
             {sel.harm_type && <div style={{fontSize:13,marginBottom:4}}>Harm type: {sel.harm_type.replace(/_/g,' ')}</div>}
-            {outcomeText(sel) && <div style={{fontSize:13,marginBottom:4}}>Outcome: {outcomeText(sel)}</div>}
+            {/* outcome panel */}
+            {(() => {
+              const live = ((sel.incident_outcomes)||[]).filter(o=>!o.voided_at)
+                .sort((a,b)=>(a.seq||0)-(b.seq||0))
+              const lad = catLadders[sel.category]
+              const avail = rungs.filter(r => r.ladder_key === lad
+                && !live.some(o => o.outcome_key === r.outcome_key))
+                .sort((a,b)=>a.position-b.position)
+              return (<div style={{marginBottom:6}}>
+                <div style={{fontSize:12,color:'var(--t3)',marginBottom:4}}>Outcome</div>
+                {live.length === 0 && <div style={{fontSize:13,color:'var(--t3)'}}>None recorded.</div>}
+                {live.map(o => (
+                  <div key={o.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,marginBottom:3}}>
+                    <span style={{opacity:.5,fontWeight:600}}>{o.seq}</span>
+                    <span>{o.outcome_label}</span>
+                    {isAdmin && (
+                      <button className="btn btn-sm" style={{marginLeft:'auto',fontSize:11,padding:'2px 8px'}}
+                        disabled={busy} onClick={async ()=>{
+                          const why = (prompt('Why is this outcome being voided? (at least 10 characters)')||'').trim()
+                          if (!why) return
+                          setBusy(true)
+                          const { error } = await supabase.rpc('incident_void_outcome',
+                            { p_outcome_id: o.id, p_reason: why })
+                          setBusy(false)
+                          if (error) { alert(error.message); return }
+                          await load()
+                        }}>Void</button>
+                    )}
+                  </div>
+                ))}
+                {canFlagNotification && avail.length > 0 && sel.status !== 'closed' && (
+                  <select value={0}
+                    style={{width:'100%',padding:'8px',borderRadius:8,
+                            border:'1px solid var(--border2)',background:'var(--card)',
+                            color:'var(--text)',marginTop:8,fontSize:13}}
+                    disabled={busy} onChange={async (e)=>{
+                      const key = e.target.value
+                      if (!key || key === '0') return
+                      // Reset BEFORE awaiting: the select keeps the chosen
+                      // value until load() re-renders, and a second change
+                      // event in that window fires the insert twice. The
+                      // unique index refuses it, so the user sees an error
+                      // for an action that already succeeded.
+                      e.target.value = '0'
+                      setBusy(true)
+                      const { error } = await supabase.rpc('incident_add_outcome',
+                        { p_incident_id: sel.id, p_outcome_key: key, p_occurred_at: null })
+                      setBusy(false)
+                      if (error) { alert(error.message); return }
+                      await load()
+                    }}>
+                    <option value={0}>— add an outcome —</option>
+                    {avail.map(r => <option key={r.outcome_key} value={r.outcome_key}>{r.label}</option>)}
+                  </select>
+                )}
+              </div>)
+            })()}
             {clinical.note && <div style={{fontSize:14,whiteSpace:'pre-wrap'}}>{clinical.note}</div>}
           </div>
         )}
