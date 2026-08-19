@@ -16473,6 +16473,10 @@ const INC_FINDING_LABEL = {
 
 function IncidentsAdminView({ user, setPage }) {
   const isAdmin = user.role === 'client_admin'
+  // notif-B: manual override. Wider than isAdmin -- a manager may flag or
+  // unflag the requirement, but only a client_admin records the actual
+  // notification.
+  const canFlagNotification = ['client_admin','manager'].includes(user.role)
   const [currentUid, setCurrentUid] = useState('')
   const [orgId, setOrgId] = useState('')
   const [incidents, setIncidents] = useState([])
@@ -17287,9 +17291,21 @@ function IncidentsAdminView({ user, setPage }) {
             Renders only when the incident is flagged as requiring an
             external statutory notification. notified_to is required:
             a record naming nobody is not a record. */}
-        {sel.external_notification_required && (
+        {(
           <div style={card}>
             <span style={lbl}>External notification</span>
+            {!sel.external_notification_required && (
+              <div style={{fontSize:13,lineHeight:1.6}}>
+                <div style={{color:'var(--t2)'}}>Not flagged as requiring an external notification.</div>
+                {canFlagNotification && (
+                  <button className="btn btn-sm" style={{marginTop:10}} disabled={busy} onClick={()=>{
+                    patchIncident({ external_notification_required: true },
+                      'notification_required_set', { to: 'required' })
+                  }}>Flag as requiring notification</button>
+                )}
+              </div>
+            )}
+            {sel.external_notification_required && (<>
             {sel.notified_at ? (
               <div style={{fontSize:13,lineHeight:1.6}}>
                 <div>
@@ -17330,6 +17346,22 @@ function IncidentsAdminView({ user, setPage }) {
                 External notification required — not yet recorded.
               </div>
             )}
+            {!sel.notified_at && canFlagNotification && (
+              <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid var(--border)'}}>
+                <button className="btn btn-sm" disabled={busy} onClick={()=>{
+                  const why = (prompt('Why is an external notification not required?')||'').trim()
+                  if (!why) { alert('A reason is required to clear this.'); return }
+                  patchIncident({ external_notification_required: false },
+                    'notification_required_cleared',
+                    { from: 'required', to: 'not required', details: { reason: why } })
+                }}>Not required after all</button>
+                <div style={{fontSize:12,color:'var(--t3)',marginTop:6}}>
+                  Clearing this asks for a reason and is recorded in the timeline.
+                  Once a notification has been recorded it can no longer be cleared.
+                </div>
+              </div>
+            )}
+            </>)}
           </div>
         )}
 
