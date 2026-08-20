@@ -140,12 +140,17 @@ Deno.serve(async (req) => {
         // User already exists — only add org_members, do NOT touch profiles
         const { data: profileData } = await supabaseAdmin.from('profiles').select('id').eq('email', email).single()
         if (profileData?.id && orgId) {
+          // FIX-NULL-OVERWRITE (20 Aug 2026): omit these keys when undefined.
+          // The app does not send position or industry in this payload, so
+          // `|| null` wrote NULL over values handle_new_user had already
+          // sourced from invite_links. An omitted key leaves the existing
+          // value untouched on upsert.
           await supabaseAdmin.from('org_members').upsert({
             user_id: profileData.id,
             org: orgId,
             role: role || 'member',
-            industry: industry || null,
-            position: position || null,
+            ...(industry ? { industry } : {}),
+            ...(position ? { position } : {}),
           }, { onConflict: 'user_id,org' })
         }
         return json({ success: true, alreadyExisted: true, userId: profileData?.id || null }, 200)
@@ -167,14 +172,18 @@ Deno.serve(async (req) => {
 
       // orgId (ORG... id) goes to org_members.org
       if (orgId) {
+        // FIX-NULL-OVERWRITE (20 Aug 2026): this is the write the om_audit
+        // trigger caught setting position from 'Driver' to NULL about 2.5s
+        // after handle_new_user inserted it. The previous comment here claimed
+        // this "adds position" - it did the opposite, because the app never
+        // sends a position field and `|| null` therefore wrote an explicit
+        // NULL. Omitting the key leaves the existing value alone.
         await supabaseAdmin.from('org_members').upsert({
           user_id: userId,
           org: orgId,
           role: role || 'member',
-          industry: industry || null,
-          // Runs AFTER handle_new_user() has inserted this row with
-          // (user_id, org, role, industry), so this adds position.
-          position: position || null,
+          ...(industry ? { industry } : {}),
+          ...(position ? { position } : {}),
         }, { onConflict: 'user_id,org' })
       }
     }
