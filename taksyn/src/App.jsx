@@ -18847,25 +18847,37 @@ export default function App() {
                     if (lk) { invIndustry = lk.invited_industry || ''; invPosition = lk.invited_position || lk.position || '' }
                   } catch (_) {}
                 }
+                // FIX-POSITION-OVERWRITE (20 Aug 2026): only send industry/position
+                // when we actually have a value. Sending '' overwrote the value
+                // handle_new_user had already written server-side from invite_links.
+                // An omitted key leaves the existing DB value untouched on upsert.
+                const _omIndustry = invIndustry || data.industry || ''
+                const _omPosition = invPosition || data.position || ''
                 await dbAdmin.from('org_members').upsert({
                   user_id: session.user.id,
                   org: pending.linkOrgId,
                   role: pending.assignedRole || data.role || 'worker',
-                  industry: invIndustry || data.industry || '',
-                  position: invPosition || data.position || '',
+                  ...(_omIndustry ? { industry: _omIndustry } : {}),
+                  ...(_omPosition ? { position: _omPosition } : {}),
                   is_active: true
                 }, { onConflict: 'user_id,org' })
                 // Ensure a profiles record exists for this user; create from existing profile data if missing (bypass RLS)
                 const { data: existingProfile } = await dbAdmin.from('profiles').select('id').eq('id', session.user.id).maybeSingle()
                 if (!existingProfile) {
+                  // FIX-POSITION-OVERWRITE: same reasoning as the org_members upsert
+                  // above. This block is guarded by if (!existingProfile) and is
+                  // probably unreachable, since handle_new_user always creates a
+                  // profile row. Fixed regardless so it cannot bite later.
+                  const _pfIndustry = invIndustry || data.industry || ''
+                  const _pfPosition = invPosition || data.position || ''
                   await dbAdmin.from('profiles').upsert({
                     id: session.user.id,
                     name: data.name || pending.userName,
                     email: data.email || session.user.email,
                     org: pending.linkOrgId || data.org,
                     role: pending.assignedRole || data.role || 'worker',
-                    industry: invIndustry || data.industry || '',
-                    position: invPosition || data.position || '',
+                    ...(_pfIndustry ? { industry: _pfIndustry } : {}),
+                    ...(_pfPosition ? { position: _pfPosition } : {}),
                     phone: data.phone || ''
                   }, { onConflict: 'id' })
                 }
