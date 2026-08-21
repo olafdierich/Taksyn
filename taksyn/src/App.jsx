@@ -6662,9 +6662,16 @@ function UsersView({ user, setAuditLog }) {
     // Clear duplicate state if we're proceeding (resend path)
     setDuplicateInvite(null)
 
+    // FIX-INVITE-DEDUPE (20 Aug 2026): capture the linkId buildInviteUrl
+    // generates so the email path can hand the SAME secret to the Edge
+    // Function. Without this both writers insert their own row and one
+    // invite produces two invite_links rows.
+    let sharedLinkId = null
+
     const buildInviteUrl = async (orgId) => {
       if (!orgId || !isConfigured()) return window.location.origin + window.location.pathname
       const linkId = 'IL' + Date.now() + Math.random().toString(36).slice(2,5)
+      sharedLinkId = linkId
       try {
         const { error } = await supabase.from('invite_links').insert({
           organisation_id: orgId,
@@ -6722,7 +6729,12 @@ function UsersView({ user, setAuditLog }) {
       const linkOrgId = resolvedOrgId
       const inviteUrl = await buildInviteUrl(linkOrgId)
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl
-      const invitePayload = { email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, orgId: linkOrgId, industry: firstIndustry, positions: rolesSummary, inviteUrl }
+      // FIX-INVITE-DEDUPE: `secret` makes the Edge Function reuse the row
+      // buildInviteUrl already inserted instead of adding a second one.
+      // `position` was missing entirely - only `positions` (a display
+      // summary the function ignores) was sent, which is why position
+      // arrived undefined inside the function.
+      const invitePayload = { email: inviteEmail.trim(), name: (inviteFirstName.trim() + ' ' + inviteLastName.trim()).trim(), role: systemRole, org: targetOrg, orgId: linkOrgId, industry: firstIndustry, position: validRows.find(p=>p.position)?.position || '', positions: rolesSummary, secret: sharedLinkId, inviteUrl }
       const res = await fetch(supabaseUrl+'/functions/v1/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': await getEdgeFunctionAuthHeader() },
