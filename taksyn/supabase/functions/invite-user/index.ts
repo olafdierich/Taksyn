@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     // [PATCH:invite-position-v2]
     // `position` is ONE name (Chef). `positions` is a display summary
     // built by the caller and is deliberately not written to any column.
-    const { action, email, name, role, org, orgId, industry, position, positions, dateOfBirth, inviteUrl } = await req.json()
+    const { action, email, name, role, org, orgId, industry, position, positions, dateOfBirth, inviteUrl, secret } = await req.json()
 
     // NOTE: `secret` is intentionally no longer read or trusted.
     console.log('[invite-user] received fields:', { action, email, name, role, org, orgId })
@@ -112,7 +112,19 @@ Deno.serve(async (req) => {
     // first or the role degrades to worker via the CHK-36 clamp. Writing
     // profiles.role afterwards does NOT work - profiles_guard_biu is BEFORE
     // UPDATE and pins it back (auth.uid() is null on a service_role connection).
-    if (orgId && role) {
+    // FIX-INVITE-DEDUPE (20 Aug 2026): when App.jsx sends a secret it has
+    // ALREADY inserted a complete invite_links row (invited_role,
+    // invited_position, invited_industry, invited_email) BEFORE calling this
+    // function. Inserting again produced a SECOND row for one invite. Skip
+    // when a secret is present; still insert when it is absent, so the
+    // WhatsApp path and any older client keep working.
+    //
+    // The row must exist before inviteUserByEmail below, because
+    // handle_new_user fires DURING that call and reads it. App.jsx's insert
+    // has already satisfied that ordering - see FIX-IL-ROW.
+    const callerSuppliedSecret = (typeof secret === 'string' && secret.trim()) ? secret.trim() : null
+
+    if (orgId && role && !callerSuppliedSecret) {
       const { error: ilErr } = await supabaseAdmin.from('invite_links').insert({
         organisation_id: orgId,
         invited_email: email,
@@ -127,6 +139,8 @@ Deno.serve(async (req) => {
         is_active: true,
       })
       if (ilErr) console.error('[invite-user] invite_links insert failed:', ilErr)
+    } else if (callerSuppliedSecret) {
+      console.log('[invite-user] FIX-INVITE-DEDUPE: reusing caller row, secret', callerSuppliedSecret)
     }
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
