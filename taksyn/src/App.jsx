@@ -11366,13 +11366,21 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
 
   pt.forEach(t=>{
     // Skip unassigned / ghost tasks
-    if (!t.assigned_user_id && !t.assigned_user_name) return
-    if (!t.assigned_user_name || t.assigned_user_name.trim().toLowerCase()==='unassigned') return
+    // PERF-ASSIGNEE-GUARD-V1: multi-assigned tasks carry assigned_user_ids only, with
+    // BOTH scalars empty. The old guard required a scalar and returned before the
+    // resolution below ever ran - which is why Kemrose's four water-system tasks were
+    // absent from Performance entirely while their missed cycles sat in
+    // task_occurrences. Legacy name-only rows still resolve via memberNameMap.
+    // First CONFIRMED member of the array wins: a stale UUID must not shadow a valid
+    // one, or the task falls through to the same silent drop this patch removes.
+    // Single-credit under SHARED semantics - multi-assignee crediting is a later step.
+    const _ids = assigneeIds(t)
+    const _memberId = _ids.find(id => memberIdSet.has(id))
+    if (!_ids.length && !t.assigned_user_name) return
+    if (!_memberId && (!t.assigned_user_name || t.assigned_user_name.trim().toLowerCase()==='unassigned')) return
 
-    // Resolve canonical member ID: prefer assigned_user_id, fall back to name lookup
-    const resolvedId = (t.assigned_user_id && memberIdSet.has(t.assigned_user_id))
-      ? t.assigned_user_id
-      : memberNameMap[t.assigned_user_name?.toLowerCase().trim()]
+    // Resolve canonical member ID: confirmed array member, else name lookup
+    const resolvedId = _memberId || memberNameMap[t.assigned_user_name?.toLowerCase().trim()]
 
     // Drop tasks not belonging to a confirmed org member
     if (!resolvedId) return
