@@ -1751,7 +1751,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 phone: invitePhone,
                 org: orgName,
                 role: assignedRole,
-                tier: tier,
+                // FIX-TIER-LASTWRITES (21 Aug 2026): profiles.tier is deprecated
+                // and no longer read. Column default satisfies NOT NULL.
                 industry: inviteIndustry || '',
                 position: invitePosition || '',
                 created_at: new Date().toISOString()
@@ -1764,7 +1765,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
 
             try {
               const { error: orgMemberError } = await supabase.from('org_members').upsert(
-                { user_id: newUserId, org: inviteOrgId, role: assignedRole, tier, ...(invitePosition ? { position: invitePosition } : {}) },
+                // FIX-TIER-LASTWRITES: org_members.tier removed for the same reason.
+                { user_id: newUserId, org: inviteOrgId, role: assignedRole, ...(invitePosition ? { position: invitePosition } : {}) },
                 { onConflict: 'user_id,org' }
               )
               if (orgMemberError) console.error('ORG_MEMBERS upsert error:', orgMemberError)
