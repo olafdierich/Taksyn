@@ -5597,6 +5597,10 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
+  // completed_late null means nothing was ever written there (July migration
+  // residue) and is read as on-time - see the script header for the ruling.
+  const onTimeDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&!o.late&&o.d>=_rsStr&&o.d<=_reStr).length
   // F70/D7: cycles declared not applicable leave the denominator entirely -
   // not counted as done, not counted as missed. See TaskDetail N/A copy.
   const naDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status===OCC_NOT_APPLICABLE&&o.d>=_rsStr&&o.d<=_reStr).length
@@ -5639,7 +5643,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     const role = t.assigned_role || 'worker'
     keys.forEach(key => {
       if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
-      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=dn; return }
+      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
       workerMap[key].total++
       if (['completed','approved'].includes(t.status)) {
         workerMap[key].done++
@@ -11327,6 +11331,10 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null }) 
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
   const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
+  // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
+  // completed_late null means nothing was ever written there (July migration
+  // residue) and is read as on-time - see the script header for the ruling.
+  const onTimeDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&!o.late&&o.d>=_rsStr&&o.d<=_reStr).length
   // F70/D7: cycles declared not applicable leave the denominator entirely -
   // not counted as done, not counted as missed. See TaskDetail N/A copy.
   const naDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status===OCC_NOT_APPLICABLE&&o.d>=_rsStr&&o.d<=_reStr).length
@@ -11387,7 +11395,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null }) 
 
     const p = peopleMap[resolvedId]
     if (!p) return
-    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=dn; return }
+    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
