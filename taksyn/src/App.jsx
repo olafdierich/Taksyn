@@ -261,6 +261,28 @@ const calendarOccurrences = (dueDate, recurrence, fromDate, toDate) => {
   return out
 }
 const isOneOff = t => !isRecurring(t)
+
+// ASSIGNEE-RESOLVER-V1
+// Single definition of "who owns this task".
+// There are TWO write paths and they do not agree: the single-assign form writes
+// assigned_user_id + assigned_user_name (scalars); the multi-assign form writes
+// assigned_user_ids (array) and leaves the scalars empty. Kemrose's four water-system
+// tasks are multi-assigned, so every reader that consults only the scalar sees them
+// as unassigned - which is why missed cycles carry no name in Performance.
+// Semantics: SHARED. One completion satisfies the cycle for all assignees; a miss is
+// attributed to all of them. Occurrences stay keyed on (task_id, occurrence_date).
+// Every new reader must come through here. Do not read either column directly.
+const assigneeIds = t => {
+  let arr = t && t.assigned_user_ids
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr) } catch (e) { arr = null } }
+  if (Array.isArray(arr)) {
+    const clean = arr.filter(x => typeof x === 'string' && x !== '')
+    if (clean.length) return clean
+  }
+  const one = t && t.assigned_user_id
+  return (typeof one === 'string' && one !== '') ? [one] : []
+}
+const isAssignedTo = (t, uid) => !!uid && uid !== '' && assigneeIds(t).indexOf(uid) !== -1
 // One-off "overdue". Recurring overdue is per-occurrence and owned by the miss-writer — never computed here.
 const isOverdueOneOff = (t, today) => !isRecurring(t) && t.status==='pending' && t.due_date && t.due_date < today
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
