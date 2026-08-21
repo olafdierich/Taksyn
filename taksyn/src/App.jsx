@@ -1863,14 +1863,17 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               // Multiple orgs — show picker
               let orgRows = []
               try {
-                const { data: od } = await supabase.from('organisations').select('id,name,industry')
+                // FIX-TIER-FROM-PLAN (21 Aug 2026): plan is needed so the
+                // displayed tier comes from organisations.plan, not the
+                // deprecated org_members.tier.
+                const { data: od } = await supabase.from('organisations').select('id,name,industry,plan')
                 orgRows = od || []
               } catch (err) {
                 console.error('Org fetch error:', err)
               }
               const enriched = uniqueMemberships.map(m => {
                 const orgRow = orgRows.find(o=>o.id===m.org||o.name===m.org)
-                return {...m, orgName: orgRow?.name || m.org, industry: orgRow?.industry || ''}
+                return {...m, orgName: orgRow?.name || m.org, industry: orgRow?.industry || '', orgPlan: orgRow?.plan || null}
               })
               setPendingAuthUser({...profile, email:data.user.email})
               setOrgChoices(enriched)
@@ -1880,7 +1883,16 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
               // Single org from org_members — use that role/org
               window.__taksyn_org_selection_pending = false
               const m = uniqueMemberships[0]
-              const userData = {...profile, email:data.user.email, role:m.role, org:profile.org||m.org, tier:m.tier||'Growth'}
+              // FIX-TIER-FROM-PLAN: orgRows is scoped to the multi-org branch
+              // above and is not in scope here, so this path does its own
+              // lookup. Falls back to the old value if the plan is missing.
+              let _soPlan = null
+              try {
+                const { data: _soOrg } = await supabase.from('organisations')
+                  .select('plan').eq('id', m.org).maybeSingle()
+                _soPlan = _soOrg?.plan || null
+              } catch (_) {}
+              const userData = {...profile, email:data.user.email, role:m.role, org:profile.org||m.org, tier:planTier(_soPlan)||m.tier||'Growth'}
               onAuth(userData)
             } else {
               // No org_members entry — use profile directly. Never create a new org or
@@ -2127,7 +2139,8 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
             {[...orgChoices].sort((a,b)=>(a.orgName||a.org).localeCompare(b.orgName||b.org)).map((m,i)=>(
               <button key={i} onClick={()=>{
                 window.__taksyn_org_selection_pending = false
-                const userData = {...pendingAuthUser, role:m.role, org:m.orgName||pendingAuthUser.org||m.org, tier:m.tier||'Growth'}
+                // FIX-TIER-FROM-PLAN: orgPlan is carried by the enriched map.
+                const userData = {...pendingAuthUser, role:m.role, org:m.orgName||pendingAuthUser.org||m.org, tier:planTier(m.orgPlan)||m.tier||'Growth'}
                 onAuth(userData)
               }} style={{padding:'14px 16px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',textAlign:'left',transition:'all .15s'}}
               onMouseOver={e=>e.currentTarget.style.borderColor='var(--brand)'}
@@ -19063,10 +19076,11 @@ export default function App() {
       const _seen = new Set()
       const unique = (memberships||[]).filter(m => { if(_seen.has(m.org)) return false; _seen.add(m.org); return true })
       if (unique.length <= 1) { setProfileMsg('You only belong to one organisation.'); return }
-      const { data: orgRows } = await supabase.from('organisations').select('id,name,industry')
+      // FIX-TIER-FROM-PLAN: plan added so the switcher sets the correct tier.
+      const { data: orgRows } = await supabase.from('organisations').select('id,name,industry,plan')
       const enriched = unique.map(m => {
         const o = (orgRows||[]).find(r=>r.id===m.org||r.name===m.org)
-        return {...m, orgName: o?.name||m.org, industry: o?.industry||''}
+        return {...m, orgName: o?.name||m.org, industry: o?.industry||'', orgPlan: o?.plan||null}
       })
       setOrgSwitchChoices(enriched)
       setShowOrgSwitch(true)
@@ -19733,7 +19747,7 @@ export default function App() {
                   {orgSwitchChoices.sort((a,b)=>(a.orgName||a.org).localeCompare(b.orgName||b.org)).map((m,i)=>(
                     <div key={i} onClick={()=>{
                       const orgName = m.orgName||m.org
-                      const userData = {...user, role:m.role, org:orgName, tier:m.tier||user.tier}
+                      const userData = {...user, role:m.role, org:orgName, tier:planTier(m.orgPlan)||m.tier||user.tier}
                       sessionStorage.setItem('currentOrgId', m.org)
                       sessionStorage.setItem('currentOrgName', orgName)
                       sessionStorage.setItem('currentRole', m.role)
