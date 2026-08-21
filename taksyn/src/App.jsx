@@ -6630,7 +6630,9 @@ function UsersView({ user, setAuditLog }) {
     if (!userOrgId) { alert('Could not find your organisation ID. Please refresh and try again.'); return }
     const { data:existing } = await supabase.from('org_members').select('*').eq('user_id',profile.id).eq('org',userOrgId)
     if (existing?.length) { alert('This user is already in your organisation.'); return }
-    await supabase.from('org_members').upsert({ user_id:profile.id, org:userOrgId, role, tier:user.tier||'Growth' }, { onConflict: 'user_id,org' })
+    // FIX-TIER-WRITERS (21 Aug 2026): tier removed. org_members.tier is
+    // deprecated and nothing reads it; the column default satisfies NOT NULL.
+    await supabase.from('org_members').upsert({ user_id:profile.id, org:userOrgId, role }, { onConflict: 'user_id,org' })
     await supabase.from('profiles').update({ org: user.org, role }).eq('id', profile.id)
     setRealUsers(prev=>[...prev,{...profile,role,org:user.org}])
     alert(profile.name+' added to your organisation as '+ROLE_LABELS[role])
@@ -7606,8 +7608,9 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       name: newOrg.name.trim(),
       industry: newOrg.industry,
       timezone: newOrg.timezone,
+      // FIX-TIER-WRITERS: writing BOTH plan and tier from one input is why
+      // organisations.tier disagrees with organisations.plan. Only plan now.
       plan: (newOrg.tier||'Starter').toLowerCase(),
-      tier: newOrg.tier||'Growth',
       notes: newOrg.notes.trim(),
       status: 'active',
       created_at: new Date().toISOString(),
@@ -7631,11 +7634,20 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     if (members?.length) {
       const ids = [...new Set(members.map(m=>m.user_id))]
       const { data: profiles } = await supabase.from('profiles').select('id,name,first_name,last_name,email,org,role,position,phone,additional_positions').in('id', ids)
+      // FIX-TIER-WRITERS: member pill shows the ORGANISATION's plan.
+      // selectedOrgView is not in scope here - this function takes
+      // (orgId, orgName) - so the plan is fetched.
+      let _lomPlan = null
+      try {
+        const { data: _lomOrg } = await supabase.from('organisations')
+          .select('plan').eq('id', orgId).maybeSingle()
+        _lomPlan = _lomOrg?.plan || null
+      } catch (_) {}
       const seen = new Set()
       setOrgMembers(
         members
           .filter(m=>{ if(seen.has(m.user_id)) return false; seen.add(m.user_id); return true })
-          .map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:p.org||orgName,orgId,tier:m.tier,email:p.email||'',industry:m.industry||'',position:m.position||''} })
+          .map(m=>{ const p=profiles?.find(p=>p.id===m.user_id)||{}; return {...p,id:m.user_id,role:m.role,org:p.org||orgName,orgId,tier:planTier(_lomPlan)||'',email:p.email||'',industry:m.industry||'',position:m.position||''} })
       )
     } else {
       setOrgMembers([])
