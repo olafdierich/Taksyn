@@ -5433,14 +5433,14 @@ function ReviewView({ user }) {
   )
 }
 
-function ReportsView({ tasks, user, setAuditLog, orgTimezone }) {
+function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=null }) {
   const [reportType, setReportType] = useState('compliance')
   const [period, setPeriod] = useState('weekly')
   const [teamsList, setTeamsList] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
-  const [occurrences, setOccurrences] = useState([])
-  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by_name,recurrence,evidence').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
+  // LIFT-OCCURRENCES-V1: fetch moved to App level. null until loaded - see note there.
+  const occurrences = orgOccurrences || []
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [orgLogo, setOrgLogo] = useState(null)
@@ -11277,7 +11277,7 @@ function ProjectsView({ user }) {
   )
 }
 
-function PerformanceView({ tasks, user, leaveRecords=[] }) {
+function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
   const [selectedTeam, setSelectedTeam] = useState('all')
@@ -11286,8 +11286,8 @@ function PerformanceView({ tasks, user, leaveRecords=[] }) {
   const [teamsList, setTeamsList] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
-  const [occurrences, setOccurrences] = useState([])
-  useEffect(()=>{ if(!isConfigured()||!user.org) return; supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by_name,recurrence,evidence').eq('org',user.org).then(({data})=>{ setOccurrences(data||[]) }).catch(()=>{}) },[user.org])
+  // LIFT-OCCURRENCES-V1: fetch moved to App level. null until loaded - see note there.
+  const occurrences = orgOccurrences || []
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
@@ -18471,6 +18471,11 @@ export default function App() {
   const [userPositionsList, setUserPositionsList] = useState([])
   const [tickets, setTickets] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
+  // LIFT-OCCURRENCES-V1: null means NOT LOADED. [] means loaded and genuinely empty.
+  // Never collapse these two. PostgREST returns 200 with error:null when RLS blocks a
+  // read, so [] can arrive with nothing to catch - rendering it as a confident 0 would
+  // assert 'nothing was missed' on a compliance surface without knowing it.
+  const [orgOccurrences, setOrgOccurrences] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
   const orgSLARef = useRef(DEFAULT_SLA)
@@ -19046,6 +19051,16 @@ export default function App() {
         supabase.from('leave_records').select('*').eq('org',user.org).neq('status','cancelled')
           .then(({data})=>{ if(data) setLeaveRecords(data) }).catch(()=>{})
       }
+      // LIFT-OCCURRENCES-V1: one fetch feeding Dashboard, Reports and Performance.
+      // Errors are logged rather than swallowed: this now backs three surfaces, and a
+      // silent failure would render zeros on all of them at once.
+      if(isConfigured()&&user.org&&user.role!=='super_admin') {
+        supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by_name,recurrence,evidence').eq('org',user.org)
+          .then(({data,error})=>{
+            if(error){ console.warn('task_occurrences load failed - occurrence surfaces will show unknown, not zero:', error.message); return }
+            setOrgOccurrences(data||[])
+          }).catch(e=>{ console.warn('task_occurrences load threw:', e && e.message) })
+      }
       let reloadTimer = null
       const pendingIds = new Set()
       const channel = supabase
@@ -19214,7 +19229,7 @@ export default function App() {
   const _tasksOpen = _visTasks.some(t=>['pending','in_progress','overdue','rejected','awaiting_review'].includes(t.status))
   const tasksBlob = _tasksOverdue ? 'warn' : (_tasksOpen ? 'ok' : 'none')
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgOccurrences, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
