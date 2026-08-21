@@ -18760,7 +18760,15 @@ export default function App() {
         const _msFloor = MISS_LOGGING_FROM > _msToday ? _msToday : MISS_LOGGING_FROM
         const _msPlusDays = (dstr,n) => new Date(new Date(dstr+'T00:00:00Z').getTime() + n*86400000).toISOString().slice(0,10)
         const _msActedOn = ['approved','completed','awaiting_review','in_progress','rejected']
-        newTasks.filter(t=>isRecurring(t) && !_msActedOn.includes(t.status)).forEach(t=>{
+        // MISS-GATE-V1: the status filter that used to sit here tested the TASK's
+        // current status against _msActedOn and skipped the ENTIRE walk when it
+        // matched. Status describes one cycle; the walk covers all of them, so one
+        // stale 'in_progress' or a pending approval switched off miss logging for
+        // every past and future cycle of that task. The walk is safe on acted-on
+        // tasks: it breaks before the current cycle (graceDeadline >= _msToday),
+        // upserts with ignoreDuplicates so it cannot overwrite a completion, and
+        // the reconcile above merges over a miss by design if they ever collide.
+        newTasks.filter(t=>isRecurring(t)).forEach(t=>{
           if(!orgTimezone) return   // F14-ORGDAY: org day unresolved — skip. Insert-if-absent,
                                     // so the row is stamped on the next load instead.
           let cur=(t.due_date||'').slice(0,10)
