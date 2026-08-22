@@ -14043,12 +14043,12 @@ function PeopleSubmissionsView({ user, setPage }) {
   return (
     <div className="page-wrap anim">
       {setPage && <button className="btn btn-secondary btn-sm" style={{marginBottom:12}} onClick={()=>setPage('incident_hub')}>← Back to Incidents</button>}
-      <div className="ph"><div className="ph-title">People to review</div>
-        <div className="ph-sub">Reporters who could not find someone in the register sent their details here. Until you resolve them, those incidents have no identified person.</div></div>
+      <div className="ph"><div className="ph-title">Incomplete person details</div>
+        <div className="ph-sub">These incidents name someone who is not on file. Confirm who they are to complete the record.</div></div>
       {err  && <div style={{...card, borderColor:'#DC2626', color:'#DC2626'}}>{err}</div>}
       {note && <div style={{...card, borderColor:'#10B981'}}>{note}</div>}
       {loading && <div style={card}>Loading…</div>}
-      {!loading && rows.length===0 && <div style={card}>Nobody waiting. 🎉</div>}
+      {!loading && rows.length===0 && <div style={card}>Nothing to confirm right now.</div>}
       {rows.map(r => (
         <div key={r.id} style={card}>
           <div style={{fontWeight:700,fontSize:16,marginBottom:2}}>{r.submitted_name}</div>
@@ -14091,13 +14091,13 @@ function PeopleSubmissionsView({ user, setPage }) {
           )}
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             <button style={btn('var(--brand,#4F46E5)','#fff')} disabled={busyId===r.id}
-              onClick={()=>resolve(r,'create')}>Add to register</button>
+              onClick={()=>resolve(r,'create')}>Add as new</button>
             <button style={btn()} disabled={busyId===r.id}
               onClick={()=>{ setOpenMatch(openMatch===r.id?null:r.id); setMQuery(''); setMResults([]); setMMsg('') }}>
-              {openMatch===r.id ? 'Cancel link' : 'Link to existing'}
+              {openMatch===r.id ? 'Cancel' : 'Already on file'}
             </button>
             <button style={btn()} disabled={busyId===r.id}
-              onClick={()=>resolve(r,'dismiss')}>Dismiss</button>
+              onClick={()=>resolve(r,'dismiss')}>Not needed</button>
           </div>
           {openMatch===r.id && (
             <div style={{marginTop:10}}>
@@ -14526,11 +14526,11 @@ function IncidentHubView({ user, setPage }) {
         {isCA && <Tile icon="🛠" title="Corrective actions"
           sub="Every action across the organisation — what was committed to, what is overdue, and whether it worked."
           onClick={()=>setPage('capa_register')}/>}
-        {isCA && <Tile icon="👤" title={pendingPeople>0 ? `People to review (${pendingPeople})` : 'People to review'}
+        {isCA && <Tile icon="👤" title={pendingPeople>0 ? `Incomplete person details (${pendingPeople})` : 'Incomplete person details'}
           color={pendingPeople>0 ? '#B45309' : undefined}
           sub={pendingPeople>0
-            ? `${pendingPeople} ${pendingPeople===1?'person is':'people are'} waiting to be added to the register. Until then their incidents have no identified person.`
-            : 'Nobody waiting. Reporters who cannot find someone in the register send their details here.'}
+            ? `${pendingPeople} ${pendingPeople===1?'incident is':'incidents are'} waiting for you to confirm who was involved.`
+            : 'Nothing to confirm right now.'}
           onClick={()=>setPage('people_submissions')}/>}
       </div>
       {canReview && activeIncidents.length>0 && (
