@@ -5476,6 +5476,32 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   ]
   const [statOrder, setStatOrder] = useState(DEFAULT_STAT_ORDER)
   const [dragStatId, setDragStatId] = useState(null)
+  const [dragOverStatId, setDragOverStatId] = useState(null)
+  // Saved block order. IDS ONLY are stored - entries carry v() closures and
+  // cannot be serialised. On load ids map back onto the defaults: unknown ids
+  // dropped, missing ones appended, so a new block is never hidden from
+  // someone who has reordered.
+  useEffect(()=>{
+    if(!isConfigured()||!user?.id) return
+    ;(async()=>{
+      const { data } = await supabase.from('user_preferences')
+        .select('value').eq('user_id',user.id).eq('key','report_stat_order').maybeSingle()
+      const ids = Array.isArray(data?.value) ? data.value : null
+      if(!ids) return
+      const byId = new Map(DEFAULT_STAT_ORDER.map(s=>[s.id,s]))
+      const next = ids.map(id=>byId.get(id)).filter(Boolean)
+      const seen = new Set(next.map(s=>s.id))
+      DEFAULT_STAT_ORDER.forEach(s=>{ if(!seen.has(s.id)) next.push(s) })
+      if(next.length) setStatOrder(next)
+    })().catch(()=>{})
+  },[user?.id])
+  const persistStatOrder = (arr)=>{
+    if(!isConfigured()||!user?.id) return
+    supabase.from('user_preferences').upsert({
+      user_id:user.id, key:'report_stat_order',
+      value:arr.map(s=>s.id), updated_at:new Date().toISOString()
+    },{ onConflict:'user_id,key' }).then(()=>{},()=>{})
+  }
   const [chartTab, setChartTab] = useState('overview')
   const [showFilters, setShowFilters] = useState(false)
   const [filterTitle, setFilterTitle] = useState('')
@@ -5940,33 +5966,43 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
           <div className="section">
             <div className="section-title">Compliance Overview — {filteredPt.length} tasks</div>
             <div style={{fontSize:10,color:'var(--t2)',marginBottom:6,marginTop:10}}>✋ Drag blocks to rearrange — order is reflected in the PDF report</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(110px,1fr))',gap:10}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(110px,1fr))',gap:10}}
+              onPointerDown={e=>{
+                const el=e.target.closest&&e.target.closest('[data-stat-id]'); if(!el) return
+                const id=el.getAttribute('data-stat-id')
+                const s=statOrder.find(x=>x.id===id); if(!s||s.c==='x') return
+                setDragStatId(id); setDragOverStatId(null)
+              }}
+              onPointerMove={e=>{
+                if(!dragStatId) return
+                e.preventDefault()
+                const t=document.elementFromPoint(e.clientX,e.clientY)
+                const el=t&&t.closest?t.closest('[data-stat-id]'):null
+                setDragOverStatId(el?el.getAttribute('data-stat-id'):null)
+              }}
+              onPointerUp={()=>{
+                const from=dragStatId, to=dragOverStatId
+                setDragStatId(null); setDragOverStatId(null)
+                if(!from||!to||from===to) return
+                const arr=[...statOrder]
+                const fi=arr.findIndex(x=>x.id===from), ti=arr.findIndex(x=>x.id===to)
+                if(fi<0||ti<0) return
+                const [moved]=arr.splice(fi,1); arr.splice(ti,0,moved)
+                setStatOrder(arr); persistStatOrder(arr)
+              }}
+              onPointerCancel={()=>{ setDragStatId(null); setDragOverStatId(null) }}>
               {statOrder.map((s,i)=>{
                 const c=s.c, v=s.v(), l=s.l
                 return (
                   <div key={s.id}
-                    draggable={c!=='x'}
-                    onDragStart={()=>setDragStatId(s.id)}
-                    onDragOver={e=>e.preventDefault()}
-                    onDrop={()=>{
-                      if(!dragStatId||dragStatId===s.id) return
-                      setStatOrder(prev=>{
-                        const arr=[...prev]
-                        const fromIdx=arr.findIndex(x=>x.id===dragStatId)
-                        const toIdx=arr.findIndex(x=>x.id===s.id)
-                        const [moved]=arr.splice(fromIdx,1)
-                        arr.splice(toIdx,0,moved)
-                        return arr
-                      })
-                      setDragStatId(null)
-                    }}
+                    data-stat-id={s.id}
                     style={{
                       background:c==='x'?'transparent':dragStatId===s.id?'var(--brand-lt)':'var(--s3)',
-                      border:c==='x'?'1px dashed var(--border)':dragStatId===s.id?'2px solid var(--brand)':'1px solid transparent',
+                      border:c==='x'?'1px dashed var(--border)':dragStatId===s.id?'2px solid var(--brand)':dragOverStatId===s.id?'2px dashed var(--brand)':'1px solid transparent',
                       borderRadius:8,padding:12,textAlign:'center',
                       cursor:c!=='x'?'grab':'default',
                       opacity:dragStatId===s.id?0.5:1,
-                      transition:'all .15s',userSelect:'none'
+                      transition:'all .15s',userSelect:'none',touchAction:c!=='x'?'none':'auto'
                     }}>
                     <div style={{fontSize:20,fontWeight:800,lineHeight:1,color:c==='g'?'var(--green)':c==='r'?'var(--red)':c==='a'?'#F59E0B':c==='p'?'#8B5CF6':c==='b'?'#3B82F6':c==='x'?'transparent':'#5BC8C0'}}>{c!=='x'?v:''}</div>
                     <div style={{fontSize:10,color:'var(--t2)',marginTop:4,textTransform:'uppercase'}}>{c!=='x'?l:''}</div>
@@ -5975,7 +6011,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
               })}
             </div>
             <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}>
-              <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setStatOrder(DEFAULT_STAT_ORDER)}>↺ Reset Order</button>
+              <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>{ setStatOrder(DEFAULT_STAT_ORDER); persistStatOrder(DEFAULT_STAT_ORDER) }}>↺ Reset Order</button>
             </div>
           </div>
           <div className="section">
