@@ -55,8 +55,8 @@ const LEAVE_TYPES = ['sick_leave','annual_leave','personal_leave','public_holida
 const LEAVE_LABELS = { sick_leave:'Sick Leave', annual_leave:'Annual Leave', personal_leave:'Personal Leave', public_holiday:'Public Holiday' }
 const LEAVE_COLORS = { sick_leave:'#EF4444', annual_leave:'#10B981', personal_leave:'#3B82F6', public_holiday:'#8B5CF6' }
 
-const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','monthly','quarterly','annually']
-const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' }
+const RECURRENCE_OPTS = ['once','daily','weekdays','weekly','fortnightly','monthly','quarterly','semiannually','annually']
+const RECURRENCE_LABELS = { once:'One-off', daily:'Daily', weekdays:'Weekdays (Mon-Fri)', weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', quarterly:'Quarterly', semiannually:'Every 6 Months', annually:'Annually' }
 const PRESET_INDUSTRIES = ['Aged Care','Disability Care','NDIS','Allied Health','Clinical','Community Services','Hospitality','Food & Beverage','Housekeeping','Mining & Resources','Oil & Gas','Construction','Engineering','Transport & Logistics','Administration','Compliance & Quality','IT & Technology','Security','Retail','Manufacturing','Project Management']
 const CLIENT_ADMIN_POSITIONS = ['Director','Regional Manager','National Manager','General Manager','CEO','Managing Director','Owner','Consultant']
 // Maps retired/consolidated position names to their replacement, per industry.
@@ -150,6 +150,7 @@ const nextOccurrenceDate = (dateStr, recurrence) => {
     case 'fortnightly': return fmt(addDays(base,14))
     case 'monthly': return fmt(addMonths(base,1))
     case 'quarterly': return fmt(addMonths(base,3))
+    case 'semiannually': return fmt(addMonths(base,6))
     case 'annually': return fmt(addMonths(base,12))
     default: return null
   }
@@ -158,7 +159,7 @@ const nextOccurrenceDate = (dateStr, recurrence) => {
 // by recurringDueNow, and by the occurrence miss-writer (search: status:'missed').
 // Line-number pointers here have gone stale twice. Use a search string. Do not copy this table
 // into a local const again: it used to exist twice, kept in sync only by this comment.
-const RECUR_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, annually:14 }
+const RECUR_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, semiannually:14, annually:14 }
 // Occurrence status for a cycle declared NOT APPLICABLE (F70). THE single source:
 // task_occurrences.status has NO CHECK constraint, so a typo here becomes a silent
 // third status that no reader knows about. Never type this literal at a call site.
@@ -5635,7 +5636,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='semiannually'?Math.max(1,Math.round(_periodDays/182)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
   // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
   // completed_late null means nothing was ever written there (July migration
@@ -11379,7 +11380,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null }) 
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='semiannually'?Math.max(1,Math.round(_periodDays/182)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
   // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
   // completed_late null means nothing was ever written there (July migration
