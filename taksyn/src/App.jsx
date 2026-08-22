@@ -160,6 +160,12 @@ const nextOccurrenceDate = (dateStr, recurrence) => {
 // Line-number pointers here have gone stale twice. Use a search string. Do not copy this table
 // into a local const again: it used to exist twice, kept in sync only by this comment.
 const RECUR_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, semiannually:14, annually:14 }
+// COMPLETION WINDOW (days before the scheduled cycle date that a recurring task may be
+// submitted). THE single source -- read only by completionWindow() below. A cadence ABSENT
+// from this table is UNGATED, which is why weekly and below do not appear: gating a weekly
+// task by days is meaningless. Overridden per task by tasks.window_days (nullable integer,
+// null = inherit this table; 0 = explicitly ungated). Do not copy this object to a call site.
+const RECUR_WINDOW_DAYS = { weekly:2, fortnightly:4, monthly:7, quarterly:14, semiannually:30, annually:30 }
 // Occurrence status for a cycle declared NOT APPLICABLE (F70). THE single source:
 // task_occurrences.status has NO CHECK constraint, so a typo here becomes a silent
 // third status that no reader knows about. Never type this literal at a call site.
@@ -196,6 +202,28 @@ const currentOccurrenceDate = (dueDate, recurrence, today) => {
     cur = nextOccurrenceDate(cur, recurrence); guard++
   }
   return cur || null
+}
+// Completion-window state for a task, or null when NO gate applies.
+// Returns {opensOn, cycleDate, windowDays} ONLY when submission is too early.
+//
+// UNGATED, in order: non-recurring tasks; a cadence with no window (weekly and below);
+// window_days explicitly 0; an unwalkable due_date; and -- deliberately -- a falsy `today`,
+// because the caller could not resolve the org day. See F14-ORGDAY: fail OPEN, never guess.
+//
+// `today` is a parameter for the same reason the walks take one: this function is
+// timezone-agnostic and the caller supplies the ORG day, not the device's.
+const completionWindow = (t, today) => {
+  if(!t || !today) return null
+  if(!isRecurring(t)) return null
+  const w = (t.window_days === null || t.window_days === undefined)
+    ? (RECUR_WINDOW_DAYS[t.recurrence] ?? 0)
+    : t.window_days
+  if(!w || w <= 0) return null
+  const cycleDate = currentOccurrenceDate(t.due_date, t.recurrence, today)
+  if(!cycleDate) return null
+  const opensOn = _recurPlusDays(cycleDate, -w)
+  if(today >= opensOn) return null
+  return { opensOn, cycleDate, windowDays: w }
 }
 // SCHEDULED date of the cycle a COMPLETION credits, as YYYY-MM-DD. Null if not walkable.
 //
@@ -2750,6 +2778,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [clNoteText, setClNoteText] = useState('')
   const [mandatoryWarn, setMandatoryWarn] = useState(null)
   const [photoWarn, setPhotoWarn] = useState(false)
+  // Completion window. earlyPrompt holds {tid, opensOn, cycleDate, windowDays} while the
+  // reason panel is open (null = closed). Shaped after naPrompt/naReason below, which is
+  // the established pattern in this component for "guard, ask why, then proceed".
+  const [earlyPrompt, setEarlyPrompt] = useState(null)
+  const [earlyReason, setEarlyReason] = useState('')
   // F70 - "Not applicable today". naPrompt holds the task id whose reason panel is
   // open (null = closed). naBusy guards the four awaited round trips in
   // markNotApplicable against a double tap.
@@ -3331,15 +3364,27 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     if(loadTasks) loadTasks()
   }
 
-  const submitTask = (tid) => {
+  // _bypassWindow: set ONLY by the early-completion panel's "Submit anyway". Threaded as a
+  // parameter rather than inferred from earlyPrompt state -- the panel clears that state
+  // before re-calling, so a state-based check re-fires the guard and reopens the panel
+  // forever. That loop was v1 of this gate.
+  const submitTask = (tid, _bypassWindow) => {
     const missing = checkMandatory(tid)
     if (missing.length > 0) { setMandatoryWarn(missing); return }
     const task = tasks.find(t=>t.id===tid)
     if (task.compliance && taskPhotoIndex(task).length === 0) { setPhotoWarn(true); return }
+    // COMPLETION WINDOW -- third guard, same shape as the two above. orgTz is the PROP (the
+    // module-level orgTimezone defaults to 'UTC' and would gate against the wrong day).
+    // completionWindow() returns null when orgTz is falsy, so an unresolved timezone means
+    // NO gate rather than a wrong one.
+    if (!_bypassWindow) {
+      const _win = completionWindow(task, orgTz ? orgToday(orgTz) : null)
+      if (_win) { setEarlyPrompt({ tid, ..._win }); setEarlyReason(''); return }
+    }
     const updatedComments = comment.trim() ? [...(task.comments||[]), user.name+': '+comment.trim()] : task.comments||[]
     const doSubmit = (extra={}) => {
-      update(tid, { status:'awaiting_review', completed_by:user.name, submitted_at:new Date().toISOString(), comments:updatedComments, ...extra })
-      setCelebration(true); setComment('')
+      update(tid, { status:'awaiting_review', completed_by:user.name, submitted_at:new Date().toISOString(), comments:updatedComments, ...(_bypassWindow && earlyReason.trim() ? { early_completion_reason: earlyReason.trim() } : {}), ...extra })
+      setCelebration(true); setComment(''); if(_bypassWindow) setEarlyReason('')
     }
     if (gpsEnabled === false || !navigator.geolocation) { doSubmit(); return }
     navigator.geolocation.getCurrentPosition(
@@ -4044,6 +4089,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   {sel.compliance&&taskPhotoIndex(sel).length===0?'📷 Add a checklist photo to submit':'✅ Submit'}
                 </button>
               )}
+              {/* COMPLETION WINDOW panel. Sibling of the Submit button DELIBERATELY: it lived
+                  in the checklist block in v3 and was unreachable on any task without a
+                  checklist -- the gate fired and nothing rendered. Keep it in this group,
+                  which renders for every task. */}
+              {earlyPrompt&&<div style={{background:'rgba(245,158,11,.10)',border:'1px solid rgba(245,158,11,.40)',borderRadius:6,padding:'12px',fontSize:13,marginTop:8}}><div style={{fontWeight:700,marginBottom:6}}>⏳ Early — this task opens {earlyPrompt.opensOn}</div><div style={{marginBottom:8}}>Its scheduled date is {earlyPrompt.cycleDate}. You can still submit, but please record why it is being done early.</div><textarea value={earlyReason} onChange={e=>setEarlyReason(e.target.value)} placeholder="Reason for early completion" style={{width:'100%',minHeight:60,padding:8,boxSizing:'border-box',fontSize:13}}/><div style={{marginTop:8,display:'flex',gap:8}}><button className="btn btn-primary" style={{flex:1,opacity:earlyReason.trim()?1:0.55}} disabled={!earlyReason.trim()} onClick={()=>{const _t=earlyPrompt.tid; setEarlyPrompt(null); submitTask(_t, true)}}>Submit anyway</button><button className="btn" style={{flex:1}} onClick={()=>{setEarlyPrompt(null); setEarlyReason('')}}>Cancel</button></div></div>}
               {sel.status==='awaiting_review'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Done — awaiting review</div>}
               {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Approved</div>}
             </div>
