@@ -5496,7 +5496,9 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     })().catch(()=>{})
   },[user?.id])
   const persistStatOrder = (arr)=>{
+    console.log('PSO called', 'configured=', isConfigured(), 'uid=', user?.id, 'len=', arr?.length)
     if(!isConfigured()||!user?.id) return
+    console.log('PSO passed guards, writing')
     supabase.from('user_preferences').upsert({
       user_id:user.id, key:'report_stat_order',
       value:arr.map(s=>s.id), updated_at:new Date().toISOString()
