@@ -5965,7 +5965,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
         <>
           <div className="section">
             <div className="section-title">Compliance Overview — {filteredPt.length} tasks</div>
-            <div style={{fontSize:10,color:'var(--t2)',marginBottom:6,marginTop:10}}>✋ Drag blocks to rearrange — order is reflected in the PDF report</div>
+            <div style={{fontSize:10,color:'var(--t2)',marginBottom:6,marginTop:10}}>✋ Drag to reorder — this is the order sections appear in the PDF</div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(110px,1fr))',gap:10}}
               onPointerDown={e=>{
                 const el=e.target.closest&&e.target.closest('[data-stat-id]'); if(!el) return
