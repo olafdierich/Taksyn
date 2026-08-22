@@ -14122,16 +14122,16 @@ function PeopleSubmissionsView({ user, setPage }) {
                 <div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>{dupMsg}</div>
               )}
               <button style={btn()} disabled={busyId===r.id}
-                onClick={()=>resolve(r,'create',null,true)}>Create a separate record anyway</button>
+                onClick={()=>resolve(r,'create',null,true)}>Add as a separate person</button>
             </div>
           )}
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             <button style={btn('var(--brand,#4F46E5)','#fff')} disabled={busyId===r.id}
-              onClick={()=>resolve(r,'create')}>Add as new</button>
-            <button style={btn()} disabled={busyId===r.id}
               onClick={()=>{ setOpenMatch(openMatch===r.id?null:r.id); setMQuery(''); setMResults([]); setMMsg('') }}>
               {openMatch===r.id ? 'Cancel' : 'Already on file'}
             </button>
+            <button style={btn()} disabled={busyId===r.id}
+              onClick={()=>resolve(r,'create')}>Add as new</button>
             <button style={btn()} disabled={busyId===r.id}
               onClick={()=>resolve(r,'dismiss')}>Not needed</button>
           </div>
