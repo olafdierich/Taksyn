@@ -2735,12 +2735,14 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null }) {
+function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null, orgOccurrences=null }) {
   const [filter, setFilter] = useState('all')
   useEffect(()=>{ try{ const _f=sessionStorage.getItem('taksyn-task-filter'); if(_f){ setFilter(_f); sessionStorage.removeItem('taksyn-task-filter') } }catch(e){} },[])
   const [selectedOrg, setSelectedOrg] = useState('all')
   const [orgSearch, setOrgSearch] = useState('')
   const [showArchive, setShowArchive] = useState(false)
+  // ARCHIVE-OCC-V1: outcome filter for the occurrence archive.
+  const [archiveOutcome, setArchiveOutcome] = useState('')
   const [archiveSearch, setArchiveSearch] = useState('')
   const [archiveDateFrom, setArchiveDateFrom] = useState('')
   const [archiveDateTo, setArchiveDateTo] = useState('')
@@ -4436,7 +4438,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <div className="anim">
               <div className="section">
                 <button className="back-btn" style={{marginBottom:10}} onClick={()=>setShowArchive(false)}><IC n="x" s={14}/> Back to Tasks</button>
-                <div className="section-title" style={{marginBottom:12}}>📦 Archive — Completed & Approved Tasks</div>
+                <div className="section-title" style={{marginBottom:12}}>📦 Archive — Task Occurrences</div>
                 <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Search & Filter</div>
                   <div style={{display:'flex',flexDirection:'column',gap:8}}>
@@ -4445,6 +4447,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       <select className="form-input" value={archiveCategory} onChange={e=>setArchiveCategory(e.target.value)} style={{fontSize:12,flex:1,minWidth:130}}>
                         <option value="">All Categories</option>
                         {Object.keys(DEPARTMENTS).map(k=><option key={k} value={k}>{k.replace('_',' ')}</option>)}
+                      </select>
+                      {/* ARCHIVE-OCC-V4: outcome filter. Default is ALL - a compliance
+                          archive should show misses by default, not hide them. */}
+                      <select className="form-input" value={archiveOutcome} onChange={e=>setArchiveOutcome(e.target.value)} style={{fontSize:12,flex:1,minWidth:130}}>
+                        <option value="">All Outcomes</option>
+                        <option value="completed">Completed only</option>
+                        <option value="missed">Missed only</option>
+                        <option value="not_applicable">Not applicable</option>
                       </select>
                       <select className="form-input" value={archiveWorker} onChange={e=>setArchiveWorker(e.target.value)} style={{fontSize:12,flex:1,minWidth:130}}>
                         <option value="">All Staff</option>
@@ -4514,10 +4524,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         </div>
                       )}
                     </div>
-                    {(archiveSearch||archiveCategory||archiveWorker||archiveDateFrom||archiveDateTo)&&(
+                    {(archiveSearch||archiveCategory||archiveWorker||archiveOutcome||archiveDateFrom||archiveDateTo)&&(
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:'var(--brand-lt)',borderRadius:6,border:'1px solid rgba(0,168,126,.2)'}}>
                         <span style={{fontSize:12,color:'var(--brand)',fontWeight:600}}>✓ Filters active</span>
-                        <button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveDateFrom('');setArchiveDateTo('');setCalPicking('from')}}>✕ Clear All</button>
+                        <button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveOutcome('');setArchiveDateFrom('');setArchiveDateTo('');setCalPicking('from')}}>✕ Clear All</button>
                       </div>
                     )}
                   </div>
@@ -4525,66 +4535,77 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 Results</div>
                   {(()=>{
-                    const archived=orgFiltered.filter(t=>{
-                      if(!['completed','approved','rejected'].includes(t.status)) return false
-                      if(archiveSearch&&!t.title?.toLowerCase().includes(archiveSearch.toLowerCase())&&!t.assigned_user_name?.toLowerCase().includes(archiveSearch.toLowerCase())) return false
-                      if(archiveCategory&&t.category!==archiveCategory) return false
-                      if(archiveWorker&&t.assigned_user_name!==archiveWorker) return false
-                      if(archiveDateFrom&&new Date(t.completed_at||t.created_at)<new Date(archiveDateFrom)) return false
-                      if(archiveDateTo&&new Date(t.completed_at||t.created_at)>new Date(archiveDateTo+'T23:59:59')) return false
+                    // ARCHIVE-OCC-V2: the archive is now a flat chronological list of
+                    // OCCURRENCES, not of task rows. A recurring task row resets in place
+                    // each cycle, so filtering `tasks` by current status showed only
+                    // whichever happened to sit in a completed state right now - Kemrose
+                    // had 40 occurrences and the archive displayed one. task_occurrences
+                    // is the history.
+                    //
+                    // MISSED occurrences appear alongside completed ones. A missed cycle
+                    // is a closed cycle: the outcome was failure, but it happened and it
+                    // belongs in the record. An archive showing only successes is a
+                    // highlight reel, not a compliance history.
+                    const _taskById = {}
+                    orgFiltered.forEach(t=>{ _taskById[t.id]=t })
+                    const archived=(Array.isArray(orgOccurrences)?orgOccurrences:[]).map(o=>{
+                      const t=_taskById[o.task_id]||{}
+                      return {
+                        ...o,
+                        _key: o.task_id+'|'+o.occurrence_date,
+                        title: t.title || '(task no longer exists)',
+                        category: t.category,
+                        assigned_user_name: o.completed_by_name || t.assigned_user_name,
+                        _task: t,
+                        _orphan: !t.id,
+                      }
+                    }).filter(o=>{
+                      if(archiveOutcome&&o.status!==archiveOutcome) return false
+                      if(archiveSearch&&!o.title?.toLowerCase().includes(archiveSearch.toLowerCase())&&!o.assigned_user_name?.toLowerCase().includes(archiveSearch.toLowerCase())) return false
+                      if(archiveCategory&&o.category!==archiveCategory) return false
+                      if(archiveWorker&&o.assigned_user_name!==archiveWorker) return false
+                      if(archiveDateFrom&&o.occurrence_date<archiveDateFrom) return false
+                      if(archiveDateTo&&o.occurrence_date>archiveDateTo) return false
                       return true
-                    }).sort((a,b)=>new Date(b.completed_at||b.created_at)-new Date(a.completed_at||a.created_at))
-                    const groups={}
-                    archived.forEach(t=>{ const dept=t.department||t.category||'General'; if(!groups[dept]) groups[dept]=[]; groups[dept].push(t) })
-                    if(archived.length===0) return <div className="empty"><div className="empty-icon">📦</div><div className="empty-text">No archived tasks match your filters</div></div>
+                    }).sort((a,b)=>b.occurrence_date.localeCompare(a.occurrence_date))
+                    if(archived.length===0) return <div className="empty"><div className="empty-icon">📦</div><div className="empty-text">No archived occurrences match your filters</div></div>
 
-                    // Same box structure as active tasks
-                    const approved = archived.filter(t=>t.status==='approved')
-                    const completed = archived.filter(t=>t.status==='completed')
-                    const rejected = archived.filter(t=>t.status==='rejected')
-                    const oneOffArchive = archived.filter(t=>isOneOff(t))
-                    const recurringArchive = archived.filter(t=>t.recurrence&&t.recurrence!==''&&t.recurrence!=='once')
-
-                    const ArchiveTaskRow = ({t}) => (
-                      <div onClick={()=>setSelected(t.id)} style={{padding:'10px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:'pointer',display:'flex',gap:12,alignItems:'flex-start'}}>
-                        <div style={{flex:1}}>
-                          <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{t.title}</div>
-                          <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
-                            <span>👤 {assigneeFull(t)||'—'}</span>
-                            {t.completed_at&&<span>✅ {fmtDateTime(t.completed_at)}</span>}
-                            {t.due_date&&<span>📅 {t.due_date}</span>}
-                            {t.recurrence&&t.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[t.recurrence]}</span>}
+                    // ARCHIVE-OCC-V3: flat chronological, newest first, badge per outcome.
+                    // Grouping into one-off vs recurring boxes was dropped: with one row
+                    // per dated cycle the list is a log, and a log reads chronologically.
+                    const OCC_BADGE = {
+                      completed:      { label:'COMPLETED',      bg:'rgba(16,185,129,.12)',  fg:'var(--green)' },
+                      missed:         { label:'MISSED',         bg:'rgba(239,68,68,.12)',   fg:'var(--red)' },
+                      not_applicable: { label:'NOT APPLICABLE', bg:'rgba(107,114,128,.12)', fg:'var(--t2)' },
+                    }
+                    const OccRow = ({o}) => {
+                      const badge = OCC_BADGE[o.status] || { label:(o.status||'?').toUpperCase(), bg:'var(--s3)', fg:'var(--t2)' }
+                      return (
+                        <div onClick={()=>{ if(!o._orphan) setSelected(o.task_id) }} style={{padding:'10px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:o._orphan?'default':'pointer',display:'flex',gap:12,alignItems:'flex-start',opacity:o._orphan?0.7:1}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{o.title}</div>
+                            <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
+                              <span>📅 {o.occurrence_date}</span>
+                              {o.completed_by_name&&<span>👤 {o.completed_by_name}</span>}
+                              {o.completed_at&&<span>✅ {fmtDateTime(o.completed_at)}</span>}
+                              {o.completed_late&&<span style={{color:'#F59E0B',fontWeight:600}}>⚠ Late</span>}
+                              {o.recurrence&&o.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[o.recurrence]||o.recurrence}</span>}
+                              {Array.isArray(o.evidence)&&o.evidence.length>0&&<span>📷 {o.evidence.length}</span>}
+                            </div>
                           </div>
+                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:badge.bg,color:badge.fg,whiteSpace:'nowrap'}}>{badge.label}</span>
                         </div>
-                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='approved'?'rgba(16,185,129,.12)':t.status==='rejected'?'rgba(239,68,68,.12)':'var(--s3)',color:t.status==='approved'?'var(--green)':t.status==='rejected'?'var(--red)':'var(--t2)'}}>{t.status.replace('_',' ').toUpperCase()}</span>
-                      </div>
-                    )
+                      )
+                    }
 
                     return (
                       <div>
-                        {/* Rejected box */}
-                        {rejected.length>0&&(
-                          <div style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:14}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--red)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>⚠️ Rejected ({rejected.length})</div>
-                            {rejected.map(t=><ArchiveTaskRow key={t.id} t={t}/>)}
-                          </div>
-                        )}
-
-                        {/* One-off tasks */}
-                        {oneOffArchive.filter(t=>t.status!=='rejected').length>0&&(
-                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:14}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>📋 One-off Tasks ({oneOffArchive.filter(t=>t.status!=='rejected').length})</div>
-                            {oneOffArchive.filter(t=>t.status!=='rejected').map(t=><ArchiveTaskRow key={t.id} t={t}/>)}
-                          </div>
-                        )}
-
-                        {/* Recurring tasks */}
-                        {recurringArchive.filter(t=>t.status!=='rejected').length>0&&(
-                          <div style={{background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:14}}>
-                            <div style={{fontSize:11,fontWeight:700,color:'var(--brand)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:12}}>🔁 Recurring Tasks ({recurringArchive.filter(t=>t.status!=='rejected').length})</div>
-                            {recurringArchive.filter(t=>t.status!=='rejected').map(t=><ArchiveTaskRow key={t.id} t={t}/>)}
-                          </div>
-                        )}
+                        <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>
+                          {archived.length} occurrence{archived.length===1?'':'s'}
+                          {' \u00b7 '}{archived.filter(o=>o.status==='completed').length} completed
+                          {' \u00b7 '}{archived.filter(o=>o.status==='missed').length} missed
+                        </div>
+                        {archived.map(o=><OccRow key={o._key} o={o}/>)}
                       </div>
                     )
                   })()}
