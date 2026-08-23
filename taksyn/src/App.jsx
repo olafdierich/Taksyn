@@ -2735,7 +2735,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null, orgOccurrences=null }) {
+function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null, orgOccurrences=null, orgMembers=null }) {
   const [filter, setFilter] = useState('all')
   useEffect(()=>{ try{ const _f=sessionStorage.getItem('taksyn-task-filter'); if(_f){ setFilter(_f); sessionStorage.removeItem('taksyn-task-filter') } }catch(e){} },[])
   const [selectedOrg, setSelectedOrg] = useState('all')
@@ -4458,7 +4458,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       </select>
                       <select className="form-input" value={archiveWorker} onChange={e=>setArchiveWorker(e.target.value)} style={{fontSize:12,flex:1,minWidth:130}}>
                         <option value="">All Staff</option>
-                        {[...new Set(orgFiltered.map(t=>t.assigned_user_name).filter(Boolean))].sort().map(n=><option key={n} value={n}>{n}</option>)}
+                        {[...new Set([].concat(...orgFiltered.map(t=>{
+                          if(t.assigned_user_name) return [t.assigned_user_name]
+                          return assigneeIds(t).map(id=>((orgMembers||[]).find(m=>m && m.id===id)||{}).name).filter(Boolean)
+                        })))].sort().map(n=><option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
                     <div style={{width:'100%'}}>
@@ -4546,6 +4549,16 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // is a closed cycle: the outcome was failure, but it happened and it
                     // belongs in the record. An archive showing only successes is a
                     // highlight reel, not a compliance history.
+                    // LIFT-ORGMEMBERS-V1: id -> name. PerformanceView's memberNameMap
+                    // goes the other way (name -> id); this is the inverse and is what
+                    // array-assigned tasks need. assigned_user_name is empty on exactly
+                    // the tasks with the most occurrence history.
+                    const _memberNameById = {}
+                    ;(orgMembers||[]).forEach(m=>{ if(m && m.id && m.name) _memberNameById[m.id]=m.name })
+                    // Ids with no member row (a departed staffer still in the array) are
+                    // skipped, never rendered as a raw uuid. Several assignees join with
+                    // a comma: showing only the first would misstate accountability.
+                    const _resolveAssignees = t => assigneeIds(t).map(id=>_memberNameById[id]).filter(Boolean)
                     const _taskById = {}
                     orgFiltered.forEach(t=>{ _taskById[t.id]=t })
                     const archived=(Array.isArray(orgOccurrences)?orgOccurrences:[]).map(o=>{
@@ -4555,7 +4568,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         _key: o.task_id+'|'+o.occurrence_date,
                         title: t.title || '(task no longer exists)',
                         category: t.category,
-                        assigned_user_name: o.completed_by_name || t.assigned_user_name,
+                        assigned_user_name: o.completed_by_name || t.assigned_user_name || (_resolveAssignees(t).join(', ') || undefined),
+                        _assigneeNames: o.completed_by_name ? [o.completed_by_name] : (t.assigned_user_name ? [t.assigned_user_name] : _resolveAssignees(t)),
                         _task: t,
                         _orphan: !t.id,
                       }
