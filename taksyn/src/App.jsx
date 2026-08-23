@@ -4438,7 +4438,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <div className="anim">
               <div className="section">
                 <button className="back-btn" style={{marginBottom:10}} onClick={()=>setShowArchive(false)}><IC n="x" s={14}/> Back to Tasks</button>
-                <div className="section-title" style={{marginBottom:12}}>📦 Archive — Completed & Approved Tasks</div>
+                <div className="section-title" style={{marginBottom:12}}>📦 Archive — Task Occurrences</div>
                 <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Search & Filter</div>
                   <div style={{display:'flex',flexDirection:'column',gap:8}}>
@@ -4568,7 +4568,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       if(archiveDateTo&&o.occurrence_date>archiveDateTo) return false
                       return true
                     }).sort((a,b)=>b.occurrence_date.localeCompare(a.occurrence_date))
-                    if(archived.length===0) return <div className="empty"><div className="empty-icon">\ud83d\udce6</div><div className="empty-text">No archived occurrences match your filters</div></div>
+                    if(archived.length===0) return <div className="empty"><div className="empty-icon">📦</div><div className="empty-text">No archived occurrences match your filters</div></div>
 
                     // ARCHIVE-OCC-V3: flat chronological, newest first, badge per outcome.
                     // Grouping into one-off vs recurring boxes was dropped: with one row
@@ -4585,12 +4585,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <div style={{flex:1}}>
                             <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{o.title}</div>
                             <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
-                              <span>\ud83d\udcc5 {o.occurrence_date}</span>
-                              {o.completed_by_name&&<span>\ud83d\udc64 {o.completed_by_name}</span>}
+                              <span>📅 {o.occurrence_date}</span>
+                              {o.completed_by_name&&<span>👤 {o.completed_by_name}</span>}
                               {o.completed_at&&<span>\u2705 {fmtDateTime(o.completed_at)}</span>}
                               {o.completed_late&&<span style={{color:'#F59E0B',fontWeight:600}}>\u26a0 Late</span>}
-                              {o.recurrence&&o.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>\ud83d\udd01 {RECURRENCE_LABELS[o.recurrence]||o.recurrence}</span>}
-                              {Array.isArray(o.evidence)&&o.evidence.length>0&&<span>\ud83d\udcf7 {o.evidence.length}</span>}
+                              {o.recurrence&&o.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[o.recurrence]||o.recurrence}</span>}
+                              {Array.isArray(o.evidence)&&o.evidence.length>0&&<span>📷 {o.evidence.length}</span>}
                             </div>
                           </div>
                           <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:badge.bg,color:badge.fg,whiteSpace:'nowrap'}}>{badge.label}</span>
