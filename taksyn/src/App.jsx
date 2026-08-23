@@ -16537,7 +16537,9 @@ function IncidentRegisterView({ user, setPage }) {
                   <td style={td}>{r.actions}</td>
                   <td style={td}>{r.closed||'—'}</td>
                   <td style={td}>{r.daysOpen??'—'}</td>
-                  <td style={{...td,fontWeight:700,color:r.target==='Met'?'var(--green)':'var(--red)'}}>{r.target}</td>
+                  {/* Colour from the shared config, not a two-way test:
+                      that made Overdue and Excluded both red. */}
+                  <td style={{...td,fontWeight:700,color:(Object.values(INC_TIMELINESS_CFG).find(c=>c.label===r.target)||{}).color||'var(--t2)'}}>{r.target}</td>
                   <td style={td}>{r.regulator}</td>
                 </tr> })}
             </tbody>
