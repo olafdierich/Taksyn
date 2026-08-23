@@ -14559,7 +14559,7 @@ function IncidentHubView({ user, setPage }) {
         const now = Date.now(); const od=(d)=>d&&new Date(d).getTime()<now
         const active = (data||[]).filter(i=>i.status!=='closed').map(i=>{
           const _t = incTimeliness(i)
-          return { ...i, _time:_t, _breached:_t==='breached', _late:_t!=='met' }
+          return { ...i, _time:_t, _breached:_t==='breached', _late:_t==='breached'||_t==='overdue' }
         })
         // Option B: breached first, then newest-first within each group.
         // Breached first, then overdue, then the rest -- newest-first within each.
@@ -16020,7 +16020,7 @@ function IncidentRegisterView({ user, setPage }) {
   // trend strip
   const bySev = [1,2,3,4,5].map(s=>({s,n:rows.filter(i=>i.severity===s).length}))
   const openCount = rows.filter(i=>i.status!=='closed').length
-  const breachedCount = rows.filter(i=>!targetMet(i)).length
+  const breachedCount = rows.filter(incIsLate).length
 
   const rowData = (i) => {
     const ac = actionCounts[i.id]||{open:0,total:0}
@@ -16659,6 +16659,13 @@ const incTimeliness = (i) => {
   // Milestones kept, but past the close date and still open.
   if (od(i.close_due_at)) return 'overdue'
   return 'met'
+}
+// An excluded report is neither met nor late -- it owed no target at
+// all. Consumers testing `!== 'met'` would otherwise count it as a
+// problem, which is how it came to read Breached in the register.
+const incIsLate = (i) => {
+  const t = incTimeliness(i)
+  return t === 'breached' || t === 'overdue'
 }
 const INC_TIMELINESS_CFG = {
   met:      { label: 'Met',      color: '#16A34A' },
@@ -17331,7 +17338,7 @@ function IncidentsAdminView({ user, setPage }) {
   // Thin wrapper on the shared rule. Returns true for BOTH late states, so
   // the detail pill still lights up on an overdue incident -- the caller
   // wanting the distinction should use incTimeliness directly.
-  const breached = (i) => incTimeliness(i) !== 'met'
+  const breached = (i) => incIsLate(i)
   // Which target was missed, and when. Returns the EARLIEST breach —
   // where several have been missed it is the one to act on, and usually
   // the reason the later ones slipped. Mirrors breached() exactly; if
