@@ -18634,6 +18634,10 @@ export default function App() {
   // read, so [] can arrive with nothing to catch - rendering it as a confident 0 would
   // assert 'nothing was missed' on a compliance surface without knowing it.
   const [orgOccurrences, setOrgOccurrences] = useState(null)
+  // LIFT-ORGMEMBERS-V1: same null/[] contract as orgOccurrences above.
+  // Was fetched twice -- once in Workforce, once in PerformanceView -- with
+  // two different shapes. One fetch, one shape, org_members.role only.
+  const [orgMembers, setOrgMembers] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
   const orgSLARef = useRef(DEFAULT_SLA)
@@ -19227,6 +19231,45 @@ export default function App() {
             setOrgOccurrences(data||[])
           }).catch(e=>{ console.warn('task_occurrences load threw:', e && e.message) })
       }
+      // LIFT-ORGMEMBERS-V1: one member fetch feeding Tasks, Performance and the
+      // task register. Role comes from org_members ONLY -- profiles.role drifts
+      // and legitimately holds super_admin, so it is not consulted even as a
+      // fallback. Deduped by user_id: a user with two membership rows in the
+      // same org must not appear twice in a staff dropdown. is_active is
+      // fetched but NOT filtered here -- a deactivated worker should not clutter
+      // a picker, but their history still belongs in the archive. Consumers decide.
+      if(isConfigured()&&user.org&&user.role!=='super_admin') {
+        ;(async()=>{
+          const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+          const orgId = orgRow?.id || user.org
+          const {data:members,error:memErr} = await supabase.from('org_members').select('user_id,role,industry,position,team_id,is_active').eq('org',orgId)
+          if(memErr){ console.warn('org_members load failed - member-backed surfaces will show unknown, not empty:', memErr.message); return }
+          if(!members?.length){ setOrgMembers([]); return }
+          const ids = [...new Set(members.map(m=>m.user_id))]
+          const {data:profiles,error:profErr} = await supabase.from('profiles')
+            .select('id,name,first_name,last_name,email,org,phone,position,additional_positions,roster,regularly_rostered')
+            .in('id', ids)
+          if(profErr){ console.warn('profiles load for org_members failed:', profErr.message); return }
+          const seen = new Set()
+          setOrgMembers(members.filter(m=>{ if(seen.has(m.user_id)) return false; seen.add(m.user_id); return true }).map(m=>{
+            const p = profiles?.find(p=>p.id===m.user_id) || {}
+            return {
+              ...p,
+              id: m.user_id,
+              name: p.name||'',
+              role: m.role||'worker',
+              org: p.org||user.org,
+              email: p.email||'',
+              industry: m.industry||'',
+              position: m.position||'',
+              team_id: m.team_id||null,
+              is_active: m.is_active!==false,
+              roster: Array.isArray(p.roster)?p.roster:[],
+              regularly_rostered: !!p.regularly_rostered,
+            }
+          }))
+        })().catch(e=>{ console.warn('org_members load threw:', e && e.message) })
+      }
       let reloadTimer = null
       const pendingIds = new Set()
       const channel = supabase
@@ -19395,7 +19438,7 @@ export default function App() {
   const _tasksOpen = _visTasks.some(t=>['pending','in_progress','overdue','rejected','awaiting_review'].includes(t.status))
   const tasksBlob = _tasksOverdue ? 'warn' : (_tasksOpen ? 'ok' : 'none')
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgOccurrences, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgOccurrences, orgMembers, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
