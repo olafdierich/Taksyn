@@ -16128,7 +16128,9 @@ function IncidentRegisterView({ user, setPage }) {
   const tNotifReq = tInc6m.filter(i=>i.external_notification_required)
   const tNotifDone= tNotifReq.filter(i=>i.notified_at)
   const tNotifRate= tNotifReq.length ? Math.round(tNotifDone.length/tNotifReq.length*100) : null
-  const tSevByMonth=[1,2,3,4,5].map(s=>({ s, counts:tMonths.map(m=>incidents.filter(i=>tInMonth(i,m.year,m.month)&&i.severity===s).length) }))
+  // Filters `incidents` directly rather than tInc6m, so it needs the
+  // exclusion filter of its own.
+  const tSevByMonth=[1,2,3,4,5].map(s=>({ s, counts:tMonths.map(m=>incidents.filter(i=>!i.excluded_at&&tInMonth(i,m.year,m.month)&&i.severity===s).length) }))
   const tPeriodLabel = tMonths[0].label+' – '+tMonths[5].label
 
   const exportTrendPDF = () => {
@@ -16643,6 +16645,10 @@ const INC_EVENT_LABEL = {
 const incTimeliness = (i) => {
   const now = Date.now()
   const od = (d) => d && new Date(d).getTime() < now
+  // An excluded report has no timeliness. FIRST, before the closed
+  // branch: exclusion closes the incident, and that branch would
+  // otherwise compare closed_at against a target it never owed.
+  if (i.excluded_at) return 'excluded'
   if (i.status === 'closed') {
     return (i.close_due_at && i.closed_at && new Date(i.closed_at) > new Date(i.close_due_at))
       ? 'breached' : 'met'
@@ -16658,6 +16664,7 @@ const INC_TIMELINESS_CFG = {
   met:      { label: 'Met',      color: '#16A34A' },
   overdue:  { label: 'Overdue',  color: '#EA580C' },
   breached: { label: 'Breached', color: '#EF4444' },
+  excluded: { label: 'Excluded', color: '#6B7280' },
 }
 const INC_FINDING_LABEL = {
   collect_statements:'Collect statements',
