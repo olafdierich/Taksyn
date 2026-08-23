@@ -4587,8 +4587,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
                               <span>📅 {o.occurrence_date}</span>
                               {o.completed_by_name&&<span>👤 {o.completed_by_name}</span>}
-                              {o.completed_at&&<span>\u2705 {fmtDateTime(o.completed_at)}</span>}
-                              {o.completed_late&&<span style={{color:'#F59E0B',fontWeight:600}}>\u26a0 Late</span>}
+                              {o.completed_at&&<span>✅ {fmtDateTime(o.completed_at)}</span>}
+                              {o.completed_late&&<span style={{color:'#F59E0B',fontWeight:600}}>⚠ Late</span>}
                               {o.recurrence&&o.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[o.recurrence]||o.recurrence}</span>}
                               {Array.isArray(o.evidence)&&o.evidence.length>0&&<span>📷 {o.evidence.length}</span>}
                             </div>
