@@ -11415,40 +11415,21 @@ function ProjectsView({ user }) {
   )
 }
 
-function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null }) {
+function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, orgMembers: _orgMembersProp=null }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
   const [selectedTeam, setSelectedTeam] = useState('all')
   const [nameQuery, setNameQuery] = useState('')
-  const [orgMembers, setOrgMembers] = useState([]) // [{id, name, role}]
+  // LIFT-ORGMEMBERS-V1: reads the App-level prop. Was a local fetch with its own
+  // shape and a profiles.role fallback; see the note at the App-level fetch.
+  // null until loaded, collapsed to [] here so load-time rendering is unchanged.
+  const orgMembers = _orgMembersProp || []
   const [teamsList, setTeamsList] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
   // LIFT-OCCURRENCES-V1: fetch moved to App level. null until loaded - see note there.
   const occurrences = orgOccurrences || []
 
-  useEffect(()=>{
-    if(!isConfigured()||!user.org) return
-    ;(async()=>{
-      const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
-      const orgId = orgRow?.id || user.org
-      const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
-      if(members?.length) {
-        const {data:profiles} = await supabase.from('profiles').select('id,name,role,roster,regularly_rostered').in('id',members.map(m=>m.user_id))
-        if(profiles) setOrgMembers(profiles.map(p=>({
-          id: p.id,
-          name: p.name||'',
-          role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker',
-          roster: Array.isArray(p.roster)?p.roster:[],
-          regularly_rostered: !!p.regularly_rostered
-        })))
-      } else {
-        // Fallback: query profiles directly by org name
-        const {data:fallback} = await supabase.from('profiles').select('id,name,role,roster,regularly_rostered').eq('org',user.org)
-        if(fallback?.length) setOrgMembers(fallback.map(p=>({id:p.id,name:p.name||'',role:p.role||'worker',roster:Array.isArray(p.roster)?p.roster:[],regularly_rostered:!!p.regularly_rostered})))
-      }
-    })().catch(()=>{})
-  },[user.org])
 
   const getRange = () => {
     const now = new Date()
