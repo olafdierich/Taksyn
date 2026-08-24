@@ -3722,7 +3722,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     return u?.position || ''
   }
   const _who = (id, name) => { const p = _posOf(id, name); return p ? name+' ('+p+')' : name }
-  const myTime = workerTimes.find(r=>r.user_id===user.id) || null
+  // WORKER-TIMES-CYCLE-V1: task_worker_times is keyed on task_id with no cycle
+  // column and is never reset, so a row written in a previous cycle is still the
+  // row read today. Left unfiltered it sets both started_at and completed_at on a
+  // fresh cycle, which hides BOTH the Time In and Time Out buttons -- a worker
+  // locked out of clocking in entirely.
+  // A row with no started_at is KEPT: it cannot be dated, and the likeliest reading
+  // is a clock-in in progress. Dropping it would hand the worker a second Time In.
+  const currentWorkerTimes = workerTimes.filter(r=>!r.started_at || photoInCurrentCycle(sel, { ts:r.started_at }, orgTz))
+  const myTime = currentWorkerTimes.find(r=>r.user_id===user.id) || null
   const _isMySelfTask = !!sel && !!sel.created_by_id && sel.created_by_id===user.id && sel.assigned_user_id===user.id
   const amAssigned = !!sel && user.role!=='super_admin' && (user.role!=='client_admin' || _isMySelfTask) && ((Array.isArray(sel.assigned_user_ids)&&sel.assigned_user_ids.includes(user.id)) || sel.assigned_user_id===user.id || (sel.assigned_user_name&&sel.assigned_user_name.toLowerCase()===user.name?.toLowerCase()) || (sel.team_id&&userTeamIds.includes(sel.team_id)))
   // Gentle worker reminders: Time In on open, Time Out+Submit when the checklist is finished.
@@ -4226,11 +4234,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
             </div>
           )}
-          {(sel.created_by===user.name||user.role==='client_admin'||user.role==='super_admin')&&workerTimes.length>0&&(
+          {(sel.created_by===user.name||user.role==='client_admin'||user.role==='super_admin')&&currentWorkerTimes.length>0&&(
             <div style={{marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:6}}>Per-worker times</div>
               <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                {workerTimes.slice().sort((a,b)=>(a.started_at||'').localeCompare(b.started_at||'')).map(w=>(
+                {currentWorkerTimes.slice().sort((a,b)=>(a.started_at||'').localeCompare(b.started_at||'')).map(w=>(
                   <div key={w.user_id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:12,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'8px 10px'}}>
                     <span style={{fontWeight:700,minWidth:120}}>{w.user_name||'Worker'}{sel.lead_user_id===w.user_id&&<span style={{color:'var(--brand)'}}> ★</span>}</span>
                     <span style={{color:'var(--green)'}}>In: {fmtDateTime(w.started_at)}</span>
