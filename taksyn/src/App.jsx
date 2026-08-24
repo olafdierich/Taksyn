@@ -2735,7 +2735,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null, orgOccurrences=null }) {
+function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null, orgOccurrences=null, orgMembers=null }) {
   const [filter, setFilter] = useState('all')
   useEffect(()=>{ try{ const _f=sessionStorage.getItem('taksyn-task-filter'); if(_f){ setFilter(_f); sessionStorage.removeItem('taksyn-task-filter') } }catch(e){} },[])
   const [selectedOrg, setSelectedOrg] = useState('all')
@@ -4458,7 +4458,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       </select>
                       <select className="form-input" value={archiveWorker} onChange={e=>setArchiveWorker(e.target.value)} style={{fontSize:12,flex:1,minWidth:130}}>
                         <option value="">All Staff</option>
-                        {[...new Set(orgFiltered.map(t=>t.assigned_user_name).filter(Boolean))].sort().map(n=><option key={n} value={n}>{n}</option>)}
+                        {[...new Set([].concat(...orgFiltered.map(t=>{
+                          if(t.assigned_user_name) return [t.assigned_user_name]
+                          return assigneeIds(t).map(id=>((orgMembers||[]).find(m=>m && m.id===id)||{}).name).filter(Boolean)
+                        })))].sort().map(n=><option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
                     <div style={{width:'100%'}}>
@@ -4546,6 +4549,16 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // is a closed cycle: the outcome was failure, but it happened and it
                     // belongs in the record. An archive showing only successes is a
                     // highlight reel, not a compliance history.
+                    // LIFT-ORGMEMBERS-V1: id -> name. PerformanceView's memberNameMap
+                    // goes the other way (name -> id); this is the inverse and is what
+                    // array-assigned tasks need. assigned_user_name is empty on exactly
+                    // the tasks with the most occurrence history.
+                    const _memberNameById = {}
+                    ;(orgMembers||[]).forEach(m=>{ if(m && m.id && m.name) _memberNameById[m.id]=m.name })
+                    // Ids with no member row (a departed staffer still in the array) are
+                    // skipped, never rendered as a raw uuid. Several assignees join with
+                    // a comma: showing only the first would misstate accountability.
+                    const _resolveAssignees = t => assigneeIds(t).map(id=>_memberNameById[id]).filter(Boolean)
                     const _taskById = {}
                     orgFiltered.forEach(t=>{ _taskById[t.id]=t })
                     const archived=(Array.isArray(orgOccurrences)?orgOccurrences:[]).map(o=>{
@@ -4555,7 +4568,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         _key: o.task_id+'|'+o.occurrence_date,
                         title: t.title || '(task no longer exists)',
                         category: t.category,
-                        assigned_user_name: o.completed_by_name || t.assigned_user_name,
+                        assigned_user_name: o.completed_by_name || t.assigned_user_name || (_resolveAssignees(t).join(', ') || undefined),
+                        _assigneeNames: o.completed_by_name ? [o.completed_by_name] : (t.assigned_user_name ? [t.assigned_user_name] : _resolveAssignees(t)),
                         _task: t,
                         _orphan: !t.id,
                       }
@@ -4586,7 +4600,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{o.title}</div>
                             <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
                               <span>📅 {o.occurrence_date}</span>
-                              {o.completed_by_name&&<span>👤 {o.completed_by_name}</span>}
+                              {o.assigned_user_name&&<span>👤 {o.assigned_user_name}</span>}
                               {o.completed_at&&<span>✅ {fmtDateTime(o.completed_at)}</span>}
                               {o.completed_late&&<span style={{color:'#F59E0B',fontWeight:600}}>⚠ Late</span>}
                               {o.recurrence&&o.recurrence!=='once'&&<span style={{color:'var(--brand)'}}>🔁 {RECURRENCE_LABELS[o.recurrence]||o.recurrence}</span>}
@@ -11415,40 +11429,21 @@ function ProjectsView({ user }) {
   )
 }
 
-function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null }) {
+function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, orgMembers: _orgMembersProp=null }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
   const [selectedTeam, setSelectedTeam] = useState('all')
   const [nameQuery, setNameQuery] = useState('')
-  const [orgMembers, setOrgMembers] = useState([]) // [{id, name, role}]
+  // LIFT-ORGMEMBERS-V1: reads the App-level prop. Was a local fetch with its own
+  // shape and a profiles.role fallback; see the note at the App-level fetch.
+  // null until loaded, collapsed to [] here so load-time rendering is unchanged.
+  const orgMembers = _orgMembersProp || []
   const [teamsList, setTeamsList] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   useEffect(()=>{ if(!isConfigured()||!user.org) return; (async()=>{ const {data:orgRow}=await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle(); const orgId=orgRow?.id||user.org; const {data:tms}=await supabase.from('teams').select('id,name').eq('org',orgId); if(tms){ setTeamsList(tms); const ids=tms.map(t=>t.id); if(ids.length){ const {data:mem}=await supabase.from('team_members').select('team_id,user_id').in('team_id',ids); if(mem) setTeamMembers(mem) } } })().catch(()=>{}) },[user.org])
   // LIFT-OCCURRENCES-V1: fetch moved to App level. null until loaded - see note there.
   const occurrences = orgOccurrences || []
 
-  useEffect(()=>{
-    if(!isConfigured()||!user.org) return
-    ;(async()=>{
-      const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
-      const orgId = orgRow?.id || user.org
-      const {data:members} = await supabase.from('org_members').select('user_id,role').eq('org',orgId)
-      if(members?.length) {
-        const {data:profiles} = await supabase.from('profiles').select('id,name,role,roster,regularly_rostered').in('id',members.map(m=>m.user_id))
-        if(profiles) setOrgMembers(profiles.map(p=>({
-          id: p.id,
-          name: p.name||'',
-          role: members.find(m=>m.user_id===p.id)?.role || p.role || 'worker',
-          roster: Array.isArray(p.roster)?p.roster:[],
-          regularly_rostered: !!p.regularly_rostered
-        })))
-      } else {
-        // Fallback: query profiles directly by org name
-        const {data:fallback} = await supabase.from('profiles').select('id,name,role,roster,regularly_rostered').eq('org',user.org)
-        if(fallback?.length) setOrgMembers(fallback.map(p=>({id:p.id,name:p.name||'',role:p.role||'worker',roster:Array.isArray(p.roster)?p.roster:[],regularly_rostered:!!p.regularly_rostered})))
-      }
-    })().catch(()=>{})
-  },[user.org])
 
   const getRange = () => {
     const now = new Date()
@@ -18634,6 +18629,10 @@ export default function App() {
   // read, so [] can arrive with nothing to catch - rendering it as a confident 0 would
   // assert 'nothing was missed' on a compliance surface without knowing it.
   const [orgOccurrences, setOrgOccurrences] = useState(null)
+  // LIFT-ORGMEMBERS-V1: same null/[] contract as orgOccurrences above.
+  // Was fetched twice -- once in Workforce, once in PerformanceView -- with
+  // two different shapes. One fetch, one shape, org_members.role only.
+  const [orgMembers, setOrgMembers] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [orgSLA, setOrgSLA] = useState(DEFAULT_SLA)
   const orgSLARef = useRef(DEFAULT_SLA)
@@ -19227,6 +19226,45 @@ export default function App() {
             setOrgOccurrences(data||[])
           }).catch(e=>{ console.warn('task_occurrences load threw:', e && e.message) })
       }
+      // LIFT-ORGMEMBERS-V1: one member fetch feeding Tasks, Performance and the
+      // task register. Role comes from org_members ONLY -- profiles.role drifts
+      // and legitimately holds super_admin, so it is not consulted even as a
+      // fallback. Deduped by user_id: a user with two membership rows in the
+      // same org must not appear twice in a staff dropdown. is_active is
+      // fetched but NOT filtered here -- a deactivated worker should not clutter
+      // a picker, but their history still belongs in the archive. Consumers decide.
+      if(isConfigured()&&user.org&&user.role!=='super_admin') {
+        ;(async()=>{
+          const {data:orgRow} = await supabase.from('organisations').select('id').eq('name',user.org).maybeSingle()
+          const orgId = orgRow?.id || user.org
+          const {data:members,error:memErr} = await supabase.from('org_members').select('user_id,role,industry,position,team_id,is_active').eq('org',orgId)
+          if(memErr){ console.warn('org_members load failed - member-backed surfaces will show unknown, not empty:', memErr.message); return }
+          if(!members?.length){ setOrgMembers([]); return }
+          const ids = [...new Set(members.map(m=>m.user_id))]
+          const {data:profiles,error:profErr} = await supabase.from('profiles')
+            .select('id,name,first_name,last_name,email,org,phone,position,additional_positions,roster,regularly_rostered')
+            .in('id', ids)
+          if(profErr){ console.warn('profiles load for org_members failed:', profErr.message); return }
+          const seen = new Set()
+          setOrgMembers(members.filter(m=>{ if(seen.has(m.user_id)) return false; seen.add(m.user_id); return true }).map(m=>{
+            const p = profiles?.find(p=>p.id===m.user_id) || {}
+            return {
+              ...p,
+              id: m.user_id,
+              name: p.name||'',
+              role: m.role||'worker',
+              org: p.org||user.org,
+              email: p.email||'',
+              industry: m.industry||'',
+              position: m.position||'',
+              team_id: m.team_id||null,
+              is_active: m.is_active!==false,
+              roster: Array.isArray(p.roster)?p.roster:[],
+              regularly_rostered: !!p.regularly_rostered,
+            }
+          }))
+        })().catch(e=>{ console.warn('org_members load threw:', e && e.message) })
+      }
       let reloadTimer = null
       const pendingIds = new Set()
       const channel = supabase
@@ -19395,7 +19433,7 @@ export default function App() {
   const _tasksOpen = _visTasks.some(t=>['pending','in_progress','overdue','rejected','awaiting_review'].includes(t.status))
   const tasksBlob = _tasksOverdue ? 'warn' : (_tasksOpen ? 'ok' : 'none')
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgOccurrences, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
+  const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgOccurrences, orgMembers, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
