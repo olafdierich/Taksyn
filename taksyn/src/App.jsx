@@ -2743,6 +2743,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [showArchive, setShowArchive] = useState(false)
   // ARCHIVE-OCC-V1: outcome filter for the occurrence archive.
   const [archiveOutcome, setArchiveOutcome] = useState('')
+  // TASK-REGISTER-V1: collapsed by default -- the register is a reference surface,
+  // not the primary view.
+  const [showRegister, setShowRegister] = useState(false)
   const [archiveSearch, setArchiveSearch] = useState('')
   const [archiveDateFrom, setArchiveDateFrom] = useState('')
   const [archiveDateTo, setArchiveDateTo] = useState('')
@@ -2930,6 +2933,26 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   const visible = visibleTasks(tasks, user, leaveRecords, userTeamIds)
   // Super admin: filter by selected org
+  // TASK-REGISTER-V1: id -> name and id -> role at component scope, from the
+  // lifted orgMembers prop. org_members.role only.
+  const _regNameById = {}
+  const _regRoleById = {}
+  ;(orgMembers||[]).forEach(m=>{ if(m && m.id){ if(m.name) _regNameById[m.id]=m.name; _regRoleById[m.id]=m.role||'worker' } })
+  // Each tier sees its own level and below.
+  const REGISTER_TIERS = { supervisor:['worker'], manager:['worker','supervisor'],
+    client_admin:['worker','supervisor','manager','client_admin'] }
+  const _regVisibleRoles = REGISTER_TIERS[user.role] || null
+  // Walks forward from the ORIGINAL due_date to the next cycle at or after today.
+  // due_date never advances on a recurring row, so this cannot be read directly.
+  const _regNextDate = t => {
+    if(!t || !t.recurrence || t.recurrence==='once' || !t.due_date) return null
+    const _t = new Date().toISOString().slice(0,10)
+    let cur = String(t.due_date).slice(0,10), guard = 0
+    while(cur && cur < _t && guard < RECUR_WALK_GUARD){
+      cur = nextOccurrenceDate(cur, t.recurrence); guard++
+    }
+    return (guard >= RECUR_WALK_GUARD) ? null : cur
+  }
   const orgFiltered = user.role==='super_admin' && selectedOrg!=='all'
     ? visible.filter(t=>t.org===selectedOrg)
     : visible
@@ -3603,6 +3626,66 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // an exemption to someone already blocked, never grant rights canApprove refused.
   //
   // CLIENT-SIDE ONLY — hides the control, does not stop a crafted request. Needs RLS.
+  // TASK-REGISTER-V1: rendered below the task list. Additive -- visibleTasks is
+  // untouched, so every role keeps the list it has today.
+  const renderTaskRegister = () => {
+    if(!_regVisibleRoles) return null
+    const from30 = new Date(Date.now()-30*86400000).toISOString().slice(0,10)
+    const occs = Array.isArray(orgOccurrences) ? orgOccurrences : []
+    const missedByTask = {}
+    occs.forEach(o=>{ if(o.status==='missed' && o.occurrence_date>=from30){
+      missedByTask[o.task_id] = (missedByTask[o.task_id]||0)+1 } })
+    const rows = orgFiltered.map(t=>{
+      const ids = assigneeIds(t)
+      const names = ids.map(id=>_regNameById[id]).filter(Boolean)
+      const display = names.length ? names.join(', ') : (t.assigned_user_name || '')
+      // Unassigned tasks are ALWAYS in scope: an unassigned daily check racking up
+      // misses is exactly what the register exists to surface.
+      const inScope = ids.length===0 ? true
+        : ids.some(id=>_regVisibleRoles.includes(_regRoleById[id]||'worker'))
+      return { t, display, inScope, missed: missedByTask[t.id]||0, next: _regNextDate(t) }
+    }).filter(r=>r.inScope)
+      .sort((a,b)=>(b.missed-a.missed) || String(a.t.title||'').localeCompare(String(b.t.title||'')))
+    const th = { textAlign:'left', padding:'8px 6px', fontSize:10, fontWeight:700,
+      color:'var(--t2)', textTransform:'uppercase', letterSpacing:'.6px',
+      borderBottom:'1px solid var(--border)', whiteSpace:'nowrap' }
+    const td = { padding:'9px 6px', fontSize:12, borderBottom:'1px solid var(--border)',
+      verticalAlign:'top' }
+    return (
+      <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginTop:14}}>
+        <div onClick={()=>setShowRegister(v=>!v)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>
+            📋 Task Register · {rows.length}
+          </div>
+          <span style={{fontSize:12,color:'var(--t2)'}}>{showRegister?'▾':'▸'}</span>
+        </div>
+        {showRegister && (rows.length===0
+          ? <div className="empty" style={{marginTop:10}}><div className="empty-text">No tasks in scope</div></div>
+          : <div style={{overflowX:'auto',marginTop:10}}>
+            <table style={{width:'100%',borderCollapse:'collapse',minWidth:680}}>
+              <thead><tr>
+                <th style={th}>Task</th><th style={th}>Cycle</th><th style={th}>Created</th>
+                <th style={th}>Next date</th><th style={th}>Assigned</th>
+                <th style={th}>Approver</th><th style={{...th,textAlign:'right'}}>Missed</th>
+              </tr></thead>
+              <tbody>
+                {rows.map(r=>(
+                  <tr key={r.t.id} onClick={()=>setSelected(r.t.id)} style={{cursor:'pointer'}}>
+                    <td style={td}>{r.t.title}</td>
+                    <td style={{...td,color:'var(--t2)'}}>{RECURRENCE_LABELS[r.t.recurrence]||r.t.recurrence||'—'}</td>
+                    <td style={{...td,color:'var(--t2)'}}>{String(r.t.created_at||'').slice(0,10)||'—'}</td>
+                    <td style={td}>{r.next||'—'}</td>
+                    <td style={td}>{r.display||'—'}</td>
+                    <td style={{...td,color:'var(--t2)'}}>{r.t.approver_name||'—'}</td>
+                    <td style={{...td,textAlign:'right',fontWeight:r.missed?700:400,color:r.missed?'#DC2626':'var(--t2)'}}>{r.missed}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>)}
+      </div>
+    )
+  }
   const canDeleteTask = (t) => canApprove && !!t && (t.created_by_id === user.id || hasAccess(user.role, 4))
   // Each role can only assign to roles below them
   const assignableRoles = user.role==='client_admin' ? ['manager','supervisor','worker']
@@ -4887,6 +4970,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       </div>
                     )
                   })()}
+            {/* TASK-REGISTER-V1: last child of the task-list branch, never the archive. */}
+            {renderTaskRegister()}
             </div>
           )}
         </div>
