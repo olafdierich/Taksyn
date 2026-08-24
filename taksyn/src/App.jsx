@@ -4333,7 +4333,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           </div>
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
-                        {[...(s.photos||[]),...(s.photo?[s.photo]:[])].map((ph,pi)=><EvidenceThumb key={pi} entry={ph} className="cl-photo-thumb" containerStyle={{marginTop:4,marginRight:6,display:'inline-block',verticalAlign:'top',overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>)}
+                        {/* STALE-PHOTO-V3: current cycle only. A prior-cycle photo on the
+                            item reads as "already done" while the Evidence panel says none. */}
+                        {[...(s.photos||[]),...(s.photo?[s.photo]:[])].filter(ph=>photoInCurrentCycle(sel,ph,orgTz)).map((ph,pi)=><EvidenceThumb key={pi} entry={ph} className="cl-photo-thumb" containerStyle={{marginTop:4,marginRight:6,display:'inline-block',verticalAlign:'top',overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>)}
                         {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><EvidenceDocLink entry={at}/> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
                         {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
@@ -4347,10 +4349,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <div className="cl-actions">
                             {canAct&&<button className="cl-action-btn" style={{color:'#10B981',borderColor:'rgba(16,185,129,.3)',fontWeight:600}} onClick={()=>{ setClMarkOpen({taskId:sel.id,idx,itemId,label:s.text}); setClMarkNote('') }}>✓ Mark done</button>}
                             <button className="cl-action-btn" onClick={()=>{setClNoteOpen({taskId:sel.id,idx});setClNoteText(s.note||'')}}>{s.note?'✏️ Edit Note':'+ Note'}</button>
-                            {s.requirePhoto&&((s.photos||[]).length+(s.photo?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
+                            {/* STALE-PHOTO-V3: cap counts CURRENT-cycle photos. Counting stale
+                                ones would hide the camera and block compliance outright. */}
+                            {s.requirePhoto&&(((s.photos||[]).filter(ph=>photoInCurrentCycle(sel,ph,orgTz)).length)+((s.photo&&photoInCurrentCycle(sel,s.photo,orgTz))?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
                               <EvidenceCameraButton taskId={sel.id} idx={idx} label={s.text} onCapture={(url)=>addSubPhoto(sel.id,idx,url)}/>
                             )}
-                            {canAct&&s.requirePhoto&&((s.photos||[]).length+(s.photo?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
+                            {canAct&&s.requirePhoto&&(((s.photos||[]).filter(ph=>photoInCurrentCycle(sel,ph,orgTz)).length)+((s.photo&&photoInCurrentCycle(sel,s.photo,orgTz))?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
                               <AttachDocButton onAttach={(url,name)=>addSubDoc(sel.id,idx,url,name)}/>
                             )}
                           </div>
