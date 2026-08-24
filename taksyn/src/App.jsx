@@ -4415,7 +4415,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             {priorPhotos.length>0 && (
               <div style={{marginTop:10,paddingTop:8,borderTop:'1px dashed var(--border)'}}>
                 <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6}}>
-                  Previous cycles ({priorPhotos.length}) \u2014 does not count toward this cycle
+                  Previous cycles ({priorPhotos.length}) — does not count toward this cycle
                 </div>
                 <div className="ev-thumbs" style={{opacity:.45}}>
                   {priorPhotos.map((p,i)=>{
