@@ -566,6 +566,26 @@ const taskPhotoIndex = (task) => {
   parseSafe(task?.evidence).forEach(e => { if (e) out.push({ ...norm(e), source:'evidence', label:'' }) })
   return out.filter(p => p.url || p.path)
 }
+// STALE-PHOTO-V1: is this photo from the CURRENT cycle?
+// Checklist photos live in subtasks[], which the cycle reset does not clear, so a
+// photo from a previous cycle survives and would otherwise satisfy today's compliance
+// requirement. The occurrence upsert already filters this way; the gate and the
+// display did not.
+// Grace-aware via currentOccurrenceDate, so a photo taken during the grace window
+// after a cycle closes still counts for that cycle. A photo with no ts cannot be
+// dated and is treated as NOT current -- undateable evidence should not satisfy a
+// compliance gate. One-off tasks have no cycle, so every photo counts.
+const photoInCurrentCycle = (task, p, tz) => {
+  if (!task || !isRecurring(task)) return true
+  if (!p || !p.ts) return false
+  const today = orgToday(tz)
+  const cycleStart = currentOccurrenceDate(task.due_date, task.recurrence, today)
+  if (!cycleStart) return true
+  const day = orgDayOf(p.ts, tz)
+  return !!day && day >= cycleStart
+}
+// Photos that count RIGHT NOW: current cycle only.
+const currentCyclePhotos = (task, tz) => taskPhotoIndex(task).filter(p => photoInCurrentCycle(task, p, tz))
 
 // Renders one evidence entry, supporting BOTH shapes:
 //   - `url` (base64 / legacy / http) → render directly (unchanged behaviour)
@@ -3409,7 +3429,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const missing = checkMandatory(tid)
     if (missing.length > 0) { setMandatoryWarn(missing); return }
     const task = tasks.find(t=>t.id===tid)
-    if (task.compliance && taskPhotoIndex(task).length === 0) { setPhotoWarn(true); return }
+    // STALE-PHOTO-V1: current-cycle photos only. A photo from a previous cycle
+    // survives the reset in subtasks[] and used to satisfy this gate.
+    if (task.compliance && currentCyclePhotos(task, orgTz).length === 0) { setPhotoWarn(true); return }
     // COMPLETION WINDOW -- third guard, same shape as the two above. orgTz is the PROP (the
     // module-level orgTimezone defaults to 'UTC' and would gate against the wrong day).
     // completionWindow() returns null when orgTz is falsy, so an unresolved timezone means
@@ -4311,7 +4333,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           </div>
                         )}
                         {s.note&&<div className="cl-note">💬 {s.note}</div>}
-                        {[...(s.photos||[]),...(s.photo?[s.photo]:[])].map((ph,pi)=><EvidenceThumb key={pi} entry={ph} className="cl-photo-thumb" containerStyle={{marginTop:4,marginRight:6,display:'inline-block',verticalAlign:'top',overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>)}
+                        {/* STALE-PHOTO-V3: current cycle only. A prior-cycle photo on the
+                            item reads as "already done" while the Evidence panel says none. */}
+                        {[...(s.photos||[]),...(s.photo?[s.photo]:[])].filter(ph=>photoInCurrentCycle(sel,ph,orgTz)).map((ph,pi)=><EvidenceThumb key={pi} entry={ph} className="cl-photo-thumb" containerStyle={{marginTop:4,marginRight:6,display:'inline-block',verticalAlign:'top',overflow:'hidden'}} imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>)}
                         {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><EvidenceDocLink entry={at}/> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
                         {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
@@ -4325,10 +4349,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <div className="cl-actions">
                             {canAct&&<button className="cl-action-btn" style={{color:'#10B981',borderColor:'rgba(16,185,129,.3)',fontWeight:600}} onClick={()=>{ setClMarkOpen({taskId:sel.id,idx,itemId,label:s.text}); setClMarkNote('') }}>✓ Mark done</button>}
                             <button className="cl-action-btn" onClick={()=>{setClNoteOpen({taskId:sel.id,idx});setClNoteText(s.note||'')}}>{s.note?'✏️ Edit Note':'+ Note'}</button>
-                            {s.requirePhoto&&((s.photos||[]).length+(s.photo?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
+                            {/* STALE-PHOTO-V3: cap counts CURRENT-cycle photos. Counting stale
+                                ones would hide the camera and block compliance outright. */}
+                            {s.requirePhoto&&(((s.photos||[]).filter(ph=>photoInCurrentCycle(sel,ph,orgTz)).length)+((s.photo&&photoInCurrentCycle(sel,s.photo,orgTz))?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
                               <EvidenceCameraButton taskId={sel.id} idx={idx} label={s.text} onCapture={(url)=>addSubPhoto(sel.id,idx,url)}/>
                             )}
-                            {canAct&&s.requirePhoto&&((s.photos||[]).length+(s.photo?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
+                            {canAct&&s.requirePhoto&&(((s.photos||[]).filter(ph=>photoInCurrentCycle(sel,ph,orgTz)).length)+((s.photo&&photoInCurrentCycle(sel,s.photo,orgTz))?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
                               <AttachDocButton onAttach={(url,name)=>addSubDoc(sel.id,idx,url,name)}/>
                             )}
                           </div>
@@ -4349,7 +4375,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               </div>
             )
           })()}
-          {(()=>{ const photos = taskPhotoIndex(sel); return (
+          {(()=>{
+            // STALE-PHOTO-V1: split current from prior cycles. Prior-cycle photos are
+            // shown dimmed and labelled rather than hidden -- vanishing evidence looks
+            // like data loss. They do not count toward the header total.
+            const _allPhotos = taskPhotoIndex(sel)
+            const photos = _allPhotos.filter(p=>photoInCurrentCycle(sel, p, orgTz))
+            const priorPhotos = _allPhotos.filter(p=>!photoInCurrentCycle(sel, p, orgTz))
+            return (
           <div className="section">
             <div className="section-title" style={{marginBottom:photos.length>0?8:0}}>
               Evidence {photos.length>0?'('+photos.length+')':''}
@@ -4379,6 +4412,29 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             )}
             {['manager','supervisor','client_admin'].includes(user.role) && (
               <ReviewerAttachEvidence task={sel} user={user} update={update}/>
+            )}
+            {/* STALE-PHOTO-V2: photos from previous cycles. Shown dimmed rather than
+                hidden -- evidence that silently disappears reads as data loss. They do
+                not count toward the header total and do not satisfy the submit gate. */}
+            {priorPhotos.length>0 && (
+              <div style={{marginTop:10,paddingTop:8,borderTop:'1px dashed var(--border)'}}>
+                <div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6}}>
+                  Previous cycles ({priorPhotos.length}) — does not count toward this cycle
+                </div>
+                <div className="ev-thumbs" style={{opacity:.45}}>
+                  {priorPhotos.map((p,i)=>{
+                    const tsStr=p.ts?fmtDateTime(p.ts,''):''
+                    const roleLbl=p.role?(ROLE_LABELS[p.role]||p.role):''
+                    const cap=p.by?`Added by ${p.by}${roleLbl?' ('+roleLbl+')':''}${tsStr?' \u00b7 '+tsStr:''}`:tsStr
+                    return (
+                      <div key={'prior'+i} style={{position:'relative',marginBottom:4}}>
+                        <EvidenceThumb entry={p} className="ev-thumb" imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>
+                        {cap&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2,maxWidth:64,lineHeight:1.3}}>{cap}</div>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             )}
           </div>
           ) })()}
