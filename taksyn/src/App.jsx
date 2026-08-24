@@ -2293,20 +2293,26 @@ function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
     l.date_to>=today
   )
 
-  if (user.role==='client_admin') {
-    // Sees all tasks in org
-    // "Receives back" = completed/approved tasks assigned to managers show in their view
-    return orgTasks
-  }
-
-  if (user.role==='manager') {
-    // Managers see all tasks in their org for full oversight
-    return orgTasks
-  }
-
-  if (user.role==='supervisor') {
-    // Supervisors see all tasks in their org for full oversight
-    return orgTasks
+  // NARROW-VISIBLE-TASKS-V1: supervisor, manager and client_admin now see only
+  // tasks where they are assigned or are the approver. The task register handles
+  // the oversight view via REGISTER_TIERS, so the personal surfaces no longer
+  // need to show everything.
+  if (['supervisor','manager','client_admin'].includes(user.role)) {
+    const myTasks = orgTasks.filter(t =>
+      // Assigned -- all three assignment forms (id, array, legacy name)
+      t.assigned_user_id===user.id ||
+      t.assigned_user_ids?.includes(user.id) ||
+      t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase() ||
+      // Approver -- both id and name (legacy rows may have name only)
+      t.approver_id===user.id ||
+      t.approver_name?.toLowerCase()===user.name?.toLowerCase()
+    )
+    // Cover tasks: same as workers -- a supervisor covering someone on leave
+    // should see their tasks in their personal list.
+    const coverTasks = coveringFor.length>0 ? orgTasks.filter(t=>
+      coveringFor.some(l=>t.assigned_user_id===l.user_id||t.assigned_user_name===l.user_name)
+    ) : []
+    return [...new Map([...myTasks,...coverTasks].map(t=>[t.id,t])).values()]
   }
 
   if (user.role==='worker') {
@@ -19628,9 +19634,15 @@ export default function App() {
 
   const escalationCount = tasks.filter(t=>t.escalation||t.status==='overdue').length
   const reviewCount = tasks.filter(t=>t.status==='awaiting_review').length
+  // NARROW-VISIBLE-TASKS-V1: rejected badge counts only tasks the user can act on.
   const rejectedCount = tasks.filter(t=>t.status==='rejected'&&visibleTasks([t],user).length>0).length
-  const myReviewCount = ['supervisor','manager','client_admin'].includes(user.role) ? tasks.filter(t=>t.status==='awaiting_review'&&visibleTasks([t],user).length>0).length : 0
+  // NARROW-VISIBLE-TASKS-V1: review badge counts only tasks where the user is the
+  // APPROVER. A review queue should reflect what you are responsible for approving.
+  const myReviewCount = ['supervisor','manager','client_admin'].includes(user.role)
+    ? tasks.filter(t=>t.status==='awaiting_review'&&(t.approver_id===user.id||t.approver_name?.toLowerCase()===user.name?.toLowerCase())).length
+    : 0
   const _blobToday = new Date().toISOString().split('T')[0]
+  // NARROW-VISIBLE-TASKS-V1: nav dot and task button colour reflect the user's own tasks.
   const _visTasks = tasks.filter(t=>visibleTasks([t],user).length>0)
   const _tasksOverdue = _visTasks.some(t=>t.status==='pending' && t.due_date && t.due_date < _blobToday)
   const _tasksOpen = _visTasks.some(t=>['pending','in_progress','overdue','rejected','awaiting_review'].includes(t.status))
