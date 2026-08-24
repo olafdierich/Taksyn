@@ -2766,6 +2766,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // TASK-REGISTER-V1: collapsed by default -- the register is a reference surface,
   // not the primary view.
   const [showRegister, setShowRegister] = useState(false)
+  // REGISTER-SEARCH-V1: shape B was originally specified without a search bar;
+  // added later on request. Always visible when the register is expanded.
+  const [registerSearch, setRegisterSearch] = useState('')
   const [archiveSearch, setArchiveSearch] = useState('')
   const [archiveDateFrom, setArchiveDateFrom] = useState('')
   const [archiveDateTo, setArchiveDateTo] = useState('')
@@ -3668,6 +3671,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       return { t, display, inScope, missed: missedByTask[t.id]||0, next: _regNextDate(t) }
     }).filter(r=>r.inScope)
       .sort((a,b)=>(b.missed-a.missed) || String(a.t.title||'').localeCompare(String(b.t.title||'')))
+    // REGISTER-SEARCH-V1: case-insensitive substring across the text columns.
+    // Named _regShown, not `shown` -- the incident register already uses that name.
+    // Created and Next Date are ISO strings, so "2026-09" narrows by month: a side
+    // effect of the haystack, not a designed feature.
+    const _regQ = registerSearch.trim().toLowerCase()
+    const _regShown = !_regQ ? rows : rows.filter(r=>[
+      r.t.title, RECURRENCE_LABELS[r.t.recurrence]||r.t.recurrence,
+      r.display, r.t.approver_name, r.next, String(r.t.created_at||'').slice(0,10)
+    ].some(v=>String(v||'').toLowerCase().includes(_regQ)))
     const th = { textAlign:'left', padding:'8px 6px', fontSize:10, fontWeight:700,
       color:'var(--t2)', textTransform:'uppercase', letterSpacing:'.6px',
       borderBottom:'1px solid var(--border)', whiteSpace:'nowrap' }
@@ -3677,12 +3689,17 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginTop:14}}>
         <div onClick={()=>setShowRegister(v=>!v)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
           <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>
-            📋 Task Register · {rows.length}
+            📋 Task Register · {_regQ ? _regShown.length+' of '+rows.length : rows.length}
           </div>
           <span style={{fontSize:12,color:'var(--t2)'}}>{showRegister?'▾':'▸'}</span>
         </div>
-        {showRegister && (rows.length===0
-          ? <div className="empty" style={{marginTop:10}}><div className="empty-text">No tasks in scope</div></div>
+        {showRegister && (
+          <input className="form-input" value={registerSearch} onChange={e=>setRegisterSearch(e.target.value)}
+            placeholder="Search task, cycle, assignee or approver…"
+            style={{width:'100%',fontSize:12,marginTop:10,boxSizing:'border-box'}}/>
+        )}
+        {showRegister && (_regShown.length===0
+          ? <div className="empty" style={{marginTop:10}}><div className="empty-text">{rows.length===0?'No tasks in scope':'No tasks match'}</div></div>
           : <div style={{overflowX:'auto',marginTop:10}}>
             <table style={{width:'100%',borderCollapse:'collapse',minWidth:680}}>
               <thead><tr>
@@ -3691,7 +3708,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 <th style={th}>Approver</th><th style={{...th,textAlign:'right'}}>Missed</th>
               </tr></thead>
               <tbody>
-                {rows.map(r=>(
+                {_regShown.map(r=>(
                   <tr key={r.t.id} onClick={()=>setSelected(r.t.id)} style={{cursor:'pointer'}}>
                     <td style={{...td,color:'var(--brand)',fontWeight:500}}>{r.t.title}</td>
                     <td style={{...td,color:'var(--t2)'}}>{RECURRENCE_LABELS[r.t.recurrence]||r.t.recurrence||'—'}</td>
