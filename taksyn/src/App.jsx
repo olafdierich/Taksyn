@@ -3677,6 +3677,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const missedByTask = {}
     occs.forEach(o=>{ if(o.status==='missed' && o.occurrence_date>=from30){
       missedByTask[o.task_id] = (missedByTask[o.task_id]||0)+1 } })
+    // REGISTER-DATE-V2: every date on which a task WAS due. Occurrence rows are
+    // only written for cycles that have come due, so this can never reach forward.
+    const occDatesByTask = {}
+    occs.forEach(o=>{ if(!o.occurrence_date) return; const k=o.task_id
+      if(!occDatesByTask[k]) occDatesByTask[k]=[]
+      occDatesByTask[k].push(o.occurrence_date) })
+    // UTC day is adequate here: the only thing this gates is whether a due date has
+    // already passed, and a task due TODAY is due either way.
+    const _regToday = new Date().toISOString().slice(0,10)
     const rows = _regSource.map(t=>{
       const ids = assigneeIds(t)
       const names = ids.map(id=>_regNameById[id]).filter(Boolean)
@@ -3685,7 +3694,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       // misses is exactly what the register exists to surface.
       const inScope = ids.length===0 ? true
         : ids.some(id=>_regVisibleRoles.includes(_regRoleById[id]||'worker'))
-      return { t, display, inScope, missed: missedByTask[t.id]||0, next: _regNextDate(t) }
+      const _occD = occDatesByTask[t.id] || []
+      const _cre = String(t.created_at||'').slice(0,10)
+      const _dueP = (t.due_date && String(t.due_date).slice(0,10) <= _regToday) ? String(t.due_date).slice(0,10) : ''
+      const _recent = [_cre, _dueP, ..._occD].filter(Boolean).sort().slice(-1)[0] || ''
+      return { t, display, inScope, missed: missedByTask[t.id]||0, next: _regNextDate(t),
+        created: _cre, occDates: _occD, duePast: _dueP, recent: _recent }
     }).filter(r=>r.inScope)
       .sort((a,b)=>(b.missed-a.missed) || String(a.t.title||'').localeCompare(String(b.t.title||'')))
     // REGISTER-FILTERBAR-V1: structured filters. registerSearch is title only;
@@ -3697,10 +3711,18 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       if(regCycle && (r.t.recurrence||'')!==regCycle) return false
       if(regAssigned && r.display!==regAssigned) return false
       if(regApprover && (r.t.approver_name||'')!==regApprover) return false
-      if(regDateFrom && (r.next||'') && r.next < regDateFrom) return false
-      if(regDateTo && (r.next||'') && r.next > regDateTo) return false
+      // REGISTER-DATE-V2: in range if CREATED in the window or ACTUALLY DUE in it.
+      // The old code guarded on r.next being truthy, so every one-off task (blank
+      // next date) short-circuited the test and survived any range that was set.
+      if(regDateFrom || regDateTo){
+        const _inR = d => !!d && (!regDateFrom || d>=regDateFrom) && (!regDateTo || d<=regDateTo)
+        if(!(_inR(r.created) || _inR(r.duePast) || r.occDates.some(_inR))) return false
+      }
       return true
     })
+    // Chronological, newest first, ONLY when a range is set. Unfiltered, the
+    // missed-count sort stands: it is what keeps 37 misses at the top of the page.
+    if(regDateFrom || regDateTo) _regShown.sort((a,b)=>String(b.recent||'').localeCompare(String(a.recent||'')))
     // Option lists built from scoped rows so they reflect the role tier.
     const _regCycles = [...new Set(rows.map(r=>r.t.recurrence).filter(Boolean))]
       .sort((a,b)=>Object.keys(RECURRENCE_LABELS).indexOf(a)-Object.keys(RECURRENCE_LABELS).indexOf(b))
@@ -3726,7 +3748,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             {/* REGISTER-FILTERBAR-V1: styled to match the incident register exactly. */}
             <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end',marginBottom:8}}>
               <div><div style={_regLbl}>Task</div><input style={{..._regCtrl,minWidth:160}} value={registerSearch} onChange={e=>setRegisterSearch(e.target.value)} placeholder="Search title…"/></div>
-              <div><div style={_regLbl}>Next date from</div><input type="date" style={_regCtrl} value={regDateFrom} onChange={e=>setRegDateFrom(e.target.value)}/></div>
+              <div><div style={_regLbl}>From</div><input type="date" style={_regCtrl} value={regDateFrom} onChange={e=>setRegDateFrom(e.target.value)}/></div>
               <div><div style={_regLbl}>To</div><input type="date" style={_regCtrl} value={regDateTo} onChange={e=>setRegDateTo(e.target.value)}/></div>
               <div><div style={_regLbl}>Cycle</div>
                 <select style={_regCtrl} value={regCycle} onChange={e=>setRegCycle(e.target.value)}>
