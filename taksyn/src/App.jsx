@@ -2766,9 +2766,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // TASK-REGISTER-V1: collapsed by default -- the register is a reference surface,
   // not the primary view.
   const [showRegister, setShowRegister] = useState(false)
-  // REGISTER-SEARCH-V1: shape B was originally specified without a search bar;
-  // added later on request. Always visible when the register is expanded.
+  // REGISTER-FILTERBAR-V1: structured filter bar, styled to match the incident
+  // register. registerSearch is title-only; the other columns have their own controls.
   const [registerSearch, setRegisterSearch] = useState('')
+  const [regDateFrom, setRegDateFrom] = useState('')
+  const [regDateTo, setRegDateTo] = useState('')
+  const [regCycle, setRegCycle] = useState('')
+  const [regAssigned, setRegAssigned] = useState('')
+  const [regApprover, setRegApprover] = useState('')
   const [archiveSearch, setArchiveSearch] = useState('')
   const [archiveDateFrom, setArchiveDateFrom] = useState('')
   const [archiveDateTo, setArchiveDateTo] = useState('')
@@ -3671,15 +3676,26 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       return { t, display, inScope, missed: missedByTask[t.id]||0, next: _regNextDate(t) }
     }).filter(r=>r.inScope)
       .sort((a,b)=>(b.missed-a.missed) || String(a.t.title||'').localeCompare(String(b.t.title||'')))
-    // REGISTER-SEARCH-V1: case-insensitive substring across the text columns.
-    // Named _regShown, not `shown` -- the incident register already uses that name.
-    // Created and Next Date are ISO strings, so "2026-09" narrows by month: a side
-    // effect of the haystack, not a designed feature.
+    // REGISTER-FILTERBAR-V1: structured filters. registerSearch is title only;
+    // other columns handled by their own controls.
     const _regQ = registerSearch.trim().toLowerCase()
-    const _regShown = !_regQ ? rows : rows.filter(r=>[
-      r.t.title, RECURRENCE_LABELS[r.t.recurrence]||r.t.recurrence,
-      r.display, r.t.approver_name, r.next, String(r.t.created_at||'').slice(0,10)
-    ].some(v=>String(v||'').toLowerCase().includes(_regQ)))
+    const _regActive = _regQ || regDateFrom || regDateTo || regCycle || regAssigned || regApprover
+    const _regShown = rows.filter(r=>{
+      if(_regQ && !String(r.t.title||'').toLowerCase().includes(_regQ)) return false
+      if(regCycle && (r.t.recurrence||'')!==regCycle) return false
+      if(regAssigned && r.display!==regAssigned) return false
+      if(regApprover && (r.t.approver_name||'')!==regApprover) return false
+      if(regDateFrom && (r.next||'') && r.next < regDateFrom) return false
+      if(regDateTo && (r.next||'') && r.next > regDateTo) return false
+      return true
+    })
+    // Option lists built from scoped rows so they reflect the role tier.
+    const _regCycles = [...new Set(rows.map(r=>r.t.recurrence).filter(Boolean))]
+      .sort((a,b)=>Object.keys(RECURRENCE_LABELS).indexOf(a)-Object.keys(RECURRENCE_LABELS).indexOf(b))
+    const _regAssignees = [...new Set(rows.map(r=>r.display).filter(Boolean))].sort()
+    const _regApprovers = [...new Set(rows.map(r=>r.t.approver_name).filter(Boolean))].sort()
+    const _regCtrl = {padding:'6px 8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',fontSize:12}
+    const _regLbl = {fontSize:10,color:'var(--t3)',marginBottom:2}
     const th = { textAlign:'left', padding:'8px 6px', fontSize:10, fontWeight:700,
       color:'var(--t2)', textTransform:'uppercase', letterSpacing:'.6px',
       borderBottom:'1px solid var(--border)', whiteSpace:'nowrap' }
@@ -3689,14 +3705,35 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginTop:14}}>
         <div onClick={()=>setShowRegister(v=>!v)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
           <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>
-            📋 Task Register · {_regQ ? _regShown.length+' of '+rows.length : rows.length}
+            📋 Task Register · {_regActive ? _regShown.length+' of '+rows.length : rows.length}
           </div>
           <span style={{fontSize:12,color:'var(--t2)'}}>{showRegister?'▾':'▸'}</span>
         </div>
         {showRegister && (
-          <input className="form-input" value={registerSearch} onChange={e=>setRegisterSearch(e.target.value)}
-            placeholder="Search task, cycle, assignee or approver…"
-            style={{width:'100%',fontSize:12,marginTop:10,boxSizing:'border-box'}}/>
+          <div style={{marginTop:10}}>
+            {/* REGISTER-FILTERBAR-V1: styled to match the incident register exactly. */}
+            <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end',marginBottom:8}}>
+              <div><div style={_regLbl}>Task</div><input style={{..._regCtrl,minWidth:160}} value={registerSearch} onChange={e=>setRegisterSearch(e.target.value)} placeholder="Search title…"/></div>
+              <div><div style={_regLbl}>Next date from</div><input type="date" style={_regCtrl} value={regDateFrom} onChange={e=>setRegDateFrom(e.target.value)}/></div>
+              <div><div style={_regLbl}>To</div><input type="date" style={_regCtrl} value={regDateTo} onChange={e=>setRegDateTo(e.target.value)}/></div>
+              <div><div style={_regLbl}>Cycle</div>
+                <select style={_regCtrl} value={regCycle} onChange={e=>setRegCycle(e.target.value)}>
+                  <option value="">All</option>
+                  {_regCycles.map(c=><option key={c} value={c}>{RECURRENCE_LABELS[c]||c}</option>)}
+                </select></div>
+              <div><div style={_regLbl}>Assigned</div>
+                <select style={_regCtrl} value={regAssigned} onChange={e=>setRegAssigned(e.target.value)}>
+                  <option value="">All</option>
+                  {_regAssignees.map(n=><option key={n} value={n}>{n}</option>)}
+                </select></div>
+              <div><div style={_regLbl}>Approver</div>
+                <select style={_regCtrl} value={regApprover} onChange={e=>setRegApprover(e.target.value)}>
+                  <option value="">All</option>
+                  {_regApprovers.map(n=><option key={n} value={n}>{n}</option>)}
+                </select></div>
+              {_regActive&&<button className="btn btn-secondary btn-sm" style={{alignSelf:'flex-end'}} onClick={()=>{setRegisterSearch('');setRegDateFrom('');setRegDateTo('');setRegCycle('');setRegAssigned('');setRegApprover('')}}>Clear all</button>}
+            </div>
+          </div>
         )}
         {showRegister && (_regShown.length===0
           ? <div className="empty" style={{marginTop:10}}><div className="empty-text">{rows.length===0?'No tasks in scope':'No tasks match'}</div></div>
