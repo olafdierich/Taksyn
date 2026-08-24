@@ -2293,11 +2293,14 @@ function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
     l.date_to>=today
   )
 
-  // NARROW-VISIBLE-TASKS-V1: supervisor, manager and client_admin now see only
-  // tasks where they are assigned or are the approver. The task register handles
-  // the oversight view via REGISTER_TIERS, so the personal surfaces no longer
-  // need to show everything.
-  if (['supervisor','manager','client_admin'].includes(user.role)) {
+  // NARROW-VISIBLE-TASKS-V3: correct tier rules.
+  // client_admin sees ALL org tasks -- they need full visibility.
+  // manager and supervisor see only tasks where they are assigned or approver.
+  // The task register reads org tasks directly, bypassing visibleTasks.
+  if (user.role==='client_admin') {
+    return orgTasks
+  }
+  if (user.role==='manager' || user.role==='supervisor') {
     const myTasks = orgTasks.filter(t =>
       // Assigned -- all three assignment forms (id, array, legacy name)
       t.assigned_user_id===user.id ||
@@ -2307,8 +2310,7 @@ function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
       t.approver_id===user.id ||
       t.approver_name?.toLowerCase()===user.name?.toLowerCase()
     )
-    // Cover tasks: same as workers -- a supervisor covering someone on leave
-    // should see their tasks in their personal list.
+    // Cover tasks: a supervisor covering someone on leave sees their tasks.
     const coverTasks = coveringFor.length>0 ? orgTasks.filter(t=>
       coveringFor.some(l=>t.assigned_user_id===l.user_id||t.assigned_user_name===l.user_name)
     ) : []
@@ -3662,6 +3664,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // an exemption to someone already blocked, never grant rights canApprove refused.
   //
   // CLIENT-SIDE ONLY — hides the control, does not stop a crafted request. Needs RLS.
+  // NARROW-VISIBLE-TASKS-V3: the register reads org tasks DIRECTLY, not through
+  // orgFiltered (which derives from visible, which now excludes tasks that
+  // supervisors and managers are not personally involved in).
+  const _regSource = tasks.filter(t=>t.org?.toLowerCase()===user.org?.toLowerCase())
   // TASK-REGISTER-V1: rendered below the task list. Additive -- visibleTasks is
   // untouched, so every role keeps the list it has today.
   const renderTaskRegister = () => {
@@ -3671,7 +3677,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const missedByTask = {}
     occs.forEach(o=>{ if(o.status==='missed' && o.occurrence_date>=from30){
       missedByTask[o.task_id] = (missedByTask[o.task_id]||0)+1 } })
-    const rows = orgFiltered.map(t=>{
+    const rows = _regSource.map(t=>{
       const ids = assigneeIds(t)
       const names = ids.map(id=>_regNameById[id]).filter(Boolean)
       const display = names.length ? names.join(', ') : (t.assigned_user_name || '')
