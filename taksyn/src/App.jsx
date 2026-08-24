@@ -3693,7 +3693,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               <tbody>
                 {rows.map(r=>(
                   <tr key={r.t.id} onClick={()=>setSelected(r.t.id)} style={{cursor:'pointer'}}>
-                    <td style={td}>{r.t.title}</td>
+                    <td style={{...td,color:'var(--brand)',fontWeight:500}}>{r.t.title}</td>
                     <td style={{...td,color:'var(--t2)'}}>{RECURRENCE_LABELS[r.t.recurrence]||r.t.recurrence||'—'}</td>
                     <td style={{...td,color:'var(--t2)'}}>{String(r.t.created_at||'').slice(0,10)||'—'}</td>
                     <td style={td}>{r.next||'—'}</td>
