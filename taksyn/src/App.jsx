@@ -2770,6 +2770,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [orgSearch, setOrgSearch] = useState('')
   const [showArchive, setShowArchive] = useState(false)
   // ARCHIVE-OCC-V1: outcome filter for the occurrence archive.
+  // TAKSYN-PATCH-OCCURRENCE-DETAIL
+  // The OCCURRENCE clicked in the archive. Null = list view.
+  // Deliberately separate from `selected`: an occurrence is a dated
+  // snapshot, the task row is the live template. Conflating the two is
+  // exactly the bug this fixes.
+  const [selectedOcc, setSelectedOcc] = useState(null)
   const [archiveOutcome, setArchiveOutcome] = useState('')
   // TASK-REGISTER-V1: collapsed by default -- the register is a reference surface,
   // not the primary view.
@@ -4841,7 +4847,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     const OccRow = ({o}) => {
                       const badge = OCC_BADGE[o.status] || { label:(o.status||'?').toUpperCase(), bg:'var(--s3)', fg:'var(--t2)' }
                       return (
-                        <div onClick={()=>{ if(!o._orphan) setSelected(o.task_id) }} style={{padding:'10px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:o._orphan?'default':'pointer',display:'flex',gap:12,alignItems:'flex-start',opacity:o._orphan?0.7:1}}>
+                        <div onClick={()=>{ if(!o._orphan) setSelectedOcc(o) }} style={{padding:'10px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,marginBottom:6,cursor:o._orphan?'default':'pointer',display:'flex',gap:12,alignItems:'flex-start',opacity:o._orphan?0.7:1}}>
                           <div style={{flex:1}}>
                             <div style={{fontWeight:600,fontSize:13,marginBottom:3}}>{o.title}</div>
                             <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap'}}>
@@ -4858,12 +4864,91 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       )
                     }
 
+                    // TAKSYN-PATCH-OCCURRENCE-DETAIL-PANEL
+                    // One evidence photo. signedEvidenceUrl is async and the
+                    // bucket is private, so the src resolves after mount. A
+                    // failure renders a stated error, never a silent blank box:
+                    // missing compliance evidence must look missing.
+                    const OccPhoto = ({ p }) => {
+                      const [url, setUrl] = useState(null)
+                      const [err, setErr] = useState(false)
+                      useEffect(()=>{
+                        let alive = true
+                        if(!p || !p.path){ setErr(true); return }
+                        signedEvidenceUrl(p.path)
+                          .then(u=>{ if(alive) setUrl(u) })
+                          .catch(()=>{ if(alive) setErr(true) })
+                        return ()=>{ alive = false }
+                      }, [p && p.path])
+                      return (
+                        <div style={{width:150,marginRight:10,marginBottom:10}}>
+                          <div style={{width:150,height:150,borderRadius:8,border:'1px solid var(--border)',background:'var(--s3)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
+                            {err
+                              ? <span style={{fontSize:11,color:'var(--red)',textAlign:'center',padding:8}}>Photo could not be loaded</span>
+                              : url
+                                ? <img src={url} alt={p.label||'Evidence'} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'pointer'}} onClick={()=>window.open(url,'_blank')}/>
+                                : <span style={{fontSize:11,color:'var(--t2)'}}>Loading...</span>}
+                          </div>
+                          {p.label&&<div style={{fontSize:11,fontWeight:600,marginTop:4}}>{p.label}</div>}
+                          <div style={{fontSize:10,color:'var(--t2)',marginTop:2}}>
+                            {p.by||'Unknown'}{p.ts?' \u00b7 '+fmtDateTime(p.ts):''}
+                          </div>
+                        </div>
+                      )
+                    }
+                    // Empty-evidence copy varies by outcome. A missed cycle and a
+                    // completed-without-photos cycle are different facts and must
+                    // not share one message.
+                    const occEmptyCopy = (o) => {
+                      if(o.status==='missed') return 'This cycle was missed. No work was recorded against it.'
+                      if(o.status==='not_applicable') return o.na_reason ? ('Marked not applicable: '+o.na_reason) : 'Marked not applicable.'
+                      return 'No photos were recorded for this cycle.'
+                    }
+                    const OccDetail = ({ o }) => {
+                      const badge = OCC_BADGE[o.status] || { label:(o.status||'?').toUpperCase(), bg:'var(--s3)', fg:'var(--t2)' }
+                      const photos = Array.isArray(o.evidence) ? o.evidence : []
+                      return (
+                        <div className="anim">
+                          <button className="back-btn" style={{marginBottom:10}} onClick={()=>setSelectedOcc(null)}><IC n="x" s={14}/> Back to Archive</button>
+                          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:4}}>
+                            <div style={{fontSize:16,fontWeight:700}}>{o.title}</div>
+                            <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:badge.bg,color:badge.fg,whiteSpace:'nowrap'}}>{badge.label}</span>
+                          </div>
+                          <div style={{fontSize:12,color:'var(--t2)',marginBottom:14}}>
+                            Cycle of {o.occurrence_date}
+                            {o.recurrence&&o.recurrence!=='once'?' \u00b7 '+(RECURRENCE_LABELS[o.recurrence]||o.recurrence):''}
+                          </div>
+                          <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>This cycle</div>
+                            <div style={{display:'flex',flexDirection:'column',gap:6,fontSize:13}}>
+                              {o.completed_by_name&&<div><span style={{color:'var(--t2)'}}>Completed by:</span> {o.completed_by_name}</div>}
+                              {o.completed_at&&<div><span style={{color:'var(--t2)'}}>Completed at:</span> {fmtDateTime(o.completed_at)}</div>}
+                              {o.completed_late&&<div style={{color:'#F59E0B',fontWeight:600}}>\u26a0 Completed late</div>}
+                              {o.approved_by_name&&<div><span style={{color:'var(--t2)'}}>Approved by:</span> {o.approved_by_name}{o.approved_at?' \u00b7 '+fmtDateTime(o.approved_at):''}</div>}
+                              {o.na_by_name&&<div><span style={{color:'var(--t2)'}}>Marked not applicable by:</span> {o.na_by_name}{o.na_at?' \u00b7 '+fmtDateTime(o.na_at):''}</div>}
+                            </div>
+                          </div>
+                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Evidence for this cycle</div>
+                            {photos.length>0
+                              ? <div style={{display:'flex',flexWrap:'wrap'}}>{photos.map((p,i)=><OccPhoto key={(p&&p.path)||i} p={p}/>)}</div>
+                              : <div style={{fontSize:13,color:'var(--t2)'}}>{occEmptyCopy(o)}</div>}
+                          </div>
+                          {!o._orphan&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setSelectedOcc(null); setSelected(o.task_id) }}>View current task</button>}
+                        </div>
+                      )
+                    }
+                    if(selectedOcc) return <OccDetail o={selectedOcc}/>
                     return (
                       <div>
                         <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>
                           {archived.length} occurrence{archived.length===1?'':'s'}
                           {' \u00b7 '}{archived.filter(o=>o.status==='completed').length} completed
                           {' \u00b7 '}{archived.filter(o=>o.status==='missed').length} missed
+                        </div>
+                        <div style={{fontSize:11,color:'var(--t2)',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'8px 10px',marginBottom:10}}>
+                          Photo evidence has been recorded against each cycle since 1 August 2026.
+                          Cycles before that date may show none even where work was done.
                         </div>
                         {archived.map(o=><OccRow key={o._key} o={o}/>)}
                       </div>
