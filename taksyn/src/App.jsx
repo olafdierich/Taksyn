@@ -4586,13 +4586,24 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Compliance:</span> {sel.compliance?'🔒 Yes':'—'}</div>
               {sel.team_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Team:</span> {sel.team_name}</div>}
               {(()=>{
-                const isOrphaned = !!sel.assigned_user_id && !teamUsers.find(u=>u.id===sel.assigned_user_id)
+                // TAKSYN-PATCH-ASSIGNEE-RESOLVER
+                const _asgIds = (typeof assigneeIds==='function' ? (assigneeIds(sel)||[]) : [])
+                const _asgResolved = _asgIds.map(id=>({ id, m:(orgMembers||[]).find(x=>x && x.id===id) }))
+                const _asgNames = _asgResolved.map(r=>r.m && r.m.name).filter(Boolean)
+                const _asgLabel = _asgNames.length
+                  ? _asgNames.join(', ')
+                  : (sel.assigned_user_name||ROLE_LABELS[sel.assigned_role])
+                // Orphaned = any assignee missing from the org OR deactivated.
+                // Scalar-only tasks (no array) keep exactly the old predicate.
+                const isOrphaned = _asgIds.length
+                  ? _asgResolved.some(r=>!r.m || r.m.is_active===false)
+                  : (!!sel.assigned_user_id && !teamUsers.find(u=>u.id===sel.assigned_user_id))
                 return (
                   <div style={{fontSize:13,gridColumn:isOrphaned?'1 / -1':'auto'}}>
                     <span style={{color:'var(--t2)'}}>Assigned:</span>{' '}
-                    <span style={isOrphaned?{color:'var(--t2)',textDecoration:'line-through'}:{}}>{sel.assigned_user_name||ROLE_LABELS[sel.assigned_role]}</span>
+                    <span style={isOrphaned?{color:'var(--t2)',textDecoration:'line-through'}:{}}>{_asgLabel}</span>
                     {isOrphaned&&<div style={{marginTop:4,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                      <span style={{fontSize:11,color:'var(--red)',fontWeight:600}}>⚠️ Assigned user no longer in organisation</span>
+                      <span style={{fontSize:11,color:'var(--red)',fontWeight:600}}>⚠️ Assigned user is no longer active in this organisation</span>
                       {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>Reassign</button>}
                     </div>}
                   </div>
