@@ -5993,10 +5993,17 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       // throwing, so an unresolved prop renders old behaviour and self-corrects.
       const doneOn=orgDayOf(o.at, orgTimezone)||''
       const late=!!(doneOn&&o.status==='completed'&&doneOn>_recurPlusDays(o.d,grace))
+      // SCHED-V1: 'scheduled' MUST be tested before the else. This chain's final branch
+      // assumes every non-N/A, non-missed row is a completion, so an untreated scheduled
+      // cycle produced the literal text "completed" -- a written falsehood, not merely an
+      // ambiguous colour. Same shape as expectedFor's fallthrough: the else is not a
+      // default, it is an assumption.
       const tip=o.status===OCC_NOT_APPLICABLE
         ? 'Cycle '+o.d+' \u2014 not applicable'
         : o.status==='missed'
         ? 'Cycle '+o.d+' \u2014 missed'
+        : o.status==='scheduled'
+        ? 'Cycle '+o.d+' \u2014 scheduled, not yet due'
         : 'Cycle '+o.d+(doneOn&&doneOn!==o.d?' \u2014 completed '+doneOn:' \u2014 completed')+(late?' (outside grace window)':'')+(o.by?' by '+o.by:'')
       return {...o,late,tip}
     })
@@ -6530,7 +6537,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                       <div>{r.title}</div>
                       <div style={{display:'flex',flexWrap:'wrap',gap:0,marginTop:6}}>
                         {r.cells.map((c,j)=>(
-                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.status===OCC_NOT_APPLICABLE?'#6B7280':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
+                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.status===OCC_NOT_APPLICABLE?'#6B7280':c.status==='scheduled'?'#D1D5DB':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
                         ))}
                       </div>
                     </td>
@@ -19161,9 +19168,13 @@ export default function App() {
           if(!cur) return
           const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
           let guard=0
+          // SCHED-V1: records HOW the loop exited. Only a grace-deadline break means `cur`
+          // holds the CURRENT cycle; exiting by exhausting RECUR_WALK_GUARD leaves `cur` 400
+          // cycles past due_date, and stamping that would be a fabricated date.
+          let _reachedCurrent=false
           while(cur && guard < RECUR_WALK_GUARD){
             const graceDeadline = _msPlusDays(cur, grace)
-            if(graceDeadline >= _msToday) break
+            if(graceDeadline >= _msToday) { _reachedCurrent=true; break }
             if(cur >= _msFloor){
               supabase.from('task_occurrences').upsert(
                 {task_id:t.id,org:t.org,occurrence_date:cur,status:'missed',recurrence:t.recurrence},
@@ -19171,6 +19182,18 @@ export default function App() {
               ).then(()=>{})
             }
             cur=nextOccurrenceDate(cur,t.recurrence); guard++
+          }
+          // SCHED-V1: stamp the CURRENT cycle as 'scheduled' so it has a row before it is
+          // either completed or (once its grace expires) missed. This is the cycle the loop
+          // broke ON, so it is by construction the first whose grace has NOT expired -- the
+          // miss-writer above can never reach it, and the two writers cover disjoint ranges.
+          // ignoreDuplicates:true so an existing 'completed' or 'not_applicable' row wins:
+          // the reconcile and the F70 writer are authoritative over a schedule marker.
+          if(_reachedCurrent && cur && cur >= _msFloor){
+            supabase.from('task_occurrences').upsert(
+              {task_id:t.id,org:t.org,occurrence_date:cur,status:'scheduled',recurrence:t.recurrence},
+              {onConflict:'task_id,occurrence_date',ignoreDuplicates:true}
+            ).then(()=>{})
           }
         })
       }
