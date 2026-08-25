@@ -4870,9 +4870,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // failure renders a stated error, never a silent blank box:
                     // missing compliance evidence must look missing.
                     const OccPhoto = ({ p }) => {
-                      const [url, setUrl] = React.useState(null)
-                      const [err, setErr] = React.useState(false)
-                      React.useEffect(()=>{
+                      const [url, setUrl] = useState(null)
+                      const [err, setErr] = useState(false)
+                      useEffect(()=>{
                         let alive = true
                         if(!p || !p.path){ setErr(true); return }
                         signedEvidenceUrl(p.path)
