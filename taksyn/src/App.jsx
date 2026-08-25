@@ -5970,7 +5970,24 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='semiannually'?Math.max(1,Math.round(_periodDays/182)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  // EXPECTED-FROM-ROWS-V1. Was: _periodDays divided by a cadence constant, floored at 1.
+  // The floor made ANY cadence longer than the window claim exactly 1 expected cycle in
+  // EVERY window -- quarterly, semiannually and annually all read max(1,0)=1 over 30 days,
+  // so a six-monthly task showed as missed five months in six.
+  //
+  // Now a cycle is expected IF AND ONLY IF a row exists for it in the window. No division,
+  // no floor, no cadence constants -- the walk that writes the rows is the single source of
+  // what a cycle is, so Reports and Performance cannot drift from it or from each other.
+  //
+  // COUNTS completed + missed + scheduled. EXCLUDES not_applicable, which is declared
+  // not-owed (F70/D7) and is separately subtracted by naDaysFor at the call sites.
+  // 'scheduled' counts DELIBERATELY: the cycle exists and is owed, it is merely unresolved.
+  // Excluding it would make the rate move backwards on its own -- 29/29 today becoming
+  // 29/30 tomorrow when today's row flips to missed, with nobody having done anything.
+  //
+  // TAKES THE TASK, not the recurrence string: the count is per-task, not per-cadence.
+  // Every call site passes t rather than t.recurrence.
+  const expectedFor=t=>(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr&&(o.status==='completed'||o.status==='missed'||o.status==='scheduled')).length
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
   // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
   // completed_late null means nothing was ever written there (July migration
@@ -6025,7 +6042,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     const role = t.assigned_role || 'worker'
     keys.forEach(key => {
       if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
-      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
+      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
       workerMap[key].total++
       if (['completed','approved'].includes(t.status)) {
         workerMap[key].done++
@@ -6043,7 +6060,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     const tset=new Set()
     if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
     else { let uids=[]; if(Array.isArray(t.assigned_user_ids)&&t.assigned_user_ids.length) uids=t.assigned_user_ids; else if(t.assigned_user_id) uids=[t.assigned_user_id]; uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) })) }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const teamRows = Object.values(teamMap).sort((a,b)=>b.total-a.total)
   // --- Approver (review) performance stats ---
@@ -6129,9 +6146,14 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       const onTimePct = pct(w.onTime,w.done)
       const avg = w.avgMins.length ? Math.round(w.avgMins.reduce((a,b)=>a+b,0)/w.avgMins.length) : 0
       const avgStr = avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
-      return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
+      // ZERO-DENOM-V1: 0-of-0 is not 0%. Colour is guarded too -- a dash must not print red,
+      // which would read as a failure in a document that leaves the building.
+      const _pdfRate = w.total>0 ? compPct+'%' : '\u2014'
+      const _pdfColor = w.total>0 ? (compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444') : '#6B7280'
+      return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+_pdfColor+'">'+_pdfRate+'</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
     }).join('')
-    const teamHtml = teamRows.map(tm=>'<tr><td>'+tm.name+'</td><td>'+tm.total+'</td><td>'+tm.done+'</td><td>'+pct(tm.done,tm.total)+'%</td></tr>').join('')
+    // ZERO-DENOM-V1: see the worker row above.
+    const teamHtml = teamRows.map(tm=>'<tr><td>'+tm.name+'</td><td>'+tm.total+'</td><td>'+tm.done+'</td><td>'+(tm.total>0?pct(tm.done,tm.total)+'%':'\u2014')+'</td></tr>').join('')
     const approverHtml = approverRows.map(a=>{
       const reviewed=a.approved+a.sentBack
       const sbPct=pct(a.sentBack,reviewed)
@@ -6426,7 +6448,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                     <td style={{padding:'8px 10px',fontWeight:600}}>{tm.name}</td>
                     <td style={{padding:'8px 10px'}}>{tm.total}</td>
                     <td style={{padding:'8px 10px'}}>{tm.done}</td>
-                    <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
+                    <td style={{padding:'8px 10px',fontWeight:700,color:tm.total>0?(cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'):'#6B7280'}}>{tm.total>0?cp+'%':'\u2014'}</td>
                   </tr>
                 )})}
               </tbody>
@@ -6487,6 +6509,8 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                 {workerRows.length===0 && <tr><td colSpan={7} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No worker data for this period</td></tr>}
                 {workerRows.map((w,i)=>{
                   const cp=pct(w.done,w.total)
+                  // ZERO-DENOM-V1: NOT YET WIRED into the JSX below -- see script header.
+                  const _cpStr = w.total>0 ? cp+'%' : '\u2014'
                   const avg=w.avgMins.length?Math.round(w.avgMins.reduce((a,b)=>a+b,0)/w.avgMins.length):0
                   return (
                     <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
@@ -6494,7 +6518,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                       <td style={{padding:'8px 10px',color:'var(--t2)',fontSize:11}}>{ROLE_LABELS[w.role]||w.role}</td>
                       <td style={{padding:'8px 10px'}}>{w.total}</td>
                       <td style={{padding:'8px 10px'}}>{w.done}</td>
-                      <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
+                      <td style={{padding:'8px 10px',fontWeight:700,color:w.total>0?(cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'):'#6B7280'}}>{_cpStr}</td>
                       <td style={{padding:'8px 10px',color:'var(--t2)'}}>{avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'}</td>
                       <td style={{padding:'8px 10px'}}>{w.reviewedInTime}</td>
                     </tr>
@@ -11702,7 +11726,24 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='semiannually'?Math.max(1,Math.round(_periodDays/182)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  // EXPECTED-FROM-ROWS-V1. Was: _periodDays divided by a cadence constant, floored at 1.
+  // The floor made ANY cadence longer than the window claim exactly 1 expected cycle in
+  // EVERY window -- quarterly, semiannually and annually all read max(1,0)=1 over 30 days,
+  // so a six-monthly task showed as missed five months in six.
+  //
+  // Now a cycle is expected IF AND ONLY IF a row exists for it in the window. No division,
+  // no floor, no cadence constants -- the walk that writes the rows is the single source of
+  // what a cycle is, so Reports and Performance cannot drift from it or from each other.
+  //
+  // COUNTS completed + missed + scheduled. EXCLUDES not_applicable, which is declared
+  // not-owed (F70/D7) and is separately subtracted by naDaysFor at the call sites.
+  // 'scheduled' counts DELIBERATELY: the cycle exists and is owed, it is merely unresolved.
+  // Excluding it would make the rate move backwards on its own -- 29/29 today becoming
+  // 29/30 tomorrow when today's row flips to missed, with nobody having done anything.
+  //
+  // TAKES THE TASK, not the recurrence string: the count is per-task, not per-cadence.
+  // Every call site passes t rather than t.recurrence.
+  const expectedFor=t=>(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr&&(o.status==='completed'||o.status==='missed'||o.status==='scheduled')).length
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
   // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
   // completed_late null means nothing was ever written there (July migration
@@ -11768,7 +11809,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
 
     const p = peopleMap[resolvedId]
     if (!p) return
-    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
+    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
@@ -11816,7 +11857,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
       else if(t.assigned_user_name){ const mid=memberNameMap[t.assigned_user_name.toLowerCase().trim()]; if(mid) uids=[mid] }
       uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) }))
     }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const _teamIdsWithMatches = new Set()
   people.forEach(p=>{ (memberTeams[p.id]||[]).forEach(tid=>_teamIdsWithMatches.add(tid)) })
@@ -11890,7 +11931,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
             <div style={{marginBottom:16}}>
               <div style={{fontSize:13,fontWeight:700,color:'var(--t1)',marginBottom:8}}>👥 Team Performance</div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
-                {teams.map((tm,i)=>{ const rate=pct(tm.done,tm.total); const g=getGrade(rate); return (
+                {teams.map((tm,i)=>{ const rate=pct(tm.done,tm.total); const g=tm.total>0?getGrade(rate):{grade:'\u2014',color:'#6B7280'}; return (
                   <div key={i} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:14}}>
                     <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>{tm.name}</div>
                     <div style={{display:'flex',gap:12,alignItems:'baseline'}}>
@@ -11908,7 +11949,12 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
           {people.map((p,i)=>{
             const compRate = pct(p.done,p.total)
             const onTimeRate = pct(p.onTime,p.done)
-            const {grade,color} = getGrade(compRate)
+            // ZERO-DENOM-V1: a person with no cycles due gets no LETTER GRADE. getGrade(0)
+            // would hand them an F in a coloured circle for having had no work.
+            // _rateStr is NOT YET WIRED into the JSX below -- see script header.
+            const _hasCycles = p.total>0
+            const _rateStr = _hasCycles ? compRate+'%' : '\u2014'
+            const {grade,color} = _hasCycles ? getGrade(compRate) : {grade:'\u2014',color:'#6B7280'}
             return (
               <div key={i} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:10}}>
                 <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
@@ -11918,7 +11964,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                     <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}><RolePill role={p.role}/></div>
                   </div>
                   <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:22,fontWeight:800,color,lineHeight:1}}>{compRate}%</div>
+                    <div style={{fontSize:22,fontWeight:800,color,lineHeight:1}}>{_rateStr}</div>
                     <div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>completion</div>
                   </div>
                 </div>
@@ -11941,10 +11987,10 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                 {/* Performance bar */}
                 <div style={{marginTop:10}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--t2)',marginBottom:3}}>
-                    <span>Performance</span><span style={{fontWeight:600,color}}>{compRate}%</span>
+                    <span>Performance</span><span style={{fontWeight:600,color}}>{_rateStr}</span>
                   </div>
                   <div style={{height:6,background:'var(--s3)',borderRadius:3,overflow:'hidden'}}>
-                    <div style={{height:'100%',width:compRate+'%',background:color,borderRadius:3,transition:'width .5s'}}/>
+                    {_hasCycles&&<div style={{height:'100%',width:compRate+'%',background:color,borderRadius:3,transition:'width .5s'}}/>}
                   </div>
                 </div>
                 {p.rejected>0&&<div style={{marginTop:8,fontSize:11,color:'#F97316',background:'rgba(249,115,22,.08)',borderRadius:6,padding:'4px 8px'}}>⚠️ {p.rejected} task{p.rejected>1?'s':''} rejected — may need coaching</div>}
@@ -11961,7 +12007,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
               <div>📊 Overall team completion rate: <strong style={{color:'var(--text)'}}>{pct(pt.filter(t=>['completed','approved'].includes(t.status)).length,pt.length)}%</strong></div>
               {(()=>{ const clTot=people.reduce((a,p)=>a+p.clTotal,0); const clDn=people.reduce((a,p)=>a+p.clDone,0); return clTot>0?<div>☑ Checklist completion: <strong style={{color:'var(--text)'}}>{pct(clDn,clTot)}%</strong> ({clDn}/{clTot} items)</div>:null })()}
               <div>⭐ Top performer: <strong style={{color:'var(--text)'}}>{people.sort((a,b)=>pct(b.done,b.total)-pct(a.done,a.total))[0]?.name||'—'}</strong></div>
-              <div>⚠️ Needs attention: <strong style={{color:'var(--red)'}}>{people.filter(p=>pct(p.done,p.total)<50).map(p=>p.name).join(', ')||'None'}</strong></div>
+              <div>⚠️ Needs attention: <strong style={{color:'var(--red)'}}>{people.filter(p=>p.total>0&&pct(p.done,p.total)<50).map(p=>p.name).join(', ')||'None'}</strong></div>
             </div>
           </div>
         </>
