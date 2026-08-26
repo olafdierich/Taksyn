@@ -134,25 +134,81 @@ function mdInline(s) {
   return out
 }
 
+// [PATCH:note-indent] Depth comes from leading spaces, two per level, before
+// the marker. Legacy notes have no leading spaces, so every line parses at
+// depth 0 and renders exactly as it did before.
+function noteParseLine(ln) {
+  const m = /^(\s*)(?:(- )|(\d+)\. )?(.*)$/.exec(ln)
+  const indent = m[1] || ''
+  const depth = Math.floor(indent.length / 2)
+  if (m[2]) return { kind: 'ul', depth, text: m[4] }
+  if (m[3] !== undefined) return { kind: 'ol', depth, text: m[4] }
+  return { kind: 'p', depth: 0, text: ln }
+}
+
+// Consecutive list items at greater depth become children of the item above.
+function noteRenderItems(items, keyBase) {
+  const out = []
+  let i = 0
+  while (i < items.length) {
+    const it = items[i]
+    let j = i + 1
+    while (j < items.length && items[j].depth > it.depth) j++
+    const kids = items.slice(i + 1, j)
+    out.push(
+      <li key={keyBase + '-' + i}>
+        {mdInline(it.text)}
+        {kids.length ? noteRenderList(kids, keyBase + '-' + i) : null}
+      </li>
+    )
+    i = j
+  }
+  return out
+}
+
+// [PATCH:note-markers] Marker style follows nesting depth, as a word processor
+// does. The browser counts; we only choose the symbol set.
+const NOTE_OL_TYPES = ['1', 'a', 'i']
+const NOTE_UL_TYPES = ['disc', 'circle', 'square']
+
+function noteRenderList(items, keyBase) {
+  const isOl = items[0].kind === 'ol'
+  const lvl = items[0].depth || 0
+  if (isOl) {
+    return (
+      <ol type={NOTE_OL_TYPES[lvl % NOTE_OL_TYPES.length]}
+          style={{margin:'2px 0',paddingLeft:22}}>
+        {noteRenderItems(items, keyBase)}
+      </ol>
+    )
+  }
+  return (
+    <ul style={{margin:'2px 0',paddingLeft:20,listStyleType:NOTE_UL_TYPES[lvl % NOTE_UL_TYPES.length]}}>
+      {noteRenderItems(items, keyBase)}
+    </ul>
+  )
+}
+
 function NoteText({ t }) {
   const srcText = String(t == null ? '' : t)
   if (!srcText) return null
+
+  // group into runs of list lines and runs of plain lines
   const blocks = []
   let cur = null
   srcText.split('\n').forEach(ln => {
-    const ul = /^- (.*)$/.exec(ln)
-    const ol = /^\d+\. (.*)$/.exec(ln)
-    const kind = ul ? 'ul' : ol ? 'ol' : 'p'
-    if (!cur || cur.type !== kind) { cur = { type: kind, items: [] }; blocks.push(cur) }
-    cur.items.push(ul ? ul[1] : ol ? ol[1] : ln)
+    const p = noteParseLine(ln)
+    const isList = p.kind !== 'p'
+    if (!cur || cur.list !== isList) { cur = { list: isList, items: [] }; blocks.push(cur) }
+    cur.items.push(p)
   })
+
   return (
     <>
-      {blocks.map((b, bi) => {
-        if (b.type === 'ul') return <ul key={bi} style={{margin:'4px 0',paddingLeft:18}}>{b.items.map((it,ii)=><li key={ii}>{mdInline(it)}</li>)}</ul>
-        if (b.type === 'ol') return <ol key={bi} style={{margin:'4px 0',paddingLeft:20}}>{b.items.map((it,ii)=><li key={ii}>{mdInline(it)}</li>)}</ol>
-        return <div key={bi}>{b.items.map((it,ii)=><div key={ii}>{mdInline(it)}</div>)}</div>
-      })}
+      {blocks.map((b, bi) => b.list
+        ? <div key={bi}>{noteRenderList(b.items, 'b' + bi)}</div>
+        : <div key={bi}>{b.items.map((p, ii) => <div key={ii}>{mdInline(p.text)}</div>)}</div>
+      )}
     </>
   )
 }
@@ -222,17 +278,18 @@ function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
     if (s !== ta.selectionEnd) return
     const ls = s === 0 ? 0 : v.lastIndexOf('\n', s - 1) + 1
     const line = v.slice(ls, s)
-    const ul = /^- (.*)$/.exec(line)
-    const ol = /^(\d+)\. (.*)$/.exec(line)
+    const ul = /^(\s*)- (.*)$/.exec(line)
+    const ol = /^(\s*)(\d+)\. (.*)$/.exec(line)
     if (!ul && !ol) return
     ev.preventDefault()
-    const body = ul ? ul[1] : ol[2]
+    const pad = ul ? ul[1] : ol[1]
+    const body = ul ? ul[2] : ol[3]
     if (!body.trim()) {
       setValue(v.slice(0, ls) + v.slice(s))
       restore(ls, ls)
       return
     }
-    const prefix = ul ? '- ' : (parseInt(ol[1], 10) + 1) + '. '
+    const prefix = ul ? pad + '- ' : pad + (parseInt(ol[2], 10) + 1) + '. '
     setValue(v.slice(0, s) + '\n' + prefix + v.slice(s))
     restore(s + 1 + prefix.length, s + 1 + prefix.length)
   }
@@ -255,6 +312,30 @@ function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
     restore(ls + block.length, ls + block.length)
   }
 
+  // Two spaces per level, applied to every selected line. Outdent removes up
+  // to two, so a half-indented line straightens rather than sticking.
+  function indent(dir) {
+    const ta = taRef.current; if (!ta) return
+    const s = ta.selectionStart, e = ta.selectionEnd
+    const ls = s === 0 ? 0 : v.lastIndexOf('\n', s - 1) + 1
+    let le = v.indexOf('\n', e); if (le === -1) le = v.length
+    const moved = v.slice(ls, le).split('\n')
+      .map(l => dir > 0 ? '  ' + l : l.replace(/^ {1,2}/, ''))
+
+    // A moved numbered line begins a new sub-list (or rejoins an outer one),
+    // so restart its counter rather than carrying the old number across.
+    let n = 0
+    const block = moved.map(l => {
+      const m = /^(\s*)(\d+)\. (.*)$/.exec(l)
+      if (!m) return l
+      n++
+      return m[1] + n + '. ' + m[3]
+    }).join('\n')
+
+    setValue(v.slice(0, ls) + block + v.slice(le))
+    restore(ls + block.length, ls + block.length)
+  }
+
   const tbBtn = {fontSize:12,minWidth:30,height:28,borderRadius:5,border:'1px solid var(--border)',
                  background:'var(--s2)',color:'var(--text)',cursor:'pointer',lineHeight:1}
 
@@ -266,7 +347,20 @@ function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
         <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>toggleWrap('__')} title="Underline" style={{...tbBtn,textDecoration:'underline'}}>U</button>
         <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>listify('ul')} title="Bullet list" style={tbBtn}>•</button>
         <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>listify('ol')} title="Numbered list" style={tbBtn}>1.</button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>indent(-1)} title="Decrease indent" style={tbBtn} aria-label="Decrease indent">
+          <svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M5 1h8M5 6h8M5 11h8"/><path d="M3 3.5L0.5 6L3 8.5"/>
+          </svg>
+        </button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>indent(1)} title="Increase indent" style={tbBtn} aria-label="Increase indent">
+          <svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M5 1h8M5 6h8M5 11h8"/><path d="M0.5 3.5L3 6L0.5 8.5"/>
+          </svg>
+        </button>
       </div>
+      {/* The box can only ever show one uniform font, so markers look inert
+          while typing. Say so, rather than letting people conclude it is broken. */}
+      <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Formatting appears once you save. Use the arrows to indent a list.</div>
       <div style={{position:'relative'}}>
         <textarea ref={taRef} className="comment-box" style={{marginTop:0,paddingBottom:44}}
           placeholder={placeholder||'Add a note…'} value={value}
@@ -4850,7 +4944,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     <div style={{marginTop:6}}>
                       <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:56,fontFamily:'inherit',boxSizing:'border-box'}} value={editingComment.text} onChange={e=>setEditingComment({...editingComment,text:e.target.value})}/>
                       <div style={{display:'flex',gap:6,marginTop:6}}>
-                        <button className="btn btn-primary btn-sm" onClick={()=>{ const all=parseSafe(sel.comments,[]); update(sel.id,{comments:all.map((cm,j)=>j!==i?cm:{...(typeof cm==='object'?cm:{id:i+'',author,authorId:user.id,text,timestamp:new Date().toISOString(),edits:[]}),edits:[...((typeof cm==='object'?cm.edits:null)||[]),{text:typeof cm==='object'?cm.text:text,editedAt:new Date().toISOString()}],text:editingComment.text})}); setEditingComment(null) }}>Save</button>
+                        <button className="btn btn-primary btn-sm" onClick={()=>{ const all=parseSafe(sel.comments,[]); update(sel.id,{comments:all.map((cm,j)=>j!==i?cm:{...(typeof cm==='object'?cm:{id:i+'',author,authorId:user.id,text,timestamp:new Date().toISOString(),edits:[]}),edits:[...((typeof cm==='object'?cm.edits:null)||[]),{text:typeof cm==='object'?cm.text:text,editedAt:new Date().toISOString()}],text:editingComment.text})}); setEditingComment(null) }}>💾 Save</button>
                         <button className="btn btn-secondary btn-sm" onClick={()=>setEditingComment(null)}>Cancel</button>
                       </div>
                     </div>
@@ -4871,7 +4965,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <NoteEditor value={comment} setValue={setComment} onBlurSave={()=>{ if(comment.trim()) addComment(sel.id) }}/>
             {comment.trim() && (
               <div style={{display:'flex',justifyContent:'flex-end',marginTop:6}}>
-                <button className="btn btn-primary btn-sm" onClick={()=>addComment(sel.id)}>Save note</button>
+                <button className="btn btn-primary btn-sm" onClick={()=>addComment(sel.id)}>💾 Save note</button>
               </div>
             )}
           </div>
