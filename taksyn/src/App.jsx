@@ -102,11 +102,126 @@ function DictateButton({ setValue, lang }) {
       aria-label={listening?'Stop dictating':'Dictate'}
       aria-pressed={listening}
       style={{position:'absolute',right:8,bottom:8,width:34,height:34,borderRadius:'50%',
-              border:'none',cursor:'pointer',fontSize:16,lineHeight:1,display:'flex',
+              cursor:'pointer',fontSize:15,lineHeight:1,display:'flex',
               alignItems:'center',justifyContent:'center',
-              background:listening?'var(--red)':'var(--s2)',
-              color:listening?'#fff':'var(--text)'}}
+              border:listening?'none':'1px solid rgba(0,0,0,.10)',
+              boxShadow:'0 1px 2px rgba(0,0,0,.06)',
+              background:listening?'var(--red)':'#EEF0F3',
+              color:listening?'#fff':'#374151'}}
     >{listening?'⏹':'🎤'}</button>
+  )
+}
+
+// [PATCH:note-formatting]
+// Renders the markdown subset the toolbar can produce: **bold**, *italic*,
+// "- " bullets, "1. " numbering. Anything else is passed through as plain text,
+// so legacy notes and system-generated entries (rejections, photo entries)
+// render exactly as they always have.
+function mdInline(s) {
+  const out = []
+  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*/g
+  let last = 0, m, k = 0
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) out.push(s.slice(last, m.index))
+    if (m[1] !== undefined) out.push(<strong key={k++}>{m[1]}</strong>)
+    else out.push(<em key={k++}>{m[2]}</em>)
+    last = re.lastIndex
+  }
+  if (last < s.length) out.push(s.slice(last))
+  return out
+}
+
+function NoteText({ t }) {
+  const srcText = String(t == null ? '' : t)
+  if (!srcText) return null
+  const blocks = []
+  let cur = null
+  srcText.split('\n').forEach(ln => {
+    const ul = /^- (.*)$/.exec(ln)
+    const ol = /^\d+\. (.*)$/.exec(ln)
+    const kind = ul ? 'ul' : ol ? 'ol' : 'p'
+    if (!cur || cur.type !== kind) { cur = { type: kind, items: [] }; blocks.push(cur) }
+    cur.items.push(ul ? ul[1] : ol ? ol[1] : ln)
+  })
+  return (
+    <>
+      {blocks.map((b, bi) => {
+        if (b.type === 'ul') return <ul key={bi} style={{margin:'4px 0',paddingLeft:18}}>{b.items.map((it,ii)=><li key={ii}>{mdInline(it)}</li>)}</ul>
+        if (b.type === 'ol') return <ol key={bi} style={{margin:'4px 0',paddingLeft:20}}>{b.items.map((it,ii)=><li key={ii}>{mdInline(it)}</li>)}</ol>
+        return <div key={bi}>{b.items.map((it,ii)=><div key={ii}>{mdInline(it)}</div>)}</div>
+      })}
+    </>
+  )
+}
+
+// Toolbar + textarea + mic in one component, so it owns the textarea ref and
+// no hook has to be added to the host component.
+// EVERY button carries onMouseDown preventDefault. Without it the tap moves
+// focus, the textarea blurs, onBlur fires addComment, and the draft is saved
+// half-written and cleared. Miss it on one button and that button alone eats
+// notes, which reads as an intermittent fault.
+function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
+  const taRef = useRef(null)
+  const v = value || ''
+
+  function restore(ns, ne) {
+    requestAnimationFrame(() => {
+      const ta = taRef.current
+      if (!ta) return
+      ta.focus()
+      try { ta.setSelectionRange(ns, ne) } catch (e) {}
+    })
+  }
+
+  function wrap(mark) {
+    const ta = taRef.current; if (!ta) return
+    const s = ta.selectionStart, e = ta.selectionEnd
+    if (s === e) {
+      setValue(v.slice(0, s) + mark + mark + v.slice(e))
+      restore(s + mark.length, s + mark.length)
+    } else {
+      setValue(v.slice(0, s) + mark + v.slice(s, e) + mark + v.slice(e))
+      restore(s + mark.length, e + mark.length)
+    }
+  }
+
+  // Prefixes every selected line, and toggles the prefix off if all lines
+  // already carry it.
+  function listify(kind) {
+    const ta = taRef.current; if (!ta) return
+    const s = ta.selectionStart, e = ta.selectionEnd
+    const ls = s === 0 ? 0 : v.lastIndexOf('\n', s - 1) + 1
+    let le = v.indexOf('\n', e); if (le === -1) le = v.length
+    const lines = v.slice(ls, le).split('\n')
+    const re = kind === 'ul' ? /^- / : /^\d+\. /
+    const all = lines.every(l => re.test(l))
+    const out = all
+      ? lines.map(l => l.replace(re, ''))
+      : lines.map((l, i) => (kind === 'ul' ? '- ' : (i + 1) + '. ') + l.replace(/^- /, '').replace(/^\d+\. /, ''))
+    const block = out.join('\n')
+    setValue(v.slice(0, ls) + block + v.slice(le))
+    restore(ls + block.length, ls + block.length)
+  }
+
+  const tbBtn = {fontSize:12,minWidth:30,height:28,borderRadius:5,border:'1px solid var(--border)',
+                 background:'var(--s2)',color:'var(--text)',cursor:'pointer',lineHeight:1}
+
+  return (
+    <div style={{marginTop:10}}>
+      <div style={{display:'flex',gap:4,marginBottom:4}}>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>wrap('**')} title="Bold" style={{...tbBtn,fontWeight:800}}>B</button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>wrap('*')} title="Italic" style={{...tbBtn,fontStyle:'italic'}}>I</button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>listify('ul')} title="Bullet list" style={tbBtn}>•</button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>listify('ol')} title="Numbered list" style={tbBtn}>1.</button>
+      </div>
+      <div style={{position:'relative'}}>
+        <textarea ref={taRef} className="comment-box" style={{marginTop:0,paddingBottom:44}}
+          placeholder={placeholder||'Add a note…'} value={value}
+          onChange={e=>setValue(e.target.value)}
+          onBlur={()=>{ if (onBlurSave) onBlurSave() }}/>
+        <DictateButton setValue={setValue}/>
+      </div>
+    </div>
   )
 }
 
@@ -4458,7 +4573,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back</div>
               {parseSafe(sel.comments,[]).filter(c=>(typeof c==='object'?c.isRejection:String(c||'').startsWith('⚠️'))).slice(-1).map((c,i)=>{
                 const txt=typeof c==='object'?c.text:String(c||'').split(': ').slice(1).join(': ')
-                return <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px'}}>{txt}</div>
+                return <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px'}}><NoteText t={txt}/></div>
               })}
             </div>
           )}
@@ -4686,7 +4801,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       </div>
                     </div>
                   ):(
-                    <div style={{marginTop:4,fontSize:13}}>{text}</div>
+                    <div style={{marginTop:4,fontSize:13}}><NoteText t={text}/></div>
                   )}
                 </div>
               )
@@ -4699,10 +4814,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             {/* [PATCH:note-dictation] The mic's onMouseDown preventDefault is load-bearing.
                 Without it the tap moves focus, the textarea blurs, onBlur fires addComment,
                 and a half-dictated note is saved and cleared before a word is spoken. */}
-            <div style={{position:'relative'}}>
-              <textarea className="comment-box" style={{marginTop:10,paddingBottom:44}} placeholder="Add a note…" value={comment} onChange={e=>setComment(e.target.value)} onBlur={()=>{ if(comment.trim()) addComment(sel.id) }}/>
-              <DictateButton setValue={setComment}/>
-            </div>
+            <NoteEditor value={comment} setValue={setComment} onBlurSave={()=>{ if(comment.trim()) addComment(sel.id) }}/>
             {comment.trim() && (
               <div style={{display:'flex',justifyContent:'flex-end',marginTop:6}}>
                 <button className="btn btn-primary btn-sm" onClick={()=>addComment(sel.id)}>Save note</button>
