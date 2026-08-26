@@ -79,7 +79,7 @@ function useDictation(onText, lang) {
   return { supported: !!Supported, listening, start, stop }
 }
 
-function DictateButton({ setValue, lang }) {
+function DictateButton({ setValue, lang, inline }) {
   function appendText(chunk) {
     setValue(prev => {
       const base = prev || ''
@@ -101,7 +101,7 @@ function DictateButton({ setValue, lang }) {
       title={listening?'Stop dictating':'Dictate'}
       aria-label={listening?'Stop dictating':'Dictate'}
       aria-pressed={listening}
-      style={{position:'absolute',right:8,bottom:8,width:34,height:34,borderRadius:'50%',
+      style={{position:inline?'static':'absolute',right:8,bottom:8,width:34,height:34,borderRadius:'50%',
               cursor:'pointer',fontSize:15,lineHeight:1,display:'flex',
               alignItems:'center',justifyContent:'center',
               border:listening?'none':'1px solid rgba(0,0,0,.10)',
@@ -219,6 +219,28 @@ function NoteText({ t }) {
 // focus, the textarea blurs, onBlur fires addComment, and the draft is saved
 // half-written and cleared. Miss it on one button and that button alone eats
 // notes, which reads as an intermittent fault.
+// [PATCH:dictation-everywhere]
+// Sits below a textarea. Pass setValue for a controlled box, or targetId for an
+// uncontrolled one (defaultValue + id, read back with getElementById on save).
+// Uncontrolled boxes have no React setter, so the mic writes el.value directly;
+// that is exactly what the save handler reads, so nothing else has to change.
+function MicChip({ setValue, targetId }) {
+  function apply(fn) {
+    if (targetId) {
+      const el = document.getElementById(targetId)
+      if (!el) return
+      el.value = typeof fn === 'function' ? fn(el.value) : fn
+      return
+    }
+    if (setValue) setValue(fn)
+  }
+  return (
+    <div style={{display:'flex',justifyContent:'flex-end',marginTop:-2,marginBottom:8}}>
+      <DictateButton setValue={apply} inline/>
+    </div>
+  )
+}
+
 function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
   const taRef = useRef(null)
   const v = value || ''
@@ -4323,7 +4345,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <div className="modal-hdr"><div className="modal-title">Reject Task</div><button className="modal-close" onClick={()=>{setShowReject(null);setRejectNote('')}}>×</button></div>
             <div className="modal-body">
               <div style={{fontSize:13,color:'var(--t2)',marginBottom:14}}>The task will be sent back as <span style={{color:'var(--red)',fontWeight:600}}>Rejected</span> with your instructions.</div>
-              <div className="form-field"><label className="form-label">Instructions for Staff Member</label><textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Please re-clean the bathroom…" value={rejectNote} onChange={e=>setRejectNote(e.target.value)}/></div>
+              <div className="form-field"><label className="form-label">Instructions for Staff Member</label><textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Please re-clean the bathroom…" value={rejectNote} onChange={e=>setRejectNote(e.target.value)}/><MicChip setValue={setRejectNote}/></div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>{setShowReject(null);setRejectNote('')}}>Cancel</button>
                 <button className="btn btn-danger" disabled={!rejectNote.trim()} onClick={()=>{
@@ -4344,7 +4366,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <div className="modal-hdr"><div className="modal-title">⚠️ Escalate Task</div><button className="modal-close" onClick={()=>{setShowEscalate(null);setEscalateReason('')}}>×</button></div>
             <div className="modal-body">
               <div style={{fontSize:13,color:'var(--t2)',marginBottom:14}}>This raises an alert to the Client Admin. It does <strong>not</strong> change the task status — you can still Approve or Send Back afterwards.</div>
-              <div className="form-field"><label className="form-label">Reason <span style={{color:'var(--red)'}}>*</span></label><textarea className="comment-box" style={{minHeight:90}} placeholder="e.g. Repair needed; risk of harm to a worker or client…" value={escalateReason} onChange={e=>setEscalateReason(e.target.value)}/></div>
+              <div className="form-field"><label className="form-label">Reason <span style={{color:'var(--red)'}}>*</span></label><textarea className="comment-box" style={{minHeight:90}} placeholder="e.g. Repair needed; risk of harm to a worker or client…" value={escalateReason} onChange={e=>setEscalateReason(e.target.value)}/><MicChip setValue={setEscalateReason}/></div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" disabled={escalating} onClick={()=>{setShowEscalate(null);setEscalateReason('')}}>Cancel</button>
                 <button className="btn btn-amber" disabled={!escalateReason.trim()||escalating} onClick={submitEscalation}>{escalating?'Escalating…':'⚠️ Escalate'}</button>
@@ -4363,7 +4385,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 <div style={{fontWeight:700,marginBottom:4}}>⚠️ You are about to modify organisation data</div>
                 <div style={{color:'var(--t2)'}}>Action: <strong>{interventionModal?.action}</strong></div>
               </div>
-              <div className="form-field"><label className="form-label">Reason for Intervention <span style={{color:'var(--red)'}}>*</span></label><textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Fixing incorrect status…" value={interventionReason} onChange={e=>setInterventionReason(e.target.value)}/></div>
+              <div className="form-field"><label className="form-label">Reason for Intervention <span style={{color:'var(--red)'}}>*</span></label><textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Fixing incorrect status…" value={interventionReason} onChange={e=>setInterventionReason(e.target.value)}/><MicChip setValue={setInterventionReason}/></div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
                 <button className="btn btn-secondary" onClick={()=>{setInterventionModal(null);setInterventionReason('')}}>Cancel</button>
                 <button className="btn btn-amber" disabled={!interventionReason.trim()} onClick={()=>{ update(interventionModal.taskId,interventionModal.changes,interventionReason.trim()); setInterventionModal(null); setInterventionReason('') }}>🔧 Confirm Intervention</button>
@@ -14567,6 +14589,7 @@ function HelpView({ user }) {
         <div className="form-field">
           <label className="form-label">Description <span style={{color:'var(--red)'}}>*</span></label>
           <textarea className="comment-box" style={{minHeight:100}} placeholder="Describe the issue you're experiencing. Include what you were doing when it happened..." value={desc} onChange={e=>setDesc(e.target.value)}/>
+          <MicChip setValue={setDesc}/>
         </div>
         <div className="two-col">
           <div style={{background:'var(--s3)',borderRadius:8,padding:'8px 12px',fontSize:12}}>
@@ -16145,6 +16168,7 @@ function IncidentReportView({ user }) {
             <textarea style={{...inp,minHeight:70,resize:'vertical'}} value={clinicalNote}
               onChange={e=>setClinicalNote(e.target.value)}
               placeholder="e.g. Amoxicillin commenced, admitted to St X Hospital"/>
+            <MicChip setValue={setClinicalNote}/>
           </div>
         )}
 
@@ -16167,9 +16191,11 @@ function IncidentReportView({ user }) {
           <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(the facts, in order — required)</span></span>
           <textarea style={{...inp,minHeight:100,resize:'vertical',marginBottom:12}} value={facts}
             onChange={e=>setFacts(e.target.value)} placeholder="Describe what happened, step by step…"/>
+          <MicChip setValue={setFacts}/>
           <span style={lbl}>Immediate actions taken to make it safe <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
           <textarea style={{...inp,minHeight:70,resize:'vertical',marginBottom:12}} value={immediateActions}
             onChange={e=>setImmediateActions(e.target.value)} placeholder="What was done right away?"/>
+          <MicChip setValue={setImmediateActions}/>
           <label style={{display:'flex',alignItems:'center',gap:8,fontSize:14,cursor:'pointer'}}>
             <input type="checkbox" checked={hazardPresent} onChange={e=>setHazardPresent(e.target.checked)}/>
             The hazard is still present / not yet made safe
@@ -16308,6 +16334,7 @@ function ReportIssueView({ user, embedded }) {
         <div className="form-group">
           <label className="form-label">Description *</label>
           <textarea className="form-input" rows={4} placeholder="Describe the issue in detail — what happened, where, and when" value={desc} onChange={e=>setDesc(e.target.value)} style={{resize:'vertical'}}/>
+          <MicChip setValue={setDesc}/>
         </div>
         <div className="form-group">
           <label className="form-label">Type</label>
@@ -18230,9 +18257,11 @@ function IncidentsAdminView({ user, setPage }) {
           {editNarr ? (<>
             <textarea defaultValue={sel.facts||''} id="inc-edit-facts"
               style={{width:'100%',minHeight:90,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8,fontSize:14}}/>
+            <MicChip targetId="inc-edit-facts"/>
             <span style={lbl}>Immediate actions taken</span>
             <textarea defaultValue={sel.immediate_actions||''} id="inc-edit-immediate"
               style={{width:'100%',minHeight:70,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8,fontSize:14}}/>
+            <MicChip targetId="inc-edit-immediate"/>
             <div style={{fontSize:12,color:'var(--t3)',marginBottom:8}}>
               Corrections are recorded in the audit trail with what changed, who changed it and why.
             </div>
@@ -18330,6 +18359,7 @@ function IncidentsAdminView({ user, setPage }) {
           {editRoot ? (<>
             <textarea defaultValue={sel.root_cause||''} placeholder="Root cause…" id="inc-rootcause"
               style={{width:'100%',minHeight:70,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8}}/>
+            <MicChip targetId="inc-rootcause"/>
             <div style={{fontSize:12,color:'var(--t3)',marginBottom:8}}>
               Recorded in the audit trail with what changed, who changed it and why.
             </div>
@@ -19256,6 +19286,7 @@ function SupportView({ user, tickets=[], setTickets }) {
                 <div className="form-field">
                   <label className="form-label">Reply to User</label>
                   <textarea className="comment-box" style={{minHeight:80}} placeholder="Type your response..." value={response||selected.response||''} onChange={e=>setResponse(e.target.value)}/>
+                  <MicChip setValue={setResponse}/>
                 </div>
                 <div style={{display:'flex',gap:8}}>
                   <button className="btn btn-primary" disabled={!response.trim()||updating} onClick={async()=>{ await updateTicket(selected.id,{response:response.trim(),status:'resolved'}); setResponse(''); setTicketMsg('Ticket resolved successfully'); setTimeout(()=>setTicketMsg(''),3000) }}>✅ Send & Resolve</button>
