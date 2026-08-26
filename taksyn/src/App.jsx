@@ -235,7 +235,11 @@ function MicChip({ setValue, targetId }) {
     if (setValue) setValue(fn)
   }
   return (
-    <div style={{display:'flex',justifyContent:'flex-end',marginTop:-2,marginBottom:8}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,marginTop:-2,marginBottom:8}}>
+      {/* [PATCH:dictation-policy] Standing disclosure. Speech is transcribed by
+          the browser vendor's service, not on the device, so audio leaves the
+          phone. People should know that before they say a client's name. */}
+      <span style={{fontSize:11,color:'var(--t2)'}}>Dictation is transcribed by your browser's speech provider.</span>
       <DictateButton setValue={apply} inline/>
     </div>
   )
@@ -10266,7 +10270,7 @@ function CompanySettingsView({ user }) {
       require_gps:false, require_evidence:false, min_evidence_photos:1,
       require_comments:false, auto_escalate_days:3,
     },
-    compliance:{ score_target:90, critical_categories:[], reminder_days:[2] },
+    compliance:{ score_target:90, critical_categories:[], reminder_days:[2], restrict_clinical_dictation:true },
     branding:{ primary_color:'#00A87E', report_header:'', report_footer:'' },
     data:{ retention_months:24 },
   }
@@ -10988,6 +10992,19 @@ function CompanySettingsView({ user }) {
               const active=settings.compliance.reminder_days.includes(n)
               return <PillBtn key={n} active={active} onClick={()=>setC('reminder_days',active?settings.compliance.reminder_days.filter(d=>d!==n):[...settings.compliance.reminder_days,n].sort((a,b)=>a-b))}>{n} day{n!==1?'s':''} before</PillBtn>
             })}
+          </div>
+        </div>
+        {/* [PATCH:dictation-policy] Under Compliance, not Tasks: this is the
+            record of a policy decision, and an auditor should be able to find it. */}
+        <div className="section">
+          <div className="section-title">Dictation</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>
+            Speech is transcribed by the person's browser — Chrome sends audio to Google, Safari to Apple — so audio leaves the device. This setting hides the dictate button on the clinical details field. It does not disable the microphone built into a phone keyboard, so it records your organisation's expectation rather than enforcing it technically.
+          </div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+            <div style={{fontSize:13}}>Require clinical details to be typed</div>
+            <Tog on={settings.compliance.restrict_clinical_dictation!==false}
+                 toggle={()=>setC('restrict_clinical_dictation',settings.compliance.restrict_clinical_dictation===false)}/>
           </div>
         </div>
         <SaveFooter/>
@@ -15420,7 +15437,10 @@ function IncidentHubView({ user, setPage }) {
   )
 }
 
-function IncidentReportView({ user }) {
+function IncidentReportView({ user, orgSettings }) {
+  // [PATCH:dictation-policy] Null (not yet loaded, or fetch failed) counts as
+  // restricted. Only an explicit false opens the mic.
+  const clinicalDictationAllowed = orgSettings?.compliance?.restrict_clinical_dictation === false
   // CATEGORY PACKS — the dropdown reads incident_category_packs for this
   // org's industry, union the org's own additions, with pack rows the org
   // has overridden suppressed. Shape stays [key, label, sub] so the render
@@ -16168,7 +16188,9 @@ function IncidentReportView({ user }) {
             <textarea style={{...inp,minHeight:70,resize:'vertical'}} value={clinicalNote}
               onChange={e=>setClinicalNote(e.target.value)}
               placeholder="e.g. Amoxicillin commenced, admitted to St X Hospital"/>
-            <MicChip setValue={setClinicalNote}/>
+            {clinicalDictationAllowed
+              ? <MicChip setValue={setClinicalNote}/>
+              : <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>Please type clinical details. Dictation sends audio to your browser's speech provider, so it is not offered here.</div>}
           </div>
         )}
 
@@ -19362,6 +19384,9 @@ export default function App() {
   const [sessionWarning, setSessionWarning] = useState(false)
   const [warnCountdown, setWarnCountdown] = useState(120)
   const [sessionTimeout, setSessionTimeout] = useState(() => { const v = localStorage.getItem('taksyn_session_timeout'); return v === null ? null : Number(v) })
+  // [PATCH:dictation-policy] null until the org fetch lands. Read as
+  // "restricted" by the clinical mic gate, so a failed fetch fails closed.
+  const [orgSettings, setOrgSettings] = useState(null)
   const [undoStack, setUndoStack] = useState([])
   const [showUndo, setShowUndo] = useState(false)
   const [auditLog, setAuditLog] = useState([])
@@ -19944,11 +19969,16 @@ export default function App() {
             notifIdsRef.current = new Set(mapped.map(n=>n.id))
           }
         }).catch(()=>{})
+      // [PATCH:dictation-policy] see setOrgSettings below
       // Load org SLA settings
       if(isConfigured()&&user.org) {
-        supabase.from('organisations').select('sla_settings,auto_logout_minutes,timezone').eq('name',user.org).maybeSingle()
+        supabase.from('organisations').select('sla_settings,auto_logout_minutes,timezone,org_settings').eq('name',user.org).maybeSingle()
           .then(({data})=>{
             if(data?.sla_settings) updateOrgSLA({...DEFAULT_SLA,...JSON.parse(data.sla_settings)})
+            // [PATCH:dictation-policy] Fails closed: orgSettings stays null on a
+            // failed or absent fetch, and the clinical mic reads null as
+            // "restricted". A missing button beats a policy silently off.
+            if(data?.org_settings) { try { setOrgSettings(JSON.parse(data.org_settings)) } catch(e) {} }
             if(data?.auto_logout_minutes!=null) setSessionTimeout(data.auto_logout_minutes)
             // F14-ORGDAY — resolve unconditionally. supabase-js returns errors in the envelope
             // rather than throwing (F37), so a 400 lands here with data undefined and we settle
@@ -20872,7 +20902,7 @@ export default function App() {
                 {page==='incident_hub' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentHubView user={user} setPage={setPage}/>}
                 {page==='contacts' && user.role==='client_admin' && <ContactsView user={user} setPage={setPage}/>}
                 {page==='people_submissions' && user.role==='client_admin' && <PeopleSubmissionsView user={user} setPage={setPage}/>}
-                {page==='report_incident' && <IncidentReportView user={user}/>}
+                {page==='report_incident' && <IncidentReportView user={user} orgSettings={orgSettings}/>}
                 {page==='guide' && <GettingStartedGuide user={user} setPage={setPage}/>}
               </>
             )}
