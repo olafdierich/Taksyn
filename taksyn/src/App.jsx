@@ -13,6 +13,103 @@ import StaffImportPanel from './StaffImportPanel.jsx'
 // Declared here (outside all components) so it is always in scope everywhere in this file.
 const pendingInviteAcceptRef = { current: null }
 
+// [PATCH:note-dictation]
+// Speech-to-text for note boxes. Appends settled transcript to whatever state
+// the caller passes in; never replaces or clears existing text.
+function useDictation(onText, lang) {
+  const [listening, setListening] = useState(false)
+  const recRef = useRef(null)
+  const wantRef = useRef(false)   // true = keep the mic open across auto-stops
+
+  const Supported = typeof window !== 'undefined' &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition)
+
+  function stop() {
+    wantRef.current = false
+    setListening(false)
+    try { if (recRef.current) recRef.current.stop() } catch (e) {}
+  }
+
+  function start() {
+    if (!Supported) return
+    const Rec = window.SpeechRecognition || window.webkitSpeechRecognition
+    const rec = new Rec()
+    rec.lang = lang || 'en-GB'      // NOT en-US: default locale mangles local names
+    rec.continuous = true            // honoured on Chrome, ignored on iOS
+    rec.interimResults = false       // settled text only — prevents duplicate words
+
+    rec.onresult = (ev) => {
+      let chunk = ''
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) chunk += ev.results[i][0].transcript
+      }
+      // functional update, so a stale closure cannot overwrite newer typing
+      if (chunk.trim()) onText(chunk.trim())
+    }
+
+    // iOS Safari ends the session after a short silence. Restart unless the
+    // user actually pressed stop, so the mic behaves the same on every device.
+    rec.onend = () => {
+      if (wantRef.current) {
+        try { rec.start() } catch (e) { setListening(false) }
+      } else {
+        setListening(false)
+      }
+    }
+
+    rec.onerror = (ev) => {
+      if (ev.error !== 'no-speech' && ev.error !== 'aborted') {
+        wantRef.current = false
+        setListening(false)
+      }
+    }
+
+    recRef.current = rec
+    wantRef.current = true
+    setListening(true)
+    try { rec.start() } catch (e) { setListening(false) }
+  }
+
+  // never leave the microphone open if the view unmounts
+  useEffect(() => () => {
+    wantRef.current = false
+    try { if (recRef.current) recRef.current.stop() } catch (e) {}
+  }, [])
+
+  return { supported: !!Supported, listening, start, stop }
+}
+
+function DictateButton({ setValue, lang }) {
+  function appendText(chunk) {
+    setValue(prev => {
+      const base = prev || ''
+      if (!base) return chunk
+      return /\s$/.test(base) ? base + chunk : base + ' ' + chunk
+    })
+  }
+  const { supported, listening, start, stop } = useDictation(appendText, lang)
+
+  // Firefox and anything without the API: render nothing. A dead mic is worse
+  // than no mic.
+  if (!supported) return null
+
+  return (
+    <button
+      type="button"
+      onMouseDown={e=>e.preventDefault()}
+      onClick={()=>listening?stop():start()}
+      title={listening?'Stop dictating':'Dictate'}
+      aria-label={listening?'Stop dictating':'Dictate'}
+      aria-pressed={listening}
+      style={{position:'absolute',right:8,bottom:8,width:34,height:34,borderRadius:'50%',
+              border:'none',cursor:'pointer',fontSize:16,lineHeight:1,display:'flex',
+              alignItems:'center',justifyContent:'center',
+              background:listening?'var(--red)':'var(--s2)',
+              color:listening?'#fff':'var(--text)'}}
+    >{listening?'⏹':'🎤'}</button>
+  )
+}
+
 const ROLES = ['super_admin','client_admin','manager','supervisor','worker']
 const ROLE_LABELS = { super_admin:'Super Admin', client_admin:'Client Admin', manager:'Manager', supervisor:'Supervisor', worker:'Staff Member' }
 const ROLE_COLORS = { super_admin:'#F59E0B', client_admin:'#8B5CF6', manager:'#3B82F6', supervisor:'#10B981', worker:'#6B7280' }
@@ -4599,7 +4696,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 reached addComment, with no error and nothing saved. onBlur is kept
                 as a fallback -- addComment no-ops on empty and clears `comment`
                 after writing, so a blur following a click cannot double-post. */}
-            <textarea className="comment-box" style={{marginTop:10}} placeholder="Add a note…" value={comment} onChange={e=>setComment(e.target.value)} onBlur={()=>{ if(comment.trim()) addComment(sel.id) }}/>
+            {/* [PATCH:note-dictation] The mic's onMouseDown preventDefault is load-bearing.
+                Without it the tap moves focus, the textarea blurs, onBlur fires addComment,
+                and a half-dictated note is saved and cleared before a word is spoken. */}
+            <div style={{position:'relative'}}>
+              <textarea className="comment-box" style={{marginTop:10,paddingBottom:44}} placeholder="Add a note…" value={comment} onChange={e=>setComment(e.target.value)} onBlur={()=>{ if(comment.trim()) addComment(sel.id) }}/>
+              <DictateButton setValue={setComment}/>
+            </div>
             {comment.trim() && (
               <div style={{display:'flex',justifyContent:'flex-end',marginTop:6}}>
                 <button className="btn btn-primary btn-sm" onClick={()=>addComment(sel.id)}>Save note</button>
