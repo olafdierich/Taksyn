@@ -3373,7 +3373,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // lifted orgMembers prop. org_members.role only.
   const _regNameById = {}
   const _regRoleById = {}
-  ;(orgMembers||[]).forEach(m=>{ if(m && m.id){ if(m.name) _regNameById[m.id]=m.name; _regRoleById[m.id]=m.role||'worker' } })
+  // REGISTER-APPROVER-SCOPE-V1: _regActiveById added. is_active reaches this component
+  // (App-level orgMembers fetch maps is_active: m.is_active!==false) but was
+  // not being read here. A deactivated approver is not a watcher.
+  const _regActiveById = {}
+  ;(orgMembers||[]).forEach(m=>{ if(m && m.id){ if(m.name) _regNameById[m.id]=m.name; _regRoleById[m.id]=m.role||'worker'; _regActiveById[m.id]=m.is_active!==false } })
   // Each tier sees its own level and below.
   const REGISTER_TIERS = { supervisor:['worker'], manager:['worker','supervisor'],
     client_admin:['worker','supervisor','manager','client_admin'] }
@@ -4093,8 +4097,30 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       const display = names.length ? names.join(', ') : (t.assigned_user_name || '')
       // Unassigned tasks are ALWAYS in scope: an unassigned daily check racking up
       // misses is exactly what the register exists to surface.
+      //
+      // REGISTER-APPROVER-SCOPE-V1: scope follows the APPROVER, not the assignee's role.
+      // Previously any supervisor saw every worker's task, so Lillian saw Asaba's
+      // water checks while Rusoke Bailey approved them. Accountability flows one
+      // way: you see what you answer for, and what answers to people below you.
+      const _apprId = t.approver_id || ''
+      const _apprName = String(t.approver_name||'').toLowerCase()
+      // Legacy rows may carry approver_name with no id. Kemrose has none (marker
+      // APPR-01: 9 of 9 have approver_id) but other orgs may, and hiding a task
+      // because of a missing id would be the same silent failure in a new coat.
+      const _apprIsMe = (_apprId && _apprId===user.id)
+        || (!!_apprName && _apprName===String(user.name||'').toLowerCase())
+      // Resolve the approver against org_members. Unresolvable, unknown or
+      // deactivated all count as ORPHANED -- nobody is watching this task.
+      const _apprRole = _apprId ? _regRoleById[_apprId] : undefined
+      const _apprLive = _apprId ? (_regActiveById[_apprId]!==false) : false
+      const _apprOrphaned = !_apprId || !_apprRole || !_apprLive
+      // Below me in tier. _regVisibleRoles already encodes 'my level and below'
+      // per REGISTER_TIERS, so client_admin (all four roles) keeps full sight.
+      const _apprBelowMe = !!_apprRole && _regVisibleRoles.includes(_apprRole)
       const inScope = ids.length===0 ? true
-        : ids.some(id=>_regVisibleRoles.includes(_regRoleById[id]||'worker'))
+        : _apprIsMe ? true
+        : _apprOrphaned ? (user.role==='client_admin')
+        : _apprBelowMe
       const _occD = occDatesByTask[t.id] || []
       const _cre = String(t.created_at||'').slice(0,10)
       const _dueP = (t.due_date && String(t.due_date).slice(0,10) <= _regToday) ? String(t.due_date).slice(0,10) : ''
