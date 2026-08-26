@@ -119,12 +119,15 @@ function DictateButton({ setValue, lang }) {
 // render exactly as they always have.
 function mdInline(s) {
   const out = []
-  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*/g
+  // [PATCH:note-formatting-v2] __underline__ is not standard markdown, but this
+  // renderer is the only thing that reads it, so the meaning is ours to define.
+  const re = /\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*/g
   let last = 0, m, k = 0
   while ((m = re.exec(s)) !== null) {
     if (m.index > last) out.push(s.slice(last, m.index))
     if (m[1] !== undefined) out.push(<strong key={k++}>{m[1]}</strong>)
-    else out.push(<em key={k++}>{m[2]}</em>)
+    else if (m[2] !== undefined) out.push(<u key={k++}>{m[2]}</u>)
+    else out.push(<em key={k++}>{m[3]}</em>)
     last = re.lastIndex
   }
   if (last < s.length) out.push(s.slice(last))
@@ -173,16 +176,65 @@ function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
     })
   }
 
-  function wrap(mark) {
+  // Toggle, not insert. The first version inserted a fresh pair on every press,
+  // which is what left stray ** at the end of notes in testing.
+  function toggleWrap(mark) {
     const ta = taRef.current; if (!ta) return
-    const s = ta.selectionStart, e = ta.selectionEnd
+    let s = ta.selectionStart, e = ta.selectionEnd
+    const m = mark.length
+
+    // Nothing selected: act on the word under the cursor, the way a word
+    // processor does. Without this the button has nothing to work on.
     if (s === e) {
-      setValue(v.slice(0, s) + mark + mark + v.slice(e))
-      restore(s + mark.length, s + mark.length)
-    } else {
-      setValue(v.slice(0, s) + mark + v.slice(s, e) + mark + v.slice(e))
-      restore(s + mark.length, e + mark.length)
+      let a = s, b = s
+      while (a > 0 && /\S/.test(v[a - 1])) a--
+      while (b < v.length && /\S/.test(v[b])) b++
+      if (b > a) { s = a; e = b }
     }
+
+    const sel = v.slice(s, e)
+
+    // markers inside the selection -> strip them
+    if (sel.length >= 2 * m && sel.slice(0, m) === mark && sel.slice(-m) === mark) {
+      const inner = sel.slice(m, sel.length - m)
+      setValue(v.slice(0, s) + inner + v.slice(e))
+      restore(s, s + inner.length)
+      return
+    }
+
+    // markers just outside the selection -> strip those instead
+    if (s >= m && v.slice(s - m, s) === mark && v.slice(e, e + m) === mark) {
+      setValue(v.slice(0, s - m) + sel + v.slice(e + m))
+      restore(s - m, s - m + sel.length)
+      return
+    }
+
+    setValue(v.slice(0, s) + mark + sel + mark + v.slice(e))
+    restore(s + m, e + m)
+  }
+
+  // Enter inside a list continues it. Enter on an empty item leaves the list.
+  // Shift+Enter is always a plain newline.
+  function onKeyDown(ev) {
+    if (ev.key !== 'Enter' || ev.shiftKey) return
+    const ta = taRef.current; if (!ta) return
+    const s = ta.selectionStart
+    if (s !== ta.selectionEnd) return
+    const ls = s === 0 ? 0 : v.lastIndexOf('\n', s - 1) + 1
+    const line = v.slice(ls, s)
+    const ul = /^- (.*)$/.exec(line)
+    const ol = /^(\d+)\. (.*)$/.exec(line)
+    if (!ul && !ol) return
+    ev.preventDefault()
+    const body = ul ? ul[1] : ol[2]
+    if (!body.trim()) {
+      setValue(v.slice(0, ls) + v.slice(s))
+      restore(ls, ls)
+      return
+    }
+    const prefix = ul ? '- ' : (parseInt(ol[1], 10) + 1) + '. '
+    setValue(v.slice(0, s) + '\n' + prefix + v.slice(s))
+    restore(s + 1 + prefix.length, s + 1 + prefix.length)
   }
 
   // Prefixes every selected line, and toggles the prefix off if all lines
@@ -209,8 +261,9 @@ function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
   return (
     <div style={{marginTop:10}}>
       <div style={{display:'flex',gap:4,marginBottom:4}}>
-        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>wrap('**')} title="Bold" style={{...tbBtn,fontWeight:800}}>B</button>
-        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>wrap('*')} title="Italic" style={{...tbBtn,fontStyle:'italic'}}>I</button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>toggleWrap('**')} title="Bold" style={{...tbBtn,fontWeight:800}}>B</button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>toggleWrap('*')} title="Italic" style={{...tbBtn,fontStyle:'italic',fontFamily:'Georgia,Times,serif',fontSize:14}}>I</button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>toggleWrap('__')} title="Underline" style={{...tbBtn,textDecoration:'underline'}}>U</button>
         <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>listify('ul')} title="Bullet list" style={tbBtn}>•</button>
         <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>listify('ol')} title="Numbered list" style={tbBtn}>1.</button>
       </div>
@@ -218,6 +271,7 @@ function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
         <textarea ref={taRef} className="comment-box" style={{marginTop:0,paddingBottom:44}}
           placeholder={placeholder||'Add a note…'} value={value}
           onChange={e=>setValue(e.target.value)}
+          onKeyDown={onKeyDown}
           onBlur={()=>{ if (onBlurSave) onBlurSave() }}/>
         <DictateButton setValue={setValue}/>
       </div>
