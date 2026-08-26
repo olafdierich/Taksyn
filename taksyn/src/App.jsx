@@ -4594,7 +4594,17 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 </div>
               )
             })}
+            {/* NOTE-SAVE-BUTTON-V1: onBlur alone lost notes silently. A note typed
+                and then abandoned by a keyboard dismissal or a back gesture never
+                reached addComment, with no error and nothing saved. onBlur is kept
+                as a fallback -- addComment no-ops on empty and clears `comment`
+                after writing, so a blur following a click cannot double-post. */}
             <textarea className="comment-box" style={{marginTop:10}} placeholder="Add a note…" value={comment} onChange={e=>setComment(e.target.value)} onBlur={()=>{ if(comment.trim()) addComment(sel.id) }}/>
+            {comment.trim() && (
+              <div style={{display:'flex',justifyContent:'flex-end',marginTop:6}}>
+                <button className="btn btn-primary btn-sm" onClick={()=>addComment(sel.id)}>Save note</button>
+              </div>
+            )}
           </div>
           <div className="section">
             <div className="section-title">Details</div>
