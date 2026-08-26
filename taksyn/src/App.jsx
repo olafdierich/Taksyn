@@ -166,9 +166,27 @@ function noteRenderItems(items, keyBase) {
   return out
 }
 
+// [PATCH:note-markers] Marker style follows nesting depth, as a word processor
+// does. The browser counts; we only choose the symbol set.
+const NOTE_OL_TYPES = ['1', 'a', 'i']
+const NOTE_UL_TYPES = ['disc', 'circle', 'square']
+
 function noteRenderList(items, keyBase) {
-  const Tag = items[0].kind === 'ol' ? 'ol' : 'ul'
-  return <Tag style={{margin:'2px 0',paddingLeft:items[0].kind==='ol'?20:18}}>{noteRenderItems(items, keyBase)}</Tag>
+  const isOl = items[0].kind === 'ol'
+  const lvl = items[0].depth || 0
+  if (isOl) {
+    return (
+      <ol type={NOTE_OL_TYPES[lvl % NOTE_OL_TYPES.length]}
+          style={{margin:'2px 0',paddingLeft:22}}>
+        {noteRenderItems(items, keyBase)}
+      </ol>
+    )
+  }
+  return (
+    <ul style={{margin:'2px 0',paddingLeft:20,listStyleType:NOTE_UL_TYPES[lvl % NOTE_UL_TYPES.length]}}>
+      {noteRenderItems(items, keyBase)}
+    </ul>
+  )
 }
 
 function NoteText({ t }) {
@@ -301,9 +319,19 @@ function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
     const s = ta.selectionStart, e = ta.selectionEnd
     const ls = s === 0 ? 0 : v.lastIndexOf('\n', s - 1) + 1
     let le = v.indexOf('\n', e); if (le === -1) le = v.length
-    const block = v.slice(ls, le).split('\n')
+    const moved = v.slice(ls, le).split('\n')
       .map(l => dir > 0 ? '  ' + l : l.replace(/^ {1,2}/, ''))
-      .join('\n')
+
+    // A moved numbered line begins a new sub-list (or rejoins an outer one),
+    // so restart its counter rather than carrying the old number across.
+    let n = 0
+    const block = moved.map(l => {
+      const m = /^(\s*)(\d+)\. (.*)$/.exec(l)
+      if (!m) return l
+      n++
+      return m[1] + n + '. ' + m[3]
+    }).join('\n')
+
     setValue(v.slice(0, ls) + block + v.slice(le))
     restore(ls + block.length, ls + block.length)
   }
@@ -319,12 +347,20 @@ function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
         <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>toggleWrap('__')} title="Underline" style={{...tbBtn,textDecoration:'underline'}}>U</button>
         <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>listify('ul')} title="Bullet list" style={tbBtn}>•</button>
         <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>listify('ol')} title="Numbered list" style={tbBtn}>1.</button>
-        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>indent(-1)} title="Decrease indent" style={tbBtn}>⇤</button>
-        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>indent(1)} title="Increase indent" style={tbBtn}>⇥</button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>indent(-1)} title="Decrease indent" style={tbBtn} aria-label="Decrease indent">
+          <svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M5 1h8M5 6h8M5 11h8"/><path d="M3 3.5L0.5 6L3 8.5"/>
+          </svg>
+        </button>
+        <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>indent(1)} title="Increase indent" style={tbBtn} aria-label="Increase indent">
+          <svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M5 1h8M5 6h8M5 11h8"/><path d="M0.5 3.5L3 6L0.5 8.5"/>
+          </svg>
+        </button>
       </div>
       {/* The box can only ever show one uniform font, so markers look inert
           while typing. Say so, rather than letting people conclude it is broken. */}
-      <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Formatting appears once you save.</div>
+      <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Formatting appears once you save. Use the arrows to indent a list.</div>
       <div style={{position:'relative'}}>
         <textarea ref={taRef} className="comment-box" style={{marginTop:0,paddingBottom:44}}
           placeholder={placeholder||'Add a note…'} value={value}
