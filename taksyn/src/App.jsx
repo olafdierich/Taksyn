@@ -3874,7 +3874,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {editTask.compliance&&<div className="form-field"><label className="form-label">Due Time <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label><input className="form-input" type="time" value={editTask.due_time||''} onChange={e=>setEditTask({...editTask,due_time:e.target.value})}/></div>}
               <div className="form-field"><label className="form-label">Assign to Team <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— optional</span></label>
                 <select className="form-select" value={editTask.team_id||''} onChange={e=>{ const team=taskOrgTeams.find(t=>t.id===e.target.value); setEditTask({...editTask,team_id:team?.id||'',team_name:team?.name||'',assigned_user_ids:[],assigned_user_names:[],lead_user_id:'',lead_user_name:''}); setTaskTeamMembers([]); setAssignAll(true); if(team?.id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',team.id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } }}>
-                  <option value="">— No team —</option>
+                  {/* TAKSYN-PATCH-SELECT-PLACEHOLDERS: was "— No team —". Team is still
+                      OPTIONAL and value="" is still selectable -- only the label
+                      changed, so an existing task with no team is unaffected on save. */}
+                  <option value="">— Click here to select —</option>
                   {taskOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
@@ -4042,7 +4045,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         }).catch(()=>{})
                     }
                   }}>
-                    <option value="">— No team —</option>
+                    {/* TAKSYN-PATCH-SELECT-PLACEHOLDERS */}
+                    <option value="">— Click here to select —</option>
                     {taskOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                   {newTask.team_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>📋 Task will be visible to all members of {newTask.team_name}</div>}
@@ -4114,7 +4118,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 <label className="form-label">Approver <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none'}}>— reviews the task on completion</span></label>
                 {teamUsers.length>0&&!newTask.approver_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4,marginBottom:4}}>⚠️ Every task needs an approver — please select who reviews this on completion</div>}
                 <select className="form-select" value={newTask.approver_id||''} onChange={e=>{ const a=teamUsers.find(u=>u.id===e.target.value); setNewTask({...newTask,approver_id:a?.id||'',approver_name:a?.name||''}) }}>
-                  <option value="">{user.role==='client_admin'?'— Select approver —':'— Me —'}</option>
+                  {/* TAKSYN-PATCH-SELECT-PLACEHOLDERS: "— Me —" carried value="" and read as a
+                      completed choice to every non-client_admin, while the amber
+                      "needs an approver" warning above said the opposite. Approver
+                      is mandatory and gates Submit, so a manager was blocked with no
+                      visible cause. One prompt for every role now. The creator's own
+                      name already appears in the list below when they are a valid
+                      approver -- do not reintroduce a self sentinel here. */}
+                  <option value="">— Click here to select —</option>
                   {teamUsers.filter(u=>(ROLE_LEVEL[u.role]||0)>(ROLE_LEVEL[newTask.assigned_role]||0)||(u.id===newTask.assigned_user_id&&(ROLE_LEVEL[newTask.assigned_role]||0)>=3)||(u.id===newTask.assigned_user_id&&newTask.assigned_user_id===user.id)).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
                 </select>
               </div>
