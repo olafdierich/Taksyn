@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, createContext, useContext } from 'react'
 import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -79,6 +79,11 @@ function useDictation(onText, lang) {
   return { supported: !!Supported, listening, start, stop }
 }
 
+// Org-level dictation policy, consumed by DictateButton below. Defaults to true
+// so any tree rendered without a provider keeps its mics — the gate is a policy
+// control, not a kill switch, and must fail open on absence.
+const DictationContext = createContext(true)
+
 function DictateButton({ setValue, lang, inline }) {
   function appendText(chunk) {
     setValue(prev => {
@@ -87,11 +92,18 @@ function DictateButton({ setValue, lang, inline }) {
       return /\s$/.test(base) ? base + chunk : base + ' ' + chunk
     })
   }
+  const orgAllowsDictation = useContext(DictationContext)
   const { supported, listening, start, stop } = useDictation(appendText, lang)
 
   // Firefox and anything without the API: render nothing. A dead mic is worse
   // than no mic.
   if (!supported) return null
+
+  // Org policy gate. null means still resolving — hide rather than flash a mic
+  // an org has switched off. Deliberately BELOW useDictation: this value changes
+  // after mount, so returning above the hook would vary hook order between
+  // renders and crash React. Both returns sit after every hook in this function.
+  if (orgAllowsDictation !== true) return null
 
   return (
     <button
@@ -20059,6 +20071,28 @@ export default function App() {
   // A user with no user.org never resolves, which is correct: occurrence rows are
   // org-scoped and t.org would be null anyway.
   const [orgTimezone, setOrgTimezone] = useState(null)
+  // Org dictation policy. null = unresolved; DictateButton hides mics until it lands.
+  // Every failure path (no org, query error, absent blob, bad JSON, missing key)
+  // resolves to true — orgs stored their org_settings before this key existed and
+  // must not silently lose dictation. Only an explicit false disables it.
+  // Its own effect, not folded into the main one: that effect owns the tasks
+  // realtime channel and re-running it would tear down and re-subscribe.
+  const [allowDictation, setAllowDictation] = useState(null)
+  useEffect(()=>{
+    if(!user?.org || !isConfigured()) return
+    let cancelled = false
+    ;(async()=>{
+      try {
+        // user.org is the org NAME (profiles.org stores the name, not the id).
+        const { data, error } = await supabase.from('organisations').select('org_settings').eq('name', user.org).maybeSingle()
+        if (cancelled) return
+        if (error || !data?.org_settings) { setAllowDictation(true); return }
+        const parsed = JSON.parse(data.org_settings)
+        setAllowDictation(parsed?.compliance?.allow_sensitive_dictation !== false)
+      } catch (e) { if (!cancelled) setAllowDictation(true) }
+    })()
+    return ()=>{ cancelled = true }
+  }, [user?.org])
   const [showOrgSwitch, setShowOrgSwitch] = useState(false)
 
   // F14-ORGDAY — loadTasks() is called at the top of the main effect, BEFORE the org
@@ -20201,6 +20235,7 @@ export default function App() {
   return (
     <>
       <style>{CSS}</style>
+      <DictationContext.Provider value={allowDictation}>
       <div className="app">
         {showUndo&&undoStack.length>0&&(
           <div className="undo-toast">
@@ -20888,6 +20923,7 @@ export default function App() {
         </div>
 
       </div>
+      </DictationContext.Provider>
     </>
   )
 }
