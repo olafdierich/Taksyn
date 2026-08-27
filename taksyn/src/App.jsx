@@ -18136,6 +18136,13 @@ function IncidentsAdminView({ user, setPage }) {
       const { data: ev } = await supabase.from('incident_events')
         .select('*').eq('incident_id', sel.id).order('at',{ascending:false})
       setEvents(ev||[])
+      // Findings are seeded server-side on entry to investigating, so the
+      // client copy stays empty until it re-reads. Without this the
+      // investigation and root cause card does not appear until the record
+      // is closed and reopened.
+      const { data: fnd } = await supabase.from('incident_findings')
+        .select('*').eq('incident_id', sel.id).order('section',{ascending:true}).order('sort_order',{ascending:true})
+      setIncFindings(fnd||[])
     }
     setBusy(false)
   }
