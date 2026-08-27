@@ -10253,7 +10253,7 @@ function RolesPositionsView({ user }) {
   )
 }
 
-function CompanySettingsView({ user }) {
+function CompanySettingsView({ user, onSettingsSaved }) {
   const NOTIF_EVENTS = [
     { key:'task_submitted', label:'Task Submitted', sub:'When a worker submits a task for review' },
     { key:'task_approved',  label:'Task Approved',  sub:'When a task is approved by a reviewer' },
@@ -10746,6 +10746,11 @@ function CompanySettingsView({ user }) {
         setSaving(false); return
       }
     }
+    // Only reached on a confirmed persisted row — every failure path above returns
+    // early, so this cannot report a policy the database refused. App re-reads the
+    // dictation policy from this object, so mics update without a reload for the
+    // admin who changed it. Other users pick it up on their next load.
+    onSettingsSaved?.(settings)
     setMsg('✓ Settings saved')
     setSavedToast(true)
     setTimeout(()=>setSavedToast(false), 3000)
@@ -20900,7 +20905,7 @@ export default function App() {
                 {page==='teams'       && hasAccess(user.role,2) && <TeamsView {...pageProps}/>}
                 {page==='templates'    && user.role!=='super_admin' && hasAccess(user.role,2) && <TemplatesView user={user}/>}
                 {page==='sla'         && ['client_admin','super_admin'].includes(user.role) && <SLASettingsView {...pageProps}/>}
-                {page==='company_settings' && ['client_admin','super_admin'].includes(user.role) && <CompanySettingsView user={user}/>}
+                {page==='company_settings' && ['client_admin','super_admin'].includes(user.role) && <CompanySettingsView user={user} onSettingsSaved={s=>setAllowDictation(s?.compliance?.allow_sensitive_dictation !== false)}/>}
                 {page==='notifications' && user.role==='super_admin' && <PlatformAnnouncementsView user={user}/>}
                 {page==='sa_templates'       && user.role==='super_admin' && <SuperAdminTemplatesView user={user}/>}
                 {page==='platform_industries' && user.role==='super_admin' && <PlatformIndustriesView user={user}/>}
