@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, createContext, useContext } from 'react'
 import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -79,6 +79,11 @@ function useDictation(onText, lang) {
   return { supported: !!Supported, listening, start, stop }
 }
 
+// Org-level dictation policy, consumed by DictateButton below. Defaults to true
+// so any tree rendered without a provider keeps its mics — the gate is a policy
+// control, not a kill switch, and must fail open on absence.
+const DictationContext = createContext(true)
+
 function DictateButton({ setValue, lang, inline }) {
   function appendText(chunk) {
     setValue(prev => {
@@ -87,11 +92,18 @@ function DictateButton({ setValue, lang, inline }) {
       return /\s$/.test(base) ? base + chunk : base + ' ' + chunk
     })
   }
+  const orgAllowsDictation = useContext(DictationContext)
   const { supported, listening, start, stop } = useDictation(appendText, lang)
 
   // Firefox and anything without the API: render nothing. A dead mic is worse
   // than no mic.
   if (!supported) return null
+
+  // Org policy gate. null means still resolving — hide rather than flash a mic
+  // an org has switched off. Deliberately BELOW useDictation: this value changes
+  // after mount, so returning above the hook would vary hook order between
+  // renders and crash React. Both returns sit after every hook in this function.
+  if (orgAllowsDictation !== true) return null
 
   return (
     <button
@@ -10241,7 +10253,7 @@ function RolesPositionsView({ user }) {
   )
 }
 
-function CompanySettingsView({ user }) {
+function CompanySettingsView({ user, onSettingsSaved }) {
   const NOTIF_EVENTS = [
     { key:'task_submitted', label:'Task Submitted', sub:'When a worker submits a task for review' },
     { key:'task_approved',  label:'Task Approved',  sub:'When a task is approved by a reviewer' },
@@ -10266,7 +10278,7 @@ function CompanySettingsView({ user }) {
       require_gps:false, require_evidence:false, min_evidence_photos:1,
       require_comments:false, auto_escalate_days:3,
     },
-    compliance:{ score_target:90, critical_categories:[], reminder_days:[2] },
+    compliance:{ score_target:90, critical_categories:[], reminder_days:[2], allow_sensitive_dictation:true },
     branding:{ primary_color:'#00A87E', report_header:'', report_footer:'' },
     data:{ retention_months:24 },
   }
@@ -10734,6 +10746,11 @@ function CompanySettingsView({ user }) {
         setSaving(false); return
       }
     }
+    // Only reached on a confirmed persisted row — every failure path above returns
+    // early, so this cannot report a policy the database refused. App re-reads the
+    // dictation policy from this object, so mics update without a reload for the
+    // admin who changed it. Other users pick it up on their next load.
+    onSettingsSaved?.(settings)
     setMsg('✓ Settings saved')
     setSavedToast(true)
     setTimeout(()=>setSavedToast(false), 3000)
@@ -10988,6 +11005,14 @@ function CompanySettingsView({ user }) {
               const active=settings.compliance.reminder_days.includes(n)
               return <PillBtn key={n} active={active} onClick={()=>setC('reminder_days',active?settings.compliance.reminder_days.filter(d=>d!==n):[...settings.compliance.reminder_days,n].sort((a,b)=>a-b))}>{n} day{n!==1?'s':''} before</PillBtn>
             })}
+          </div>
+        </div>
+        <div className="section" style={{marginBottom:20}}>
+          <div className="section-title">Voice Dictation on Sensitive Records</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Controls whether voice dictation can be used anywhere in this organisation on incidents, tasks and issue reports. When off, dictation is unavailable regardless of per-record settings.</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <Tog on={settings.compliance.allow_sensitive_dictation!==false} toggle={()=>setC('allow_sensitive_dictation',settings.compliance.allow_sensitive_dictation===false)}/>
+            <div style={{fontSize:13}}>{settings.compliance.allow_sensitive_dictation!==false?'Allowed — workers still opt in on each record':'Disabled organisation-wide'}</div>
           </div>
         </div>
         <SaveFooter/>
@@ -20051,6 +20076,28 @@ export default function App() {
   // A user with no user.org never resolves, which is correct: occurrence rows are
   // org-scoped and t.org would be null anyway.
   const [orgTimezone, setOrgTimezone] = useState(null)
+  // Org dictation policy. null = unresolved; DictateButton hides mics until it lands.
+  // Every failure path (no org, query error, absent blob, bad JSON, missing key)
+  // resolves to true — orgs stored their org_settings before this key existed and
+  // must not silently lose dictation. Only an explicit false disables it.
+  // Its own effect, not folded into the main one: that effect owns the tasks
+  // realtime channel and re-running it would tear down and re-subscribe.
+  const [allowDictation, setAllowDictation] = useState(null)
+  useEffect(()=>{
+    if(!user?.org || !isConfigured()) return
+    let cancelled = false
+    ;(async()=>{
+      try {
+        // user.org is the org NAME (profiles.org stores the name, not the id).
+        const { data, error } = await supabase.from('organisations').select('org_settings').eq('name', user.org).maybeSingle()
+        if (cancelled) return
+        if (error || !data?.org_settings) { setAllowDictation(true); return }
+        const parsed = JSON.parse(data.org_settings)
+        setAllowDictation(parsed?.compliance?.allow_sensitive_dictation !== false)
+      } catch (e) { if (!cancelled) setAllowDictation(true) }
+    })()
+    return ()=>{ cancelled = true }
+  }, [user?.org])
   const [showOrgSwitch, setShowOrgSwitch] = useState(false)
 
   // F14-ORGDAY — loadTasks() is called at the top of the main effect, BEFORE the org
@@ -20193,6 +20240,7 @@ export default function App() {
   return (
     <>
       <style>{CSS}</style>
+      <DictationContext.Provider value={allowDictation}>
       <div className="app">
         {showUndo&&undoStack.length>0&&(
           <div className="undo-toast">
@@ -20857,7 +20905,7 @@ export default function App() {
                 {page==='teams'       && hasAccess(user.role,2) && <TeamsView {...pageProps}/>}
                 {page==='templates'    && user.role!=='super_admin' && hasAccess(user.role,2) && <TemplatesView user={user}/>}
                 {page==='sla'         && ['client_admin','super_admin'].includes(user.role) && <SLASettingsView {...pageProps}/>}
-                {page==='company_settings' && ['client_admin','super_admin'].includes(user.role) && <CompanySettingsView user={user}/>}
+                {page==='company_settings' && ['client_admin','super_admin'].includes(user.role) && <CompanySettingsView user={user} onSettingsSaved={s=>setAllowDictation(s?.compliance?.allow_sensitive_dictation !== false)}/>}
                 {page==='notifications' && user.role==='super_admin' && <PlatformAnnouncementsView user={user}/>}
                 {page==='sa_templates'       && user.role==='super_admin' && <SuperAdminTemplatesView user={user}/>}
                 {page==='platform_industries' && user.role==='super_admin' && <PlatformIndustriesView user={user}/>}
@@ -20880,6 +20928,7 @@ export default function App() {
         </div>
 
       </div>
+      </DictationContext.Provider>
     </>
   )
 }
