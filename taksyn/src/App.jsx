@@ -15617,7 +15617,10 @@ function IncidentReportView({ user, orgSettings }) {
   const [immediateActions, setImmediateActions] = useState('')
   const [hazardPresent, setHazardPresent] = useState(false)
   const [clinicalNote, setClinicalNote] = useState('')
-  const [evidence, setEvidence] = useState([]) // {kind,url,name}
+  const [evidence, setEvidence] = useState([])
+  // [PATCH:incident-sensitive-toggle]
+  const [allowSensitiveDictation, setAllowSensitiveDictation] = useState(false)
+  const [showSensitivePrompt, setShowSensitivePrompt] = useState(false) // {kind,url,name}
   const [submitting, setSubmitting] = useState(false)
   const [receipt, setReceipt] = useState(null) // {ref}
   const [error, setError] = useState('')
@@ -16188,7 +16191,7 @@ function IncidentReportView({ user, orgSettings }) {
             <textarea style={{...inp,minHeight:70,resize:'vertical'}} value={clinicalNote}
               onChange={e=>setClinicalNote(e.target.value)}
               placeholder="e.g. Amoxicillin commenced, admitted to St X Hospital"/>
-            {clinicalDictationAllowed
+            {clinicalDictationAllowed && allowSensitiveDictation
               ? <MicChip setValue={setClinicalNote}/>
               : <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>Please type clinical details. Dictation sends audio to your browser's speech provider, so it is not offered here.</div>}
           </div>
@@ -16213,11 +16216,11 @@ function IncidentReportView({ user, orgSettings }) {
           <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(the facts, in order — required)</span></span>
           <textarea style={{...inp,minHeight:100,resize:'vertical',marginBottom:12}} value={facts}
             onChange={e=>setFacts(e.target.value)} placeholder="Describe what happened, step by step…"/>
-          <MicChip setValue={setFacts}/>
+          {clinicalDictationAllowed && allowSensitiveDictation ? <MicChip setValue={setFacts}/> : null}
           <span style={lbl}>Immediate actions taken to make it safe <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
           <textarea style={{...inp,minHeight:70,resize:'vertical',marginBottom:12}} value={immediateActions}
             onChange={e=>setImmediateActions(e.target.value)} placeholder="What was done right away?"/>
-          <MicChip setValue={setImmediateActions}/>
+          {clinicalDictationAllowed && allowSensitiveDictation ? <MicChip setValue={setImmediateActions}/> : null}
           <label style={{display:'flex',alignItems:'center',gap:8,fontSize:14,cursor:'pointer'}}>
             <input type="checkbox" checked={hazardPresent} onChange={e=>setHazardPresent(e.target.checked)}/>
             The hazard is still present / not yet made safe
