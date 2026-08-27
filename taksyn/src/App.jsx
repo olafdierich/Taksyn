@@ -15626,6 +15626,10 @@ function IncidentReportView({ user }) {
   const [locationText, setLocationText] = useState('')
   const [gps, setGps] = useState(null)
   const [facts, setFacts] = useState('')
+  // Reporter-typed label. Required in the form, nullable in the DB so
+  // pre-existing rows stay legal. Travels to the register, exports and
+  // future notifications, so the field carries a de-identification warning.
+  const [incTitle, setIncTitle] = useState("")
   const [immediateActions, setImmediateActions] = useState('')
   const [hazardPresent, setHazardPresent] = useState(false)
   const [clinicalNote, setClinicalNote] = useState('')
@@ -15821,7 +15825,7 @@ function IncidentReportView({ user }) {
   const affectedIdentityOk = !affectedType ||
     (affectedKnown === 'unknown') ||
     (affectedKnown === 'known' && (affectedPerson || (noMatch && unmatchedName.trim())))
-  const canSubmit = category && outcomes.length && effectiveSeverity && facts.trim() &&
+  const canSubmit = incTitle.trim() && category && outcomes.length && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
     affectedTypeOk && affectedIdentityOk && domainDetailOk
@@ -15829,7 +15833,8 @@ function IncidentReportView({ user }) {
   // The first thing still missing, in the same order canSubmit tests them,
   // so the message cannot drift away from the condition it explains.
   const missingField =
-    !category                                   ? 'Choose what happened'
+    !incTitle.trim()                            ? 'Give this incident a short title'
+    : !category                                 ? 'Choose what happened'
     : !outcomes.length                          ? 'Choose the outcome'
     : !effectiveSeverity                        ? 'Choose a severity'
     : !occurredAt                               ? 'Set when it happened'
@@ -15884,6 +15889,8 @@ function IncidentReportView({ user }) {
                  suggested_severity: row[2] || null, seq: idx+1 }
       }),
       clinical: clinicalNote.trim() ? { note: clinicalNote.trim() } : null,
+      // Read by create_incident as p_payload->>"title", trimmed there too.
+      title: incTitle.trim() || null,
     }
     try {
       const { data, error: rpcErr } = await supabase.rpc('create_incident', {
@@ -15917,7 +15924,7 @@ function IncidentReportView({ user }) {
           and quote the reference above.
         </p>
         <button className="cl-action-btn" style={{marginTop:20}} onClick={()=>{
-          setReceipt(null); setCategory(''); setHarmType(''); setOutcomes([]); setSeverity(0)
+          setReceipt(null); setIncTitle(""); setCategory(''); setHarmType(''); setOutcomes([]); setSeverity(0)
           setOverrideReason(''); setAffectedType(''); setAffectedInitials(''); setShift('')
           setDepartment(''); setLocationText(''); setGps(null); setFacts(''); setImmediateActions('')
           setHazardPresent(false); setClinicalNote(''); setEvidence([])
@@ -15938,6 +15945,17 @@ function IncidentReportView({ user }) {
         straight to management.
       </p>
 
+      {/* Step 0 - title. First field: a reporter starts by naming the thing. */}
+      <div style={card}>
+        <span style={lbl}>Give this incident a short title <span style={{fontWeight:400,color:"#9CA3AF"}}>(required)</span></span>
+        <div style={{fontSize:12,color:"#B45309",background:"#FEF3C7",padding:"8px 10px",borderRadius:8,margin:"8px 0"}}>
+          This title is shown in the incident register, in exports, and in notification emails. Use a role or initials - do not include full names, diagnoses or clinical detail.
+        </div>
+        <input value={incTitle} onChange={e=>setIncTitle(e.target.value)} maxLength={80}
+          placeholder="e.g. Fall in dining room, night shift"
+          style={{width:"100%",padding:"10px",borderRadius:8,border:"1px solid var(--border2)",background:"var(--card)",color:"var(--text)",boxSizing:"border-box"}}/>
+        <div style={{fontSize:11,color:"var(--t3)",marginTop:6}}>{incTitle.length}/80</div>
+      </div>
       {/* Step 1 — category */}
       <div style={card}>
         <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
