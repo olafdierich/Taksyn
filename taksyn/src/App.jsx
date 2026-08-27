@@ -17518,7 +17518,6 @@ function IncidentsAdminView({ user, setPage }) {
   const [incTasks, setIncTasks] = useState({})   // task id -> {id,status,reviewed_at}
   const [capaStaff, setCapaStaff] = useState([])
   const [editNarr, setEditNarr] = useState(false)   // "what happened" card unlocked
-  const [editRoot, setEditRoot] = useState(false)   // investigation root cause unlocked
   const [incOrgLogo, setIncOrgLogo] = useState('')
   const [catLabels, setCatLabels] = useState(INC_CATEGORY_LABEL)
   const [editAct, setEditAct] = useState(null)     // action id currently unlocked, or null
@@ -18388,32 +18387,16 @@ function IncidentsAdminView({ user, setPage }) {
           </div>
         )}
 
-        {/* investigation + risk */}
+        {/* initial assessment: risk rating and the corrective-action decision.
+            The legacy free-text root cause was retired 27 Aug 2026 - the
+            structured findings card is the single place a root cause is
+            recorded. Existing prose stays visible, read-only, as history. */}
         <div style={card}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <span style={lbl}>Investigation</span>
-            {!editRoot && <button className="btn btn-secondary btn-sm" disabled={busy}
-              onClick={()=>setEditRoot(true)}>{sel.root_cause ? 'Edit' : 'Add root cause'}</button>}
-          </div>
-          {editRoot ? (<>
-            <textarea defaultValue={sel.root_cause||''} placeholder="Root cause…" id="inc-rootcause"
-              style={{width:'100%',minHeight:70,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8}}/>
-            <MicChip targetId="inc-rootcause"/>
-            <div style={{fontSize:12,color:'var(--t3)',marginBottom:8}}>
-              Recorded in the audit trail with what changed, who changed it and why.
-            </div>
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={()=>{
-              editNarrative({ root_cause: document.getElementById('inc-rootcause').value },
-                sel.root_cause ? 'Why is the root cause being changed? (recorded in the audit trail)'
-                               : 'Note for the audit trail (what this root cause is based on)')
-            }}>Save root cause</button>
-            <button className="btn btn-secondary btn-sm" disabled={busy} style={{marginLeft:8}}
-              onClick={()=>setEditRoot(false)}>Cancel</button>
-          </>) : (
-            <div style={{fontSize:14,lineHeight:1.5,whiteSpace:'pre-wrap',marginBottom:8,color:sel.root_cause?'var(--text)':'var(--t3)'}}>
-              {sel.root_cause || 'No root cause recorded yet.'}
-            </div>
-          )}
+          <span style={lbl}>Initial assessment</span>
+          {sel.root_cause && (<>
+            <div style={{fontSize:12,color:"var(--t3)",marginTop:8}}>Root cause (recorded earlier)</div>
+            <div style={{fontSize:14,lineHeight:1.5,whiteSpace:"pre-wrap",marginBottom:8}}>{sel.root_cause}</div>
+          </>)}
 
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:14}}>
             <div>
