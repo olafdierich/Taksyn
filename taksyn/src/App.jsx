@@ -3848,6 +3848,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     // STALE-PHOTO-V1: current-cycle photos only. A photo from a previous cycle
     // survives the reset in subtasks[] and used to satisfy this gate.
     if (task.compliance && currentCyclePhotos(task, orgTz).length === 0) { setPhotoWarn(true); return }
+    setPhotoWarn(false)   // guard passed — clear any warning left from an earlier attempt
     // COMPLETION WINDOW -- third guard, same shape as the two above. orgTz is the PROP (the
     // module-level orgTimezone defaults to 'UTC' and would gate against the wrong day).
     // completionWindow() returns null when orgTz is falsy, so an unresolved timezone means
@@ -4709,10 +4710,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {myTime?.started_at&&myTime?.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
                 <button
                   className="btn btn-primary"
-                  style={{width:'100%',opacity:(sel.compliance&&taskPhotoIndex(sel).length===0)?0.55:1}}
+                  style={{width:'100%',opacity:(sel.compliance&&currentCyclePhotos(sel,orgTz).length===0)?0.55:1}}
                   onClick={()=>submitTask(sel.id)}
                 >
-                  {sel.compliance&&taskPhotoIndex(sel).length===0?'📷 Add a checklist photo to submit':'✅ Submit'}
+                  {/* Must use the SAME condition as the submit guard in submitTask.
+                      It previously read taskPhotoIndex (all cycles) while the guard
+                      read currentCyclePhotos (this cycle only), so a recurring task
+                      holding a previous cycle's photo showed 'Submit' and then did
+                      nothing. Change both or neither. */}
+                  {sel.compliance&&currentCyclePhotos(sel,orgTz).length===0?'📷 Add a photo for this cycle to submit':'✅ Submit'}
                 </button>
               )}
               {/* COMPLETION WINDOW panel. Sibling of the Submit button DELIBERATELY: it lived
@@ -4783,6 +4789,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 <div className="cl-prog">
                   <div className="cl-prog-bar"><div className="cl-prog-fill" style={{width:pctVal+'%',background:pctColor}}/></div>
                 </div>
+                {photoWarn&&<div className="cl-warn">⚠️ <strong>Cannot submit — a photo is required for this cycle.</strong><div style={{marginTop:6}}>This is a compliance task. Any photo from an earlier cycle does not count — add one taken for the current cycle.</div><button className="cl-action-btn" style={{marginTop:8}} onClick={()=>setPhotoWarn(false)}>Dismiss</button></div>}
                 {mandatoryWarn&&<div className="cl-warn">⚠️ <strong>Cannot submit — complete mandatory items first:</strong><ul style={{margin:'6px 0 0 16px',padding:0}}>{mandatoryWarn.map((m,i)=><li key={i}>{m}</li>)}</ul><button className="cl-action-btn" style={{marginTop:8}} onClick={()=>setMandatoryWarn(null)}>Dismiss</button></div>}
                 {subs.map((s,idx)=>{
                   const itemId = s.id || String(idx)
