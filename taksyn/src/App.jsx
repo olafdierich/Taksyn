@@ -14606,7 +14606,7 @@ function HelpView({ user }) {
         <div className="form-field">
           <label className="form-label">Description <span style={{color:'var(--red)'}}>*</span></label>
           <textarea className="comment-box" style={{minHeight:100}} placeholder="Describe the issue you're experiencing. Include what you were doing when it happened..." value={desc} onChange={e=>setDesc(e.target.value)}/>
-          <MicChip setValue={setDesc}/>
+          {orgSettings?.compliance?.restrict_clinical_dictation===false && allowSensitiveDictation ? <MicChip setValue={setDesc}/> : null}
         </div>
         <div className="two-col">
           <div style={{background:'var(--s3)',borderRadius:8,padding:'8px 12px',fontSize:12}}>
@@ -16267,7 +16267,7 @@ function IncidentReportView({ user, orgSettings }) {
   )
 }
 
-function ReportIssueView({ user, embedded }) {
+function ReportIssueView({ user, embedded, orgSettings }) {
   const [title, setTitle] = useState('')
   const [desc, setDesc] = useState('')
   const [priority, setPriority] = useState('medium')
@@ -16276,6 +16276,9 @@ function ReportIssueView({ user, embedded }) {
   const [submitted, setSubmitted] = useState(false)
   const [issues, setIssues] = useState([])
   const [rtype, setRtype] = useState('request')
+  // [PATCH:issue-report-sensitive-toggle]
+  const [allowSensitiveDictation, setAllowSensitiveDictation] = useState(false)
+  const [showSensitivePrompt, setShowSensitivePrompt] = useState(false)
   const [anon, setAnon] = useState(false)
 
   useEffect(()=>{
@@ -16359,7 +16362,7 @@ function ReportIssueView({ user, embedded }) {
         <div className="form-group">
           <label className="form-label">Description *</label>
           <textarea className="form-input" rows={4} placeholder="Describe the issue in detail — what happened, where, and when" value={desc} onChange={e=>setDesc(e.target.value)} style={{resize:'vertical'}}/>
-          <MicChip setValue={setDesc}/>
+          {orgSettings?.compliance?.restrict_clinical_dictation===false && allowSensitiveDictation ? <MicChip setValue={setDesc}/> : null}
         </div>
         <div className="form-group">
           <label className="form-label">Type</label>
@@ -16409,6 +16412,28 @@ function ReportIssueView({ user, embedded }) {
             </div>
           )}
         </div>
+        {orgSettings?.compliance?.restrict_clinical_dictation===false && !allowSensitiveDictation && (
+          <div style={{background:'rgba(79,70,229,.06)',border:'1px solid var(--brand)',borderRadius:10,padding:12,marginBottom:12}}>
+            <div style={{fontSize:12,color:'var(--brand)',marginBottom:6,fontWeight:600}}>Enable dictation for this report</div>
+            <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.5,marginBottom:8}}>By enabling dictation, you confirm this report contains no identifiable information (names, dates, locations). Responsibility for privacy is yours.</div>
+            <button type="button" onClick={()=>setShowSensitivePrompt(true)} style={{fontSize:12,padding:'6px 12px',borderRadius:6,border:'1px solid var(--brand)',background:'var(--brand)',color:'#fff',cursor:'pointer',fontWeight:600}}>Enable dictation</button>
+          </div>
+        )}
+        {allowSensitiveDictation && orgSettings?.compliance?.restrict_clinical_dictation===false && (
+          <div style={{background:'rgba(34,197,94,.06)',border:'1px solid #22C55E',borderRadius:10,padding:8,marginBottom:12,fontSize:12,color:'#15803D',fontWeight:600}}>✓ Dictation enabled</div>
+        )}
+        {showSensitivePrompt && (
+          <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}}>
+            <div style={{background:'#fff',borderRadius:12,padding:24,maxWidth:400,boxShadow:'0 20px 25px rgba(0,0,0,.15)'}}>
+              <div style={{fontSize:16,fontWeight:700,marginBottom:12}}>Enable dictation</div>
+              <div style={{fontSize:14,lineHeight:1.6,color:'#374151',marginBottom:16}}>By confirming, you declare this report contains no identifiable information. Responsibility for privacy is yours.</div>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button type="button" onClick={()=>setShowSensitivePrompt(false)} style={{padding:'8px 16px',borderRadius:6,border:'1px solid #D1D5DB',background:'#fff',cursor:'pointer',fontWeight:600}}>Cancel</button>
+                <button type="button" onClick={()=>{setAllowSensitiveDictation(true); setShowSensitivePrompt(false)}} style={{padding:'8px 16px',borderRadius:6,border:'none',background:'var(--brand)',color:'#fff',cursor:'pointer',fontWeight:600}}>I confirm</button>
+              </div>
+            </div>
+          </div>
+        )}
         {submitted && <div style={{padding:'10px 14px',borderRadius:8,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.3)',color:'#059669',fontWeight:600,marginBottom:12}}>✓ Request logged successfully</div>}
         <button className="btn btn-primary" disabled={!title.trim()||!desc.trim()||submitting} onClick={submit} style={{width:'100%'}}>
           {submitting?'Submitting…':'Submit Issue Report'}
@@ -20897,7 +20922,7 @@ export default function App() {
                 {page==='roles_departments' && ['client_admin','super_admin'].includes(user.role) && <RolesPositionsView user={user}/>}
                 {page==='platform_settings' && user.role==='super_admin' && <PlatformSettingsView user={user} sessionTimeout={sessionTimeout} setSessionTimeout={setSessionTimeout}/>}
                 {page==='my_account' && user.role==='super_admin' && <SuperAdminAccountView user={user} setUser={setUser} darkMode={darkMode} toggleDarkMode={toggleDarkMode}/>}
-                {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
+                {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user} orgSettings={orgSettings}/>}
                 {page==='incident_register' && user.role==='client_admin' && <IncidentRegisterView user={user} setPage={setPage}/>}
                 {page==='capa_register' && user.role==='client_admin' && <CapaRegisterView user={user} setPage={setPage}/>}
                 {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user} setPage={setPage}/>}
