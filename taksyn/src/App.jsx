@@ -11009,10 +11009,10 @@ function CompanySettingsView({ user, onSettingsSaved }) {
         </div>
         <div className="section" style={{marginBottom:20}}>
           <div className="section-title">Voice Dictation on Sensitive Records</div>
-          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Controls whether voice dictation can be used anywhere in this organisation on incidents, tasks and issue reports. When off, dictation is unavailable regardless of per-record settings.</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Controls whether voice dictation is available anywhere in this organisation — incidents, tasks, issue reports and task notes. This is an organisation-wide setting and applies to everyone.</div>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <Tog on={settings.compliance.allow_sensitive_dictation!==false} toggle={()=>setC('allow_sensitive_dictation',settings.compliance.allow_sensitive_dictation===false)}/>
-            <div style={{fontSize:13}}>{settings.compliance.allow_sensitive_dictation!==false?'Allowed — workers still opt in on each record':'Disabled organisation-wide'}</div>
+            <div style={{fontSize:13}}>{settings.compliance.allow_sensitive_dictation!==false?'Allowed — dictation available to everyone in this organisation':'Disabled — dictation unavailable to everyone in this organisation'}</div>
           </div>
         </div>
         <SaveFooter/>
