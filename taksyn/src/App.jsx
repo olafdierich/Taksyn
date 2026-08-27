@@ -10266,7 +10266,7 @@ function CompanySettingsView({ user }) {
       require_gps:false, require_evidence:false, min_evidence_photos:1,
       require_comments:false, auto_escalate_days:3,
     },
-    compliance:{ score_target:90, critical_categories:[], reminder_days:[2] },
+    compliance:{ score_target:90, critical_categories:[], reminder_days:[2], allow_sensitive_dictation:true },
     branding:{ primary_color:'#00A87E', report_header:'', report_footer:'' },
     data:{ retention_months:24 },
   }
@@ -10988,6 +10988,14 @@ function CompanySettingsView({ user }) {
               const active=settings.compliance.reminder_days.includes(n)
               return <PillBtn key={n} active={active} onClick={()=>setC('reminder_days',active?settings.compliance.reminder_days.filter(d=>d!==n):[...settings.compliance.reminder_days,n].sort((a,b)=>a-b))}>{n} day{n!==1?'s':''} before</PillBtn>
             })}
+          </div>
+        </div>
+        <div className="section" style={{marginBottom:20}}>
+          <div className="section-title">Voice Dictation on Sensitive Records</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Controls whether voice dictation can be used anywhere in this organisation on incidents, tasks and issue reports. When off, dictation is unavailable regardless of per-record settings.</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <Tog on={settings.compliance.allow_sensitive_dictation!==false} toggle={()=>setC('allow_sensitive_dictation',settings.compliance.allow_sensitive_dictation===false)}/>
+            <div style={{fontSize:13}}>{settings.compliance.allow_sensitive_dictation!==false?'Allowed — workers still opt in on each record':'Disabled organisation-wide'}</div>
           </div>
         </div>
         <SaveFooter/>
