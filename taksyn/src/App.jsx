@@ -18529,6 +18529,120 @@ function IncidentsAdminView({ user, setPage }) {
           </div>
         )}
 
+        {incFindings.length > 0 && (()=>{
+          const canEdit = isAdmin || sel.assigned_to === user.id || sel.investigator_id === user.id
+          const STATES = {
+            investigation: [['not_examined','Not examined'],['not_applicable','Not applicable'],['done','Done']],
+            rca:           [['not_examined','Not examined'],['not_a_factor','Not a factor'],['contributing','Contributing']],
+          }
+          const saveFinding = async (f, nextState, nextComment) => {
+            const cmt = nextComment === undefined ? (f.comment || '') : (nextComment || '')
+            // A contributing RCA factor requires free text -- enforced by a CHECK
+            // constraint. Caught here so the user reads a sentence, not a 23514.
+            if (f.section === 'rca' && nextState === 'contributing' && !cmt.trim()) {
+              alert('A comment is required when a factor is marked contributing. Write why it contributed, then choose Contributing.')
+              return
+            }
+            setBusy(true)
+            try {
+              const { data: row, error } = await supabase.from('incident_findings')
+                .update({ state: nextState, comment: cmt.trim() ? cmt : null })
+                .eq('id', f.id).select().maybeSingle()
+              if (error) throw error
+              // PostgREST returns 200 with error null when RLS blocks a write.
+              if (!row) throw new Error('the change was not saved')
+              setIncFindings(prev => prev.map(x => x.id === row.id ? row : x))
+            } catch (err) {
+              alert('Not saved -- ' + (err?.message || 'update failed'))
+            }
+            setBusy(false)
+          }
+          const group = (section, heading) => {
+            const items = incFindings.filter(f => f.section === section)
+            if (!items.length) return null
+            const outstanding = items.filter(f => f.state === 'not_examined').length
+            return (
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:12,color:'var(--t3)',fontWeight:600,marginBottom:8,display:'flex',alignItems:'center',gap:8}}>
+                  {heading}
+                  <span style={{fontWeight:700,fontSize:11,padding:'2px 8px',borderRadius:12,color:'#fff',background:outstanding?'#EAB308':'#16A34A'}}>
+                    {outstanding ? outstanding + ' not examined' : 'Complete'}
+                  </span>
+                </div>
+                {items.map(f => {
+                  // Default: open while not_examined, closed once answered. An
+                  // explicit toggle wins in either direction.
+                  const answered = f.state !== 'not_examined'
+                  const open = openFind[f.id] === undefined ? !answered : openFind[f.id]
+                  const stateTxt = (STATES[section].find(s => s[0] === f.state) || [null, f.state])[1]
+                  const stateBg = f.state === 'contributing' ? '#DC2626'
+                                : f.state === 'not_examined' ? 'var(--t3)' : '#16A34A'
+                  return (
+                  <div key={f.id} style={{marginBottom:open?12:6,paddingBottom:open?12:6,borderBottom:'1px solid var(--border2)'}}>
+                    <div onClick={()=>setOpenFind(p=>({...p,[f.id]:!open}))}
+                      style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:open?6:0}}>
+                      <span style={{fontSize:11,color:'var(--t3)',width:10,flexShrink:0}}>{open?'\u25be':'\u25b8'}</span>
+                      <span style={{fontSize:13,fontWeight:600,flex:1}}>{INC_FINDING_LABEL[f.item_key]||f.item_key}</span>
+                      {!open && (
+                        <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,color:'#fff',background:stateBg,flexShrink:0}}>
+                          {stateTxt}
+                        </span>
+                      )}
+                    </div>
+                    {!open && f.comment && (
+                      <div style={{fontSize:11,color:'var(--t3)',marginLeft:18,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                        {f.comment}
+                      </div>
+                    )}
+                    {open && (<>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
+                      {STATES[section].map(([val,txt]) => (
+                        <button key={val} disabled={busy||!canEdit}
+                          onClick={()=>{
+                            const box = document.getElementById('find-c-'+f.id)
+                            saveFinding(f, val, box ? box.value : undefined)
+                          }}
+                          style={{fontSize:12,padding:'4px 10px',borderRadius:14,
+                            cursor:(busy||!canEdit)?'default':'pointer',
+                            border:'1px solid '+(f.state===val?'transparent':'var(--border2)'),
+                            background: f.state===val
+                              ? (val==='contributing' ? '#DC2626' : val==='not_examined' ? 'var(--t3)' : '#16A34A')
+                              : 'var(--card)',
+                            color: f.state===val ? '#fff' : 'var(--t2)',
+                            fontWeight: f.state===val ? 700 : 500}}>
+                          {txt}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea id={'find-c-'+f.id} defaultValue={f.comment||''} disabled={busy||!canEdit}
+                      placeholder={section==='rca'&&f.state==='contributing' ? 'Comment required' : 'Comment (optional)'}
+                      onBlur={e=>{ if ((e.target.value||'') !== (f.comment||'')) saveFinding(f, f.state, e.target.value) }}
+                      style={{width:'100%',minHeight:44,padding:8,borderRadius:8,border:'1px solid var(--border2)',
+                        background:'var(--card)',color:'var(--text)',fontSize:13,fontFamily:'inherit',boxSizing:'border-box'}}/>
+                    {f.by_name && (
+                      <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>{f.by_name} · {fmtDate(f.at)}</div>
+                    )}
+                    </>)}
+                  </div>
+                  )
+                })}
+              </div>
+            )
+          }
+          return (
+            <div style={card}>
+              <span style={lbl}>Investigation and root cause</span>
+              {group('investigation','Investigation')}
+              {group('rca','Root cause analysis')}
+              {!canEdit && (
+                <div style={{fontSize:11,color:'var(--t3)'}}>
+                  Only the assigned handler, the investigator or a client admin may answer these.
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         {/* corrective actions (display + simple add; task-linking is a later branch) */}
         <div style={card}>
           <span style={lbl}>Corrective / preventive actions</span>
@@ -18762,119 +18876,6 @@ function IncidentsAdminView({ user, setPage }) {
         </div>
         {/* findings -- investigation + RCA. Rows are seeded by the database on
             entry to investigating, so this card is absent until then. */}
-        {incFindings.length > 0 && (()=>{
-          const canEdit = isAdmin || sel.assigned_to === user.id || sel.investigator_id === user.id
-          const STATES = {
-            investigation: [['not_examined','Not examined'],['not_applicable','Not applicable'],['done','Done']],
-            rca:           [['not_examined','Not examined'],['not_a_factor','Not a factor'],['contributing','Contributing']],
-          }
-          const saveFinding = async (f, nextState, nextComment) => {
-            const cmt = nextComment === undefined ? (f.comment || '') : (nextComment || '')
-            // A contributing RCA factor requires free text -- enforced by a CHECK
-            // constraint. Caught here so the user reads a sentence, not a 23514.
-            if (f.section === 'rca' && nextState === 'contributing' && !cmt.trim()) {
-              alert('A comment is required when a factor is marked contributing. Write why it contributed, then choose Contributing.')
-              return
-            }
-            setBusy(true)
-            try {
-              const { data: row, error } = await supabase.from('incident_findings')
-                .update({ state: nextState, comment: cmt.trim() ? cmt : null })
-                .eq('id', f.id).select().maybeSingle()
-              if (error) throw error
-              // PostgREST returns 200 with error null when RLS blocks a write.
-              if (!row) throw new Error('the change was not saved')
-              setIncFindings(prev => prev.map(x => x.id === row.id ? row : x))
-            } catch (err) {
-              alert('Not saved -- ' + (err?.message || 'update failed'))
-            }
-            setBusy(false)
-          }
-          const group = (section, heading) => {
-            const items = incFindings.filter(f => f.section === section)
-            if (!items.length) return null
-            const outstanding = items.filter(f => f.state === 'not_examined').length
-            return (
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:12,color:'var(--t3)',fontWeight:600,marginBottom:8,display:'flex',alignItems:'center',gap:8}}>
-                  {heading}
-                  <span style={{fontWeight:700,fontSize:11,padding:'2px 8px',borderRadius:12,color:'#fff',background:outstanding?'#EAB308':'#16A34A'}}>
-                    {outstanding ? outstanding + ' not examined' : 'Complete'}
-                  </span>
-                </div>
-                {items.map(f => {
-                  // Default: open while not_examined, closed once answered. An
-                  // explicit toggle wins in either direction.
-                  const answered = f.state !== 'not_examined'
-                  const open = openFind[f.id] === undefined ? !answered : openFind[f.id]
-                  const stateTxt = (STATES[section].find(s => s[0] === f.state) || [null, f.state])[1]
-                  const stateBg = f.state === 'contributing' ? '#DC2626'
-                                : f.state === 'not_examined' ? 'var(--t3)' : '#16A34A'
-                  return (
-                  <div key={f.id} style={{marginBottom:open?12:6,paddingBottom:open?12:6,borderBottom:'1px solid var(--border2)'}}>
-                    <div onClick={()=>setOpenFind(p=>({...p,[f.id]:!open}))}
-                      style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:open?6:0}}>
-                      <span style={{fontSize:11,color:'var(--t3)',width:10,flexShrink:0}}>{open?'\u25be':'\u25b8'}</span>
-                      <span style={{fontSize:13,fontWeight:600,flex:1}}>{INC_FINDING_LABEL[f.item_key]||f.item_key}</span>
-                      {!open && (
-                        <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,color:'#fff',background:stateBg,flexShrink:0}}>
-                          {stateTxt}
-                        </span>
-                      )}
-                    </div>
-                    {!open && f.comment && (
-                      <div style={{fontSize:11,color:'var(--t3)',marginLeft:18,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                        {f.comment}
-                      </div>
-                    )}
-                    {open && (<>
-                    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
-                      {STATES[section].map(([val,txt]) => (
-                        <button key={val} disabled={busy||!canEdit}
-                          onClick={()=>{
-                            const box = document.getElementById('find-c-'+f.id)
-                            saveFinding(f, val, box ? box.value : undefined)
-                          }}
-                          style={{fontSize:12,padding:'4px 10px',borderRadius:14,
-                            cursor:(busy||!canEdit)?'default':'pointer',
-                            border:'1px solid '+(f.state===val?'transparent':'var(--border2)'),
-                            background: f.state===val
-                              ? (val==='contributing' ? '#DC2626' : val==='not_examined' ? 'var(--t3)' : '#16A34A')
-                              : 'var(--card)',
-                            color: f.state===val ? '#fff' : 'var(--t2)',
-                            fontWeight: f.state===val ? 700 : 500}}>
-                          {txt}
-                        </button>
-                      ))}
-                    </div>
-                    <textarea id={'find-c-'+f.id} defaultValue={f.comment||''} disabled={busy||!canEdit}
-                      placeholder={section==='rca'&&f.state==='contributing' ? 'Comment required' : 'Comment (optional)'}
-                      onBlur={e=>{ if ((e.target.value||'') !== (f.comment||'')) saveFinding(f, f.state, e.target.value) }}
-                      style={{width:'100%',minHeight:44,padding:8,borderRadius:8,border:'1px solid var(--border2)',
-                        background:'var(--card)',color:'var(--text)',fontSize:13,fontFamily:'inherit',boxSizing:'border-box'}}/>
-                    {f.by_name && (
-                      <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>{f.by_name} · {fmtDate(f.at)}</div>
-                    )}
-                    </>)}
-                  </div>
-                  )
-                })}
-              </div>
-            )
-          }
-          return (
-            <div style={card}>
-              <span style={lbl}>Investigation and root cause</span>
-              {group('investigation','Investigation')}
-              {group('rca','Root cause analysis')}
-              {!canEdit && (
-                <div style={{fontSize:11,color:'var(--t3)'}}>
-                  Only the assigned handler, the investigator or a client admin may answer these.
-                </div>
-              )}
-            </div>
-          )
-        })()}
         {/* RESIDUAL RISK — deliberately placed LAST, immediately before the
             status block. Rated after the corrective actions have been created
             and verified, so the number reflects what the actions actually
