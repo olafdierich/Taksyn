@@ -242,6 +242,15 @@ function MicChip({ setValue, targetId }) {
       const el = document.getElementById(targetId)
       if (!el) return
       el.value = typeof fn === 'function' ? fn(el.value) : fn
+      // MICCHIP-FOCUS-V1: focus the box after writing. DictateButton preventDefaults
+      // onMouseDown so the tap does NOT move focus -- right, because a premature blur
+      // would save the pre-dictation text. But a box the user never clicked is never
+      // focused, so it never blurs, so a blur-save handler never runs and the text is
+      // lost on unmount with no error. Found on the incident finding comments, which
+      // save on blur. Harmless for the button-saved boxes. Do not replace this with a
+      // direct save call: that would write on every dictation pause, not when the
+      // user has finished.
+      try { el.focus({ preventScroll: true }) } catch (e) { try { el.focus() } catch (e2) {} }
       return
     }
     if (setValue) setValue(fn)
@@ -18645,6 +18654,12 @@ function IncidentsAdminView({ user, setPage }) {
                       onBlur={e=>{ if ((e.target.value||'') !== (f.comment||'')) saveFinding(f, f.state, e.target.value) }}
                       style={{width:'100%',minHeight:44,padding:8,borderRadius:8,border:'1px solid var(--border2)',
                         background:'var(--card)',color:'var(--text)',fontSize:13,fontFamily:'inherit',boxSizing:'border-box'}}/>
+                    {/* Uncontrolled box: targetId, not setValue. MicChip writes el.value
+                        directly, which is what the onBlur handler above reads. DictateButton
+                        already preventDefaults onMouseDown, so tapping the mic does not blur
+                        the box and cannot fire saveFinding with the pre-dictation text --
+                        which would alert and refuse on a contributing RCA row. */}
+                    {canEdit && <MicChip targetId={'find-c-'+f.id}/>}
                     {f.by_name && (
                       <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>{f.by_name} · {fmtDate(f.at)}</div>
                     )}
