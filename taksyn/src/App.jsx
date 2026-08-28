@@ -16857,7 +16857,7 @@ function IncidentRegisterView({ user, setPage }) {
   const rowData = (i) => {
     const ac = actionCounts[i.id]||{open:0,total:0}
     return {
-      ref:i.ref, date:fmtDay(i.occurred_at), title:(i.title||categoryLabels[i.category]||i.category||""), category:(categoryLabels[i.category]||i.category),
+      ref:i.ref, date:fmtDay(i.occurred_at), title:(i.title||"\u2014"), category:(categoryLabels[i.category]||i.category),
       severity:`${i.severity} ${(INC_SEVERITY_CFG[i.severity]||{}).label||''}`.trim(),
       status:(INC_STATUS_CFG[i.status]||{}).label||i.status,
       affected:i.affected_type||'', assigned:names[i.assigned_to]||i.assigned_to_name||'',
