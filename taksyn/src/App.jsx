@@ -15626,6 +15626,10 @@ function IncidentReportView({ user }) {
   const [locationText, setLocationText] = useState('')
   const [gps, setGps] = useState(null)
   const [facts, setFacts] = useState('')
+  // Reporter-typed label. Required in the form, nullable in the DB so
+  // pre-existing rows stay legal. Travels to the register, exports and
+  // future notifications, so the field carries a de-identification warning.
+  const [incTitle, setIncTitle] = useState("")
   const [immediateActions, setImmediateActions] = useState('')
   const [hazardPresent, setHazardPresent] = useState(false)
   const [clinicalNote, setClinicalNote] = useState('')
@@ -15821,7 +15825,7 @@ function IncidentReportView({ user }) {
   const affectedIdentityOk = !affectedType ||
     (affectedKnown === 'unknown') ||
     (affectedKnown === 'known' && (affectedPerson || (noMatch && unmatchedName.trim())))
-  const canSubmit = category && outcomes.length && effectiveSeverity && facts.trim() &&
+  const canSubmit = incTitle.trim() && category && outcomes.length && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
     affectedTypeOk && affectedIdentityOk && domainDetailOk
@@ -15829,7 +15833,8 @@ function IncidentReportView({ user }) {
   // The first thing still missing, in the same order canSubmit tests them,
   // so the message cannot drift away from the condition it explains.
   const missingField =
-    !category                                   ? 'Choose what happened'
+    !incTitle.trim()                            ? 'Give this incident a short title'
+    : !category                                 ? 'Choose what happened'
     : !outcomes.length                          ? 'Choose the outcome'
     : !effectiveSeverity                        ? 'Choose a severity'
     : !occurredAt                               ? 'Set when it happened'
@@ -15884,6 +15889,8 @@ function IncidentReportView({ user }) {
                  suggested_severity: row[2] || null, seq: idx+1 }
       }),
       clinical: clinicalNote.trim() ? { note: clinicalNote.trim() } : null,
+      // Read by create_incident as p_payload->>"title", trimmed there too.
+      title: incTitle.trim() || null,
     }
     try {
       const { data, error: rpcErr } = await supabase.rpc('create_incident', {
@@ -15917,7 +15924,7 @@ function IncidentReportView({ user }) {
           and quote the reference above.
         </p>
         <button className="cl-action-btn" style={{marginTop:20}} onClick={()=>{
-          setReceipt(null); setCategory(''); setHarmType(''); setOutcomes([]); setSeverity(0)
+          setReceipt(null); setIncTitle(""); setCategory(''); setHarmType(''); setOutcomes([]); setSeverity(0)
           setOverrideReason(''); setAffectedType(''); setAffectedInitials(''); setShift('')
           setDepartment(''); setLocationText(''); setGps(null); setFacts(''); setImmediateActions('')
           setHazardPresent(false); setClinicalNote(''); setEvidence([])
@@ -15938,6 +15945,17 @@ function IncidentReportView({ user }) {
         straight to management.
       </p>
 
+      {/* Step 0 - title. First field: a reporter starts by naming the thing. */}
+      <div style={card}>
+        <span style={lbl}>Give this incident a short title <span style={{fontWeight:400,color:"#9CA3AF"}}>(required)</span></span>
+        <div style={{fontSize:12,color:"#B45309",background:"#FEF3C7",padding:"8px 10px",borderRadius:8,margin:"8px 0"}}>
+          This title is shown in the incident register, in exports, and in notification emails. Use a role or initials - do not include full names, diagnoses or clinical detail.
+        </div>
+        <input value={incTitle} onChange={e=>setIncTitle(e.target.value)} maxLength={80}
+          placeholder="e.g. Fall in dining room, night shift"
+          style={{width:"100%",padding:"10px",borderRadius:8,border:"1px solid var(--border2)",background:"var(--card)",color:"var(--text)",boxSizing:"border-box"}}/>
+        <div style={{fontSize:11,color:"var(--t3)",marginTop:6}}>{incTitle.length}/80</div>
+      </div>
       {/* Step 1 — category */}
       <div style={card}>
         <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
@@ -16748,6 +16766,10 @@ function IncidentRegisterView({ user, setPage }) {
   const [incidents, setIncidents] = useState([])
   const [names, setNames] = useState({})
   const [actionCounts, setActionCounts] = useState({}) // incident_id -> {open, total}
+  // incident_id -> {total, notExamined} over the rca section of
+  // incident_findings. Replaces the old root_cause Yes/No, which read a
+  // column retired on 27 Aug 2026 and would have said No forever.
+  const [rcaCounts, setRcaCounts] = useState({})
   const [loading, setLoading] = useState(true)
   const [fFrom, setFFrom] = useState('')
   const [fTo, setFTo] = useState('')
@@ -16790,6 +16812,12 @@ function IncidentRegisterView({ user, setPage }) {
     const { data: acts } = await supabase.from('incident_actions').select('incident_id,status').eq('org', id)
     const counts={}; (acts||[]).forEach(a=>{ const c=counts[a.incident_id]||{open:0,total:0}; c.total++; if(a.status!=='verified'&&a.status!=='done'&&a.status!=='completed') c.open++; counts[a.incident_id]=c })
     setActionCounts(counts)
+    // rca completion per incident. One org-scoped fetch, reduced in memory,
+    // mirroring the action counts above rather than querying per row.
+    const { data: fnds } = await supabase.from("incident_findings")
+      .select("incident_id,section,state").eq("org", id).eq("section", "rca")
+    const rc={}; (fnds||[]).forEach(f=>{ const c=rc[f.incident_id]||{total:0,notExamined:0}; c.total++; if(f.state==="not_examined") c.notExamined++; rc[f.incident_id]=c })
+    setRcaCounts(rc)
     // category labels — load packs union for this org's industry so real
     // pack keys resolve to human labels in the trend report and register
     try {
@@ -16829,11 +16857,11 @@ function IncidentRegisterView({ user, setPage }) {
   const rowData = (i) => {
     const ac = actionCounts[i.id]||{open:0,total:0}
     return {
-      ref:i.ref, date:fmtDay(i.occurred_at), category:(categoryLabels[i.category]||i.category),
+      ref:i.ref, date:fmtDay(i.occurred_at), title:(i.title||"\u2014"), category:(categoryLabels[i.category]||i.category),
       severity:`${i.severity} ${(INC_SEVERITY_CFG[i.severity]||{}).label||''}`.trim(),
       status:(INC_STATUS_CFG[i.status]||{}).label||i.status,
       affected:i.affected_type||'', assigned:names[i.assigned_to]||i.assigned_to_name||'',
-      rootCause:i.root_cause?'Yes':'No', actions:`${ac.total-ac.open}/${ac.total}`,
+      rootCause:(()=>{ const c=rcaCounts[i.id]; if(!c||!c.total) return "—"; return c.notExamined>0 ? c.notExamined+" pending" : "Complete" })(), actions:`${ac.total-ac.open}/${ac.total}`,
       closed:i.closed_at?fmtDay(i.closed_at):'', daysOpen:i.status==='closed'?daysBetween(i.occurred_at,i.closed_at):daysBetween(i.occurred_at,null),
       riskInit:i.risk_rating??'', riskRes:i.residual_rating??'',
       domain:i.outcome_domain||'', harm:i.harm_type?String(i.harm_type).replace(/_/g,' '):'',
@@ -16843,8 +16871,8 @@ function IncidentRegisterView({ user, setPage }) {
   }
 
   const exportCSV = () => {
-    const head=['Ref','Date','Category','Severity','Status','Affected','Assigned To','Root Cause','Actions Closed/Total','Date Closed','Days Open','Target','Regulator','Initial Risk','Residual Risk','Outcome Domain','Harm Type','Outcome Level','Closure Note']
-    const lines=rows.map(i=>{ const r=rowData(i); return [r.ref,r.date,r.category,r.severity,r.status,r.affected,r.assigned,r.rootCause,r.actions,r.closed,r.daysOpen,r.target,r.regulator,r.riskInit,r.riskRes,r.domain,r.harm,r.outcome,r.closureNote].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',') })
+    const head=['Ref','Date','Title','Category','Severity','Status','Affected','Assigned To','Root Cause','Actions Closed/Total','Date Closed','Days Open','Target','Regulator','Initial Risk','Residual Risk','Outcome Domain','Harm Type','Outcome Level','Closure Note']
+    const lines=rows.map(i=>{ const r=rowData(i); return [r.ref,r.date,r.title,r.category,r.severity,r.status,r.affected,r.assigned,r.rootCause,r.actions,r.closed,r.daysOpen,r.target,r.regulator,r.riskInit,r.riskRes,r.domain,r.harm,r.outcome,r.closureNote].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',') })
     const csv=[head.join(','),...lines].join('\n')
     const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv)
     a.download=`incident-register-${new Date().toISOString().slice(0,10)}.csv`; a.click()
@@ -16856,7 +16884,7 @@ function IncidentRegisterView({ user, setPage }) {
     pdf.setFontSize(14); pdf.text('Incident Register', lm, 10)
     pdf.setFontSize(8)
     pdf.text(`Generated ${new Date().toLocaleString('en-AU')} · ${rows.length} incidents · ${breachedCount} breached`, lm, 14)
-    const cols=[['Ref',22],['Date',18],['Category',30],['Severity',22],['Status',20],['Assigned',30],['Root',12],['Actions',16],['Closed',18],['Days',12],['Target',16],['Reg',14]]
+    const cols=[['Ref',22],['Date',18],['Title',45],['Category',30],['Severity',22],['Status',20],['Assigned',30],['RCA',20],['Actions',16],['Closed',18],['Days',12],['Target',16],['Reg',14]]
     let x=lm; pdf.setFont(undefined,'bold')
     cols.forEach(([h,w])=>{ pdf.text(String(h),x,top); x+=w })
     pdf.setFont(undefined,'normal')
@@ -16864,7 +16892,7 @@ function IncidentRegisterView({ user, setPage }) {
     rows.forEach(i=>{
       if(y>200){ pdf.addPage(); y=top }
       const r=rowData(i); let cx=lm
-      const cells=[r.ref,r.date,r.category,r.severity,r.status,r.assigned,r.rootCause,r.actions,r.closed,String(r.daysOpen??''),r.target,r.regulator]
+      const cells=[r.ref,r.date,r.title,r.category,r.severity,r.status,r.assigned,r.rootCause,r.actions,r.closed,String(r.daysOpen??''),r.target,r.regulator]
       cells.forEach((c,ci)=>{ const w=cols[ci][1]; pdf.text(String(c??'').slice(0,Math.floor(w/1.6)),cx,y); cx+=w })
       y+=5
     })
@@ -17326,13 +17354,14 @@ function IncidentRegisterView({ user, setPage }) {
         <div style={{overflowX:'auto',border:'1px solid var(--border)',borderRadius:10}}>
           <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
             <thead><tr>
-              {['Ref','Date','Category','Severity','Status','Assigned','Root cause','Actions','Closed','Days open','Target','Regulator'].map(h=><th key={h} style={th}>{h}</th>)}
+              {['Ref','Date','Title','Category','Severity','Status','Assigned','Root cause','Actions','Closed','Days open','Target','Regulator'].map(h=><th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
               {rows.map(i=>{ const r=rowData(i)
                 return <tr key={i.id} style={{cursor:'pointer'}} onClick={()=>openIncident(i.ref)}>
                   <td style={{...td,fontWeight:700,color:'var(--brand)'}}>{r.ref}</td>
                   <td style={td}>{r.date}</td>
+                  <td style={{...td,maxWidth:220}}>{r.title}</td>
                   <td style={td}>{r.category}</td>
                   <td style={{...td,color:(INC_SEVERITY_CFG[i.severity]||{}).color}}>{r.severity}</td>
                   <td style={td}>{r.status}</td>
@@ -19055,7 +19084,10 @@ function IncidentsAdminView({ user, setPage }) {
                         <span style={pill(st.color)}>{st.label}</span>
                         {breached(inc) && <span style={pill('#fff','var(--red)')}>⚠ Breached</span>}
                       </div>
-                      <div style={{fontSize:13,color:'var(--t2)',marginBottom:4}}>{catLabels[inc.category]||inc.category}</div>
+                      <div style={{fontSize:13,marginBottom:4}}>
+                        {inc.title && <span style={{fontWeight:600,color:"var(--text)"}}>{inc.title}</span>}
+                        <span style={{color:"var(--t2)",marginLeft:inc.title?8:0}}>{inc.title ? "\u00b7 " : ""}{catLabels[inc.category]||inc.category}</span>
+                      </div>
                       <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
                         <span>📅 {fmtDay(inc.occurred_at)}</span>
                         {inc.affected_type && <span>👤 {inc.affected_type}</span>}
