@@ -18645,6 +18645,12 @@ function IncidentsAdminView({ user, setPage }) {
                       onBlur={e=>{ if ((e.target.value||'') !== (f.comment||'')) saveFinding(f, f.state, e.target.value) }}
                       style={{width:'100%',minHeight:44,padding:8,borderRadius:8,border:'1px solid var(--border2)',
                         background:'var(--card)',color:'var(--text)',fontSize:13,fontFamily:'inherit',boxSizing:'border-box'}}/>
+                    {/* Uncontrolled box: targetId, not setValue. MicChip writes el.value
+                        directly, which is what the onBlur handler above reads. DictateButton
+                        already preventDefaults onMouseDown, so tapping the mic does not blur
+                        the box and cannot fire saveFinding with the pre-dictation text --
+                        which would alert and refuse on a contributing RCA row. */}
+                    {canEdit && <MicChip targetId={'find-c-'+f.id}/>}
                     {f.by_name && (
                       <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>{f.by_name} · {fmtDate(f.at)}</div>
                     )}
