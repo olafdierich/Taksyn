@@ -15769,7 +15769,14 @@ function IncidentReportView({ user }) {
   // category whose ladder_key is missing or whose rungs failed to load --
   // an empty picker blocks a report entirely.
   const activeOutcomes =
-    LADDERS[CATEGORY_LADDERS[category]] || OUTCOMES
+    // Harm type overrides the medical ladder. The category names a ladder,
+    // but a category like Environmental and Safety can produce either a
+    // physical or a psychological harm, and only the reporter knows which.
+    // Recording psychological harm as "First aid only" is wrong on a
+    // compliance record. Narrow by design: only people_medical is
+    // overridden, and only to people_psychological.
+    (harmType === 'mental_psychological' && CATEGORY_LADDERS[category] === 'people_medical' && LADDERS['people_psychological'])
+    || LADDERS[CATEGORY_LADDERS[category]] || OUTCOMES
   // Worst outcome sets the suggestion. Sequence tells the story; the
   // highest rung sets severity, so an admission plus antibiotics
   // suggests the admission's severity, not the first one tapped.
@@ -15980,7 +15987,7 @@ function IncidentReportView({ user }) {
             <span style={lbl}>Type of harm <span style={{fontWeight:400,color:'#9CA3AF'}}>(if anyone was harmed)</span></span>
             <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
               {HARM_TYPES.map(([k,t]) => (
-                <button key={k} onClick={()=>setHarmType(k)}
+                <button key={k} onClick={()=>{setHarmType(k); setOutcomes([]); setSeverity(0)}}
                   style={{padding:'8px 12px',borderRadius:20,fontSize:13,cursor:'pointer',
                     border: harmType===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.15)',
                     background: harmType===k ? 'rgba(79,70,229,.06)' : 'transparent'}}>{t}</button>
