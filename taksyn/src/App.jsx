@@ -19084,7 +19084,10 @@ function IncidentsAdminView({ user, setPage }) {
                         <span style={pill(st.color)}>{st.label}</span>
                         {breached(inc) && <span style={pill('#fff','var(--red)')}>⚠ Breached</span>}
                       </div>
-                      <div style={{fontSize:13,color:'var(--t2)',marginBottom:4}}>{catLabels[inc.category]||inc.category}</div>
+                      <div style={{fontSize:13,marginBottom:4}}>
+                        {inc.title && <span style={{fontWeight:600,color:"var(--text)"}}>{inc.title}</span>}
+                        <span style={{color:"var(--t2)",marginLeft:inc.title?8:0}}>{inc.title ? "\u00b7 " : ""}{catLabels[inc.category]||inc.category}</span>
+                      </div>
                       <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
                         <span>📅 {fmtDay(inc.occurred_at)}</span>
                         {inc.affected_type && <span>👤 {inc.affected_type}</span>}
