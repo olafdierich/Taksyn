@@ -103,6 +103,17 @@ const CSS = `
   .flagbox p,.goodbox p,.gapbox p{margin:0;font-size:14px}
   .foot{margin-top:48px;padding-top:15px;border-top:1px solid var(--rule);font-size:12px;color:var(--ink-3)}
   .noprint{border-left:3px solid var(--rule);padding-left:12px}
+  .bar{position:sticky;top:0;z-index:5;display:flex;justify-content:flex-end;gap:8px;
+    padding:10px 0 12px;margin:-52px -56px 18px;padding-right:56px;
+    background:rgba(251,250,247,.94);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--rule-2)}
+  .bar button{font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:12px;
+    font-weight:600;letter-spacing:.03em;padding:8px 15px;cursor:pointer;
+    border:1px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:2px}
+  .bar button.ghost{background:transparent;color:var(--ink-2);border-color:var(--rule)}
+  .bar button:hover{opacity:.85}
+  .bar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(max-width:760px){ .bar{margin:-30px -20px 14px;padding-right:20px} }
   @media print{ .noprint{display:none} }
   @media print{
     body{background:#fff}
@@ -239,6 +250,11 @@ export function openBoardReport(o) {
   H.push('<title>Board report \u2014 '+esc(orgName)+' \u2014 '+esc(last.label)+'</title>')
   H.push('<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">')
   H.push('<style>'+CSS+'</style></head><body><div class="sheet">')
+  // Before the masthead so it sticks to the top of the scroll, and marked
+  // noprint so it does not appear on the page itself.
+  H.push('<div class="bar noprint">'
+    + '<button class="ghost" onclick="window.close()">Close</button>'
+    + '<button onclick="window.print()">Save as PDF</button></div>')
 
   H.push('<header class="masthead"><div class="eyebrow">Incident intelligence \u00b7 '+esc(orgName)+'</div>')
   H.push('<h1>Incident&nbsp;Report<br>'+esc(last.label)+'</h1>')
@@ -338,7 +354,7 @@ export function openBoardReport(o) {
   H.push('<p>'+repeatPeople+' '+(repeatPeople===1?'person appears':'people appear')+' in more than one incident this period. Matching is on the register entry, not typed initials.</p>')
   H.push('<p class="note"><b>Names are deliberately absent.</b> This report gives a count, never a list. The register holds the names, access-logged, for anyone who needs to act on them.</p>')
 
-  H.push('<p class="note noprint" style="margin-top:32px"><b>Printing this report:</b> use your browser\u2019s print dialogue and choose Save as PDF. Untick \u201cHeaders and footers\u201d under More settings, or the page will carry the browser\u2019s URL and date across a compliance document.</p>')
+  H.push('<p class="note noprint" style="margin-top:32px"><b>Before you save:</b> in the print dialogue, open More settings and untick \u201cHeaders and footers\u201d. Otherwise the browser prints its own URL and date across the top of the page.</p>')
   H.push('<div class="foot">'+esc(orgName)+' \u00b7 incident register \u00b7 generated '+new Date().toLocaleDateString('en-AU')+'</div>')
   H.push('</div></body></html>')
 
