@@ -102,11 +102,24 @@ const CSS = `
   .gapbox h3{color:var(--ink-2)}
   .flagbox p,.goodbox p,.gapbox p{margin:0;font-size:14px}
   .foot{margin-top:48px;padding-top:15px;border-top:1px solid var(--rule);font-size:12px;color:var(--ink-3)}
+  .noprint{border-left:3px solid var(--rule);padding-left:12px}
+  @media print{ .noprint{display:none} }
   @media print{
     body{background:#fff}
     .sheet{margin:0;padding:0;box-shadow:none;max-width:none}
-    h2{break-after:avoid} .subs,.stats,table,.mx,.flagbox,.goodbox,.gapbox{break-inside:avoid}
-    @page{margin:16mm}
+    h2{break-after:avoid}
+    .subs,.stats,table,.mx,.flagbox,.goodbox,.gapbox,.stat,.two{break-inside:avoid}
+    /* auto-fit wraps the sixth card onto its own line inside the same box,
+       leaving a large empty area beside it. Fix the column count at print. */
+    .stats{grid-template-columns:repeat(6,1fr)}
+    .stat{padding:10px 9px 11px}
+    .stat-n{font-size:24px}
+    .stat-l{font-size:8.5px;letter-spacing:.04em}
+    .stat-s{font-size:10.5px}
+    /* Browser headers and footers cannot be suppressed from CSS -- only from
+       the print dialogue's "Headers and footers" tick. A larger top margin at
+       least keeps them clear of the masthead. */
+    @page{margin:18mm 16mm}
   }
 `
 
@@ -325,6 +338,7 @@ export function openBoardReport(o) {
   H.push('<p>'+repeatPeople+' '+(repeatPeople===1?'person appears':'people appear')+' in more than one incident this period. Matching is on the register entry, not typed initials.</p>')
   H.push('<p class="note"><b>Names are deliberately absent.</b> This report gives a count, never a list. The register holds the names, access-logged, for anyone who needs to act on them.</p>')
 
+  H.push('<p class="note noprint" style="margin-top:32px"><b>Printing this report:</b> use your browser\u2019s print dialogue and choose Save as PDF. Untick \u201cHeaders and footers\u201d under More settings, or the page will carry the browser\u2019s URL and date across a compliance document.</p>')
   H.push('<div class="foot">'+esc(orgName)+' \u00b7 incident register \u00b7 generated '+new Date().toLocaleDateString('en-AU')+'</div>')
   H.push('</div></body></html>')
 
