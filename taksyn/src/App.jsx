@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react'
 import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
+import { openBoardReport } from './boardReport'
 import html2canvas from 'html2canvas'
 import { uploadEvidence, uploadIncidentEvidence, signedEvidenceUrl } from './lib/evidenceStorage'
 import { isSameOrgDay, orgToday, orgDayOf } from './lib/orgTime'
@@ -17387,6 +17388,12 @@ function IncidentRegisterView({ user, setPage }) {
         <div style={{flex:1}}/>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportCSV}>📥 CSV</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportTrendPDF}>📊 Trend PDF</button>
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={()=>openBoardReport({
+          orgName: user.org, incidents, months: tMonths, inMonth: tInMonth,
+          categoryLabels, periodLabel: tPeriodLabel, excludedCount: tExcluded,
+          repeatPeople: tRepeatPeople, isLate: incIsLate,
+          severityLabels: Object.fromEntries(Object.entries(INC_SEVERITY_CFG).map(([k,v])=>[k,v.label])),
+        })}>📑 Board report</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 PDF</button>
       </div>
 
