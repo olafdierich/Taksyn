@@ -51,6 +51,8 @@ const CSS = `
   td.tot{font-family:'IBM Plex Mono',monospace;font-weight:600;
     border-left:1px solid var(--rule);width:56px}
   td.trend{border-left:1px solid var(--rule);width:78px}
+  th.yoy,td.yoy{border-right:2px solid var(--rule);width:56px;
+    font-family:'IBM Plex Mono',monospace;color:var(--ink-3);background:#F5F3EE}
   .cell{display:block;height:32px;line-height:32px;font-family:'IBM Plex Mono',monospace;font-size:12.5px}
   .b0{background:var(--band-0);color:var(--ink-3)}.b1{background:var(--band-1)}
   .b2{background:var(--band-2)}.b3{background:var(--band-3)}
@@ -138,6 +140,13 @@ export function openBoardReport(o) {
     const r = inc.filter(i => i.category === c && inMonth(i, m.year, m.month))
     return { n: r.length, worst: r.reduce((w,i) => Math.max(w, i.severity||0), 0) }
   }
+
+  // Same month a year earlier, per category. Counted from ALL incidents rather
+  // than the six-month set, since last year's records fall outside it by
+  // definition. Excluded reports are dropped on both sides so the comparison
+  // is counted the same way.
+  const yoyCell = (c) => incidents.filter(i => !i.excluded_at &&
+    i.category === c && inMonth(i, last.year - 1, last.month)).length
 
   // Current month against the MEAN of those before it. A single quiet month
   // distorts a month-on-month comparison; a running mean does not.
@@ -238,10 +247,13 @@ export function openBoardReport(o) {
   H.push('<p>Each cell is shaded by the <em>worst severity recorded in it</em>, not by how many incidents it holds. One critical incident darkens a cell more than nine minor ones. The trend column compares '+esc(last.label)+' against the mean of the months before it.</p>')
   H.push('<div class="key"><div class="b0">\u2014 none</div><div class="b1">1 minor</div><div class="b2">2 moderate</div><div class="b3">3 major</div><div class="b4">4 severe</div><div class="b5">5 critical</div></div>')
   H.push('<table><thead><tr><th class="cat">Category</th>')
+  H.push('<th class="yoy">'+esc(yoyLabel)+'</th>')
   months.forEach(m => H.push('<th>'+esc(String(m.label).split(' ')[0])+'</th>'))
   H.push('<th class="sep">Total</th><th class="sep">vs mean</th></tr></thead><tbody>')
   cats.forEach(c => {
     H.push('<tr><td class="cat">'+esc(catLabel(c))+'</td>')
+    const y = yoyCell(c)
+    H.push('<td class="yoy">'+(y||'\u2014')+'</td>')
     months.forEach(m => { const x = cell(c,m)
       H.push('<td><span class="cell b'+x.worst+'">'+(x.n||'\u2014')+'</span></td>') })
     const t = trend(c)
