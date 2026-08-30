@@ -198,7 +198,12 @@ export function openBoardReport(o) {
       // that gets the whole report dismissed. Below a base worth a
       // percentage, show the raw pair and let the reader see the size of it.
       // Same reasoning as the rated.length >= 20 guard on the risk matrix.
-      if (mean < 2) return { t: now+' vs '+mean.toFixed(1),
+      // Against the TOTAL of the prior months, not their mean. "10 vs 1"
+      // is something a board can hold in its head; "10 vs 0.2" is not --
+      // an average of a fifth of an incident per month is not how anyone
+      // thinks about incidents.
+      const total = before.reduce((a,b) => a+b, 0)
+      if (mean < 2) return { t: now+' vs '+total,
                              d: now>mean?'up':(now<mean?'down':'flat') }
       const pct = Math.round((now - mean) / mean * 100)
       if (Math.abs(pct) < 25) return { t:'▬ '+Math.abs(pct)+'%', d:'flat' }
@@ -265,12 +270,12 @@ export function openBoardReport(o) {
     H.push('<div class="stat'+(late?' alarm':'')+'"><span class="stat-n">'+late+'</span><span class="stat-l">Past target</span><span class="stat-s">'+open+' still open</span></div>')
     H.push('</div>')
     H.push('<h2>Category by month</h2>')
-    H.push('<p>Each cell is shaded by the <em>worst severity recorded in it</em>, not by how many incidents it holds. One critical incident darkens a cell more than nine minor ones. The trend column compares '+esc(last.label)+' against the mean of the months before it.</p>')
+    H.push('<p>Each cell is shaded by the <em>worst severity recorded in it</em>, not by how many incidents it holds. One critical incident darkens a cell more than nine minor ones. The last column compares '+esc(last.label)+' against the months before it: a percentage where there is enough history to carry one, and otherwise the two counts side by side \u2014 this month against the total of the five before.</p>')
     H.push('<div class="key"><div class="b0">— none</div><div class="b1">1 minor</div><div class="b2">2 moderate</div><div class="b3">3 major</div><div class="b4">4 severe</div><div class="b5">5 critical</div></div>')
     H.push('<table><thead><tr><th class="cat">Category</th>')
     H.push('<th class="yoy">'+esc(yoyLabel)+'</th>')
     months.forEach(m => H.push('<th>'+esc(String(m.label).split(' ')[0])+'</th>'))
-    H.push('<th class="sep">Total</th><th class="sep">vs mean</th></tr></thead><tbody>')
+    H.push('<th class="sep">Total</th><th class="sep">vs before</th></tr></thead><tbody>')
     cats.forEach(c => {
       H.push('<tr><td class="cat">'+esc(catLabel(c))+'</td>')
       const y = yoyCell(c)
