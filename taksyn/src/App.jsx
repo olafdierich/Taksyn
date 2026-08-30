@@ -17709,12 +17709,27 @@ function IncidentRegisterView({ user, setPage }) {
               .map(r=>[r.industry_id, r.global_industries?.name])
               .filter(r=>r[1])
           } catch(e) { inds = [] }
+          // Corrective actions and investigation findings for the whole org.
+          // The report scopes them per section by incident id. A failure
+          // leaves both empty, which prints the section as "nothing recorded"
+          // rather than dropping it -- an absence here is itself a finding.
+          let acts = [], finds = []
+          try {
+            const [{ data: a }, { data: f }] = await Promise.all([
+              supabase.from('incident_actions')
+                .select('incident_id,status,due_date,verified_at,effectiveness').eq('org', orgId),
+              supabase.from('incident_findings')
+                .select('incident_id,section,item_key,state').eq('org', orgId),
+            ])
+            acts = a || []; finds = f || []
+          } catch(e) { acts = []; finds = [] }
           openBoardReport({
             orgName: user.org, incidents, months: tMonths, inMonth: tInMonth,
             categoryLabels, periodLabel: tPeriodLabel, excludedCount: tExcluded,
             repeatPeople: tRepeatPeople, isLate: incIsLate,
             severityLabels: Object.fromEntries(Object.entries(INC_SEVERITY_CFG).map(([k,v])=>[k,v.label])),
             industries: inds,
+            actions: acts, findings: finds, findingLabels: INC_FINDING_LABEL,
           })
         }}>📑 Board report</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 PDF</button>

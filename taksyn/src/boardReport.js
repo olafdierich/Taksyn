@@ -142,6 +142,10 @@ export function openBoardReport(o) {
     orgName = '', incidents = [], months = [], inMonth,
     categoryLabels = {}, severityLabels = {}, periodLabel = '',
     excludedCount = 0, repeatPeople = 0, isLate = () => false,
+    // Corrective actions and investigation findings for the whole org.
+    // Filtered to each section's incidents below, so every service gets its
+    // own figures without a second query.
+    actions = [], findings = [], findingLabels = {},
     // IND: [[industry_id, name], ...] with the PRIMARY FIRST. Empty or a
     // single entry means the report is drawn exactly as it always was --
     // one pass, no headings.
@@ -325,6 +329,69 @@ export function openBoardReport(o) {
       H.push('</tbody></table>')
     }
     H.push('<p class="note">An incident cannot appear here without a closure status: every incident holds one of six workflow states at all times.</p>')
+
+    // ---- What was done about it -------------------------------------
+    // Scoped to this section's incidents, so a service's actions belong to
+    // that service. Void actions are excluded from every count and reported
+    // separately: a voided action is a decision, not an outstanding job.
+    const incIds = new Set(inc.map(i => i.id))
+    const mine = actions.filter(a => incIds.has(a.incident_id))
+    const voided = mine.filter(a => a.status === 'void').length
+    const acts = mine.filter(a => a.status !== 'void')
+    // Same closed set the register uses, so the two never disagree.
+    const CLOSED = ['verified','done','completed']
+    const actOpen = acts.filter(a => CLOSED.indexOf(a.status) === -1)
+    const actOverdue = actOpen.filter(a => a.due_date && new Date(a.due_date) < new Date())
+    const actClosed = acts.filter(a => CLOSED.indexOf(a.status) !== -1)
+    const actVerified = acts.filter(a => a.status === 'verified' || a.verified_at)
+    // effectiveness is free text: count that a review exists, never print it.
+    const actEff = actClosed.filter(a => String(a.effectiveness || '').trim() !== '')
+    const finds = findings.filter(f => incIds.has(f.incident_id))
+    const rca = finds.filter(f => f.section === 'rca')
+    const invest = finds.filter(f => f.section === 'investigation')
+    const investDone = invest.filter(f => f.state === 'done').length
+    const rcaLooked = rca.filter(f => f.state !== 'not_examined').length
+    const contrib = {}
+    rca.filter(f => f.state === 'contributing').forEach(f => {
+      contrib[f.item_key] = (contrib[f.item_key] || 0) + 1
+    })
+    const contribRows = Object.entries(contrib).sort((a,b) => b[1]-a[1])
+
+    H.push('<h2>What was done about it</h2>')
+    H.push('<p>Corrective actions are raised during investigation and closed when the work is done. Closing one proves a task was ticked. An action <em>verified</em>, and then reviewed for effectiveness, is the only evidence that the incident is less likely to happen again.</p>')
+    H.push('<div class="stats">')
+    H.push('<div class="stat"><span class="stat-n">'+acts.length+'</span><span class="stat-l">Actions raised</span><span class="stat-s">'+(voided?voided+' voided, not counted':'in this period')+'</span></div>')
+    H.push('<div class="stat"><span class="stat-n">'+actOpen.length+'</span><span class="stat-l">Still open</span><span class="stat-s">of '+acts.length+' raised</span></div>')
+    H.push('<div class="stat'+(actOverdue.length?' alarm':'')+'"><span class="stat-n">'+actOverdue.length+'</span><span class="stat-l">Past their date</span><span class="stat-s">open, due date gone</span></div>')
+    H.push('<div class="stat"><span class="stat-n">'+actClosed.length+'</span><span class="stat-l">Closed</span><span class="stat-s">'+actVerified.length+' verified</span></div>')
+    H.push('<div class="stat'+(actClosed.length&&!actEff.length?' alarm':'')+'"><span class="stat-n">'+actEff.length+'</span><span class="stat-l">Effectiveness reviewed</span><span class="stat-s">of '+actClosed.length+' closed</span></div>')
+    H.push('</div>')
+    if (actOverdue.length) {
+      H.push('<div class="flagbox"><h3>'+actOverdue.length+' corrective action'+(actOverdue.length===1?'':'s')+' past the date set for '+(actOverdue.length===1?'it':'them')+'</h3>')
+      H.push('<p>An action with a date that has passed and no closure is the clearest signal in this report. '+actOpen.length+' of '+acts.length+' actions remain open.</p></div>')
+    }
+    if (actClosed.length && !actEff.length) {
+      H.push('<div class="flagbox"><h3>No closed action has been reviewed for effectiveness</h3>')
+      H.push('<p>'+actClosed.length+' action'+(actClosed.length===1?' was':'s were')+' closed in this period. Without an effectiveness review there is no record that any of them changed the conditions that produced the incident.</p></div>')
+    }
+    H.push('<h4>Investigation and root cause</h4>')
+    if (!invest.length && !rca.length) {
+      H.push('<div class="gapbox"><h3>No investigation or root cause work recorded</h3>')
+      H.push('<p>Neither the investigation checklist nor the root cause list has been opened for the incidents in this period.</p></div>')
+    } else {
+      H.push('<p class="note"><b>'+investDone+' of '+invest.length+'</b> investigation items are marked done; <b>'+rcaLooked+' of '+rca.length+'</b> root cause items have been examined. An item never examined is not the same as one ruled out.</p>')
+    }
+    if (contribRows.length) {
+      const cmax = contribRows[0][1]
+      H.push('<h4>Contributing factors, most frequent first</h4>')
+      H.push('<p>Counted from root cause items marked as contributing. A factor appearing across several incidents is the one worth acting on.</p>')
+      H.push('<div class="subs"><div class="sub-head"><b>Recorded as contributing</b><span>'+contribRows.reduce((a,r)=>a+r[1],0)+' across '+contribRows.length+' factor'+(contribRows.length===1?'':'s')+'</span></div>')
+      contribRows.forEach(([k,n]) => H.push('<div class="sub-row"><div>'+esc(findingLabels[k] || k)+'</div><div class="sbar"><span style="width:'+Math.round(n/cmax*100)+'%"></span></div><div class="sn">'+n+'</div></div>'))
+      H.push('</div>')
+    } else if (rca.length) {
+      H.push('<div class="gapbox"><h3>No contributing factor has been recorded</h3>')
+      H.push('<p>Of '+rca.length+' root cause items, '+rcaLooked+' have been examined and none marked as contributing. Until a cause is named, corrective actions have nothing to aim at.</p></div>')
+    }
     // Counted organisation-wide by the caller, so it belongs to the combined
     // pass alone. Repeating the same figure under each service would read as
     // a per-service count and would be wrong.
