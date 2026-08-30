@@ -17277,6 +17277,13 @@ function IncidentRegisterView({ user, setPage }) {
   const tHarmRows = Object.entries(tHarmMap).sort((a,b)=>b[1]-a[1])
   const tAffMap = {}; tInc6m.forEach(i=>{ if(i.affected_type) tAffMap[i.affected_type]=(tAffMap[i.affected_type]||0)+1 })
   const tAffRows = Object.entries(tAffMap).sort((a,b)=>b[1]-a[1])
+  // How many incidents actually recorded each of these. Both panels divide
+  // by the sum of their own rows, so they always total 100% however many
+  // incidents were left out -- and a manufacturing incident records no harm
+  // type at all. Without the denominator on screen, 5 of 6 reads as 83% of
+  // everything.
+  const tHarmRecorded = tHarmRows.reduce((s,r)=>s+r[1],0)
+  const tAffRecorded  = tAffRows.reduce((s,r)=>s+r[1],0)
   // REPEAT PEOPLE. Initials collided - two different people sharing
   // "J.D." counted as one repeat. affected_person_id is exact.
   // Rows predating the register have no person id, so both are counted
@@ -17390,6 +17397,7 @@ function IncidentRegisterView({ user, setPage }) {
               <div style={{...trCard,flex:'1 1 200px'}}>
                 <div style={trH}>Type of harm (6 months)</div>
                 {tHarmRows.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No harm type recorded</div>}
+                {tHarmRows.length>0&&<div style={{fontSize:11,color:'var(--t3)',marginBottom:8}}>{tHarmRecorded} of {tTotal6m} incident{tTotal6m===1?'':'s'} recorded a harm type</div>}
                 {tHarmRows.map(([key,n])=>{ const tot=tHarmRows.reduce((s,r)=>s+r[1],0)||1; const pc=Math.round(n/tot*100); return <div key={key} style={{marginBottom:6}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
                     <span style={{color:'var(--text)',fontWeight:500}}>{HARM_LABEL[key]||key.replace(/_/g,' ')}</span>
@@ -17401,6 +17409,7 @@ function IncidentRegisterView({ user, setPage }) {
               <div style={{...trCard,flex:'1 1 200px'}}>
                 <div style={trH}>Who was affected (6 months)</div>
                 {tAffRows.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No affected person recorded</div>}
+                {tAffRows.length>0&&<div style={{fontSize:11,color:'var(--t3)',marginBottom:8}}>{tAffRecorded} of {tTotal6m} incident{tTotal6m===1?'':'s'} recorded who was affected</div>}
                 {tAffRows.map(([key,n])=>{ const tot=tAffRows.reduce((s,r)=>s+r[1],0)||1; const pc=Math.round(n/tot*100); return <div key={key} style={{marginBottom:6}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
                     <span style={{color:'var(--text)',fontWeight:500,textTransform:'capitalize'}}>{String(key).replace(/_/g,' ')}</span>
@@ -17413,6 +17422,7 @@ function IncidentRegisterView({ user, setPage }) {
               <div style={{...trCard,flex:'1 1 200px'}}>
                 <div style={trH}>Outcome (6 months)</div>
                 {tOutRows.length===0&&<div style={{fontSize:12,color:'var(--t3)'}}>No outcome recorded</div>}
+                {tOutRows.length>0&&<div style={{fontSize:11,color:'var(--t3)',marginBottom:8}}>{tOutRows.reduce((s,r)=>s+r[1],0)} outcomes across {tOutInc.length} of {tTotal6m} incidents</div>}
                 {tOutRows.map(([key,n,dom,olbl])=>{ const pc=Math.round(n/tOutBase*100); return <div key={key} style={{marginBottom:6}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
                     <span style={{color:'var(--text)',fontWeight:500}}>
