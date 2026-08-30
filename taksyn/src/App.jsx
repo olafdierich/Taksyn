@@ -10553,6 +10553,24 @@ function CompanySettingsView({ user, onSettingsSaved }) {
   const [form, setForm] = useState(emptyForm)
   const [settings, setSettings] = useState(defaultSettings)
   const [orgId, setOrgId] = useState(null)
+  // IND: every service this organisation runs, primary first. Read-only
+  // here -- only a super admin changes them.
+  const [orgIndustryNames, setOrgIndustryNames] = useState([])
+  // Loaded once the org is resolved. Empty on failure or for an org with no
+  // links -- the field then falls back to the single stored name, which is
+  // what it showed before.
+  useEffect(()=>{
+    if(!isConfigured()||!orgId){ setOrgIndustryNames([]); return }
+    supabase.from('org_industry_links')
+      .select('is_primary,global_industries(name)').eq('org', orgId)
+      .then(({data})=>{
+        const names = (data||[]).slice()
+          .sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+          .map(r=>r.global_industries?.name).filter(Boolean)
+        setOrgIndustryNames(names)
+      })
+      .catch(()=>{ setOrgIndustryNames([]) })
+  },[orgId])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -11118,7 +11136,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                 <div className="form-field"><label className="form-label">ABN / Business Number</label><input className="form-input" placeholder="12 345 678 901" {...fld('abn')}/></div>
               </div>
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" {...fld("industry")} disabled readOnly/><div style={{fontSize:12,color:"var(--t2)",marginTop:4}}>Your services are set by Taksyn and decide which incident categories you get. Contact support to add or change one.</div></div>
+                <div className="form-field"><label className="form-label">Industries</label><input className="form-input" {...fld("industry")} value={orgIndustryNames.length?orgIndustryNames.join(' \u00b7 '):(form.industry||'\u2014')} disabled readOnly/><div style={{fontSize:12,color:"var(--t2)",marginTop:4}}>Every service your organisation runs, primary first. These decide which incident categories you get \u2014 contact support to add or change one.</div></div>
                 <div className="form-field"><label className="form-label">Website</label><input className="form-input" placeholder="https://example.com" {...fld('website')}/></div>
               </div>
               <div className="form-field"><label className="form-label">Timezone</label><select className="form-input" {...fld('timezone')}><option value="">— Select timezone —</option>{TIMEZONES.map(tz=><option key={tz} value={tz}>{tz==='UTC'?'UTC (Coordinated Universal Time)':tz.split('/').pop().replace(/_/g,' ')+' — '+tz}</option>)}</select></div>
