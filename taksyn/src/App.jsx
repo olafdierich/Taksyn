@@ -17695,12 +17695,28 @@ function IncidentRegisterView({ user, setPage }) {
         <div style={{flex:1}}/>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportCSV}>📥 CSV</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportTrendPDF}>📊 Trend PDF</button>
-        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={()=>openBoardReport({
-          orgName: user.org, incidents, months: tMonths, inMonth: tInMonth,
-          categoryLabels, periodLabel: tPeriodLabel, excludedCount: tExcluded,
-          repeatPeople: tRepeatPeople, isLate: incIsLate,
-          severityLabels: Object.fromEntries(Object.entries(INC_SEVERITY_CFG).map(([k,v])=>[k,v.label])),
-        })}>📑 Board report</button>
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={async ()=>{
+          // IND: the org's services, primary FIRST, so the report can draw a
+          // section per service. Fetched here rather than held in state --
+          // it is one small query on a button press. A failure leaves the
+          // list empty, which draws exactly the single-section report.
+          let inds = []
+          try {
+            const { data: li } = await supabase.from('org_industry_links')
+              .select('industry_id,is_primary,global_industries(name)').eq('org', orgId)
+            inds = (li||[]).slice()
+              .sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+              .map(r=>[r.industry_id, r.global_industries?.name])
+              .filter(r=>r[1])
+          } catch(e) { inds = [] }
+          openBoardReport({
+            orgName: user.org, incidents, months: tMonths, inMonth: tInMonth,
+            categoryLabels, periodLabel: tPeriodLabel, excludedCount: tExcluded,
+            repeatPeople: tRepeatPeople, isLate: incIsLate,
+            severityLabels: Object.fromEntries(Object.entries(INC_SEVERITY_CFG).map(([k,v])=>[k,v.label])),
+            industries: inds,
+          })
+        }}>📑 Board report</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 PDF</button>
       </div>
 
