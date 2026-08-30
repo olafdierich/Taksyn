@@ -7,3 +7,6 @@ scripts/
 *.bak*
 supabase/.temp/
 src/*.bak-*
+backups/
+src/App.jsx.*
+src/*.bak*

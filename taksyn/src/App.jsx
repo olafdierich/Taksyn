@@ -497,11 +497,23 @@ const getPositionsForIndustry = (industry, role, customPositions=[], customRoles
     const base = customPositions.length>0 ? [...customPositions,...CLIENT_ADMIN_POSITIONS] : CLIENT_ADMIN_POSITIONS
     return [...new Set(base)]
   }
-  const preset = INDUSTRY_POSITIONS[industry]?.[rk] || INDUSTRY_POSITIONS[industry]?.worker || ['Receptionist','Cleaner','Administration','Security','Maintenance']
-  const orgRoles = customRoles.filter(r=>r.industry_name===industry).map(r=>r.role_name)
+  // IND: `industry` is a name OR an array of names. An organisation can run
+  // several services (org_industry_links) and its people can hold any of
+  // their titles. Callers pass the PRIMARY FIRST — the case-insensitive
+  // dedupe at the end keeps the first occurrence, so the primary's wording
+  // wins a title that two industries share. A plain string behaves exactly
+  // as it did before.
+  const inds = (Array.isArray(industry) ? industry : [industry]).filter(Boolean)
+  const presetRaw = inds.flatMap(i => INDUSTRY_POSITIONS[i]?.[rk] || INDUSTRY_POSITIONS[i]?.worker || [])
+  // FALLBACK, not an empty list: an unknown industry must still offer
+  // something, or the position dropdown renders nothing at all.
+  const preset = presetRaw.length ? presetRaw : ['Receptionist','Cleaner','Administration','Security','Maintenance']
+  const orgRoles = customRoles.filter(r=>inds.includes(r.industry_name)).map(r=>r.role_name)
   const base = customPositions.length>0 ? [...customPositions,...preset] : preset
-  const consolidate = CONSOLIDATED_POSITIONS[industry] || {}
-  const presetLower = new Map(preset.map(p=>[p.toLowerCase(),p]))
+  // Later industries merged first so the primary's mapping wins.
+  const consolidate = Object.assign({}, ...inds.slice().reverse().map(i=>CONSOLIDATED_POSITIONS[i]||{}))
+  // Reversed so the FIRST spelling wins, matching the dedupe below.
+  const presetLower = new Map(preset.slice().reverse().map(p=>[p.toLowerCase(),p]))
   const seen = new Set()
   return [...base,...orgRoles].map(p=>consolidate[p]||presetLower.get(p.toLowerCase())||p).filter(p=>{ const l=p.toLowerCase(); if(seen.has(l)) return false; seen.add(l); return true })
 }
@@ -3288,6 +3300,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     )
   }
   const [taskOrgIndustry, setTaskOrgIndustry] = useState('')
+  // IND: every service the org runs, primary first. Position dropdown only.
+  const [taskOrgIndustryNames, setTaskOrgIndustryNames] = useState([])
   const [taskOrgCustomPositions, setTaskOrgCustomPositions] = useState([])
   const [taskOrgCustomRoles, setTaskOrgCustomRoles] = useState([])
   const [checklistMode, setChecklistMode] = useState('scratch')
@@ -3304,6 +3318,18 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
         setOrgTimezone(orgRow?.timezone||'UTC')
         const orgId = orgRow?.id; if(!orgId) return
         if(orgRow?.industry) setTaskOrgIndustry(orgRow.industry)
+        // IND: the org's full industry set for the position dropdown.
+        // FALLBACK, not an empty list: an org with no links predates
+        // multi-industry and must keep offering its primary's titles.
+        supabase.from('org_industry_links')
+          .select('is_primary,global_industries(name)').eq('org', orgId)
+          .then(({data:li})=>{
+            const names = (li||[]).slice()
+              .sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+              .map(r=>r.global_industries?.name).filter(Boolean)
+            setTaskOrgIndustryNames(names.length ? names : (orgRow?.industry?[orgRow?.industry]:[]))
+          })
+          .catch(()=>{ setTaskOrgIndustryNames(orgRow?.industry?[orgRow?.industry]:[]) })
         supabase.from('checklist_templates').select('*').eq('organisation_id',orgId).order('name')
           .then(({data})=>{ if(data) setTemplates(data.map(t=>({...t,items:parseSafe(t.items)}))) })
           .catch(()=>{})
@@ -4454,7 +4480,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={newTask.assigned_user_id===user.id?'__self':newTask.assigned_role} onChange={e=>{ if(e.target.value==='__self'){ setTaskTeamMembers([]); setNewTask(prev=>({...prev,assigned_role:user.role,position:'',team_id:'',team_name:'',assigned_user_id:user.id,assigned_user_name:user.name,assigned_user_email:user.email||'',assigned_user_ids:[user.id],assigned_user_names:[user.name],approver_id:prev.approver_id||user.id,approver_name:prev.approver_name||user.name})) } else { const wasSelf=newTask.assigned_user_id===user.id; setNewTask(prev=>({...prev,assigned_role:e.target.value,position:'',assigned_user_id:wasSelf?'':prev.assigned_user_id,assigned_user_name:wasSelf?'':prev.assigned_user_name,assigned_user_email:wasSelf?'':prev.assigned_user_email,assigned_user_ids:wasSelf?[]:prev.assigned_user_ids,assigned_user_names:wasSelf?[]:prev.assigned_user_names})) } }}><option value="__self">Myself ({user.name})</option>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={taskOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
-                {!newTask.team_id&&<div className="form-field"><label className="form-label">Position</label><select className="form-select" value={newTask.position||''} onChange={e=>setNewTask({...newTask,position:e.target.value})}><option value="">— Select —</option>{getPositionsForIndustry(taskOrgIndustry||newTask.industry,newTask.assigned_role,taskOrgCustomPositions,taskOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}</select></div>}
+                {!newTask.team_id&&<div className="form-field"><label className="form-label">Position</label><select className="form-select" value={newTask.position||''} onChange={e=>setNewTask({...newTask,position:e.target.value})}><option value="">— Select —</option>{getPositionsForIndustry(taskOrgIndustryNames.length?taskOrgIndustryNames:(taskOrgIndustry||newTask.industry),newTask.assigned_role,taskOrgCustomPositions,taskOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}</select></div>}
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
               <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={newTask.due_date} onChange={e=>setNewTask({...newTask,due_date:e.target.value})}/></div>
@@ -7188,6 +7214,10 @@ function UsersView({ user, setAuditLog }) {
   const [workforceOrgId, setWorkforceOrgId] = useState(null)
   const [pendingMsg, setPendingMsg] = useState('')
   const [workforceOrgIndustry, setWorkforceOrgIndustry] = useState('')
+  // IND: every service this org runs, primary FIRST. Drives the position
+  // dropdowns; workforceOrgIndustry stays the single primary name, which is
+  // what invite rows write.
+  const [workforceOrgIndustries, setWorkforceOrgIndustries] = useState([])
   const [inviteTeamId, setInviteTeamId] = useState('')
   const [inviteOrgTeams, setInviteOrgTeams] = useState([])
   const [duplicateInvite, setDuplicateInvite] = useState(null) // {existingId, linkOrgId, ...} when duplicate detected
@@ -7231,6 +7261,19 @@ function UsersView({ user, setAuditLog }) {
       .then(({data:orgRow})=>{
         if(!orgRow?.id) return
         if(orgRow.industry) setWorkforceOrgIndustry(orgRow.industry)
+        // IND: the org's full industry set for the position dropdowns.
+        // FALLBACK, not an empty list: an org with no links predates
+        // multi-industry and must keep offering its primary's titles.
+        supabase.from('org_industry_links')
+          .select('is_primary,global_industries(name)').eq('org', orgRow.id)
+          .then(({data:li})=>{
+            const names = (li||[])
+              .slice()
+              .sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+              .map(r=>r.global_industries?.name).filter(Boolean)
+            setWorkforceOrgIndustries(names.length ? names : (orgRow.industry?[orgRow.industry]:[]))
+          })
+          .catch(()=>{ setWorkforceOrgIndustries(orgRow.industry?[orgRow.industry]:[]) })
         supabase.from('org_industries').select('name').eq('organisation_id', orgRow.id)
           .then(({data})=>{ if(data?.length) setOrgCustomDepts(data.map(d=>d.name)) }).catch(()=>{})
       }).catch(()=>{})
@@ -8044,11 +8087,13 @@ function UsersView({ user, setAuditLog }) {
                   {['Industry','Permission Level','Job Title',''].map((h,i)=><div key={i} style={{fontSize:9,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.5px'}}>{h}</div>)}
                 </div>
                 {invitePositions.map((row,i)=>{
-                  const positions = getPositionsForIndustry(workforceOrgIndustry, row.role, orgCustomPositions, orgCustomRoles)
+                  // IND: the union across every service the org runs,
+                  // primary first so its wording wins a shared title.
+                  const positions = getPositionsForIndustry(workforceOrgIndustries.length?workforceOrgIndustries:workforceOrgIndustry, row.role, orgCustomPositions, orgCustomRoles)
                   const invitableRoles = user.role==='client_admin' ? ['client_admin',...getInvitableRoles(user.role)] : getInvitableRoles(user.role)
                   return (
                     <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:4,marginBottom:6,alignItems:'center'}}>
-                      <input className="form-input" style={{fontSize:11,background:'var(--s3)',cursor:'default'}} value={workforceOrgIndustry||'—'} readOnly/>
+                      <input className="form-input" style={{fontSize:11,background:'var(--s3)',cursor:'default'}} value={(workforceOrgIndustries.length?workforceOrgIndustries.join(' · '):workforceOrgIndustry)||'—'} readOnly/>
                       <select className="form-select" style={{fontSize:11}} value={row.role} onChange={e=>setInvitePositions(prev=>prev.map((p,j)=>j===i?{...p,role:e.target.value}:p))}>
                         <option value="">— Role —</option>
                         {invitableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
@@ -8532,6 +8577,25 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   const [toastMsg, setToastMsg] = useState('')
 
   const INDUSTRIES = PRESET_INDUSTRIES
+  // IND: the industries that actually exist, as [id, name]. PRESET_INDUSTRIES
+  // stays for the position-list code that reads names; it must NOT be the
+  // source for this screen, because a 22nd industry added through the GLOBAL
+  // INDUSTRIES tab would be unselectable — which is the state today.
+  const [GLOBAL_INDUSTRIES, setGlobalIndustries] = useState([])
+  // IND: editing one org's industries. indOrg is the org being edited, or
+  // null when the modal is closed.
+  const [indOrg, setIndOrg] = useState(null)
+  const [indSel, setIndSel] = useState([])
+  const [indPrimary, setIndPrimary] = useState('')
+  const [indSaving, setIndSaving] = useState(false)
+  // IND: orgId -> [[name, isPrimary], ...], primary first. Feeds the cards.
+  const [ORG_IND_MAP, setOrgIndMap] = useState({})
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('global_industries').select('id,name').order('name')
+      .then(({data})=>{ setGlobalIndustries((data||[]).map(r=>[r.id,r.name])) })
+      .catch(()=>{ setGlobalIndustries([]) })
+  },[])
 
   useEffect(()=>{
     if(isConfigured()) loadOrgs()
@@ -8563,18 +8627,44 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   const loadOrgs = async () => {
     const { data } = await supabase.from('organisations').select('*').order('created_at',{ascending:false})
     if (data) setOrgs(data)
+    // IND: every org's industries in ONE query rather than one per card.
+    // Failure is silent and leaves the map empty — the cards then fall back
+    // to organisations.industry, which is what they showed before.
+    try {
+      const { data: links } = await supabase.from('org_industry_links')
+        .select('org,is_primary,global_industries(name)')
+      const map = {}
+      ;(links||[]).forEach(r=>{
+        const n = r.global_industries?.name
+        if (!n) return
+        ;(map[r.org] = map[r.org] || []).push([n, !!r.is_primary])
+      })
+      Object.keys(map).forEach(k=>map[k].sort(
+        (a,b)=>(b[1]?1:0)-(a[1]?1:0) || String(a[0]).localeCompare(String(b[0]))))
+      setOrgIndMap(map)
+    } catch(e) { setOrgIndMap({}) }
   }
 
   const createOrg = async () => {
     if (!newOrg.name.trim()) { alert('Organisation name is required.'); return }
-    if (!newOrg.industry) { alert('Industry is required — it determines the position list for this organisation.'); return }
+    if (!(newOrg.industries||[]).length) { alert('At least one industry is required — it determines the position list AND the incident categories for this organisation.'); return }
     // No default. A wrong timezone is worse than an empty one: it looks correct.
     if (!newOrg.timezone) { alert('Timezone is required — dates, reminders and evidence day-boundaries all depend on it.'); return }
     setLoading(true)
+    // IND: the primary industry is the one the org's name-based features
+    // (position lists, invites) keep using. The others are additional
+    // services it can file incidents under.
+    const primaryInd = newOrg.primaryIndustry || (newOrg.industries||[])[0]
+    const primaryName = (GLOBAL_INDUSTRIES.find(g=>g[0]===primaryInd)||[])[1] || ''
     const entry = {
       id: 'ORG'+Date.now(),
       name: newOrg.name.trim(),
-      industry: newOrg.industry,
+      // IND / F9: one input, BOTH columns. industry_id is what resolves the
+      // incident category pack — writing only the name is why organisations
+      // created on this screen have no categories at all. Same failure mode
+      // the FIX-TIER-WRITERS comment below records for plan/tier.
+      industry: primaryName,
+      industry_id: primaryInd,
       timezone: newOrg.timezone,
       // FIX-TIER-WRITERS: writing BOTH plan and tier from one input is why
       // organisations.tier disagrees with organisations.plan. Only plan now.
@@ -8587,13 +8677,59 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
     if (isConfigured()) {
       const { error } = await supabase.from('organisations').insert(entry)
       if (error) { alert('Error: '+error.message); setLoading(false); return }
+      // IND: one row per industry this org is registered for. Reported
+      // separately rather than rolled back — an org that exists with no
+      // links is recoverable; a half-failed create is not.
+      const links = (newOrg.industries||[]).map(id=>({
+        org: entry.id, industry_id: id,
+        is_primary: id===primaryInd, created_by: user.name
+      }))
+      const { error: linkErr } = await supabase.from('org_industry_links').insert(links)
+      if (linkErr) alert('Organisation created, but its industries were not saved: '+linkErr.message+'\n\nAdd them before inviting anyone.')
     }
     setOrgs(prev=>[entry,...prev])
     setShowCreate(false)
-    setNewOrg({ name:'', industry:'', tier:'Growth', notes:'', timezone:'' })
+    setNewOrg({ name:'', industry:'', industries:[], primaryIndustry:'', tier:'Growth', notes:'', timezone:'' })
     setLoading(false)
   }
 
+  // IND: read the org's current set. An org created before multi-industry
+  // has no links at all; it falls back to its own industry_id so the modal
+  // opens showing what the org actually has rather than nothing.
+  const openOrgIndustries = async (org) => {
+    setIndOrg(org); setIndSel([]); setIndPrimary('')
+    const { data } = await supabase.from('org_industry_links')
+      .select('industry_id,is_primary').eq('org', org.id)
+    const rows = data || []
+    if (rows.length) {
+      setIndSel(rows.map(r=>r.industry_id))
+      setIndPrimary((rows.find(r=>r.is_primary)||rows[0]||{}).industry_id || '')
+    } else if (org.industry_id) {
+      setIndSel([org.industry_id]); setIndPrimary(org.industry_id)
+    }
+  }
+  // IND: the set is REPLACED, not diffed. The one-primary partial unique
+  // index means a new primary cannot be inserted while the old one is still
+  // there, so the delete has to come first. That leaves a window where the
+  // org has no links — the alert below says so explicitly rather than
+  // failing quietly, because an org with no industries has no incident
+  // categories.
+  const saveOrgIndustries = async () => {
+    if (!indOrg) return
+    if (!indSel.length) { alert('An organisation must have at least one industry — it decides the position list and the incident categories.'); return }
+    const prim = indPrimary || indSel[0]
+    const primName = (GLOBAL_INDUSTRIES.find(g=>g[0]===prim)||[])[1] || ''
+    setIndSaving(true)
+    const { error: delErr } = await supabase.from('org_industry_links').delete().eq('org', indOrg.id)
+    if (delErr) { alert('Could not update industries: '+delErr.message); setIndSaving(false); return }
+    const rows = indSel.map(id=>({ org: indOrg.id, industry_id: id, is_primary: id===prim, created_by: user.name }))
+    const { error: insErr } = await supabase.from('org_industry_links').insert(rows)
+    if (insErr) { alert('The old industries were removed but the new ones did not save: '+insErr.message+'\n\nRe-open Industries for this organisation and set them again before anyone reports an incident.'); setIndSaving(false); return }
+    const { error: orgErr } = await supabase.from('organisations')
+      .update({ industry: primName, industry_id: prim }).eq('id', indOrg.id)
+    if (orgErr) alert('Industries saved, but the primary was not written to the organisation: '+orgErr.message)
+    setIndSaving(false); setIndOrg(null); loadOrgs()
+  }
   const loadOrgMembers = async (orgId, orgName) => {
     setLoadingMembers(true)
     const { data: members } = await supabase.from('org_members')
@@ -9246,7 +9382,13 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
               </div>
               {/* Metadata row */}
               <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}}>
-                <span>🏭 {org.industry||'—'}</span>
+                {/* IND: all of the org's services, primary first. Falls
+                    back to the single stored name if the map is empty. */}
+                <span title={(ORG_IND_MAP[org.id]||[]).map(x=>x[1]?x[0]+' (primary)':x[0]).join(', ')}>
+                  🏭 {(ORG_IND_MAP[org.id]||[]).length
+                        ? ORG_IND_MAP[org.id].map(x=>x[0]).join(' · ')
+                        : (org.industry||'—')}
+                </span>
                 {org.admin_name&&<span>👤 {org.admin_name}</span>}
                 {org.admin_email&&<span style={{overflow:'hidden',textOverflow:'ellipsis',maxWidth:180}}>✉️ {org.admin_email}</span>}
                 <span>📅 {new Date(org.created_at).toLocaleDateString('en-AU')}</span>
@@ -9255,6 +9397,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
               {/* Action buttons — wrap on narrow screens */}
               <div className="org-actions">
                 <button className="btn btn-secondary btn-sm" onClick={()=>enterOrgContext(org)}>👥 View & Manage</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>openOrgIndustries(org)}>🏭 Industries</button>
                 <button className="btn btn-primary btn-sm" onClick={()=>{ setShowInvite(org); setInviteEmail(''); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email') }}>✉️ Invite Admin</button>
                 <label style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:'1px dashed '+(dragOver===org.id?'var(--brand)':'var(--border)'),background:dragOver===org.id?'var(--brand-lt)':'transparent',color:dragOver===org.id?'var(--brand)':'var(--t2)'}}
                   onDragOver={e=>{ e.preventDefault(); setDragOver(org.id) }}
@@ -9334,11 +9477,37 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                 <input className="form-input" placeholder="e.g. Sunrise Aged Care" value={newOrg.name} onChange={e=>setNewOrg({...newOrg,name:e.target.value})}/>
               </div>
               <div className="form-field">
-                <label className="form-label">Industry <span style={{color:'var(--red)'}}>*</span></label>
-                <select className="form-input" value={newOrg.industry} onChange={e=>setNewOrg({...newOrg,industry:e.target.value})}>
-                  <option value="">Select industry...</option>
-                  {INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}
-                </select>
+                <label className="form-label">Industries <span style={{color:'var(--red)'}}>*</span></label>
+                <div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>
+                  Tick every service this organisation runs. The first one ticked is the primary — it sets the position list, and is what the incident form pre-selects. Only a super admin can change this.
+                </div>
+                {GLOBAL_INDUSTRIES.length===0 ? (
+                  /* IND: no silent fallback to the hardcoded array. The ids
+                     are what get written; guessing them would write junk. */
+                  <div style={{fontSize:13,color:'var(--red)'}}>Could not load the industry list. Reload before creating an organisation.</div>
+                ) : (
+                  <div style={{maxHeight:220,overflowY:'auto',border:'1px solid var(--border)',borderRadius:8,padding:8}}>
+                    {GLOBAL_INDUSTRIES.map(([gid,gname])=>{
+                      const picked = (newOrg.industries||[]).includes(gid)
+                      const primary = (newOrg.primaryIndustry || (newOrg.industries||[])[0]) === gid
+                      return (
+                        <label key={gid} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 2px',cursor:'pointer'}}>
+                          <input type="checkbox" checked={picked} onChange={()=>{
+                            const cur = newOrg.industries||[]
+                            const next = picked ? cur.filter(x=>x!==gid) : [...cur,gid]
+                            const prim = next.includes(newOrg.primaryIndustry) ? newOrg.primaryIndustry : (next[0]||'')
+                            setNewOrg({...newOrg,industries:next,primaryIndustry:prim})
+                          }}/>
+                          <span style={{fontWeight:primary?700:400}}>{gname}</span>
+                          {primary
+                            ? <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>primary</span>
+                            : picked && <button type="button" style={{marginLeft:'auto',fontSize:11,background:'none',border:'none',color:'var(--brand)',cursor:'pointer',textDecoration:'underline',padding:0}}
+                                onClick={e=>{e.preventDefault(); e.stopPropagation(); setNewOrg({...newOrg,primaryIndustry:gid})}}>make primary</button>}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
               <div className="form-field">
                 <label className="form-label">Timezone <span style={{color:'var(--red)'}}>*</span></label>
@@ -9360,7 +9529,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowCreate(false)}>Cancel</button>
-                <button className="btn btn-primary" disabled={!newOrg.name.trim()||!newOrg.industry||!newOrg.timezone||loading} onClick={createOrg}>
+                <button className="btn btn-primary" disabled={!newOrg.name.trim()||!(newOrg.industries||[]).length||!newOrg.timezone||loading} onClick={createOrg}>
                   {loading?'Creating...':'Create Organisation'}
                 </button>
               </div>
@@ -9369,6 +9538,53 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
         </div>
       )}
 
+      {/* IND: Industries Modal — super admin only. The same tick-list as
+          create-org, but reading and replacing an existing org's set. */}
+      {indOrg && (
+        <div className="modal-overlay" onClick={()=>!indSaving&&setIndOrg(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Industries — {indOrg.name}</div>
+              <button className="modal-close" onClick={()=>!indSaving&&setIndOrg(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>
+                Tick every service this organisation runs. The first ticked is the primary — it sets the position list and is what the incident form pre-selects. Changing these changes which incident categories their staff see.
+              </div>
+              {GLOBAL_INDUSTRIES.length===0 ? (
+                <div style={{fontSize:13,color:'var(--red)'}}>Could not load the industry list. Reload before changing anything.</div>
+              ) : (
+                <div style={{maxHeight:280,overflowY:'auto',border:'1px solid var(--border)',borderRadius:8,padding:8}}>
+                  {GLOBAL_INDUSTRIES.map(([gid,gname])=>{
+                    const picked = indSel.includes(gid)
+                    const primary = (indPrimary || indSel[0]) === gid
+                    return (
+                      <label key={gid} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 2px',cursor:'pointer'}}>
+                        <input type="checkbox" checked={picked} onChange={()=>{
+                          const next = picked ? indSel.filter(x=>x!==gid) : [...indSel,gid]
+                          setIndSel(next)
+                          setIndPrimary(next.includes(indPrimary) ? indPrimary : (next[0]||''))
+                        }}/>
+                        <span style={{fontWeight:primary?700:400}}>{gname}</span>
+                        {primary
+                          ? <span style={{fontSize:11,color:'var(--t2)',marginLeft:'auto'}}>primary</span>
+                          : picked && <button type="button" style={{marginLeft:'auto',fontSize:11,background:'none',border:'none',color:'var(--brand)',cursor:'pointer',textDecoration:'underline',padding:0}}
+                              onClick={e=>{e.preventDefault(); e.stopPropagation(); setIndPrimary(gid)}}>make primary</button>}
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+                <button className="btn btn-secondary" disabled={indSaving} onClick={()=>setIndOrg(null)}>Cancel</button>
+                <button className="btn btn-primary" disabled={indSaving||!indSel.length} onClick={saveOrgIndustries}>
+                  {indSaving?'Saving...':'Save Industries'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Invite Admin Modal */}
       {showInvite&&(
   <div className="modal-overlay" onClick={()=>{ setShowInvite(null); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}]); setInviteEmailExistsMsg('') }}>
@@ -10491,20 +10707,35 @@ function CompanySettingsView({ user, onSettingsSaved }) {
   // id first, then fall back to a name match. organisations.id is TEXT, so .eq('id',…) never type-throws.
   const resolveOrgRow = async () => {
     const uid = await authUserId()
+    let myOrgs = []
     if (uid) {
       const { data: members } = await supabase.from('org_members').select('org').eq('user_id', uid)
       const ids = [...new Set((members || []).map(m => m?.org).filter(Boolean))]
       if (ids.length) {
         const { data: orgs } = await supabase.from('organisations').select('*').in('id', ids)
-        if (orgs && orgs.length) {
-          // Multi-org users: prefer the row whose name matches the profile's org; else the first.
-          return orgs.find(o => o.name === user.org) || orgs[0]
-        }
+        myOrgs = orgs || []
+        // Multi-org users: the membership whose name matches the org being viewed.
+        const match = myOrgs.find(o => o.name === user.org)
+        if (match) return match
       }
     }
-    // Fallback: legacy name match.
+    // FIX-WRONG-ORG (30 Aug 2026): this used to `return … || myOrgs[0]`
+    // whenever the requested org was not one of the caller's memberships.
+    // A super admin viewing another organisation has THAT org's name in
+    // user.org (contextUser = {...user, org: selectedOrgView.name}) but no
+    // membership row for it, so it silently returned their OWN org -- the
+    // header named one organisation while the form showed another's data.
+    //
+    // Not cosmetic: the save below writes .eq('id', orgId) with whatever
+    // this resolved, so it would have written the wrong organisation's row.
+    //
+    // Resolve the requested NAME first.
     const { data } = await supabase.from('organisations').select('*').eq('name', user.org).maybeSingle()
-    return data || null
+    if (data) return data
+    // LAST RESORT, and the reason the old fallback existed: a member whose
+    // profiles.org is stale (their org was renamed) has no name match, and
+    // should still reach their own organisation rather than an empty form.
+    return myOrgs[0] || null
   }
 
   useEffect(() => {
@@ -10887,7 +11118,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                 <div className="form-field"><label className="form-label">ABN / Business Number</label><input className="form-input" placeholder="12 345 678 901" {...fld('abn')}/></div>
               </div>
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Industry</label><select className="form-input" {...fld('industry')}><option value="">— Select industry —</option>{PRESET_INDUSTRIES.map(k=><option key={k} value={k}>{k}</option>)}</select></div>
+                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" {...fld("industry")} disabled readOnly/><div style={{fontSize:12,color:"var(--t2)",marginTop:4}}>Your services are set by Taksyn and decide which incident categories you get. Contact support to add or change one.</div></div>
                 <div className="form-field"><label className="form-label">Website</label><input className="form-input" placeholder="https://example.com" {...fld('website')}/></div>
               </div>
               <div className="form-field"><label className="form-label">Timezone</label><select className="form-input" {...fld('timezone')}><option value="">— Select timezone —</option>{TIMEZONES.map(tz=><option key={tz} value={tz}>{tz==='UTC'?'UTC (Coordinated Universal Time)':tz.split('/').pop().replace(/_/g,' ')+' — '+tz}</option>)}</select></div>
@@ -12788,6 +13019,8 @@ function TeamsView({ user }) {
   const [teamOrgCustomPositions, setTeamOrgCustomPositions] = useState([])
   const [teamOrgCustomRoles, setTeamOrgCustomRoles] = useState([])
   const [teamOrgIndustry, setTeamOrgIndustry] = useState('')
+  // IND: every service the org runs, primary first. Position dropdown only.
+  const [teamOrgIndustryNames, setTeamOrgIndustryNames] = useState([])
   const isCA = ['client_admin','super_admin'].includes(user.role)
 
   useEffect(()=>{
@@ -12799,6 +13032,18 @@ function TeamsView({ user }) {
         if(data.industry) { setTeamOrgIndustry(data.industry); setInviteLinkIndustry(data.industry) }
         if(data.id) {
           setOrgId(data.id)
+        // IND: the org's full industry set for the position dropdown.
+        // FALLBACK, not an empty list: an org with no links predates
+        // multi-industry and must keep offering its primary's titles.
+        supabase.from('org_industry_links')
+          .select('is_primary,global_industries(name)').eq('org', data.id)
+          .then(({data:li})=>{
+            const names = (li||[]).slice()
+              .sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+              .map(r=>r.global_industries?.name).filter(Boolean)
+            setTeamOrgIndustryNames(names.length ? names : (data.industry?[data.industry]:[]))
+          })
+          .catch(()=>{ setTeamOrgIndustryNames(data.industry?[data.industry]:[]) })
           supabase.from('teams').select('*').eq('org',data.id).order('name')
             .then(async ({data:td})=>{
               if(!td) return
@@ -13171,7 +13416,7 @@ function TeamsView({ user }) {
                       <label className="form-label">Job Title <span style={{fontSize:10,color:'var(--t2)',fontWeight:400}}>optional</span></label>
                       <select className="form-select" value={inviteLinkPosition} onChange={e=>setInviteLinkPosition(e.target.value)}>
                         <option value="">— Job Title —</option>
-                        {getPositionsForIndustry(teamOrgIndustry, inviteLinkRole, teamOrgCustomPositions, teamOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
+                        {getPositionsForIndustry(teamOrgIndustryNames.length?teamOrgIndustryNames:teamOrgIndustry, inviteLinkRole, teamOrgCustomPositions, teamOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}
                       </select>
                     </div>
                   </div>
@@ -15496,6 +15741,12 @@ function IncidentReportView({ user }) {
   // text column.
   const [CATEGORIES, setCategories] = useState([])
   const [catsLoading, setCatsLoading] = useState(true)
+  // IND: the industry this report is filed under. An org can be registered
+  // for more than one (org_industry_links). ORG_INDUSTRIES is
+  // [[industry_id, name], ...], primary first. industryId drives the pack
+  // loader below, so every vocabulary on this form follows the choice.
+  const [ORG_INDUSTRIES, setOrgIndustries] = useState([])
+  const [industryId, setIndustryId] = useState('')
   // AFFECTED TYPES — per-industry labels over the three REGISTER keys.
   // The form shows the LABEL, the database stores the KEY. Confirmed
   // 6 Aug, do not reverse: 14461 buckets the trend report by key, and
@@ -15703,6 +15954,26 @@ function IncidentReportView({ user }) {
     })()
   }, [user?.org])
 
+  // IND: which industries this org is registered for. Defaults to the
+  // primary one, so a single-industry org never sees a picker and behaves
+  // exactly as it does today.
+  useEffect(() => {
+    if (!orgResolved || !orgId) { setOrgIndustries([]); setIndustryId(''); return }
+    ;(async()=>{
+      try {
+        const { data } = await supabase.from('org_industry_links')
+          .select('industry_id,is_primary,global_industries(name)')
+          .eq('org', orgId)
+        const rows = (data || [])
+          .map(r => [r.industry_id, r.global_industries?.name || '', !!r.is_primary])
+          .sort((a,b) => (b[2]?1:0) - (a[2]?1:0)
+                      || String(a[1]).localeCompare(String(b[1])))
+        setOrgIndustries(rows.map(r => [r[0], r[1]]))
+        const primary = rows.find(r => r[2]) || rows[0]
+        setIndustryId(primary ? primary[0] : '')
+      } catch(e) { console.error('IND industries effect failed:', e); setOrgIndustries([]); setIndustryId('') }
+    })()
+  }, [orgId, orgResolved])
   // CATEGORY PACKS — load once the org ID is known. Resolves the org's
   // industry_id, then reads packs ∪ org categories. source='category'
   // excludes outcome rows (report-only) and legacy rows.
@@ -15711,32 +15982,44 @@ function IncidentReportView({ user }) {
     if (!orgId) { setCategories([]); setAffectedTypes(AFFECTED_FALLBACK); setCategoryDomains({}); setCategoryLadders({}); setDamageTypes([]); setBreachTypes([]); setLadders({}); setCatsLoading(false); return }
     ;(async()=>{
       try {
-        const { data: org } = await supabase.from('organisations')
-          .select('industry_id').eq('id', orgId).maybeSingle()
-        const industryId = org?.industry_id
+        // IND: a category from the previous industry would fail the
+        // create_incident guard, and a domain answer would belong to the
+        // wrong domain. Harmless on first load — all of these start empty.
+        setCategory(''); setOutcomes([]); setHarmType('')
+        setDamageType(''); setDamagedItem(''); setBreachType(''); setDataDescription('')
+        // IND: the reporter's choice wins. Fall back to the org's own
+        // column so an org with no links behaves exactly as before.
+        // Named indId, NOT industryId — that would shadow the state above
+        // and the form would silently keep using the org's industry.
+        let indId = industryId
+        if (!indId) {
+          const { data: org } = await supabase.from('organisations')
+            .select('industry_id').eq('id', orgId).maybeSingle()
+          indId = org?.industry_id
+        }
         const [packsRes, ownRes, affRes, dmgRes, brcRes, laddersRes] = await Promise.all([
-          industryId
+          indId
             ? supabase.from('incident_category_packs')
                 .select('category_key,label,sort_order,outcome_domain,ladder_key')
-                .eq('industry_id', industryId).eq('source','category').eq('is_active', true)
+                .eq('industry_id', indId).eq('source','category').eq('is_active', true)
             : Promise.resolve({ data: [] }),
           supabase.from('org_incident_categories')
             .select('category_key,label,sort_order,overrides_key,outcome_domain,ladder_key')
             .eq('org', orgId).eq('is_active', true),
-          industryId
+          indId
             ? supabase.from('incident_category_packs')
                 .select('category_key,label,sort_order')
-                .eq('industry_id', industryId).eq('source','affected_type').eq('is_active', true)
+                .eq('industry_id', indId).eq('source','affected_type').eq('is_active', true)
             : Promise.resolve({ data: [] }),
-          industryId
+          indId
             ? supabase.from('incident_category_packs')
                 .select('category_key,label,sort_order')
-                .eq('industry_id', industryId).eq('source','damage_type').eq('is_active', true)
+                .eq('industry_id', indId).eq('source','damage_type').eq('is_active', true)
             : Promise.resolve({ data: [] }),
-          industryId
+          indId
             ? supabase.from('incident_category_packs')
                 .select('category_key,label,sort_order')
-                .eq('industry_id', industryId).eq('source','breach_type').eq('is_active', true)
+                .eq('industry_id', indId).eq('source','breach_type').eq('is_active', true)
             : Promise.resolve({ data: [] }),
           // C1: ladder_key -- ONE global fetch replaces the two
           // per-industry ladder queries. incident_outcome_ladders has no
@@ -15781,6 +16064,7 @@ function IncidentReportView({ user }) {
         setCategoryLadders(Object.fromEntries(
           merged.map(r => [r.category_key, r.ladder_key || null])))
       } catch (e) {
+        console.error('IND packs effect failed:', e)
         setCategories([])
         setAffectedTypes(AFFECTED_FALLBACK)
         setCategoryDomains({})
@@ -15789,7 +16073,7 @@ function IncidentReportView({ user }) {
       }
       setCatsLoading(false)
     })()
-  }, [orgId, orgResolved])
+  }, [orgId, orgResolved, industryId])
 
   // suggested severity from the outcome ladder
   // Declared here, not further down, because `suggested` needs them and
@@ -15868,7 +16152,8 @@ function IncidentReportView({ user }) {
   const affectedIdentityOk = !affectedType ||
     (affectedKnown === 'unknown') ||
     (affectedKnown === 'known' && (affectedPerson || (noMatch && unmatchedName.trim())))
-  const canSubmit = incTitle.trim() && category && outcomes.length && effectiveSeverity && facts.trim() &&
+  const canSubmit = (ORG_INDUSTRIES.length < 2 || industryId) &&
+    incTitle.trim() && category && outcomes.length && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
     affectedTypeOk && affectedIdentityOk && domainDetailOk
@@ -15876,7 +16161,8 @@ function IncidentReportView({ user }) {
   // The first thing still missing, in the same order canSubmit tests them,
   // so the message cannot drift away from the condition it explains.
   const missingField =
-    !incTitle.trim()                            ? 'Give this incident a short title'
+    (ORG_INDUSTRIES.length > 1 && !industryId)  ? 'Choose which service this relates to'
+    : !incTitle.trim()                          ? 'Give this incident a short title'
     : !category                                 ? 'Choose what happened'
     : !outcomes.length                          ? 'Choose the outcome'
     : !effectiveSeverity                        ? 'Choose a severity'
@@ -15932,6 +16218,10 @@ function IncidentReportView({ user }) {
                  suggested_severity: row[2] || null, seq: idx+1 }
       }),
       clinical: clinicalNote.trim() ? { note: clinicalNote.trim() } : null,
+      // IND: the industry this incident is categorised under.
+      // create_incident validates it against org_industry_links and
+      // rejects one the org is not registered for.
+      industry_id: industryId || null,
       // Read by create_incident as p_payload->>"title", trimmed there too.
       title: incTitle.trim() || null,
     }
@@ -16002,6 +16292,25 @@ function IncidentReportView({ user }) {
       {/* Step 1 — category */}
       <div style={card}>
         <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
+        {/* IND: which service this incident belongs to. Hidden entirely
+            for a single-industry org. Changing it reloads the categories
+            below, and clears any category already chosen. */}
+        {ORG_INDUSTRIES.length > 1 && (
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Which service does this relate to?</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+              {ORG_INDUSTRIES.map(([iid,iname]) => (
+                <button key={iid} type="button" onClick={()=>setIndustryId(iid)}
+                  style={{padding:'8px 14px',borderRadius:8,cursor:'pointer',
+                          border:'1px solid '+(industryId===iid?'var(--brand)':'var(--border)'),
+                          background:industryId===iid?'var(--brand-lt)':'transparent',
+                          fontWeight:industryId===iid?700:400}}>
+                  {iname}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {CATEGORIES.map(([k,title,sub]) => (
           <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcomes([]); setSeverity(0)}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:8,borderRadius:10,
@@ -17464,12 +17773,26 @@ const loadCategoryLabels = async (orgId) => {
   const labels = { ...INC_CATEGORY_LABEL }
   if (!orgId) return labels
   try {
-    const { data: orgRow } = await supabase.from('organisations')
-      .select('industry_id').eq('id', orgId).maybeSingle()
-    const indId = orgRow?.industry_id
+    // IND: labels for EVERY industry this org is registered for, not just
+    // its primary. A register lists incidents filed under different
+    // services; a map built from one industry renders the others as raw
+    // keys. Sorted primary LAST so the primary wins any category_key two
+    // industries share.
+    const { data: linkRows } = await supabase.from('org_industry_links')
+      .select('industry_id,is_primary').eq('org', orgId)
+    let indIds = (linkRows||[]).slice()
+      .sort((a,b)=>(a.is_primary?1:0)-(b.is_primary?1:0))
+      .map(r=>r.industry_id)
+    // FALLBACK, not the primary path: an org with no links predates
+    // multi-industry, or has none set. It resolves exactly as before.
+    if (!indIds.length) {
+      const { data: orgRow } = await supabase.from('organisations')
+        .select('industry_id').eq('id', orgId).maybeSingle()
+      if (orgRow?.industry_id) indIds = [orgRow.industry_id]
+    }
     const [pkRes, ownRes] = await Promise.all([
-      indId ? supabase.from('incident_category_packs')
-                .select('category_key,label').eq('industry_id', indId)
+      indIds.length ? supabase.from('incident_category_packs')
+                .select('category_key,label,industry_id').in('industry_id', indIds)
                 .eq('source','category').eq('is_active',true)
             : Promise.resolve({ data: [] }),
       supabase.from('org_incident_categories')
@@ -17477,8 +17800,12 @@ const loadCategoryLabels = async (orgId) => {
     ])
     const own = ownRes?.data || []
     const suppressed = new Set(own.filter(r=>r.overrides_key).map(r=>r.overrides_key))
+    // IND: indIds is primary-last, so sorting pack rows by that order means
+    // the primary's wording is written last and wins.
+    const packRows = (pkRes?.data||[]).slice()
+      .sort((a,b)=>indIds.indexOf(a.industry_id)-indIds.indexOf(b.industry_id))
     const merged = [
-      ...(pkRes?.data||[]).filter(r=>!suppressed.has(r.category_key)),
+      ...packRows.filter(r=>!suppressed.has(r.category_key)),
       ...own.filter(r=>!r.overrides_key),
     ]
     merged.forEach(r=>{ labels[r.category_key] = r.label })
