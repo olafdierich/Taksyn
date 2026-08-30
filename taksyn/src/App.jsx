@@ -8157,28 +8157,16 @@ function UsersView({ user, setAuditLog }) {
       {showManageIndustries&&(
         <div className="modal-overlay" onClick={()=>setShowManageIndustries(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-hdr"><div className="modal-title">🏭 Manage Industries</div><button className="modal-close" onClick={()=>setShowManageIndustries(false)}>×</button></div>
+            <div className="modal-hdr"><div className="modal-title">🏭 Industries</div><button className="modal-close" onClick={()=>setShowManageIndustries(false)}>×</button></div>
             <div className="modal-body">
-              <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Preset industries are always available. Add custom industries specific to your organisation.</div>
-              <div style={{display:'flex',gap:8,marginBottom:12}}>
-                <input className="form-input" value={newIndustry} onChange={e=>setNewIndustry(e.target.value)} placeholder="e.g. Childcare, Veterinary..." onKeyDown={e=>e.key==='Enter'&&saveCustomIndustry()}/>
-                <button className="btn btn-primary" onClick={saveCustomIndustry} disabled={!newIndustry.trim()}>Add</button>
-              </div>
+              {/* IND: the add form is gone. An organisation's services are set
+                  by Taksyn, because an invented industry name resolves to no
+                  incident category pack. Custom ROLES and POSITIONS remain. */}
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>These are the industries Taksyn supports. Your organisation's services are set by Taksyn — contact support to add or change one.</div>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Preset Industries</div>
               <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
                 {PRESET_INDUSTRIES.map(i=><span key={i} style={{fontSize:11,padding:'3px 10px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:500}}>{i}</span>)}
               </div>
-              {orgCustomDepts.length>0&&<>
-                <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Custom Industries ({orgCustomDepts.length})</div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                  {orgCustomDepts.map(i=>(
-                    <span key={i} style={{display:'flex',alignItems:'center',gap:4,fontSize:11,padding:'3px 10px',borderRadius:10,background:'rgba(99,102,241,.1)',color:'#6366F1',fontWeight:600,border:'1px solid rgba(99,102,241,.2)'}}>
-                      {i}
-                      <span style={{cursor:'pointer',opacity:.7,fontWeight:700}} onClick={()=>removeCustomIndustry(i)}>×</span>
-                    </span>
-                  ))}
-                </div>
-              </>}
             </div>
           </div>
         </div>
@@ -10355,16 +10343,10 @@ function RolesPositionsView({ user }) {
                   </div>
                 ))}
 
-                {/* Add Industry */}
-                {isSuper&&(showAddInd ? (
-                  <div style={{display:'flex',gap:4,marginTop:6,padding:'4px 2px'}}>
-                    <input className="form-input" style={{flex:1,fontSize:11,padding:'4px 6px'}} placeholder="Industry name…" value={newIndName} onChange={e=>setNewIndName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addOrgIndustry();if(e.key==='Escape'){setShowAddInd(false);setNewIndName('')}}} autoFocus/>
-                    <button className="btn btn-primary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={addOrgIndustry} disabled={saving||!newIndName.trim()}>Add</button>
-                    <button className="btn btn-secondary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={()=>{setShowAddInd(false);setNewIndName('')}}>✕</button>
-                  </div>
-                ) : (
-                  <button className="btn btn-secondary btn-sm" style={{width:'100%',marginTop:8,fontSize:11}} onClick={()=>setShowAddInd(true)}>+ Add Industry</button>
-                ))}
+                {/* IND: "+ Add Industry" removed. An org's services are set on
+                    the Organisations screen (the Industries button), which
+                    writes org_industry_links. A name typed here went to
+                    org_industries and resolved to no category pack. */}
               </>
             )}
           </div>
@@ -11661,10 +11643,8 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                 )
               })}
 
-              <div style={{display:'flex',gap:6,marginTop:12}}>
-                <input style={TM_INPUT} placeholder="New industry name…" value={tmNewIndName} onChange={e=>setTmNewIndName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&tmAddInd()}/>
-                <button style={TM_SAVE_BTN} onClick={tmAddInd} disabled={tmSaving}>Add Industry</button>
-              </div>
+              {/* IND: adding an industry here is gone \u2014 see the Industries
+                  button on the Organisations screen. Roles below are unaffected. */}
             </div>
           )}
 
