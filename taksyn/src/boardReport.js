@@ -279,6 +279,20 @@ export function openBoardReport(o) {
     }))
     const notifReq = inc.filter(i => i.external_notification_required)
     const notifDone = notifReq.filter(i => i.notified_at)
+    // Hours from occurrence to notification. Sorted so the median is taken
+    // the same way closeRows takes its own -- the two cannot then disagree
+    // about what a median is.
+    const notifHours = notifDone
+      .map(i => ({ ref: i.ref,
+                   h: Math.round((new Date(i.notified_at) - new Date(i.occurred_at)) / 36e5 * 10) / 10 }))
+      .filter(x => x.h >= 0)
+      .sort((a,b) => a.h - b.h)
+    const notifMedian = notifHours.length
+      ? notifHours[Math.floor(notifHours.length/2)].h : null
+    // Over 24 hours is worth LOOKING at, not necessarily a breach: the clock
+    // differs by category and jurisdiction. The report surfaces; the reader
+    // judges.
+    const notifSlow = notifHours.filter(x => x.h > 24)
     const admissions = inc.reduce((a,i) =>
       a + (i.incident_outcomes||[]).filter(x => !x.voided_at && x.outcome_key === 'hospital_admission').length, 0)
     const open = inc.filter(i => i.status !== 'closed').length
@@ -373,6 +387,31 @@ export function openBoardReport(o) {
       H.push('</div>')
     })
     H.push('<h2>Notification, closure and timeliness</h2>')
+    if (notifDone.length) {
+      H.push('<h4>How long notification took</h4>')
+      H.push('<table><thead><tr><th class="cat">Incident</th><th>Hours to notify</th>'
+        + '<th class="sep">Notified</th></tr></thead><tbody>')
+      notifHours.forEach(x => {
+        const row = notifDone.find(i => i.ref === x.ref) || {}
+        H.push('<tr><td class="cat">'+esc(x.ref || '\u2014')+'</td>'
+          + '<td class="tot">'+x.h+'</td>'
+          + '<td class="tot" style="font-weight:400">'+esc(row.notified_to || '\u2014')+'</td></tr>')
+      })
+      H.push('</tbody></table>')
+      H.push('<p class="note">Median '+notifMedian+' hours across '+notifDone.length
+        +' notified incident'+(notifDone.length===1?'':'s')+'. The deadline differs by category and '
+        + 'jurisdiction \u2014 24 hours for a serious aged care or NDIS incident, immediately on '
+        + 'becoming aware for a WHS notification, thirty days to assess a data breach. This report '
+        + 'gives the elapsed time and leaves the clock to the reader.</p>')
+      if (notifSlow.length) {
+        H.push('<div class="flagbox"><h3>'+notifSlow.length+' notification'
+          +(notifSlow.length===1?'':'s')+' took more than 24 hours</h3>')
+        H.push('<p>'+esc(notifSlow.map(x => x.ref+' at '+x.h+' hours').join(', '))
+          + '. Worth checking against the deadline that governs '
+          + (notifSlow.length===1?'that category':'those categories')+'.</p></div>')
+      }
+    }
+
     if (notifReq.length > notifDone.length) {
       const gap = notifReq.length - notifDone.length
       H.push('<div class="flagbox"><h3>'+gap+' notifiable incident'+(gap===1?'':'s')+' with no notification recorded</h3>')
