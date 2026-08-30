@@ -192,6 +192,14 @@ export function openBoardReport(o) {
       const before = months.slice(0, -1).map(m => cell(c, m).n)
       const mean = before.reduce((a,b) => a+b, 0) / (before.length || 1)
       if (!mean) return now ? { t:'new', d:'up' } : { t:'—', d:'flat' }
+      // A percentage against a tiny base overstates wildly: one incident in
+      // the prior months gives a mean of 0.2, so ten this month reads as
+      // 4900%. Arithmetically right, useless to a board, and a number like
+      // that gets the whole report dismissed. Below a base worth a
+      // percentage, show the raw pair and let the reader see the size of it.
+      // Same reasoning as the rated.length >= 20 guard on the risk matrix.
+      if (mean < 2) return { t: now+' vs '+mean.toFixed(1),
+                             d: now>mean?'up':(now<mean?'down':'flat') }
       const pct = Math.round((now - mean) / mean * 100)
       if (Math.abs(pct) < 25) return { t:'▬ '+Math.abs(pct)+'%', d:'flat' }
       return { t:(pct>0?'▲ ':'▼ ')+Math.abs(pct)+'%', d: pct>0?'up':'down' }
@@ -414,7 +422,7 @@ export function openBoardReport(o) {
 
   const H = []
   H.push('<!DOCTYPE html><html lang="en-AU"><head><meta charset="utf-8">')
-  H.push('<title>Board report — '+esc(orgName)+' — '+esc(last.label)+'</title>')
+  H.push('<title>Trend analysis — '+esc(orgName)+' — '+esc(last.label)+'</title>')
   H.push('<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">')
   H.push('<style>'+CSS+'</style></head><body><div class="sheet">')
   // Before the masthead so it sticks to the top of the scroll, and marked
@@ -423,7 +431,7 @@ export function openBoardReport(o) {
     + '<button class="ghost" onclick="window.close()">Close</button>'
     + '<button onclick="window.print()">Save as PDF</button></div>')
   H.push('<header class="masthead"><div class="eyebrow">Incident intelligence · '+esc(orgName)+'</div>')
-  H.push('<h1>Incident&nbsp;Report<br>'+esc(last.label)+'</h1>')
+  H.push('<h1>Trend&nbsp;Analysis<br>'+esc(last.label)+'</h1>')
   H.push('<p class="lede">Drawn from the incident register. Every figure traces to a record.</p>')
   H.push('<div class="runline"><span>Period <b>'+esc(periodLabel)+'</b></span>')
   H.push('<span>Generated <b>'+new Date().toLocaleString('en-AU')+'</b></span>')
@@ -465,7 +473,7 @@ export function openBoardReport(o) {
   H.push('<div class="foot">'+esc(orgName)+' · incident register · generated '+new Date().toLocaleDateString('en-AU')+'</div>')
   H.push('</div></body></html>')
   const w = window.open('', '_blank')
-  if (!w) { alert('Allow pop-ups for this site to open the board report.'); return }
+  if (!w) { alert('Allow pop-ups for this site to open the Trend Analysis Report.'); return }
   w.document.write(H.join(''))
   w.document.close()
 }

@@ -17251,7 +17251,7 @@ function IncidentRegisterView({ user, setPage }) {
 
   const openIncident = (ref) => { try{ sessionStorage.setItem('taksyn-open-incident', ref) }catch(e){}; if(setPage) setPage('incidents') }
 
-  // TREND COMPUTATIONS — shared by JSX section and exportTrendPDF
+  // TREND COMPUTATIONS — shared by the on-screen section and the report
   const tNow = new Date()
   const tMonths = Array.from({length:6},(_,i)=>{
     const d = new Date(tNow.getFullYear(), tNow.getMonth()-5+i, 1)
@@ -17315,210 +17315,6 @@ function IncidentRegisterView({ user, setPage }) {
   const tSevByMonth=[1,2,3,4,5].map(s=>({ s, counts:tMonths.map(m=>incidents.filter(i=>!i.excluded_at&&tInMonth(i,m.year,m.month)&&i.severity===s).length) }))
   const tPeriodLabel = tMonths[0].label+' – '+tMonths[5].label
 
-  const exportTrendPDF = () => {
-    try {
-    const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'})
-    const lm=14, rw=182, y0=14
-    let y=y0
-    const ph=277, addPage=()=>{ pdf.addPage(); y=14 }
-    const line = (txt,size,bold,color)=>{ if(y>ph) addPage(); pdf.setFontSize(size); pdf.setFont(undefined,bold?'bold':'normal'); if(color) pdf.setTextColor(...color); else pdf.setTextColor(30,30,30); pdf.text(String(txt||''),lm,y); y+=size*0.45 }
-    const gap  = (n=4)=>{ y+=n; if(y>ph) addPage() }
-    const rule = ()=>{ pdf.setDrawColor(200,200,200); pdf.line(lm,y,lm+rw,y); y+=4 }
-    const rect = (x,ry,w,h,fill)=>{ pdf.setFillColor(...fill); pdf.roundedRect(x,ry,w,h,1,1,'F') }
-    // header
-    line('Incident Trend Report',16,true)
-    gap(1)
-    line(user.org||'Organisation',11,false,[80,80,80])
-    line('Period: '+tPeriodLabel,10,false,[80,80,80])
-    line('Generated: '+new Date().toLocaleString('en-AU'),9,false,[120,120,120])
-    gap(2); rule()
-    // factual summary
-    line('Summary',12,true)
-    gap(2)
-    const sevCfg={1:'Minor',2:'Moderate',3:'Major',4:'Severe',5:'Critical'}
-    const domN = (d)=>tByDomain.find(x=>x.dom===d)?.n||0
-    const summaryLines = [
-      tTotal6m===0
-        ? 'No incidents were recorded in the 6-month period.'
-        : tTotal6m+' incident'+(tTotal6m!==1?'s were':' was')+' recorded in the period '+tPeriodLabel+'.',
-      tTotalYoy===0&&tTotal6m===0 ? null
-        : 'The prior year same period recorded '+tTotalYoy+' incident'+(tTotalYoy!==1?'s':'')+
-          '. This represents '+(tDelta>0?'an increase of '+tDelta:tDelta<0?'a decrease of '+Math.abs(tDelta):'no change')+' year on year.',
-      domN('people')>0  ? domN('people')+' incident'+(domN('people')!==1?'s were':' was')+' people-domain (harm to a person).' : null,
-      domN('property')>0? domN('property')+' incident'+(domN('property')!==1?'s were':' was')+' property-domain (damage to property or equipment).' : null,
-      domN('information')>0? domN('information')+' incident'+(domN('information')!==1?'s were':' was')+' information-domain (data or privacy).' : null,
-      tNotifRate!==null ? 'Regulatory notification compliance: '+tNotifRate+'% ('+tNotifDone.length+' of '+tNotifReq.length+' required notifications completed).' : null,
-      tTopCats.length>0 ? 'Most frequent category: '+(categoryLabels[tTopCats[0][0]]||tTopCats[0][0])+' ('+tTopCats[0][1]+' incident'+(tTopCats[0][1]!==1?'s':'')+').' : null,
-    ].filter(Boolean)
-    summaryLines.forEach(s=>{
-      pdf.setFontSize(10); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
-      const wrapped=pdf.splitTextToSize(s,rw)
-      pdf.text(wrapped,lm,y); y+=wrapped.length*5
-    })
-    gap(2); rule()
-    // monthly volume — table + bar chart
-    line('Monthly Volume',12,true)
-    gap(3)
-    const colW=rw/(tMonths.length+2)
-    // table header
-    pdf.setFontSize(8); pdf.setFont(undefined,'bold'); pdf.setTextColor(80,80,80)
-    pdf.text('Period',lm,y)
-    tMonths.forEach((m,i)=>pdf.text(m.label,lm+colW*(i+1),y,{align:'center'}))
-    pdf.text('Total',lm+colW*(tMonths.length+1),y,{align:'center'})
-    y+=5
-    ;[['This year',tMonthlyCounts,[79,70,229]],['Prior year',tYoyCounts,[180,180,180]]].forEach(([label,counts,col])=>{
-      pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
-      pdf.text(label,lm,y)
-      const tot=counts.reduce((a,b)=>a+b,0)
-      counts.forEach((n,i)=>pdf.text(String(n),lm+colW*(i+1),y,{align:'center'}))
-      pdf.text(String(tot),lm+colW*(tMonths.length+1),y,{align:'center'})
-      y+=5
-    })
-    gap(3)
-    // bar chart — grouped bars per month
-    const chartH=28, barW=colW*0.38, maxVal=Math.max(1,...tMonthlyCounts,...tYoyCounts)
-    const chartTop=y+chartH
-    tMonths.forEach((m,mi)=>{
-      const cx=lm+colW*(mi+1)
-      const curH=Math.max(1,Math.round((tMonthlyCounts[mi]/maxVal)*chartH))
-      const yoyH=Math.max(1,Math.round((tYoyCounts[mi]/maxVal)*chartH))
-      if(curH>0){ pdf.setFillColor(79,70,229); pdf.rect(cx-barW-0.5,chartTop-curH,barW,curH,'F') }
-      if(yoyH>0){ pdf.setFillColor(180,180,180); pdf.rect(cx+0.5,chartTop-yoyH,barW,yoyH,'F') }
-      pdf.setFontSize(7); pdf.setTextColor(120,120,120)
-      pdf.text(m.label,cx,chartTop+4,{align:'center'})
-    })
-    y=chartTop+8
-    // legend
-    pdf.setFillColor(79,70,229); pdf.rect(lm,y,3,3,'F')
-    pdf.setFontSize(7); pdf.setTextColor(80,80,80); pdf.text('This year',lm+4,y+2.5)
-    pdf.setFillColor(180,180,180); pdf.rect(lm+22,y,3,3,'F')
-    pdf.text('Prior year',lm+26,y+2.5)
-    y+=6
-    gap(2); rule()
-    // breakdown axes: harm type / affected persons / outcome
-    const axisBlock = (title, rows, labelFn, base) => {
-      if(!rows) return
-      line(title,12,true)
-      gap(3)
-      // An OMITTED section is ambiguous — a reader cannot tell "nothing was
-      // recorded" from "this report does not cover that". State it instead.
-      if(rows.length===0){
-        line('None recorded in this period.',9,false,[120,120,120])
-        gap(2); rule()
-        return
-      }
-      // Share of the total, not of the largest. Matches the on-screen
-      // breakdown; the old rw*n/(maxN*2) made every bar relative to the
-      // biggest count AND capped that at half width.
-      // v49: optional base. Defaults to sum-of-counts, so the harm-type
-      // and affected-persons blocks are byte-identical in behaviour.
-      // The outcome block passes the INCIDENT count instead, because an
-      // incident can appear in several rows and sum-of-counts would
-      // silently answer a different question.
-      const barTot=base||rows.reduce((s,r)=>s+r[1],0)||1
-      rows.forEach(([key,n])=>{
-        // v49: row must fit before it starts -- label, bar and spacing
-        // are ~10mm, and pdf.text/rect bypass the y>ph guard that line()
-        // and rule() apply.
-        if(y>ph-12) addPage()
-        const pc=Math.round(n/barTot*100)
-        pdf.setFontSize(9); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
-        pdf.text(String(labelFn(key)),lm,y)
-        pdf.text(String(n)+' ('+pc+'%)',lm+rw,y,{align:'right'})
-        y+=4
-        const barPct=Math.min(rw,Math.round(rw*pc/100))
-        rect(lm,y,barPct,3,[79,70,229])
-        if(barPct<rw) rect(lm+barPct,y,rw-barPct,3,[220,220,220])
-        y+=6
-      })
-      gap(2); rule()
-    }
-    axisBlock('Type of Harm (6 months)', tHarmRows, k=>HARM_LABEL[k]||String(k).replace(/_/g,' '))
-    axisBlock('Who Was Affected (6 months)', tAffRows, k=>String(k).replace(/_/g,' '))
-    if(tRepeatPeople>0){
-      line(tRepeatPeople+' individual'+(tRepeatPeople!==1?'s':'')+' had 2 or more incidents in the period. Refer to the Incident Register for detail.',9,false,[80,80,80])
-    } else {
-      line('No individual had more than one incident in the period.',9,false,[120,120,120])
-    }
-    gap(2); rule()
-    axisBlock('Outcome — share of incidents (an incident may have several)',
-      tOutRows.map(r=>[r[0], r[1]]),
-      k=>{ const r=tOutRows.find(x=>x[0]===k)||[]; const d=r[2]
-           return (DOMAIN_LABEL[d]||d)+' · '+(r[3]||String(k)) },
-      tOutBase)
-    // top categories
-    if(tTopCats.length>0){
-      line('Top Categories (6 months)',12,true)
-      gap(3)
-      const maxN=tTopCats[0][1]||1
-      tTopCats.forEach(([key,n])=>{
-        const label=categoryLabels[key]||key
-        pdf.setFontSize(9); pdf.setFont(undefined,'normal'); pdf.setTextColor(40,40,40)
-        pdf.text(label,lm,y)
-        pdf.text(String(n),lm+rw,y,{align:'right'})
-        y+=4
-        const barPct=Math.min(rw,Math.round(rw*n/Math.max(maxN*2,4)))
-        rect(lm,y,barPct,3,[79,70,229])
-        if(barPct<rw) rect(lm+barPct,y,rw-barPct,3,[220,220,220])
-        y+=6
-      })
-      gap(1); rule()
-    }
-    // severity by month
-    line('Severity by Month',12,true)
-    gap(3)
-    const sColW=rw/(tMonths.length+2)
-    pdf.setFontSize(8); pdf.setFont(undefined,'bold'); pdf.setTextColor(80,80,80)
-    pdf.text('Severity',lm,y)
-    tMonths.forEach((m,i)=>pdf.text(m.label,lm+sColW*(i+1),y,{align:'center'}))
-    pdf.text('Total',lm+sColW*(tMonths.length+1),y,{align:'center'})
-    y+=5
-    const sevColors={1:[16,185,129],2:[59,130,246],3:[245,158,11],4:[239,68,68],5:[239,68,68]}
-    tSevByMonth.forEach(({s,counts})=>{
-      const rowTotal=counts.reduce((a,b)=>a+b,0)
-      const col=sevColors[s]||[100,100,100]
-      pdf.setFont(undefined,'bold'); pdf.setTextColor(...col)
-      pdf.text(s+' '+sevCfg[s],lm,y)
-      pdf.setFont(undefined,'normal')
-      counts.forEach((n,i)=>{
-        if(n>0) pdf.setTextColor(...col); else pdf.setTextColor(180,180,180)
-        pdf.text(n>0?String(n):'·',lm+sColW*(i+1),y,{align:'center'})
-      })
-      if(rowTotal>0) pdf.setTextColor(...col); else pdf.setTextColor(180,180,180)
-      pdf.text(rowTotal>0?String(rowTotal):'·',lm+sColW*(tMonths.length+1),y,{align:'center'})
-      y+=5
-    })
-    gap(4)
-    // severity bar chart
-    line('Severity Distribution (6 months)',12,true)
-    gap(3)
-    const sevTotals=tSevByMonth.map(({s,counts})=>({ s, n:counts.reduce((a,b)=>a+b,0) })).filter(x=>x.n>0)
-    if(sevTotals.length>0){
-      const sevChartMax=Math.max(1,...sevTotals.map(x=>x.n))
-      const sevColors2={1:[16,185,129],2:[59,130,246],3:[245,158,11],4:[239,68,68],5:[185,28,28]}
-      const sevLabels={1:'Minor',2:'Moderate',3:'Major',4:'Severe',5:'Critical'}
-      const bw=rw/7
-      const sChartH=24, sChartTop=y+sChartH
-      sevTotals.forEach((x,xi)=>{
-        const bx=lm+bw*xi+bw*0.2
-        const bh=Math.max(1,Math.round((x.n/sevChartMax)*sChartH))
-        const col=sevColors2[x.s]||[100,100,100]
-        pdf.setFillColor(...col); pdf.rect(bx,sChartTop-bh,bw*0.6,bh,'F')
-        pdf.setFontSize(7); pdf.setTextColor(...col)
-        pdf.text(String(x.n),bx+bw*0.3,sChartTop-bh-1,{align:'center'})
-        pdf.setTextColor(100,100,100)
-        pdf.text(sevLabels[x.s]||String(x.s),bx+bw*0.3,sChartTop+4,{align:'center'})
-      })
-      y=sChartTop+8
-    } else {
-      pdf.setFontSize(10); pdf.setTextColor(160,160,160); pdf.text('No incidents in this period.',lm,y); y+=6
-    }
-    gap(4)
-    pdf.setFontSize(7); pdf.setTextColor(160,160,160); pdf.setFont(undefined,'italic')
-    pdf.text('This report was generated by Taksyn. Narrative analysis by Taksyn EQ (coming soon).',lm,y)
-    pdf.save('incident-trend-'+new Date().toISOString().slice(0,10)+'.pdf')
-    } catch(e) { console.error('TrendPDF crash:', e.message, e.stack) }
-  }
 
   const card={background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}
   const th={textAlign:'left',fontSize:11,fontWeight:700,color:'var(--t2)',padding:'6px 8px',textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}
@@ -17694,7 +17490,6 @@ function IncidentRegisterView({ user, setPage }) {
         </label>
         <div style={{flex:1}}/>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportCSV}>📥 CSV</button>
-        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportTrendPDF}>📊 Trend PDF</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={async ()=>{
           // IND: the org's services, primary FIRST, so the report can draw a
           // section per service. Fetched here rather than held in state --
@@ -17731,7 +17526,7 @@ function IncidentRegisterView({ user, setPage }) {
             industries: inds,
             actions: acts, findings: finds, findingLabels: INC_FINDING_LABEL,
           })
-        }}>📑 Board report</button>
+        }}>📊 Trend Analysis Report</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 PDF</button>
       </div>
 
@@ -18360,8 +18155,9 @@ function IncidentsAdminView({ user, setPage }) {
   // absence is evidence: dropping those rows would misrepresent the
   // investigation as more thorough than it was.
   //
-  // Follows exportTrendPDF's layout conventions so the two documents read as
-  // siblings. All data comes from state already loaded for this incident.
+  // Layout conventions kept from the retired trend PDF so this and the
+  // Trend Analysis Report read as siblings. All data comes from state
+  // already loaded for this incident.
   const exportIncidentPDF = () => {
     if (!sel) return
     try {
