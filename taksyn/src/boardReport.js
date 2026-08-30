@@ -237,6 +237,19 @@ export function openBoardReport(o) {
         longest: days.length ? days[days.length-1] : null,
         met: done.length ? Math.round(met/done.length*100) : null }
     }).filter(r => r.n)
+    // Categories that stopped. Present in at least three of the months before
+    // the current one, and absent in it. The floor matters: without it every
+    // category with one incident in April and none since reads as a trend
+    // that reversed.
+    const priorMonths = months.slice(0, -1)
+    const dormant = priorMonths.length >= 4 ? cats.filter(c => {
+      const inCurrent = inc.some(i => i.category === c && inMonth(i, last.year, last.month))
+      if (inCurrent) return false
+      const monthsSeen = priorMonths.filter(m =>
+        inc.some(i => i.category === c && inMonth(i, m.year, m.month))).length
+      return monthsSeen >= 3
+    }) : []
+
     // Where the open ones are sitting. Workflow order, not by count: the table
     // then reads as a pipeline rather than a ranking. Oldest matters more than
     // median -- a median of three days hides the one that has sat at Review for
@@ -308,6 +321,16 @@ export function openBoardReport(o) {
     // Raw pair, not a percentage: with a small base month an arrow overstates.
     H.push('<p class="note"><b>'+inc.length+'</b> incidents across '+esc(periodLabel)
       +', against <b>'+yoyWindow+'</b> in the same six months a year earlier.</p>')
+    if (dormant.length) {
+      H.push('<div class="flagbox"><h3>'+dormant.length+' categor'
+        +(dormant.length===1?'y that was appearing regularly has stopped':'ies that were appearing regularly have stopped')+'</h3>')
+      H.push('<p>'+esc(dormant.map(c => catLabel(c)).join(', '))+'. '
+        + (dormant.length===1?'It appeared':'Each appeared')+' in at least three of the months before '
+        + esc(String(last.label))+' and not in it. That is either a real improvement or a drop in '
+        + 'reporting, and this report cannot tell which \u2014 but it is worth asking the people '
+        + 'who would have raised '+(dormant.length===1?'it':'them')+'.</p></div>')
+    }
+
     H.push('<h2>Consequence, not just count</h2>')
     H.push('<p>Severity is recorded on every incident. Risk rating — likelihood by consequence — is recorded during investigation, and again after corrective actions as residual risk. The second number is the only evidence that anything worked.</p>')
     H.push('<h4>Severity mix, '+esc(last.label)+' against the months before it</h4>')
