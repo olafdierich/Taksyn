@@ -237,6 +237,25 @@ export function openBoardReport(o) {
         longest: days.length ? days[days.length-1] : null,
         met: done.length ? Math.round(met/done.length*100) : null }
     }).filter(r => r.n)
+    // Where the open ones are sitting. Workflow order, not by count: the table
+    // then reads as a pipeline rather than a ranking. Oldest matters more than
+    // median -- a median of three days hides the one that has sat at Review for
+    // five weeks, and that is the one holding the queue up.
+    const WF = [['reported','Reported'],['assessing','Assessing'],
+                ['investigating','Investigating'],['actions_open','Action'],
+                ['review','Review']]
+    const stuckRows = WF.map(([key,label]) => {
+      const rows = inc.filter(i => i.status === key)
+      const days = rows.map(i => Math.max(0, Math.round(
+        (Date.now() - new Date(i.occurred_at)) / 86400000))).sort((a,b) => a-b)
+      return { key, label, n: rows.length,
+        median: days.length ? days[Math.floor(days.length/2)] : null,
+        oldest: days.length ? days[days.length-1] : null,
+        oldestRef: days.length
+          ? (rows.slice().sort((a,b) => new Date(a.occurred_at) - new Date(b.occurred_at))[0] || {}).ref
+          : null }
+    }).filter(r => r.n)
+
     // Outcomes grouped by domain rather than by ladder: outcome_domain is on the
     // incident, whereas the ladder key needs the org's category pack.
     const byDomain = {}
@@ -340,6 +359,26 @@ export function openBoardReport(o) {
       H.push('<h4>Time to close, by severity</h4><table><thead><tr><th class="cat">Severity</th><th>Closed</th><th>Median days</th><th>Longest</th><th class="sep">Target met</th></tr></thead><tbody>')
       closeRows.forEach(r => H.push('<tr><td class="cat">'+r.s+' · '+esc(severityLabels[r.s]||'')+'</td><td class="tot">'+r.n+'</td><td class="tot">'+r.median+'</td><td class="tot">'+r.longest+'</td><td class="tot">'+r.met+'%</td></tr>'))
       H.push('</tbody></table>')
+    }
+    if (stuckRows.length) {
+      H.push('<h4>Where the open incidents are sitting</h4>')
+      H.push('<table><thead><tr><th class="cat">Stage</th><th>Open</th><th>Median days</th>'
+        + '<th class="sep">Oldest</th></tr></thead><tbody>')
+      stuckRows.forEach(r => {
+        H.push('<tr><td class="cat">'+esc(r.label)+'</td><td class="tot">'+r.n+'</td>'
+          + '<td class="tot">'+r.median+'</td>'
+          + '<td class="tot">'+r.oldest+(r.oldestRef ? ' <span style="font-weight:400;color:var(--ink-3)">'+esc(r.oldestRef)+'</span>' : '')+'</td></tr>')
+      })
+      H.push('</tbody></table>')
+      const worst = stuckRows.slice().sort((a,b) => (b.oldest||0)-(a.oldest||0))[0]
+      if (worst && worst.oldest >= 21) {
+        H.push('<div class="flagbox"><h3>The oldest open incident has been at '+esc(worst.label)
+          +' for '+worst.oldest+' days</h3>')
+        H.push('<p>'+(worst.oldestRef ? esc(worst.oldestRef)+'. ' : '')
+          + 'An incident that has not moved in three weeks is waiting on something. '
+          + 'What it is waiting on differs by stage \u2014 at Review it is usually a signature, '
+          + 'earlier it is usually the work itself.</p></div>')
+      }
     }
     H.push('<p class="note">An incident cannot appear here without a closure status: every incident holds one of six workflow states at all times.</p>')
 
