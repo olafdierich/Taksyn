@@ -17489,6 +17489,7 @@ function IncidentRegisterView({ user, setPage }) {
           <input type="checkbox" checked={breachedOnly} onChange={e=>setBreachedOnly(e.target.checked)}/> Breached only
         </label>
         <div style={{flex:1}}/>
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 Incident Register List PDF</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportCSV}>📥 CSV</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={async ()=>{
           // IND: the org's services, primary FIRST, so the report can draw a
@@ -17527,7 +17528,6 @@ function IncidentRegisterView({ user, setPage }) {
             actions: acts, findings: finds, findingLabels: INC_FINDING_LABEL,
           })
         }}>📊 Trend Analysis Report</button>
-        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 Incident Register List PDF</button>
       </div>
 
       {/* table */}
