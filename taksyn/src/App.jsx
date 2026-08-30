@@ -17053,7 +17053,7 @@ function CapaRegisterView({ user, setPage }) {
         </div>
         <div style={{marginLeft:'auto',display:'flex',gap:8}}>
           <button className="btn btn-secondary btn-sm" onClick={exportCSV}>⬇ CSV</button>
-          <button className="btn btn-secondary btn-sm" onClick={exportPDF}>📄 PDF</button>
+          <button className="btn btn-secondary btn-sm" onClick={exportPDF}>📄 Corrective Actions PDF</button>
         </div>
       </div>
 
@@ -17527,7 +17527,7 @@ function IncidentRegisterView({ user, setPage }) {
             actions: acts, findings: finds, findingLabels: INC_FINDING_LABEL,
           })
         }}>📊 Trend Analysis Report</button>
-        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 PDF</button>
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 Incident Register List PDF</button>
       </div>
 
       {/* table */}
