@@ -2355,7 +2355,12 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
                 // FIX-TIER-FROM-PLAN (21 Aug 2026): plan is needed so the
                 // displayed tier comes from organisations.plan, not the
                 // deprecated org_members.tier.
-                const { data: od } = await supabase.from('organisations').select('id,name,industry,plan')
+                // Only the orgs this user belongs to. This read is what the
+                // organisations SELECT policy has to permit, so it must not ask
+                // for rows the caller has no claim to.
+                const _memOrgIds = uniqueMemberships.map(m => m.org).filter(Boolean)
+                const { data: od } = await supabase.from('organisations')
+                  .select('id,name,industry,plan').in('id', _memOrgIds)
                 orgRows = od || []
               } catch (err) {
                 console.error('Org fetch error:', err)
@@ -20498,7 +20503,10 @@ export default function App() {
       const unique = (memberships||[]).filter(m => { if(_seen.has(m.org)) return false; _seen.add(m.org); return true })
       if (unique.length <= 1) { setProfileMsg('You only belong to one organisation.'); return }
       // FIX-TIER-FROM-PLAN: plan added so the switcher sets the correct tier.
-      const { data: orgRows } = await supabase.from('organisations').select('id,name,industry,plan')
+      // Only the orgs this user belongs to. Same reason as the sign-in
+      // path: the SELECT policy has to permit this read.
+      const { data: orgRows } = await supabase.from('organisations')
+        .select('id,name,industry,plan').in('id', unique.map(m => m.org).filter(Boolean))
       const enriched = unique.map(m => {
         const o = (orgRows||[]).find(r=>r.id===m.org||r.name===m.org)
         return {...m, orgName: o?.name||m.org, industry: o?.industry||'', orgPlan: o?.plan||null}
