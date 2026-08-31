@@ -4300,10 +4300,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
         {showRegister && (_regShown.length===0
           ? <div className="empty" style={{marginTop:10}}><div className="empty-text">{rows.length===0?'No tasks in scope':'No tasks match'}</div></div>
           : <div style={{overflowX:'auto',marginTop:10}}>
-            <table style={{width:'100%',borderCollapse:'collapse',minWidth:680}}>
+            <table style={{width:'100%',borderCollapse:'collapse',minWidth:820}}>
               <thead><tr>
                 <th style={th}>Task</th><th style={th}>Cycle</th><th style={th}>Created</th>
-                <th style={th}>Next date</th><th style={th}>Assigned</th>
+                <th style={th}>Due</th><th style={th}>Next date</th><th style={th}>Status</th>
+                <th style={th}>Assigned</th>
                 <th style={th}>Approver</th><th style={{...th,textAlign:'right'}}>Missed</th>
               </tr></thead>
               <tbody>
@@ -4312,7 +4313,29 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     <td style={{...td,color:'var(--brand)',fontWeight:500}}>{r.t.title}</td>
                     <td style={{...td,color:'var(--t2)'}}>{RECURRENCE_LABELS[r.t.recurrence]||r.t.recurrence||'—'}</td>
                     <td style={{...td,color:'var(--t2)'}}>{String(r.t.created_at||'').slice(0,10)||'—'}</td>
-                    <td style={td}>{r.next||'—'}</td>
+                    {(()=>{
+                      // One-off = no recurrence, or the explicit 'once' value.
+                      const _oneOff = !r.t.recurrence || r.t.recurrence==='once'
+                      const _due = _oneOff ? (String(r.t.due_date||'').slice(0,10)||'') : ''
+                      const _open = ['pending','in_progress'].includes(r.t.status)
+                      const _regStatus =
+                          (r.t.escalation===true || r.t.status==='escalated')
+                            ? { label:'Escalated', fg:'#DC2626', bg:'rgba(220,38,38,.10)' }
+                        : r.t.extended_from
+                            ? { label:'Extended',  fg:'#D97706', bg:'rgba(217,119,6,.10)' }
+                        : (_oneOff && r.duePast && _open)
+                            ? { label:'Overdue',   fg:'#DC2626', bg:'transparent' }
+                            : { label:'On time',   fg:'var(--t2)', bg:'transparent' }
+                      return (<>
+                        <td style={{...td,color:'var(--t2)'}}>{_due||'—'}</td>
+                        <td style={td}>{r.next||'—'}</td>
+                        <td style={td}>
+                          <span title={r.t.extended_from?('Extended from '+r.t.extended_from+(r.t.extended_by?' by '+r.t.extended_by:'')):undefined}
+                            style={{fontSize:11,fontWeight:600,color:_regStatus.fg,background:_regStatus.bg,
+                                    padding:_regStatus.bg==='transparent'?0:'2px 6px',borderRadius:4}}>{_regStatus.label}</span>
+                        </td>
+                      </>)
+                    })()}
                     <td style={td}>{r.display||'—'}</td>
                     <td style={{...td,color:'var(--t2)'}}>{r.t.approver_name||'—'}</td>
                     <td style={{...td,textAlign:'right',fontWeight:r.missed?700:400,color:r.missed?'#DC2626':'var(--t2)'}}>{r.missed}</td>
