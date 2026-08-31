@@ -16698,17 +16698,45 @@ function ReportIssueView({ user, embedded }) {
   const [issues, setIssues] = useState([])
   const [rtype, setRtype] = useState('request')
   const [anon, setAnon] = useState(false)
+  // IND: the service this complaint is about. [[industry_id, name], ...],
+  // primary first. Empty or single -> no picker, resolved silently.
+  const [cmpInds, setCmpInds] = useState([])
+  const [cmpInd, setCmpInd] = useState('')
 
   useEffect(()=>{
     if(!isConfigured()) return
     ;(async()=>{
       const { data, error } = await supabase.from('issue_reports').select('*').eq('reported_by',user.id).order('created_at',{ascending:false})
       if(!error && data) setIssues(data)
+      // Which services this organisation runs. issue_reports.org stores the
+      // NAME, so the id has to be resolved before the links can be read.
+      try {
+        const oid = await resolveTaskOrgId({ org: user.org })
+        if (oid) {
+          const { data: links } = await supabase.from('org_industry_links')
+            .select('industry_id,is_primary,global_industries(name)').eq('org', oid)
+          const rows = (links || [])
+            .slice().sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+            .map(r=>[r.industry_id, r.global_industries?.name || ''])
+            .filter(r=>r[0])
+          setCmpInds(rows)
+          // One service, or none recorded: resolve it and never ask.
+          if (rows.length === 1) setCmpInd(rows[0][0])
+          if (!rows.length) {
+            const { data: org } = await supabase.from('organisations')
+              .select('industry_id').eq('id', oid).maybeSingle()
+            if (org?.industry_id) setCmpInd(org.industry_id)
+          }
+        }
+      } catch(e) { /* no picker; the column stays null rather than wrong */ }
     })()
   },[])
 
   const submit = async () => {
     if(!title.trim()||!desc.trim()) return
+    // Required where there is a choice: a defaulted service reads exactly
+    // like a recorded one, which is the thing the picker exists to prevent.
+    if (cmpInds.length > 1 && !cmpInd) return
     setSubmitting(true)
     const now = new Date().toISOString()
     const payload = {
@@ -16721,6 +16749,7 @@ function ReportIssueView({ user, embedded }) {
       type: rtype,
       is_anonymous: anon,
     }
+    if (cmpInd) payload.industry_id = cmpInd
     if(photo) payload.photo_url = photo
     if(isConfigured()) {
       try {
@@ -16782,6 +16811,28 @@ function ReportIssueView({ user, embedded }) {
           <textarea className="form-input" rows={4} placeholder="Describe the issue in detail — what happened, where, and when" value={desc} onChange={e=>setDesc(e.target.value)} style={{resize:'vertical'}}/>
           <MicChip setValue={setDesc}/>
         </div>
+        {cmpInds.length > 1 && (
+          <div className="form-group">
+            <label className="form-label">Which service is this about? *</label>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {cmpInds.map(([id,name])=>(
+                <button key={id} onClick={()=>setCmpInd(id)}
+                  style={{padding:'7px 16px',borderRadius:20,
+                    border:`2px solid ${cmpInd===id?'var(--brand)':'var(--border)'}`,
+                    background:cmpInd===id?'rgba(99,102,241,.1)':'none',
+                    color:cmpInd===id?'var(--brand)':'var(--t2)',
+                    fontWeight:cmpInd===id?700:400,cursor:'pointer',fontSize:13,
+                    fontFamily:'inherit',transition:'all .15s'}}>
+                  {name}
+                </button>
+              ))}
+            </div>
+            <div style={{fontSize:12,color:'var(--t3)',marginTop:4}}>
+              Your organisation runs more than one service. Recording which one this
+              concerns keeps the two reported separately.
+            </div>
+          </div>
+        )}
         <div className="form-group">
           <label className="form-label">Type</label>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
