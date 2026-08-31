@@ -2761,6 +2761,32 @@ function computeAwards(tasks) {
   return { week:sorted[0]||null, month:sorted[0]||null }
 }
 
+// Resolve the SELECTED org, not merely the first membership.
+//
+// profiles.org holds a NAME and org_members.org holds an ID. The name is
+// never used AS an id here -- only to look one up -- and the result is then
+// checked against the caller's memberships, so the id returned has come from
+// org_members either way.
+//
+// Falls back to the first membership when the selection cannot be resolved or
+// is not one of theirs. A single-org user reaches the same answer by either
+// route.
+async function resolveOrgId(user) {
+  try {
+    const { data: sess } = await supabase.auth.getSession()
+    const authId = sess?.session?.user?.id
+    if (!authId) return ''
+    const { data: m } = await supabase.from('org_members').select('org').eq('user_id', authId)
+    const mine = (m || []).map(x => x.org).filter(o => /^ORG/i.test(o || ''))
+    if (user?.org) {
+      const { data: row } = await supabase.from('organisations')
+        .select('id').eq('name', user.org).maybeSingle()
+      if (row?.id && mine.includes(row.id)) return row.id
+    }
+    return mine[0] || ''
+  } catch (e) { return '' }
+}
+
 function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgSLA=DEFAULT_SLA, orgOccurrences=null }) {
   const isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor', isWkr=user.role==='worker'
   const [dashOpen, setDashOpen] = useState({ active:true, invites:false })
@@ -2832,7 +2858,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
       const authId = sess?.session?.user?.id
       if (!authId) return
       const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
-      const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+      const oid = await resolveOrgId(user)
       if (!oid) return
       if (isCA||isMgr) {
         // count open incidents + compute breached from minimal columns
@@ -15117,7 +15143,7 @@ function PeopleSubmissionsView({ user, setPage }) {
         const authId = sess?.session?.user?.id
         if(!authId) { setLoading(false); return }
         const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
-        const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+        const oid = await resolveOrgId(user)
         if(!oid) { setLoading(false); return }
         setOrgId(oid); await load(oid)
       } catch(e) { setErr('Could not load the queue.'); setLoading(false) }
@@ -15342,7 +15368,7 @@ function ContactsView({ user, setPage }) {
         const authId = sess?.session?.user?.id
         if(!authId){ setLoading(false); return }
         const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
-        const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+        const oid = await resolveOrgId(user)
         if(!oid){ setLoading(false); return }
         setOrgId(oid)
         // Type labels come from the SAME pack rows the incident form
@@ -15651,7 +15677,7 @@ function IncidentHubView({ user, setPage }) {
         const authId = sess?.session?.user?.id
         if(!authId) return
         const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
-        const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+        const oid = await resolveOrgId(user)
         if(!oid) return
         const { data } = await supabase.from('incidents').select('*').eq('org', oid).order('created_at',{ascending:false})
         if(cancelled) return
@@ -16858,7 +16884,7 @@ function CapaRegisterView({ user, setPage }) {
       const authId = sess?.session?.user?.id
       if (!authId) { setLoading(false); return }
       const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
-      const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+      const oid = await resolveOrgId(user)
       if (!oid) { setLoading(false); return }
       setOrgId(oid)
       setCatLabels(await loadCategoryLabels(oid))
@@ -17159,7 +17185,7 @@ function IncidentRegisterView({ user, setPage }) {
     const authId = sess?.session?.user?.id
     if (!authId) return ''
     const { data: m } = await supabase.from('org_members').select('org').eq('user_id', authId)
-    return (m||[]).map(x=>x.org).find(o=>/^ORG/i.test(o||'')) || ''
+    return await resolveOrgId(user)
   }
 
   const load = async () => {
@@ -17798,7 +17824,7 @@ function IncidentsAdminView({ user, setPage }) {
     if (!authId) return ''
     if (authId !== currentUid) setCurrentUid(authId)
     const { data: m } = await supabase.from('org_members').select('org').eq('user_id', authId)
-    return (m||[]).map(x=>x.org).find(o => /^ORG/i.test(o||'')) || ''
+    return await resolveOrgId(user)
   }
 
   const load = async () => {
@@ -20458,7 +20484,7 @@ export default function App() {
         const authId = sess?.session?.user?.id
         if(!authId) return
         const { data: mem } = await supabase.from('org_members').select('org').eq('user_id', authId)
-        const oid = (mem||[]).map(m=>m.org).find(o=>/^ORG/i.test(o||''))
+        const oid = await resolveOrgId(user)
         if(!oid) return
         const { data: rows } = await supabase.from('incidents')
           .select('id,ref,category,severity,status,assigned_at,root_cause,assign_due_at,investigate_due_at,close_due_at,closed_at')
