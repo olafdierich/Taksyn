@@ -3500,14 +3500,49 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
         const editableFields = ['title','priority','due_date','category','department','description']
         const changesMap = {}
         editableFields.filter(f=>f in changes && changes[f]!==prev?.[f]).forEach(f=>{changesMap[f]=changes[f]})
+        // AUDIT -- capture the PRIOR value of every changed field. Without this the
+        // entry records what a field became but not what it was, which for a due-date
+        // extension loses the only value an auditor needs.
+        const changesFrom = {}
+        Object.keys(changesMap).forEach(f=>{ changesFrom[f] = prev?.[f] ?? null })
+        // EXTENSION -- a due-date move counts as an extension ONLY when the OLD date
+        // had already passed AND the new date is later. A reschedule of a not-yet-due
+        // task, or a deadline brought forward, is a plain edit; marking those too would
+        // drain the word of meaning.
+        // Compared against the same date string every other overdue surface in this file
+        // uses (see the 'overdue' filter ~30 lines above). Deliberately NOT orgToday():
+        // TasksView holds its own orgTimezone defaulting to 'UTC', and a marker that
+        // disagreed with the Overdue card would be worse than one that is consistently
+        // browser-local.
+        const _extToday = new Date().toISOString().split('T')[0]
+        const _isExtension = ('due_date' in changesMap)
+          && !!prev?.due_date && prev.due_date < _extToday
+          && !!changes.due_date && changes.due_date > prev.due_date
+        // Stamped onto `changes` so it reaches BOTH the optimistic setTasks spread and
+        // the payload built for the PATCH -- no separate write path.
+        // Escalation is NOT cleared here, by design: the breach happened and the
+        // extension was granted. Both facts stay on the record.
+        if (_isExtension) {
+          changes.extended_from = prev.due_date
+          changes.extended_at   = new Date().toISOString()
+          changes.extended_by   = user?.name || null
+        }
         // Also audit checklist/instruction, compliance and schedule edits (summary only — no array dump)
         const edited = Object.keys(changesMap)
         if ('subtasks' in changes && JSON.stringify(parseSafe(changes.subtasks)) !== JSON.stringify(parseSafe(prev?.subtasks))) edited.push('checklist/instructions')
         if ('compliance' in changes && !!changes.compliance !== !!prev?.compliance) edited.push('compliance')
         if ('recurrence' in changes && changes.recurrence !== prev?.recurrence) edited.push('schedule')
         if (edited.length>0) {
-          const edEntry = mkAuditEntry('task_edited', user, task?.org||user?.org, { changes:changesMap, fields:edited }, id, prev?.title||id,
-            null, edited.join(', '))
+          // When a due date moved, old_value/new_value carry the DATES -- the most
+          // legible pair for the case that matters. Otherwise behaviour is unchanged
+          // (null / field list), so existing audit rows and any reader of them keep
+          // their current shape.
+          const _dueChanged = 'due_date' in changesMap
+          const _edOld = _dueChanged ? (prev?.due_date || '(none)') : null
+          const _edNew = _dueChanged ? (changes.due_date || '(none)') : edited.join(', ')
+          const edEntry = mkAuditEntry('task_edited', user, task?.org||user?.org,
+            { changes:changesMap, from:changesFrom, fields:edited, extension:_isExtension||undefined },
+            id, prev?.title||id, _edOld, _edNew)
           setAuditLog(log=>[edEntry,...log])
           if (isConfigured()) {
             const {error} = await supabase.from('audit_log').insert(edEntry)
