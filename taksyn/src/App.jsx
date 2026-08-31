@@ -1928,7 +1928,6 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeChecked, setAgreeChecked] = useState(false)
   const [showTerms, setShowTerms] = useState(false)
-  const [orgs, setOrgs] = useState([])
   // Invite params: set immediately from URL, names resolved async
   const [inviteParams, setInviteParams] = useState(_isInvite ? {
     orgId: _sp.get('org')||'',
@@ -2048,11 +2047,10 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       window.history.replaceState(null, '', window.location.pathname)
     }
 
-    // Load orgs list for the staff registration dropdown (organisations table has RLS disabled)
-    if (isConfigured()) {
-      supabase.from('organisations').select('id,name').order('name')
-        .then(({data})=>{ if(data) setOrgs(data) }).catch(()=>{})
-    }
+    // No organisation list here. Registration is invite-only: invite_links
+    // carries the org, role, industry and position, and handle_new_user reads
+    // them server-side. Fetching every organisation before sign-in published
+    // the full client list to anyone who opened this page.
   }, [])
 
   const handleSubmit = async () => {
