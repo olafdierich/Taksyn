@@ -15359,11 +15359,31 @@ function ContactsView({ user, setPage }) {
           .select('industry_name,role_name').eq('organisation_id', oid)
           .order('sort_order',{nullsFirst:false}).order('role_name')
           .then(({data})=>{ if(data) setOrgJobRoles(data) }).catch(()=>{})
-        if (org?.industry_id) {
+        // IND: every industry the org is registered for, primary first. The
+        // register belongs to the whole organisation, so the types are a UNION
+        // -- a We2care contact might be an aged care resident or an NDIS
+        // participant and the list should hold both.
+        const { data: tLinks } = await supabase.from('org_industry_links')
+          .select('industry_id,is_primary').eq('org', oid)
+        let tIndIds = (tLinks || [])
+          .slice().sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+          .map(r=>r.industry_id).filter(Boolean)
+        if (!tIndIds.length && org?.industry_id) tIndIds = [org.industry_id]
+        if (tIndIds.length) {
           const { data: packs } = await supabase.from('incident_category_packs')
-            .select('category_key,label,sort_order')
-            .eq('industry_id', org.industry_id).eq('source','affected_type').eq('is_active', true)
-          const t = (packs||[]).slice().sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(r=>[r.category_key,r.label])
+            .select('category_key,label,sort_order,industry_id')
+            .in('industry_id', tIndIds).eq('source','affected_type').eq('is_active', true)
+          // Deduplicate on category_key. Primary first, so a key defined in
+          // both industries reads the way the primary names it.
+          const seen = new Set()
+          const t = (packs||[]).slice()
+            .sort((a,b)=>{
+              const d = tIndIds.indexOf(a.industry_id) - tIndIds.indexOf(b.industry_id)
+              return d !== 0 ? d : (a.sort_order||0)-(b.sort_order||0)
+            })
+            .filter(r=>{ if (seen.has(r.category_key)) return false
+                         seen.add(r.category_key); return true })
+            .map(r=>[r.category_key,r.label])
           if (t.length) setTypes(t)
         }
         await load(oid)
