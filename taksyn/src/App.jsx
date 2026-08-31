@@ -1820,6 +1820,7 @@ const TaskCard = ({ task, onClick }) => {
       <div className="tc-meta">
         <PriBadge priority={task.priority} />
         <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}{dueTimeSuffix(task)}</span>
+        {task.extended_from&&<span title={'Extended from '+task.extended_from+(task.extended_by?' by '+task.extended_by:'')} style={{fontSize:11,color:'#D97706',background:'rgba(217,119,6,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>⇔ Extended</span>}
         {assigneeNames(task)&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {assigneeNames(task)}</span>}{task.lead_user_name&&<span style={{fontSize:11,color:'var(--brand)',fontWeight:600,marginLeft:6}}>★ {task.lead_user_name}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
         {task.compliance&&taskPhotoIndex(task).length===0&&!['awaiting_review','approved','completed'].includes(task.status)&&<span style={{fontSize:11,color:'#8B5CF6',background:'rgba(139,92,246,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>📷 required</span>}
