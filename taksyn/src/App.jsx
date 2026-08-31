@@ -17805,13 +17805,34 @@ function IncidentsAdminView({ user, setPage }) {
     const { data: lad } = await supabase.from('incident_outcome_ladders')
       .select('ladder_key,position,label,outcome_key').eq('is_active', true)
     if (lad) setRungs(lad)
-    const { data: orgRow2 } = await supabase.from('organisations')
-      .select('industry_id').eq('id', id).maybeSingle()
-    if (orgRow2?.industry_id) {
+    // IND: every industry the org is registered for, primary first. Reading
+    // organisations.industry_id alone left a second-industry incident with no
+    // ladder for its category, so the add-outcome picker offered nothing.
+    const { data: links } = await supabase.from('org_industry_links')
+      .select('industry_id,is_primary').eq('org', id)
+    let indIds = (links || [])
+      .slice().sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+      .map(r=>r.industry_id).filter(Boolean)
+    if (!indIds.length) {
+      // No links: fall back to the org's own column, so an org that has not
+      // been migrated behaves exactly as it did before.
+      const { data: orgRow2 } = await supabase.from('organisations')
+        .select('industry_id').eq('id', id).maybeSingle()
+      if (orgRow2?.industry_id) indIds = [orgRow2.industry_id]
+    }
+    if (indIds.length) {
       const { data: cats } = await supabase.from('incident_category_packs')
-        .select('category_key,ladder_key').eq('industry_id', orgRow2.industry_id)
+        .select('category_key,ladder_key,industry_id').in('industry_id', indIds)
         .eq('source','category').eq('is_active', true)
-      if (cats) setCatLadders(Object.fromEntries(cats.map(c=>[c.category_key,c.ladder_key])))
+      if (cats) {
+        // Primary industry wins a key collision: sort so its rows are applied
+        // last and overwrite. Two industries sharing a category_key with
+        // different ladders is possible, and silently picking whichever came
+        // back first would make the picker depend on row order.
+        const ordered = cats.slice().sort(
+          (a,b) => indIds.indexOf(b.industry_id) - indIds.indexOf(a.industry_id))
+        setCatLadders(Object.fromEntries(ordered.map(c=>[c.category_key,c.ladder_key])))
+      }
     }
     // org members for the assignee picker (supervisor/manager/client_admin only)
     const { data: mem } = await supabase.from('org_members').select('user_id,role').eq('org', id)
