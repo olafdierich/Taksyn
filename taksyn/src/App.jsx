@@ -8661,6 +8661,25 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   // IND: editing one org's industries. indOrg is the org being edited, or
   // null when the modal is closed.
   const [indOrg, setIndOrg] = useState(null)
+  // IND-HDR: every industry the org in the detail view is registered for,
+  // primary first. Mirrors CompanySettingsView (~10628). Empty on failure or
+  // for an org with no links -- the header then falls back to the single
+  // stored name, which is what it showed before.
+  const [orgHdrIndustries, setOrgHdrIndustries] = useState([])
+  useEffect(()=>{
+    const oid = selectedOrgView?.id
+    if(!oid){ setOrgHdrIndustries([]); return }
+    setOrgHdrIndustries([])
+    supabase.from('org_industry_links')
+      .select('is_primary,global_industries(name)').eq('org', oid)
+      .then(({data})=>{
+        const names = (data||[]).slice()
+          .sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+          .map(r=>r.global_industries?.name).filter(Boolean)
+        setOrgHdrIndustries(names)
+      })
+      .catch(()=>{ setOrgHdrIndustries([]) })
+  },[selectedOrgView?.id])
   const [indSel, setIndSel] = useState([])
   const [indPrimary, setIndPrimary] = useState('')
   const [indSaving, setIndSaving] = useState(false)
@@ -9162,7 +9181,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             {selectedOrgView.logo&&<img src={selectedOrgView.logo} alt={selectedOrgView.name} style={{height:28,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>}
             <div style={{minWidth:0}}>
               <div style={{fontWeight:800,fontSize:16,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedOrgView.name}</div>
-              <div style={{fontSize:11,color:'var(--t2)'}}>{selectedOrgView.industry||'—'} · <span style={{color:TIERS[planTier(selectedOrgView.plan)]?.color||'var(--t2)',fontWeight:600}}>{planTier(selectedOrgView.plan)||'—'}</span></div>
+              <div style={{fontSize:11,color:'var(--t2)'}}>{(orgHdrIndustries.length?orgHdrIndustries.join(' \u00b7 '):selectedOrgView.industry)||'—'} · <span style={{color:TIERS[planTier(selectedOrgView.plan)]?.color||'var(--t2)',fontWeight:600}}>{planTier(selectedOrgView.plan)||'—'}</span></div>
             </div>
           </div>
         </div>
