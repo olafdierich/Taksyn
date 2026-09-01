@@ -13891,14 +13891,6 @@ function PlatformAnnouncementsView({ user }) {
   )
 }
 
-const PLAN_DEFS = [
-  { key:'personal',     label:'Personal',     color:'#6B7280', price:0,   retention:'30 days',  features:['1 user','30-day data retention','Basic task management'] },
-  { key:'starter',      label:'Starter',      color:'#3B82F6', price:29,  retention:'6 months', features:['Up to 10 users','6-month retention','Tasks + reports'] },
-  { key:'growth',       label:'Growth',       color:'#10B981', price:79,  retention:'12 months',features:['Up to 50 users','12-month retention','Full feature set'] },
-  { key:'professional', label:'Professional', color:'#8B5CF6', price:149, retention:'2 years',  features:['Unlimited users','2-year retention','Priority support','Custom SLA'] },
-  { key:'enterprise',   label:'Enterprise',   color:'#F59E0B', price:399, retention:'7 years',  features:['Unlimited users','7-year retention','Dedicated support','Custom everything'] },
-]
-
 function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
   const [tab, setTab] = useState('industries')
 
@@ -13910,11 +13902,6 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
   const [editIndName, setEditIndName] = useState('')
   const [indSaving, setIndSaving] = useState(false)
 
-  // Plans state
-  const [plans, setPlans] = useState(PLAN_DEFS.map(p=>({...p})))
-  const [editPlanKey, setEditPlanKey] = useState(null)
-  const [planSaving, setPlanSaving] = useState(false)
-  const [planMsg, setPlanMsg] = useState('')
 
   // Announcements state
   const [announcements, setAnnouncements] = useState([])
@@ -13937,9 +13924,6 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
     setIndLoading(true)
     supabase.from('global_industries').select('*').order('name')
       .then(({data})=>{ if(data) setIndustries(data) }).catch(()=>{}).finally(()=>setIndLoading(false))
-    // Load plans from DB if they exist
-    supabase.from('platform_plans').select('*')
-      .then(({data})=>{ if(data?.length) setPlans(PLAN_DEFS.map(d=>{ const r=data.find(p=>p.name===d.key); return r?{...d,price:r.price_monthly,features:r.features||d.features}:d })) }).catch(()=>{})
     // Load orgs for announcement target
     supabase.from('organisations').select('id,name').order('name')
       .then(({data})=>{ if(data) setAnOrgs(data) }).catch(()=>{})
@@ -13976,15 +13960,6 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
     setIndustries(prev=>{const n=[...prev];n[idx]=swap;n[idx+dir]=industries[idx];return n})
   }
 
-  // Plans save
-  const savePlan = async (planKey) => {
-    const plan=plans.find(p=>p.key===planKey); if(!plan) return
-    setPlanSaving(true); setPlanMsg('')
-    const row={name:plan.key,price_monthly:plan.price,retention_days:0,features:plan.features,updated_at:new Date().toISOString()}
-    if(isConfigured()){ const { error } = await supabase.from('platform_plans').upsert(row,{onConflict:'name'}); if(error) setPlanMsg('✗ '+error.message) }
-    setEditPlanKey(null); setPlanMsg('✓ Plan saved'); setPlanSaving(false)
-    setTimeout(()=>setPlanMsg(''),3000)
-  }
 
   // Announcements send
   const sendAnn = async () => {
