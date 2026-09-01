@@ -10642,6 +10642,67 @@ function CompanySettingsView({ user, onSettingsSaved }) {
   const [form, setForm] = useState(emptyForm)
   const [settings, setSettings] = useState(defaultSettings)
   const [orgId, setOrgId] = useState(null)
+  // [SUBSCRIPTION-CARD] ---------------------------------------------------
+  // user.role here is the REAL role. The super admin reaches this component
+  // through the org drill-down wrapped as {...user, org: <name>} -- only org
+  // is overridden. If `role` is ever added to that spread this gate opens
+  // silently, so treat it as load-bearing.
+  const subIsSuper = user?.role === 'super_admin'
+  const [subPlan, setSubPlan]     = useState('')
+  const [subSeats, setSubSeats]   = useState(null)
+  const [subNew, setSubNew]       = useState('')
+  const [subNote, setSubNote]     = useState('')
+  const [subBusy, setSubBusy]     = useState(false)
+  const [subMsg, setSubMsg]       = useState('')
+  const [subConfirm, setSubConfirm] = useState(false)
+  const [subHist, setSubHist]     = useState(null)
+  const [subReload, setSubReload] = useState(0)
+
+  useEffect(()=>{
+    if(!isConfigured()||!orgId){ setSubPlan(''); setSubSeats(null); return }
+    supabase.from('organisations').select('plan').eq('id', orgId).maybeSingle()
+      .then(({data})=>{ setSubPlan(data?.plan||'') }).catch(()=>{ setSubPlan('') })
+    supabase.from('org_members').select('user_id', { count:'exact', head:true }).eq('org', orgId)
+      .then(({count})=>{ setSubSeats(typeof count==='number'?count:null) })
+      .catch(()=>{ setSubSeats(null) })
+  },[orgId, subReload])
+
+  // Every write goes through the Edge Function. A direct update is refused
+  // by billing_plan_guard_bu unless current_user is service_role, and the
+  // browser holds no service key.
+  const subChangePlan = async () => {
+    setSubBusy(true); setSubMsg('')
+    try {
+      const { data, error } = await supabase.functions.invoke('set-org-plan', {
+        body: { orgId, newPlan: subNew, note: subNote.trim() }
+      })
+      // invoke surfaces a non-2xx as an error whose body is on error.context.
+      if (error) {
+        let m = error.message || 'Request failed'
+        try { const j = await error.context?.json(); if (j?.error) m = j.error } catch(e) {}
+        throw new Error(m)
+      }
+      if (!data?.success) throw new Error(data?.error || 'Request failed')
+      setSubMsg('\u2713 ' + data.org + ': ' + data.oldPlan + ' \u2192 ' + data.newPlan)
+      setSubNew(''); setSubNote(''); setSubConfirm(false); setSubHist(null)
+      setSubReload(n=>n+1)
+    } catch(e) {
+      setSubMsg('Error: ' + e.message)
+    }
+    setSubBusy(false)
+  }
+
+  const subLoadHistory = async () => {
+    setSubHist('loading')
+    try {
+      const { data, error } = await supabase.functions.invoke('set-org-plan', {
+        body: { action:'history', orgId }
+      })
+      if (error) throw error
+      setSubHist(data?.history || [])
+    } catch(e) { setSubHist([]) }
+  }
+  // ----------------------------------------------------------------------
   // IND: every service this organisation runs, primary first. Read-only
   // here -- only a super admin changes them.
   const [orgIndustryNames, setOrgIndustryNames] = useState([])
@@ -11260,6 +11321,90 @@ function CompanySettingsView({ user, onSettingsSaved }) {
           </div>
           <div className="form-field"><label className="form-label">Email</label><input className="form-input" type="email" {...fld('contact2_email')}/></div>
         </div>
+
+        {/* [SUBSCRIPTION-CARD] read-only for everyone; editable by super admin only */}
+        <div className="section" style={{marginBottom:14}}>
+          <div className="section-title">Subscription</div>
+          {(()=>{
+            const tierName = planTier(subPlan)
+            const t = TIERS[tierName]
+            const maxSeats = t ? parseInt(String(t.users).replace(/[^0-9]/g,''),10) : NaN
+            const overSeats = Number.isFinite(maxSeats) && subSeats!=null && subSeats > maxSeats
+            return (
+              <>
+                <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:10}}>
+                  <span style={{fontSize:12,fontWeight:700,letterSpacing:'.4px',textTransform:'uppercase',padding:'3px 12px',borderRadius:6,color:t?.color||'var(--t2)',background:(t?.color||'#888')+'18',border:'1px solid '+((t?.color||'#888')+'30')}}>{tierName||'\u2014'}</span>
+                  {t&&<span style={{fontSize:13,color:'var(--t2)'}}>{t.base}/mo base &middot; {t.perUser} per user</span>}
+                </div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+                  <span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:overSeats?'rgba(239,68,68,.1)':'var(--s3)',color:overSeats?'var(--red)':'var(--t2)',fontWeight:600}}>
+                    Seats: {subSeats==null?'\u2014':subSeats}{Number.isFinite(maxSeats)?' of '+maxSeats:(t?' of '+t.users:'')}
+                  </span>
+                  {t&&<span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'var(--s3)',color:'var(--t2)'}}>{t.retention} retention</span>}
+                  {t&&<span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'var(--s3)',color:'var(--t2)'}}>{t.storage}</span>}
+                </div>
+                {overSeats&&<div style={{fontSize:12,color:'var(--red)',marginBottom:10}}>This organisation is over the seat maximum for its plan.</div>}
+
+                {!subIsSuper&&(
+                  <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.6}}>
+                    Your plan sets the features, seat limit and how long records are kept. To move to a different plan, contact Taksyn &mdash; plan changes are made by Taksyn and recorded.
+                  </div>
+                )}
+
+                {subIsSuper&&(
+                  <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:8}}>Change plan &middot; super admin</div>
+                    {subMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:subMsg.startsWith('\u2713')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subMsg.startsWith('\u2713')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subMsg}</div>}
+                    <div className="two-col">
+                      <div className="form-field">
+                        <label className="form-label">New plan</label>
+                        <select className="form-select" value={subNew} onChange={e=>{setSubNew(e.target.value);setSubConfirm(false)}}>
+                          <option value="">&mdash; Select &mdash;</option>
+                          {Object.keys(TIERS).filter(k=>k!==tierName).map(k=><option key={k} value={k.toLowerCase()}>{k}</option>)}
+                        </select>
+                      </div>
+                      <div className="form-field">
+                        <label className="form-label">Reason <span style={{color:'var(--red)'}}>*</span></label>
+                        <input className="form-input" value={subNote} onChange={e=>{setSubNote(e.target.value);setSubConfirm(false)}} placeholder="Why this is changing"/>
+                      </div>
+                    </div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>The reason is recorded against the change and cannot be edited afterwards.</div>
+                    {!subConfirm&&(
+                      <button className="btn btn-primary btn-sm" disabled={!subNew||subNote.trim().length<3||subBusy}
+                        onClick={()=>setSubConfirm(true)}>Change plan</button>
+                    )}
+                    {subConfirm&&(
+                      <div style={{padding:'10px 12px',borderRadius:6,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
+                        <div style={{fontSize:13,marginBottom:8}}>Move <strong>{form.name||'this organisation'}</strong> from <strong>{tierName||'\u2014'}</strong> to <strong>{planTier(subNew)}</strong>?</div>
+                        <div style={{display:'flex',gap:6}}>
+                          <button className="btn btn-primary btn-sm" disabled={subBusy} onClick={subChangePlan}>{subBusy?'Working\u2026':'Confirm'}</button>
+                          <button className="btn btn-secondary btn-sm" disabled={subBusy} onClick={()=>setSubConfirm(false)}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{marginTop:12}}>
+                      {subHist===null&&<button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={subLoadHistory}>View plan history</button>}
+                      {subHist==='loading'&&<div style={{fontSize:12,color:'var(--t2)'}}>Loading\u2026</div>}
+                      {Array.isArray(subHist)&&subHist.length===0&&<div style={{fontSize:12,color:'var(--t2)'}}>No plan changes recorded.</div>}
+                      {Array.isArray(subHist)&&subHist.length>0&&(
+                        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                          {subHist.map(h=>(
+                            <div key={h.id} style={{fontSize:12,padding:'6px 10px',borderRadius:5,background:'var(--s3)'}}>
+                              <div><strong>{planTier(h.old_plan)||h.old_plan||'\u2014'} {'\u2192'} {planTier(h.new_plan)||h.new_plan}</strong> <span style={{color:'var(--t2)'}}>&middot; {h.source}</span></div>
+                              <div style={{color:'var(--t2)'}}>{new Date(h.created_at).toLocaleString()}{h.note?' \u00b7 '+h.note:''}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          })()}
+        </div>
+
         <SaveFooter/>
       </>}
 
