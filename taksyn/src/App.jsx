@@ -13901,46 +13901,43 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
         </div>
       )}
 
+      {/* [PLANS-FROM-TIERS] Sourced from the TIERS object (~line 423), which is
+          the authoritative pricing in the app and matches billing design v6
+          section 13. Read-only by design: entitlement comes from TIERS,
+          retention from PLAN_RETENTION, and charging -- when Stripe lands --
+          from billing_prices. There is nothing here an edit form could
+          usefully change. The platform_plans table is no longer read. */}
       {tab==='plans'&&(
         <div>
-          {planMsg&&<div style={{marginBottom:12,padding:'8px 12px',borderRadius:6,fontSize:13,background:planMsg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(planMsg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:planMsg.startsWith('✓')?'var(--green)':'var(--red)'}}>{planMsg}</div>}
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
-            {plans.map(plan=>(
-              <div key={plan.key} style={{border:'2px solid '+plan.color+'40',borderRadius:12,padding:'16px',background:'var(--bg)',boxShadow:'0 2px 8px rgba(0,0,0,.06)'}}>
+            {Object.entries(TIERS).map(([key,t])=>(
+              <div key={key} style={{border:'2px solid '+t.color+'40',borderRadius:12,padding:'16px',background:'var(--bg)',boxShadow:'0 2px 8px rgba(0,0,0,.06)'}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-                  <span style={{fontSize:11,fontWeight:700,color:plan.color,background:plan.color+'18',border:'1px solid '+plan.color+'30',borderRadius:6,padding:'2px 10px',letterSpacing:'.4px',textTransform:'uppercase'}}>{plan.label}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:t.color,background:t.color+'18',border:'1px solid '+t.color+'30',borderRadius:6,padding:'2px 10px',letterSpacing:'.4px',textTransform:'uppercase'}}>{key}</span>
                 </div>
-                {editPlanKey===plan.key ? (
-                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                    <div>
-                      <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Monthly Price (USD)</div>
-                      <input className="form-input" style={{fontSize:13}} type="number" min={0} value={plan.price} onChange={e=>setPlans(prev=>prev.map(p=>p.key===plan.key?{...p,price:Number(e.target.value)}:p))}/>
-                    </div>
-                    <div>
-                      <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Features (one per line)</div>
-                      <textarea className="form-input" rows={4} style={{fontSize:12,resize:'vertical'}} value={plan.features.join('\n')} onChange={e=>setPlans(prev=>prev.map(p=>p.key===plan.key?{...p,features:e.target.value.split('\n').filter(Boolean)}:p))}/>
-                    </div>
-                    <div style={{display:'flex',gap:6}}>
-                      <button className="btn btn-primary btn-sm" onClick={()=>savePlan(plan.key)} disabled={planSaving}>Save</button>
-                      <button className="btn btn-secondary btn-sm" onClick={()=>setEditPlanKey(null)}>Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{fontSize:22,fontWeight:800,color:plan.color,marginBottom:4}}>${plan.price}<span style={{fontSize:12,fontWeight:400,color:'var(--t2)'}}>/mo</span></div>
-                    <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>Retention: {plan.retention}</div>
-                    <ul style={{margin:0,padding:'0 0 0 16px',fontSize:12,color:'var(--t2)',lineHeight:1.8}}>
-                      {plan.features.map((f,i)=><li key={i}>{f}</li>)}
-                    </ul>
-                    <button className="btn btn-secondary btn-sm" style={{marginTop:12,width:'100%',fontSize:11}} onClick={()=>setEditPlanKey(plan.key)}>Edit Plan</button>
-                  </>
+                <div style={{fontSize:22,fontWeight:800,color:t.color,marginBottom:2}}>{t.base}<span style={{fontSize:12,fontWeight:400,color:'var(--t2)'}}>/mo base</span></div>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--text)',marginBottom:8}}>+ {t.perUser}<span style={{fontSize:11,fontWeight:400,color:'var(--t2)'}}> per user / mo</span></div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:10}}>
+                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>{t.users}</span>
+                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'var(--s3)',color:'var(--t2)'}}>{t.retention}</span>
+                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'var(--s3)',color:'var(--t2)'}}>{t.storage}</span>
+                  {t.images!=='\u2014'&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'var(--s3)',color:'var(--t2)'}}>{t.images}</span>}
+                </div>
+                <ul style={{margin:0,padding:'0 0 0 16px',fontSize:12,color:'var(--t2)',lineHeight:1.7}}>
+                  {t.features.map((f,i)=><li key={i}>{f}</li>)}
+                </ul>
+                {t.locked?.length>0&&(
+                  <ul style={{margin:'6px 0 0',padding:'0 0 0 16px',fontSize:11,color:'var(--t2)',lineHeight:1.7,opacity:.55}}>
+                    {t.locked.map((f,i)=><li key={i} style={{textDecoration:'line-through'}}>{f}</li>)}
+                  </ul>
                 )}
               </div>
             ))}
           </div>
-          <div style={{marginTop:16,padding:'12px 14px',background:'var(--s3)',borderRadius:8,fontSize:11,color:'var(--t2)'}}>
-            SQL to create platform_plans table if needed:<br/>
-            <code style={{fontFamily:'monospace',display:'block',marginTop:6,color:'var(--text)',lineHeight:1.8,whiteSpace:'pre-wrap'}}>{'CREATE TABLE IF NOT EXISTS platform_plans (\n  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n  name text UNIQUE NOT NULL,\n  price_monthly numeric DEFAULT 0,\n  price_yearly numeric DEFAULT 0,\n  retention_days integer DEFAULT 30,\n  features jsonb DEFAULT \'[]\'::jsonb,\n  created_at timestamptz DEFAULT now()\n);'}</code>
+          <div style={{marginTop:16,padding:'12px 14px',background:'var(--s3)',borderRadius:8,fontSize:11,color:'var(--t2)',lineHeight:1.7}}>
+            Every tier is a monthly base fee <strong>plus</strong> a per-user fee, charged from the first user &mdash; the user figure is a maximum, not an included allowance. At the maximum an organisation must move up a tier.<br/>
+            Example: Growth with 20 users is $39 + (20 &times; $8) = <strong>$199</strong> per month. Annual billing is ten months&rsquo; price for twelve months&rsquo; service.<br/>
+            These figures are defined in code and shown here for reference. They are not editable from this screen.
           </div>
         </div>
       )}
