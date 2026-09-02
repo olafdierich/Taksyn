@@ -5219,7 +5219,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
           <div className="section">
             <div className="section-title">Details</div>
             <div className="two-col">
-              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Due:</span> {sel.due_date}{dueTimeSuffix(sel)}</div>
+              {/* INITIAL-DUE-LABEL-V1: on a recurring task this is the ANCHOR the cycle
+                  walks count from, not the deadline. The header above shows the current
+                  cycle date, so leaving both labelled "Due" put two different dates under
+                  the same word on one screen. Label only -- no arithmetic here, so this
+                  line cannot drift out of step with the header. One-offs keep "Due". */}
+              <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>{isRecurring(sel)?'Initial due date:':'Due:'}</span> {sel.due_date}{dueTimeSuffix(sel)}</div>
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Compliance:</span> {sel.compliance?'🔒 Yes':'—'}</div>
               {sel.team_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Team:</span> {sel.team_name}</div>}
               {(()=>{
