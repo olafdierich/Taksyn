@@ -3859,12 +3859,32 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const workerTimeIn = (tid) => {
     const now=new Date().toISOString()
     const setRow=async(gps)=>{
-      await supabase.from('task_worker_times').upsert({task_id:tid,user_id:user.id,user_name:user.name,org:user.org,started_at:now,gps_start:gps||null,updated_at:now},{onConflict:'task_id,user_id'})
-      const {data:rows}=await supabase.from('task_worker_times').select('started_at,gps_start').eq('task_id',tid)
-      const ws=(rows||[]).filter(r=>r.started_at).sort((a,b)=>a.started_at<b.started_at?-1:1)
-      const env=ws[0]||{}
+      // WORKER-TIMES-CYCLE-V2: a new cycle's clock-in must NOT inherit the previous
+      // cycle's clock-out. task_worker_times is keyed (task_id,user_id) with no cycle
+      // column, so this upsert MERGES onto the old row. Observed LIVE 2026-09-02:
+      // started_at 2 Sep paired with completed_at 22 Jul, rendered -60048m to a worker.
+      // Nulling completed_at/gps_end is safe: this function is only reachable when
+      // myTime is absent (gate at ~4816), i.e. no row dated inside the current cycle,
+      // so a same-day resume cannot reach it.
+      await supabase.from('task_worker_times').upsert({task_id:tid,user_id:user.id,user_name:user.name,org:user.org,started_at:now,gps_start:gps||null,completed_at:null,gps_end:null,updated_at:now},{onConflict:'task_id,user_id'})
+      const {data:rows}=await supabase.from('task_worker_times').select('started_at,gps_start,completed_at,gps_end').eq('task_id',tid)
       const t=tasks.find(x=>x.id===tid)
-      const patch={started_at:env.started_at||now,gps_start:env.gps_start||gps||null}
+      // The task-row envelope is computed over the CURRENT CYCLE's rows only. Unfiltered
+      // it took the earliest started_at across ALL rows, so one stale row dragged the
+      // task's start backwards -- the same fossil one level up. orgTz unresolved: skip
+      // the filter and fall back to this write alone rather than dating rows in the
+      // wrong timezone (F14-ORGDAY). Safe direction: a null envelope self-repairs on the
+      // next Time Out; a wrongly-dated one does not.
+      const _cyc = orgTz ? (rows||[]).filter(r=>r.started_at&&photoInCurrentCycle(t,{ts:r.started_at},orgTz)) : []
+      const ws=_cyc.slice().sort((a,b)=>a.started_at<b.started_at?-1:1)
+      const env=ws[0]||{}
+      // MULTI-WORKER: worker A may have clocked out earlier in this same cycle without
+      // finishing the checklist. Recompute the latest completed_at across the cycle
+      // rather than nulling, or A's finish time vanishes from the task envelope until
+      // B clocks out. A's own per-worker row is untouched either way (keyed by user_id).
+      const we=_cyc.filter(r=>r.completed_at).sort((a,b)=>a.completed_at<b.completed_at?1:-1)
+      const envEnd=we[0]||{}
+      const patch={started_at:env.started_at||now,gps_start:env.gps_start||gps||null,completed_at:envEnd.completed_at||null,gps_end:envEnd.gps_end||null}
       if(t&&['pending','overdue','escalated','rejected'].includes(t.status)) patch.status='in_progress'
       update(tid,patch); loadWorkerTimes(tid)
     }
