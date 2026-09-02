@@ -2800,7 +2800,7 @@ async function resolveOrgId(user) {
   } catch (e) { return '' }
 }
 
-function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgSLA=DEFAULT_SLA, orgOccurrences=null }) {
+function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgSLA=DEFAULT_SLA, orgOccurrences=null, orgTimezone=null }) {
   const isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor', isWkr=user.role==='worker'
   const [dashOpen, setDashOpen] = useState({ active:true, invites:false })
   const go = (f) => { try{ sessionStorage.setItem('taksyn-task-filter', f) }catch(e){}; setPage('tasks') }
@@ -2940,7 +2940,17 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   // Filter tasks by org
   const visibleAll = visibleTasks(tasks, user)
   const visible = visibleAll
-  const today = new Date().toISOString().split('T')[0]
+  // F14-ORGDAY-DASH: `today` gates Active vs Scheduled via recurringDueNow (~3004)
+  // and overdue via isOverdueOneOff. Derived in UTC it was wrong for the first three
+  // hours of every day in a +03 org: the closing cycle still read as due and the
+  // opening one did not appear.
+  // EARLY RETURN, not a null pass-through: currentOccurrenceDate has no falsy-`today`
+  // guard, and `graceDeadline >= null` coerces to a numeric compare that never breaks
+  // the loop -- it would walk all 400 RECUR_WALK_GUARD iterations and return a date
+  // 400 cycles out, for every recurring task on every render.
+  // orgTimezone is App's useState(null) (~20983), NOT TasksView's 'UTC' default (~3325).
+  const today = orgTimezone ? orgToday(orgTimezone) : null
+  if(!today) return <div className="ph"><div className="ph-title">Dashboard</div><div className="ph-sub">Loading\u2026</div></div>
   const done = visible.filter(t=>['completed','approved','awaiting_review'].includes(t.status)).length
   const overdue = visible.filter(t=>isOverdueOneOff(t,today)).length
   const esc = visible.filter(t=>t.escalation).length
@@ -21816,7 +21826,7 @@ export default function App() {
               <div className="empty" style={{marginTop:60}}><div className="empty-icon">🔒</div><div style={{fontSize:16,fontWeight:700,marginBottom:8}}>Access Restricted</div><div className="empty-text">Your role ({ROLE_LABELS[user.role]}) does not have access to this section.</div></div>
             ) : (
               <>
-                {page==='dashboard'   && <DashboardView   {...pageProps} tickets={tickets} leaveRecords={leaveRecords}/>}
+                {page==='dashboard'   && <DashboardView   {...pageProps} tickets={tickets} leaveRecords={leaveRecords} orgTimezone={orgTimezone}/>}
                 {page==='tasks'       && user.role!=='super_admin' && <TasksView {...pageProps} orgTz={orgTimezone}/>}
                 {page==='evidence'    && user.role!=='super_admin' && hasAccess(user.role,2) && <EvidenceView   {...pageProps}/>}
                 {page==='escalations' && user.role!=='super_admin' && hasAccess(user.role,2) && <EscalationsView {...pageProps}/>}
