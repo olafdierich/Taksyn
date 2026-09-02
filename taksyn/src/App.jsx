@@ -1286,7 +1286,7 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
             <>
               <video ref={videoRef} playsInline muted style={{maxWidth:'100%',maxHeight:'68vh',borderRadius:8,background:'#000',display:shot?'none':'block'}}/>
               {shot && <img src={shot.url} alt="" style={{maxWidth:'100%',maxHeight:'68vh',borderRadius:8,background:'#000'}}/>}
-              <div style={{color:'#fff',fontSize:12,marginTop:8,opacity:.85}}>📍 {shot ? shot.gps : (gps||'locating…')} · {shot ? shot.stampStr : new Date().toLocaleDateString()}</div>
+              <div style={{color:'#fff',fontSize:12,marginTop:8,opacity:.85}}>📍 {shot ? shot.gps : (gps||'locating…')} · {shot ? shot.stampStr : new Date().toLocaleDateString('en-AU')}</div>
               {shot && (
                 <div style={{marginTop:10}}>
                   <button className="btn btn-secondary" disabled={busy} onClick={toggleClean}>{cleaned ? '↩ Original' : '✨ Clean up'}</button>
@@ -3046,6 +3046,13 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
 
 function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   const [stats, setStats] = useState({ orgs:0, users:0 })
+  // [SUBS-SURFACES] open plan change requests across all orgs
+  const [openReqCount, setOpenReqCount] = useState(0)
+  useEffect(()=>{
+    if(!isConfigured()) return
+    supabase.from('plan_change_requests').select('id',{count:'exact',head:true}).eq('status','open')
+      .then(({count})=>setOpenReqCount(count||0)).catch(()=>{})
+  },[])
   const [recentAudit, setRecentAudit] = useState([])
   const [auditLoading, setAuditLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -3111,6 +3118,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
         <Stat label="Total Users" val={stats.users} sub="across all orgs" icon="👥" color="#3B82F6" bg="rgba(59,130,246,.1)"/>
         <Stat label="Open Tickets" val={openTickets} sub={openTickets>0?'Need attention':'All clear'} icon="🎫" color={openTickets>0?'#EF4444':'#10B981'} bg={openTickets>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'}/>
         <Stat label="Audit Events" val={recentAudit.length>0?'Live':0} sub="activity tracked" icon="📋" color="#6B7280" bg="rgba(107,114,128,.1)"/>
+        <Stat label="Plan Requests" val={openReqCount} sub={openReqCount>0?'Awaiting your decision':'None open'} icon="💳" color={openReqCount>0?'#F59E0B':'#10B981'} bg={openReqCount>0?'rgba(245,158,11,.12)':'rgba(16,185,129,.1)'} onClick={()=>setPage('subscriptions')}/>
       </div>
 
       <div className="section" style={{marginBottom:14}}>
@@ -3196,7 +3204,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
       <div className="section" style={{marginTop:14}}>
         <div className="section-title">Quick Navigation</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8}}>
-          {[['orgs','🏢','Organisations','View & manage orgs'],['users','👥','Users','Fix role & access issues'],['teams','👤','Teams','View team structure'],['audit','📋','Audit Log','Structural activity only'],['support','🎫','Support Tickets','Resolve user issues'],['notifications','📢','Announcements','Platform-wide messages'],['platform_industries','🏭','Platform Industries','Manage global industry list']].map(([pg,icon,label,sub])=>(
+          {[['orgs','🏢','Organisations','View & manage orgs'],['users','👥','Users','Fix role & access issues'],['teams','👤','Teams','View team structure'],['audit','📋','Audit Log','Structural activity only'],['support','🎫','Support Tickets','Resolve user issues'],['subscriptions','💳','Subscriptions','Plan change requests'],['notifications','📢','Announcements','Platform-wide messages'],['platform_industries','🏭','Platform Industries','Manage global industry list']].map(([pg,icon,label,sub])=>(
             <div key={pg} onClick={()=>setPage(pg)} style={{padding:'12px',borderRadius:10,border:'1px solid var(--border)',background:'var(--s2)',cursor:'pointer',textAlign:'center'}}>
               <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
               <div style={{fontSize:12,fontWeight:700}}>{label}</div>
@@ -8491,7 +8499,7 @@ const COMPANY_COMPLETENESS_FIELDS = [
 ]
 
 const NAV = {
-  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
+  super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['subscriptions','Subscriptions','tier'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
   client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['review','Review','clipboard'],['users','Workforce','user'],['teams','Teams','users'],['leave','Team Leave','clock'],['projects','Projects 🔜','tasks'],['incident_hub','Incidents & Risk','alert'],['issue_reports','Complaints & Feedback','clipboard'],['reports','Reports','chart'],['performance','Performance','chart'],['sla','Response Time','clock'],['audit','Audit Log','audit'],['company_settings','Company Settings','settings'],['tiers','Plans','tier'],['help','Help & Support','alert'],['roles_departments','Roles & Positions','shield'],['contacts','Contacts','users']],
   manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents & Risk','alert']],
   supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents & Risk','alert']],
@@ -8601,6 +8609,95 @@ function PasswordResetView({ onDone }) {
 }
 
 
+// [SUBSCRIPTIONS-PAGE] Platform Admin -> Subscriptions. Plan change requests
+// across every org. Open ones first, then recently decided.
+function SubscriptionsView({ user, setPage }) {
+  const [rows, setRows] = useState([])
+  const [orgNames, setOrgNames] = useState({})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(()=>{
+    if(!isConfigured()){ setLoading(false); return }
+    let alive = true
+    ;(async ()=>{
+      const { data } = await supabase.from('plan_change_requests')
+        .select('id,org,requested_plan,current_plan,reason,status,decision_note,requested_at,decided_at')
+        .order('requested_at',{ascending:false}).limit(200)
+      if(!alive) return
+      setRows(data||[])
+      // plan_change_requests.org holds the org ID. Names come from
+      // organisations; do NOT join through profiles, which stores names.
+      const { data: orgs } = await supabase.from('organisations').select('id,name')
+      if(!alive) return
+      const map = {}
+      ;(orgs||[]).forEach(o=>{ map[o.id]=o.name })
+      setOrgNames(map)
+      setLoading(false)
+    })().catch(()=>{ if(alive) setLoading(false) })
+    return ()=>{ alive = false }
+  },[])
+
+  const open = rows.filter(r=>r.status==='open')
+  const decided = rows.filter(r=>r.status!=='open').slice(0,20)
+
+  const goToOrg = (orgId) => {
+    // Part 2 makes this land on the Settings tab. For now it opens the
+    // Organisations list, where the org can be picked.
+    try { sessionStorage.setItem('taksyn-open-org', orgId) } catch(e) {}
+    setPage('orgs')
+  }
+
+  const OrgLink = ({ orgId }) => (
+    <span onClick={()=>goToOrg(orgId)}
+      style={{color:'var(--green)',fontWeight:700,cursor:'pointer',textDecoration:'underline'}}>
+      {orgNames[orgId]||orgId}
+    </span>
+  )
+
+  return (
+    <div className="anim">
+      <div className="ph-title">Subscriptions</div>
+      <div className="ph-sub">Plan change requests from organisations</div>
+
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">Open requests {loading?'':'('+open.length+')'}</div>
+        {loading&&<div style={{fontSize:13,color:'var(--t2)'}}>Loading&hellip;</div>}
+        {!loading&&open.length===0&&(
+          <div style={{fontSize:13,color:'var(--t2)'}}>No open requests. Nothing is waiting on you.</div>
+        )}
+        {open.map(r=>(
+          <div key={r.id} style={{padding:'10px 12px',borderRadius:6,marginBottom:8,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
+            <div style={{fontSize:14,fontWeight:700,marginBottom:3}}>
+              <OrgLink orgId={r.org}/>
+              <span style={{fontWeight:400,color:'var(--t2)'}}> &middot; {planTier(r.current_plan)||'\u2014'} &rarr; {planTier(r.requested_plan)}</span>
+            </div>
+            <div style={{fontSize:12,color:'var(--t2)'}}>{r.reason}</div>
+            <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>Raised {new Date(r.requested_at).toLocaleDateString('en-AU')} &middot; open the organisation to approve or decline</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="section">
+        <div className="section-title">Recently decided ({decided.length})</div>
+        {!loading&&decided.length===0&&(
+          <div style={{fontSize:13,color:'var(--t2)'}}>Nothing decided yet.</div>
+        )}
+        {decided.map(r=>(
+          <div key={r.id} style={{padding:'8px 12px',borderRadius:6,marginBottom:6,background:'var(--s3)'}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>
+              <OrgLink orgId={r.org}/>
+              <span style={{fontWeight:400,color:'var(--t2)'}}> &middot; {planTier(r.requested_plan)} &middot; {r.status}</span>
+            </div>
+            {r.decision_note&&<div style={{fontSize:12,color:'var(--t2)'}}>{r.decision_note}</div>}
+            <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>
+              {r.decided_at?new Date(r.decided_at).toLocaleDateString('en-AU'):new Date(r.requested_at).toLocaleDateString('en-AU')}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 function OrganisationsView({ user }) {
   const [orgs, setOrgs] = useState([])
   const [showCreate, setShowCreate] = useState(false)
@@ -8722,6 +8819,17 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
   const loadOrgs = async () => {
     const { data } = await supabase.from('organisations').select('*').order('created_at',{ascending:false})
     if (data) setOrgs(data)
+    // [SUBS-SURFACES] deep link from the Subscriptions page. This sits inside
+    // loadOrgs, after the orgs land, so it cannot run before there is an org
+    // object to open. A separate effect would race.
+    try {
+      const wantOrg = sessionStorage.getItem('taksyn-open-org')
+      if (wantOrg && data) {
+        sessionStorage.removeItem('taksyn-open-org')
+        const target = data.find(o=>o.id===wantOrg)
+        if (target) { enterOrgContext(target); setOrgContextTab('settings') }
+      }
+    } catch(e) {}
     // IND: every org's industries in ONE query rather than one per card.
     // Failure is silent and leaves the map empty — the cards then fall back
     // to organisations.industry, which is what they showed before.
@@ -10657,6 +10765,95 @@ function CompanySettingsView({ user, onSettingsSaved }) {
   const [subConfirm, setSubConfirm] = useState(false)
   const [subHist, setSubHist]     = useState(null)
   const [subReload, setSubReload] = useState(0)
+  // [PLAN-REQUEST] the org's most recent plan change request, whatever its
+  // status. Null when the org has never raised one.
+  const subIsClientAdmin = user?.role === 'client_admin'
+  const [subReq, setSubReq]         = useState(null)
+  const [subReqPlan, setSubReqPlan] = useState('')
+  const [subReqWhy, setSubReqWhy]   = useState('')
+  const [subReqBusy, setSubReqBusy] = useState(false)
+  const [subReqMsg, setSubReqMsg]   = useState('')
+  // [PLAN-REQUEST-DECIDE] super admin decline flow
+  const [subDeclineOpen, setSubDeclineOpen] = useState(false)
+  const [subDeclineNote, setSubDeclineNote] = useState('')
+
+  const subApproveRequest = () => {
+    // Pre-fill only. The operator still passes the existing confirm step.
+    if(!subReq) return
+    setSubNew(subReq.requested_plan)
+    setSubNote('Approved request #' + subReq.id + ': ' + subReq.reason)
+    setSubDeclineOpen(false)
+    setSubReqMsg('')
+  }
+
+  const subDeclineRequest = async () => {
+    setSubReqBusy(true); setSubReqMsg('')
+    try {
+      const { data, error } = await supabase.from('plan_change_requests')
+        .update({
+          status: 'declined',
+          decided_by: user?.id,
+          decided_at: new Date().toISOString(),
+          decision_note: subDeclineNote.trim(),
+        })
+        .eq('id', subReq.id).eq('status','open')
+        .select('id')
+      if (error) throw new Error(error.message)
+      if (!data || data.length !== 1) throw new Error('The request could not be declined.')
+      setSubDeclineOpen(false); setSubDeclineNote('')
+      setSubReqMsg('\u2713 Request declined.')
+      setSubReload(n=>n+1)
+    } catch(e) { setSubReqMsg('Error: ' + e.message) }
+    setSubReqBusy(false)
+  }
+
+  useEffect(()=>{
+    if(!isConfigured()||!orgId){ setSubReq(null); return }
+    supabase.from('plan_change_requests')
+      .select('id,requested_plan,current_plan,reason,status,decision_note,requested_at,decided_at')
+      .eq('org', orgId).order('requested_at',{ascending:false}).limit(1)
+      .then(({data})=>{ setSubReq(data && data.length ? data[0] : null) })
+      .catch(()=>{ setSubReq(null) })
+  },[orgId, subReload])
+
+  const subRaiseRequest = async () => {
+    setSubReqBusy(true); setSubReqMsg('')
+    try {
+      const { data, error } = await supabase.from('plan_change_requests')
+        .insert({
+          org: orgId,
+          requested_plan: subReqPlan,
+          current_plan: subPlan || null,
+          reason: subReqWhy.trim(),
+          status: 'open',
+          requested_by: user?.id,
+        })
+        .select('id')
+      if (error) throw new Error(error.message)
+      // A zero-row insert means RLS refused it. PostgREST does not raise.
+      if (!data || data.length !== 1) {
+        throw new Error('The request was not saved. You may not have permission to raise one for this organisation.')
+      }
+      setSubReqPlan(''); setSubReqWhy('')
+      setSubReqMsg('\u2713 Request sent to Taksyn.')
+      setSubReload(n=>n+1)
+    } catch(e) { setSubReqMsg('Error: ' + e.message) }
+    setSubReqBusy(false)
+  }
+
+  const subWithdrawRequest = async () => {
+    setSubReqBusy(true); setSubReqMsg('')
+    try {
+      const { data, error } = await supabase.from('plan_change_requests')
+        .update({ status: 'withdrawn' }).eq('id', subReq.id).eq('status','open')
+        .select('id')
+      if (error) throw new Error(error.message)
+      if (!data || data.length !== 1) throw new Error('The request could not be withdrawn.')
+      setSubReqMsg('\u2713 Request withdrawn.')
+      setSubReload(n=>n+1)
+    } catch(e) { setSubReqMsg('Error: ' + e.message) }
+    setSubReqBusy(false)
+  }
 
   useEffect(()=>{
     if(!isConfigured()||!orgId){ setSubPlan(''); setSubSeats(null); return }
@@ -10684,6 +10881,20 @@ function CompanySettingsView({ user, onSettingsSaved }) {
       }
       if (!data?.success) throw new Error(data?.error || 'Request failed')
       setSubMsg('\u2713 ' + data.org + ': ' + data.oldPlan + ' \u2192 ' + data.newPlan)
+      // [PLAN-REQUEST-DECIDE] tie the request to the change it produced. A
+      // failure here leaves the request open rather than marking it done on
+      // a guess; the plan change itself is already in plan_change_log.
+      if (subReq && subReq.status === 'open' && subReq.requested_plan === data.newPlan) {
+        const { error: closeErr } = await supabase.from('plan_change_requests')
+          .update({
+            status: 'approved',
+            decided_by: user?.id,
+            decided_at: new Date().toISOString(),
+            plan_change_id: data.logId || null,
+          })
+          .eq('id', subReq.id).eq('status','open').select('id')
+        if (closeErr) setSubReqMsg('Plan changed, but the request could not be closed: ' + closeErr.message)
+      }
       setSubNew(''); setSubNote(''); setSubConfirm(false); setSubHist(null)
       setSubReload(n=>n+1)
     } catch(e) {
@@ -11345,14 +11556,90 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                 </div>
                 {overSeats&&<div style={{fontSize:12,color:'var(--red)',marginBottom:10}}>This organisation is over the seat maximum for its plan.</div>}
 
-                {!subIsSuper&&(
-                  <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.6}}>
-                    Your plan sets the features, seat limit and how long records are kept. To move to a different plan, contact Taksyn &mdash; plan changes are made by Taksyn and recorded.
+                {/* [PLAN-REQUEST] request state, shown to everyone who can see the card */}
+                {subReq&&subReq.status==='open'&&(
+                  <div style={{padding:'10px 12px',borderRadius:6,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',marginBottom:10}}>
+                    <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>Plan change requested: {planTier(subReq.requested_plan)}</div>
+                    <div style={{fontSize:12,color:'var(--t2)'}}>{subReq.reason}</div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>Awaiting a decision from Taksyn &middot; raised {new Date(subReq.requested_at).toLocaleDateString('en-AU')}</div>
+                    {subIsClientAdmin&&(
+                      <button className="btn btn-secondary btn-sm" style={{marginTop:8,fontSize:11}} disabled={subReqBusy} onClick={subWithdrawRequest}>Withdraw request</button>
+                    )}
                   </div>
+                )}
+                {subReq&&(subReq.status==='declined'||subReq.status==='approved')&&(
+                  <div style={{padding:'10px 12px',borderRadius:6,marginBottom:10,background:subReq.status==='approved'?'rgba(16,185,129,.08)':'var(--s3)',border:'1px solid '+(subReq.status==='approved'?'rgba(16,185,129,.2)':'var(--border)')}}>
+                    <div style={{fontSize:12,fontWeight:600,marginBottom:2}}>
+                      Last request: {planTier(subReq.requested_plan)} &middot; {subReq.status==='approved'?'approved':'declined'}
+                    </div>
+                    {subReq.decision_note&&<div style={{fontSize:12,color:'var(--t2)'}}>{subReq.decision_note}</div>}
+                    {subReq.decided_at&&<div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{new Date(subReq.decided_at).toLocaleDateString('en-AU')}</div>}
+                  </div>
+                )}
+
+                {!subIsSuper&&(
+                  <>
+                    {subReqMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:subReqMsg.startsWith('\u2713')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subReqMsg.startsWith('\u2713')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subReqMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subReqMsg}</div>}
+                    {subIsClientAdmin&&(!subReq||subReq.status!=='open')?(
+                      <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
+                        <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:8}}>Request a plan change</div>
+                        <div className="two-col">
+                          <div className="form-field">
+                            <label className="form-label">Plan you want</label>
+                            <select className="form-select" value={subReqPlan} onChange={e=>setSubReqPlan(e.target.value)}>
+                              <option value="">&mdash; Select &mdash;</option>
+                              {Object.keys(TIERS).filter(k=>k!==planTier(subPlan)).map(k=><option key={k} value={k.toLowerCase()}>{k}</option>)}
+                            </select>
+                          </div>
+                          <div className="form-field">
+                            <label className="form-label">Why <span style={{color:'var(--red)'}}>*</span></label>
+                            <input className="form-input" value={subReqWhy} onChange={e=>setSubReqWhy(e.target.value)} placeholder="e.g. we are over the seat limit"/>
+                          </div>
+                        </div>
+                        <button className="btn btn-primary btn-sm" disabled={!subReqPlan||subReqWhy.trim().length<3||subReqBusy}
+                          onClick={subRaiseRequest}>{subReqBusy?'Sending\u2026':'Send request'}</button>
+                        <div style={{fontSize:11,color:'var(--t2)',marginTop:8,lineHeight:1.6}}>
+                          Taksyn reviews the request and applies the change. Your plan sets the features, seat limit and how long records are kept.
+                        </div>
+                      </div>
+                    ):(
+                      !subIsClientAdmin&&(
+                        <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.6}}>
+                          Your plan sets the features, seat limit and how long records are kept. Your organisation admin can ask Taksyn to change it.
+                        </div>
+                      )
+                    )}
+                  </>
                 )}
 
                 {subIsSuper&&(
                   <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
+                    {/* [PLAN-REQUEST-DECIDE] act on an open request */}
+                    {subReq&&subReq.status==='open'&&(
+                      <div style={{marginBottom:14,padding:'10px 12px',borderRadius:6,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
+                        <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>Open request: move to {planTier(subReq.requested_plan)}</div>
+                        <div style={{fontSize:12,color:'var(--t2)'}}>{subReq.reason}</div>
+                        <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>Raised {new Date(subReq.requested_at).toLocaleDateString('en-AU')}</div>
+                        {subReqMsg&&<div style={{marginTop:8,fontSize:12,color:subReqMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subReqMsg}</div>}
+                        {!subDeclineOpen&&(
+                          <div style={{display:'flex',gap:6,marginTop:8}}>
+                            <button className="btn btn-primary btn-sm" style={{fontSize:11}} disabled={subReqBusy} onClick={subApproveRequest}>Approve</button>
+                            <button className="btn btn-secondary btn-sm" style={{fontSize:11}} disabled={subReqBusy} onClick={()=>{setSubDeclineOpen(true);setSubReqMsg('')}}>Decline</button>
+                          </div>
+                        )}
+                        {!subDeclineOpen&&<div style={{fontSize:11,color:'var(--t2)',marginTop:6}}>Approve loads the request into the form below. Nothing changes until you confirm it.</div>}
+                        {subDeclineOpen&&(
+                          <div style={{marginTop:8}}>
+                            <div style={{fontSize:11,color:'var(--t2)',marginBottom:4}}>Reason for declining <span style={{color:'var(--red)'}}>*</span> &mdash; this is shown to the organisation.</div>
+                            <input className="form-input" style={{marginBottom:6}} value={subDeclineNote} onChange={e=>setSubDeclineNote(e.target.value)} placeholder="Why this is being declined"/>
+                            <div style={{display:'flex',gap:6}}>
+                              <button className="btn btn-primary btn-sm" style={{fontSize:11}} disabled={subDeclineNote.trim().length<3||subReqBusy} onClick={subDeclineRequest}>{subReqBusy?'Working\u2026':'Confirm decline'}</button>
+                              <button className="btn btn-secondary btn-sm" style={{fontSize:11}} disabled={subReqBusy} onClick={()=>{setSubDeclineOpen(false);setSubDeclineNote('')}}>Cancel</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:8}}>Change plan &middot; super admin</div>
                     {subMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:subMsg.startsWith('\u2713')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subMsg.startsWith('\u2713')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subMsg}</div>}
                     <div className="two-col">
@@ -20780,6 +21067,27 @@ export default function App() {
 
   const [incidentBlob, setIncidentBlob] = useState('none') // 'none'|'ok'|'warn' -> green/orange/red
   const [requestsBlob, setRequestsBlob] = useState('none') // 'none'|'ok' -> green/orange (no red)
+  // [SUBS-SURFACES] true while any org has an open plan change request.
+  // Re-read on navigation so acting on one clears the dot without a reload.
+  const [subsBlob, setSubsBlob] = useState(false)
+  useEffect(()=>{
+    if(!isConfigured()||user?.role!=='super_admin'){ setSubsBlob(false); return }
+    supabase.from('plan_change_requests').select('id',{count:'exact',head:true}).eq('status','open')
+      .then(({count})=>setSubsBlob((count||0)>0)).catch(()=>{ setSubsBlob(false) })
+  },[user?.role, page])
+  // [SUBS-SURFACES] page changes cover navigation, but a request decided
+  // inside the org view leaves `page` on 'orgs' and the dot one hop stale.
+  // Re-reading on focus closes that gap.
+  useEffect(()=>{
+    if(user?.role!=='super_admin') return
+    const onFocus = ()=>{
+      if(!isConfigured()) return
+      supabase.from('plan_change_requests').select('id',{count:'exact',head:true}).eq('status','open')
+        .then(({count})=>setSubsBlob((count||0)>0)).catch(()=>{})
+    }
+    window.addEventListener('focus', onFocus)
+    return ()=>window.removeEventListener('focus', onFocus)
+  },[user?.role])
   if(needsPasswordSetup) return <PasswordSetupView onDone={()=>setNeedsPasswordSetup(false)}/>
   if(needsPasswordReset) return <PasswordResetView onDone={()=>setNeedsPasswordReset(false)}/>
   if(!user) return <AuthView onAuth={handleAuth} deactivatedMsg={deactivatedMsg} onClearDeactivated={()=>setDeactivatedMsg('')}/>
@@ -21418,6 +21726,7 @@ export default function App() {
                     {key==='incident_hub'&&incidentBlob!=='none'&&<span title={incidentBlob==='warn'?'An incident needs attention':'Active incidents, on track'} style={{marginLeft:'auto',width:9,height:9,borderRadius:'50%',flexShrink:0,background:incidentBlob==='warn'?'#EF4444':'#F59E0B'}}/>}
                     {key==='tasks'&&tasksBlob!=='none'&&<span title={tasksBlob==='warn'?'Overdue tasks need attention':'Open tasks, on track'} style={{marginLeft:'auto',width:9,height:9,borderRadius:'50%',flexShrink:0,background:tasksBlob==='warn'?'#EF4444':'#F59E0B'}}/>}
                     {key==='issue_reports'&&requestsBlob!=='none'&&<span title="Open requests" style={{marginLeft:'auto',width:9,height:9,borderRadius:'50%',flexShrink:0,background:'#F59E0B'}}/>}
+                    {key==='subscriptions'&&subsBlob&&<span title="An organisation is waiting on a plan decision" style={{marginLeft:'auto',width:9,height:9,borderRadius:'50%',flexShrink:0,background:'#EF4444'}}/>}
                   </button>
                 ))}
               </div>
@@ -21461,6 +21770,7 @@ export default function App() {
                 {page==='review'      && user.role!=='super_admin' && hasAccess(user.role,3) && <ReviewView     {...pageProps}/>}
                 {page==='audit'       && hasAccess(user.role,2) && <AuditLogView   {...pageProps}/>}
                 {page==='orgs'        && user.role==='super_admin' && <OrganisationsView {...pageProps}/>}
+                {page==='subscriptions' && user.role==='super_admin' && <SubscriptionsView {...pageProps}/>}
                 {page==='users'       && hasAccess(user.role,2) && <UsersView      {...pageProps}/>}
                 {page==='tiers'       && user.role!=='super_admin' && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
                 {page==='support'     && user.role==='super_admin' && <SupportView {...pageProps}/>}
