@@ -8437,9 +8437,21 @@ function UsersView({ user, setAuditLog }) {
 }
 
 function TiersView({ user }) {
+  // [TIERS-LIVE-PLAN] user.tier is a login-time snapshot and goes stale the
+  // moment a plan changes. Read the org's current plan instead, falling back
+  // to the snapshot only if the lookup fails.
+  const [livePlan, setLivePlan] = useState(null)
+  useEffect(()=>{
+    if(!isConfigured()||!user?.org){ setLivePlan(null); return }
+    // user.org is the org NAME (profiles.org), not the ID.
+    supabase.from('organisations').select('plan').eq('name', user.org).maybeSingle()
+      .then(({data})=>{ setLivePlan(planTier(data?.plan)||null) })
+      .catch(()=>{ setLivePlan(null) })
+  },[user?.org])
+  const currentTier = livePlan || user.tier || ''
   return (
     <div className="anim">
-      <div className="ph"><div className="ph-title">Subscription Plans</div><div className="ph-sub">Hybrid pricing — base + per user. Current: <span style={{color:TIERS[user.tier]?.color,fontWeight:700}}>{user.tier}</span></div></div>
+      <div className="ph"><div className="ph-title">Subscription Plans</div><div className="ph-sub">Hybrid pricing — base + per user. Current: <span style={{color:TIERS[currentTier]?.color,fontWeight:700}}>{currentTier||'—'}</span></div></div>
       <div className="section" style={{marginBottom:16,background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)'}}>
         <div style={{display:'flex',gap:16,flexWrap:'wrap',alignItems:'center'}}>
           <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'var(--brand)',marginBottom:4}}>How pricing works</div><div style={{fontSize:13,color:'var(--t2)',lineHeight:1.6}}>Each plan has a <strong>base monthly fee</strong> plus a <strong>per user fee</strong>.</div></div>
@@ -8448,11 +8460,11 @@ function TiersView({ user }) {
       </div>
       <div className="tier-grid">
         {Object.entries(TIERS).map(([name,tier])=>(
-          <div key={name} className={"tier-card "+(user.tier===name?'active':'')} style={{borderColor:user.tier===name?tier.color:'var(--border)'}}>
+          <div key={name} className={"tier-card "+(currentTier===name?'active':'')} style={{borderColor:currentTier===name?tier.color:'var(--border)'}}>
             <div><div className="tier-name" style={{color:tier.color}}>{name}</div><div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>{tier.users} users</div></div>
             <div style={{background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Base / month</div><div style={{fontSize:18,fontWeight:800,color:tier.color}}>{tier.base}</div></div>
             <div style={{background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Per user / month</div><div style={{fontSize:18,fontWeight:800,color:tier.color}}>{tier.perUser}</div></div>
-            {user.tier===name&&<span className="badge" style={{background:tier.color+'22',color:tier.color,width:'fit-content'}}>✓ Current Plan</span>}
+            {currentTier===name&&<span className="badge" style={{background:tier.color+'22',color:tier.color,width:'fit-content'}}>✓ Current Plan</span>}
             <div style={{fontSize:11,color:'var(--t2)',display:'flex',flexDirection:'column',gap:3}}><div>💾 {tier.storage}</div><div>📷 {tier.images}</div><div>🗓 {tier.retention}</div></div>
             <div style={{display:'flex',flexDirection:'column',gap:4,borderTop:'1px solid var(--border)',paddingTop:8}}>
               {tier.features.map(f=><div key={f} className="tier-feat"><div className="tier-dot" style={{background:tier.color}}/>{f}</div>)}
@@ -10757,6 +10769,8 @@ function CompanySettingsView({ user, onSettingsSaved }) {
   // silently, so treat it as load-bearing.
   const subIsSuper = user?.role === 'super_admin'
   const [subPlan, setSubPlan]     = useState('')
+  // [BILLING-NOTE] the exemption reason when the org is exempt, else null.
+  const [subExempt, setSubExempt] = useState(null)
   const [subSeats, setSubSeats]   = useState(null)
   const [subNew, setSubNew]       = useState('')
   const [subNote, setSubNote]     = useState('')
@@ -10857,8 +10871,9 @@ function CompanySettingsView({ user, onSettingsSaved }) {
 
   useEffect(()=>{
     if(!isConfigured()||!orgId){ setSubPlan(''); setSubSeats(null); return }
-    supabase.from('organisations').select('plan').eq('id', orgId).maybeSingle()
-      .then(({data})=>{ setSubPlan(data?.plan||'') }).catch(()=>{ setSubPlan('') })
+    supabase.from('organisations').select('plan,billing_exempt,billing_exempt_reason').eq('id', orgId).maybeSingle()
+      .then(({data})=>{ setSubPlan(data?.plan||''); setSubExempt(data?.billing_exempt?(data?.billing_exempt_reason||'No reason recorded'):null) })
+      .catch(()=>{ setSubPlan(''); setSubExempt(null) })
     supabase.from('org_members').select('user_id', { count:'exact', head:true }).eq('org', orgId)
       .then(({count})=>{ setSubSeats(typeof count==='number'?count:null) })
       .catch(()=>{ setSubSeats(null) })
@@ -11555,6 +11570,17 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                   {t&&<span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'var(--s3)',color:'var(--t2)'}}>{t.storage}</span>}
                 </div>
                 {overSeats&&<div style={{fontSize:12,color:'var(--red)',marginBottom:10}}>This organisation is over the seat maximum for its plan.</div>}
+
+                {/* [BILLING-NOTE] the card shows prices next to a live seat
+                    count and reads like an invoice. Nothing bills yet. */}
+                <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,padding:'7px 10px',borderRadius:5,background:'var(--s3)',lineHeight:1.6}}>
+                  Plans are not billed yet. The pricing shown is for reference &mdash; you will be told before any charging begins.
+                </div>
+                {subIsSuper&&subExempt&&(
+                  <div style={{fontSize:11,marginBottom:10,padding:'7px 10px',borderRadius:5,background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',color:'var(--t2)',lineHeight:1.6}}>
+                    <strong style={{color:'var(--green)'}}>Billing exempt.</strong> {subExempt}
+                  </div>
+                )}
 
                 {/* [PLAN-REQUEST] request state, shown to everyone who can see the card */}
                 {subReq&&subReq.status==='open'&&(
