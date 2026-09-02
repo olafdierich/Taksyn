@@ -1808,8 +1808,17 @@ function Celebration({ onClose }) {
   )
 }
 
-const TaskCard = ({ task, onClick }) => {
+const TaskCard = ({ task, onClick, today=null }) => {
   const dur = fmtDuration(task.started_at, task.completed_at)
+  // CYCLE-DATE-DISPLAY-V1: due_date on a recurring row is the ANCHOR the cycle walks
+  // start from, not a deadline -- it never advances. Printing it raw put "2026-07-21"
+  // on a daily task sitting under "Active Tasks". `today` is OPTIONAL and must be the
+  // ORG day (F14-ORGDAY): absent, the card falls back to due_date exactly as before,
+  // which is why the other 35 call sites need no edit. Never resolve the day in here --
+  // this component has no timezone and would reach for UTC.
+  const _cardDate = (today && isRecurring(task))
+    ? (currentOccurrenceDate(task.due_date, task.recurrence, today) || task.due_date)
+    : task.due_date
   const isDone = ['awaiting_review','approved','completed'].includes(task.status)
   return (
     <div className={"task-card "+task.priority+(isDone?' task-done':'')} onClick={onClick}>
@@ -1828,7 +1837,7 @@ const TaskCard = ({ task, onClick }) => {
       </div>
       <div className="tc-meta">
         <PriBadge priority={task.priority} />
-        <span style={{fontSize:11,color:'var(--t2)'}}>📅 {task.due_date}{dueTimeSuffix(task)}</span>
+        <span style={{fontSize:11,color:'var(--t2)'}}>📅 {_cardDate}{dueTimeSuffix(task)}</span>
         {task.extended_from&&<span title={'Extended from '+task.extended_from+(task.extended_by?' by '+task.extended_by:'')} style={{fontSize:11,color:'#D97706',background:'rgba(217,119,6,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>⇔ Extended</span>}
         {assigneeNames(task)&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {assigneeNames(task)}</span>}{task.lead_user_name&&<span style={{fontSize:11,color:'var(--brand)',fontWeight:600,marginLeft:6}}>★ {task.lead_user_name}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
@@ -3015,11 +3024,11 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
           const scheduled = visible.filter(t=> isRecurring(t) && !recurringDueNow(t,today))
           const openCard = id=>{ try{ sessionStorage.setItem('taksyn-open-task', id) }catch(e){}; setPage('tasks') }
           return <>
-            {activeNow.map(t=><TaskCard key={t.id} task={t} onClick={()=>openCard(t.id)}/>)}
+            {activeNow.map(t=><TaskCard key={t.id} task={t} today={today} onClick={()=>openCard(t.id)}/>)}
             {activeNow.length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">Nothing due right now!</div></div>}
             {scheduled.length>0&&<>
               <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',margin:'14px 0 8px',display:'flex',alignItems:'center',gap:6}}>🕓 Scheduled ({scheduled.length}) <span style={{fontWeight:400,fontSize:11}}>— recurring, not due yet</span></div>
-              {scheduled.slice(0,5).map(t=><TaskCard key={t.id} task={t} onClick={()=>openCard(t.id)}/>)}
+              {scheduled.slice(0,5).map(t=><TaskCard key={t.id} task={t} today={today} onClick={()=>openCard(t.id)}/>)}
             </>}
           </>
         })()}
@@ -4812,7 +4821,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 {sel.recurrence&&sel.recurrence!=='once'&&<span className="recurrence-tag">🔁 {RECURRENCE_LABELS[sel.recurrence]}</span>}
               </div>
               <div style={{fontSize:17,fontWeight:800,letterSpacing:'-.5px'}}>{sel.title}</div>
-              <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>{sel.id} · Due {sel.due_date}{dueTimeSuffix(sel)}</div>
+              <div style={{fontSize:11,color:'var(--t2)',marginTop:3}}>{sel.id} · Due {(orgTz&&isRecurring(sel)) ? (currentOccurrenceDate(sel.due_date, sel.recurrence, orgToday(orgTz))||sel.due_date) : sel.due_date}{dueTimeSuffix(sel)}</div>
               {(sel.created_by||sel.approver_name)&&<div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>
                 {sel.created_by&&<span>Assigned by <strong style={{fontWeight:600}}>{_who(sel.created_by_id, sel.created_by)}</strong></span>}
                 {sel.created_by&&sel.approver_name&&<span> · </span>}
