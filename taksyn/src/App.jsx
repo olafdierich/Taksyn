@@ -952,8 +952,17 @@ const fmtDateTime = (ts, placeholder='—') => {
 const fmtDuration = (start, end) => {
   if (!start || !end) return null
   const mins = Math.round((new Date(end) - new Date(start)) / 60000)
+  // NEGATIVE-DURATION GUARD. task_worker_times has ONE row per (task_id,user_id) and NO
+  // occurrence key, so a new Time In can be measured against a PREVIOUS cycle's Time Out.
+  // Observed LIVE 2026-09-02: started_at 2 Sep vs completed_at 22 Jul rendered -60048m to
+  // a worker. Returning null renders nothing -- every call site already guards with &&.
+  // THIS HIDES THE SYMPTOM ONLY. The stale-row cause is separate and still open.
+  if (mins < 0) return null
   if (mins < 60) return mins + 'm'
-  return Math.floor(mins/60) + 'h ' + (mins%60) + 'm'
+  if (mins < 1440) return Math.floor(mins/60) + 'h ' + (mins%60) + 'm'
+  const _durDays = Math.floor(mins/1440)
+  const _durHrs = Math.floor((mins%1440)/60)
+  return _durDays + 'd ' + _durHrs + 'h'
 }
 const clearAuthCache = () => {
   try { indexedDB.deleteDatabase('supabase') } catch(e) {}
