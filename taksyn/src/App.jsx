@@ -577,11 +577,23 @@ const nextOccurrenceDate = (dateStr, recurrence) => {
 // into a local const again: it used to exist twice, kept in sync only by this comment.
 const RECUR_GRACE_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:3, monthly:5, quarterly:7, semiannually:14, annually:14 }
 // COMPLETION WINDOW (days before the scheduled cycle date that a recurring task may be
-// submitted). THE single source -- read only by completionWindow() below. A cadence ABSENT
-// from this table is UNGATED, which is why weekly and below do not appear: gating a weekly
-// task by days is meaningless. Overridden per task by tasks.window_days (nullable integer,
-// null = inherit this table; 0 = explicitly ungated). Do not copy this object to a call site.
-const RECUR_WINDOW_DAYS = { weekly:2, fortnightly:4, monthly:7, quarterly:14, semiannually:30, annually:30 }
+// submitted). THE single source -- read only by completionWindow() below. Overridden per
+// task by tasks.window_days (nullable integer; null = inherit this table). Do not copy
+// this object to a call site.
+//
+// WINDOW-ZERO-HARD-V1: EVERY cadence appears here now. An absent cadence used to mean
+// UNGATED -- no early restriction at all -- so a daily could be submitted any number of
+// days early, silently, with no prompt and no record. The previous comment here also
+// claimed "weekly and below do not appear" while weekly sat in the table with 2.
+//
+// 0 means OPENS ON THE CYCLE DATE and is enforced as a HARD block: no prompt, no reason,
+// no bypass. It does NOT mean ungated -- that reading is what the old `!w || w <= 0`
+// shortcut in completionWindow encoded, and it is removed. Daily and weekdays are 0
+// because there is no legitimate reason to pre-sign today's check tomorrow, so there is
+// no reason worth capturing. Weekly and above stay SOFT (prompt + recorded reason), per
+// the 23 August ruling that a hard block on a long cadence gets worked around by faking
+// the date, which is worse than a logged early completion.
+const RECUR_WINDOW_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:4, monthly:7, quarterly:14, semiannually:30, annually:30 }
 // Occurrence status for a cycle declared NOT APPLICABLE (F70). THE single source:
 // task_occurrences.status has NO CHECK constraint, so a typo here becomes a silent
 // third status that no reader knows about. Never type this literal at a call site.
@@ -634,12 +646,18 @@ const completionWindow = (t, today) => {
   const w = (t.window_days === null || t.window_days === undefined)
     ? (RECUR_WINDOW_DAYS[t.recurrence] ?? 0)
     : t.window_days
-  if(!w || w <= 0) return null
+  // WINDOW-ZERO-HARD-V1: the `!w || w <= 0 -> return null` shortcut is GONE. 0 is a real
+  // window meaning opensOn === cycleDate, not an escape hatch. A negative value is still
+  // nonsense and is treated as ungated.
+  if(w < 0) return null
   const cycleDate = currentOccurrenceDate(t.due_date, t.recurrence, today)
   if(!cycleDate) return null
   const opensOn = _recurPlusDays(cycleDate, -w)
   if(today >= opensOn) return null
-  return { opensOn, cycleDate, windowDays: w }
+  // kind decides ENFORCEMENT, not placement. hard: refuse outright. soft: prompt and
+  // record a reason. Read by submitTask AND by the Submit button -- change both or
+  // neither, per the comment on that button.
+  return { opensOn, cycleDate, windowDays: w, kind: w === 0 ? 'hard' : 'soft' }
 }
 // SCHEDULED date of the cycle a COMPLETION credits, as YYYY-MM-DD. Null if not walkable.
 //
@@ -4016,6 +4034,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     // NO gate rather than a wrong one.
     if (!_bypassWindow) {
       const _win = completionWindow(task, orgTz ? orgToday(orgTz) : null)
+      // WINDOW-ZERO-HARD-V1: a hard block returns WITHOUT calling setEarlyPrompt, which is
+      // the only route to _bypassWindow. If a hard block could be bypassed by any path it
+      // would not be one. The button is already disabled, so this is defence in depth.
+      if (_win && _win.kind === 'hard') return
       if (_win) { setEarlyPrompt({ tid, ..._win }); setEarlyReason(''); return }
     }
     const updatedComments = comment.trim() ? [...(task.comments||[]), user.name+': '+comment.trim()] : task.comments||[]
@@ -4913,10 +4935,16 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   )}
                 </div>
               )}
-              {myTime?.started_at&&myTime?.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(
+              {/* WINDOW-ZERO-HARD-V1: derived ONCE here and used by both the disabled
+                  attribute and the label below, so they cannot diverge -- see the
+                  change-both-or-neither comment inside the button. */}
+              {myTime?.started_at&&myTime?.completed_at&&!['awaiting_review','approved'].includes(sel.status)&&(()=>{
+                const _hardWin = orgTz ? (completionWindow(sel, orgToday(orgTz))?.kind === 'hard' ? completionWindow(sel, orgToday(orgTz)) : null) : null
+                return (
                 <button
                   className="btn btn-primary"
-                  style={{width:'100%',opacity:(sel.compliance&&currentCyclePhotos(sel,orgTz).length===0)?0.55:1}}
+                  style={{width:'100%',opacity:((sel.compliance&&currentCyclePhotos(sel,orgTz).length===0)||_hardWin)?0.55:1}}
+                  disabled={!!_hardWin}
                   onClick={()=>submitTask(sel.id)}
                 >
                   {/* Must use the SAME condition as the submit guard in submitTask.
@@ -4924,9 +4952,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       read currentCyclePhotos (this cycle only), so a recurring task
                       holding a previous cycle's photo showed 'Submit' and then did
                       nothing. Change both or neither. */}
-                  {sel.compliance&&currentCyclePhotos(sel,orgTz).length===0?'📷 Add a photo for this cycle to submit':'✅ Submit'}
+                  {_hardWin?'⏳ Opens '+_hardWin.opensOn:sel.compliance&&currentCyclePhotos(sel,orgTz).length===0?'📷 Add a photo for this cycle to submit':'✅ Submit'}
                 </button>
-              )}
+                )
+              })()}
               {/* COMPLETION WINDOW panel. Sibling of the Submit button DELIBERATELY: it lived
                   in the checklist block in v3 and was unreachable on any task without a
                   checklist -- the gate fired and nothing rendered. Keep it in this group,
