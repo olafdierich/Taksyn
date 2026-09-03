@@ -3378,6 +3378,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // reason panel is open (null = closed). Shaped after naPrompt/naReason below, which is
   // the established pattern in this component for "guard, ask why, then proceed".
   const [earlyPrompt, setEarlyPrompt] = useState(null)
+  // EXT-REQUEST-V1: the OPEN extension request for the selected task, or null.
+  // Loaded per task exactly like workerTimes, so it cannot go stale when the
+  // selection changes. Decided and withdrawn rows are deliberately not loaded
+  // here -- this state answers "is there an ask outstanding", nothing more.
+  const [extReq, setExtReq] = useState(null)
+  const [extPanel, setExtPanel] = useState(false)
+  const [extDate, setExtDate] = useState('')
+  const [extReason, setExtReason] = useState('')
+  const [extBusy, setExtBusy] = useState(false)
   const [earlyReason, setEarlyReason] = useState('')
   // F70 - "Not applicable today". naPrompt holds the task id whose reason panel is
   // open (null = closed). naBusy guards the four awaited round trips in
@@ -3930,6 +3939,51 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   const loadWorkerTimes = (tid) => { if(!tid||!isConfigured()){ setWorkerTimes([]); return } supabase.from('task_worker_times').select('*').eq('task_id',tid).then(({data})=>{ setWorkerTimes(data||[]) }).catch(()=>{}) }
   useEffect(()=>{ loadWorkerTimes(selected) },[selected])
+  // EXT-REQUEST-V1: same shape as loadWorkerTimes above -- loader plus an effect
+  // keyed on `selected`. maybeSingle() because ter_one_open_per_task guarantees
+  // at most one open row per task; .single() would throw on zero, which is the
+  // normal case.
+  const loadExtReq = (tid) => {
+    if(!tid || !isConfigured()){ setExtReq(null); return }
+    supabase.from('task_extension_requests').select('*')
+      .eq('task_id',tid).eq('status','open').maybeSingle()
+      .then(({data})=>{ setExtReq(data||null) }).catch(()=>{ setExtReq(null) })
+  }
+  useEffect(()=>{ loadExtReq(selected); setExtPanel(false); setExtDate(''); setExtReason('') },[selected])
+  // Writes the ask. The database is the real guard -- ter_forward_chk refuses a
+  // date on or before the current one and ter_one_open_per_task refuses a second
+  // open ask -- so .select() is used to confirm the row LANDED. PostgREST returns
+  // 200 with error null when RLS blocks a write, so a silent failure here would
+  // otherwise look like success.
+  const raiseExtRequest = async (t) => {
+    if(!t || !extDate || !extReason.trim() || extBusy) return
+    setExtBusy(true)
+    const { data, error } = await supabase.from('task_extension_requests').insert({
+      task_id: t.id, org: t.org,
+      current_due_date: t.due_date || null,
+      requested_due_date: extDate,
+      reason: extReason.trim(),
+      requested_by: user.id, requested_by_name: user.name
+    }).select()
+    setExtBusy(false)
+    if(error || !data || !data.length){
+      alert('Could not send the request: ' + (error?.message || 'no row was written'))
+      return
+    }
+    setExtReq(data[0]); setExtPanel(false); setExtDate(''); setExtReason('')
+  }
+  // Withdrawing releases the partial index, so the worker can ask again with a
+  // different date. The withdrawn row is KEPT -- every ask stays on the record.
+  const withdrawExtRequest = async () => {
+    if(!extReq || extBusy) return
+    setExtBusy(true)
+    const { data, error } = await supabase.from('task_extension_requests')
+      .update({ status:'withdrawn', decided_at:new Date().toISOString() })
+      .eq('id', extReq.id).select()
+    setExtBusy(false)
+    if(error || !data || !data.length){ alert('Could not withdraw: ' + (error?.message || 'no row was updated')); return }
+    setExtReq(null)
+  }
   const workerTimeIn = (tid) => {
     // TIMEIN-WINDOW-GATE-V1: refuse BEFORE the upsert. Previously nothing gated this,
     // so on a not-yet-open cycle the write LANDED and was then hidden by
@@ -4916,6 +4970,43 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Duration</div>
                   <div style={{fontSize:15,fontWeight:800,color:'var(--t1)'}}>{fmtDuration(myTime?.started_at,myTime?.completed_at)}</div>
                 </div>
+              )}
+            </div>
+          )}
+          {/* EXT-REQUEST-V1: one-off tasks only. A recurring task's due_date is the
+              ANCHOR its cycle walks count from, so extending it would move every
+              future cycle -- not an extension, a schedule change. */}
+          {amAssigned&&isOneOff(sel)&&sel.due_date&&!['approved','completed'].includes(sel.status)&&(
+            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>More time</div>
+              {extReq ? (
+                <div>
+                  <div style={{fontSize:13,marginBottom:6}}>
+                    <span style={{fontWeight:700,color:'#D97706'}}>\u23F3 Awaiting a decision</span>
+                    {' \u2014 you asked to move this to '}<strong>{extReq.requested_due_date}</strong>
+                  </div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Your reason: {extReq.reason}</div>
+                  <button className="btn" onClick={withdrawExtRequest} disabled={extBusy}>Withdraw request</button>
+                </div>
+              ) : extPanel ? (
+                <div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>
+                    Currently due {sel.due_date}. Ask your approver for a later date and say why.
+                  </div>
+                  <input type="date" className="form-input" value={extDate} min={sel.due_date}
+                    onChange={e=>setExtDate(e.target.value)} style={{marginBottom:8}}/>
+                  <textarea value={extReason} onChange={e=>setExtReason(e.target.value)}
+                    placeholder="Why do you need more time?"
+                    style={{width:'100%',minHeight:60,padding:8,boxSizing:'border-box',fontSize:13,marginBottom:8}}/>
+                  <div style={{display:'flex',gap:8}}>
+                    <button className="btn btn-primary" style={{flex:1}}
+                      disabled={extBusy||!extReason.trim()||!extDate||extDate<=sel.due_date}
+                      onClick={()=>raiseExtRequest(sel)}>Send request</button>
+                    <button className="btn" style={{flex:1}} onClick={()=>{setExtPanel(false);setExtDate('');setExtReason('')}}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="btn" onClick={()=>setExtPanel(true)}>\u23F3 Request more time</button>
               )}
             </div>
           )}
