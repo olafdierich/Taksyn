@@ -3066,7 +3066,18 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         </div>
         {dashOpen.active&&(()=>{
           const notDone = t=>!['completed','approved'].includes(t.status)
+          // EXT-OUTCOME-V1 (fix 2): activeNow had NO sort at all -- the order was
+          // whatever the fetch returned, so it differed between loads (observed:
+          // 3 Sep, 4 Sep, 15 Sep, 4 Sep). Sorting by due_date would not fix it
+          // either: on a recurring row due_date is the ANCHOR, so a task anchored
+          // in July would sort into July while its card reads 4 Sep. The key is
+          // the CYCLE date -- the same expression TaskCard uses to decide what to
+          // print, so order and labels cannot disagree. Undated sorts last.
+          const _cycleKey = t => (today && isRecurring(t)
+            ? (currentOccurrenceDate(t.due_date, t.recurrence, today) || t.due_date || '9999')
+            : (t.due_date || '9999'))
           const activeNow = visible.filter(t=> isRecurring(t) ? recurringDueNow(t,today) : notDone(t))
+            .slice().sort((a,b)=> String(_cycleKey(a)).localeCompare(String(_cycleKey(b))))
           const scheduled = visible.filter(t=> isRecurring(t) && !recurringDueNow(t,today))
           const openCard = id=>{ try{ sessionStorage.setItem('taksyn-open-task', id) }catch(e){}; setPage('tasks') }
           return <>
@@ -3943,10 +3954,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // keyed on `selected`. maybeSingle() because ter_one_open_per_task guarantees
   // at most one open row per task; .single() would throw on zero, which is the
   // normal case.
+  // EXT-OUTCOME-V1: the LATEST request, whatever its status -- not only the open
+  // one. Filtering on open meant a decision vanished the moment it was made, so
+  // the worker who asked was never told the answer. On a feature built to close an
+  // accountability loop, an invisible decision is the failure it exists to fix.
+  // extReq therefore no longer implies OPEN: every reader must test status.
   const loadExtReq = (tid) => {
     if(!tid || !isConfigured()){ setExtReq(null); return }
     supabase.from('task_extension_requests').select('*')
-      .eq('task_id',tid).eq('status','open').maybeSingle()
+      .eq('task_id',tid).order('id',{ascending:false}).limit(1).maybeSingle()
       .then(({data})=>{ setExtReq(data||null) }).catch(()=>{ setExtReq(null) })
   }
   useEffect(()=>{ loadExtReq(selected); setExtPanel(false); setExtDate(''); setExtReason('') },[selected])
@@ -3971,6 +3987,53 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       return
     }
     setExtReq(data[0]); setExtPanel(false); setExtDate(''); setExtReason('')
+  }
+  // EXT-DECIDE-V1: the approver's note. Required on decline, optional on approve --
+  // "no" is the answer a worker will want explained.
+  const [extNote, setExtNote] = useState('')
+  // Approve: request row FIRST, then the task. update() does not return its write
+  // result, so ordering task-first would promise a guarantee it cannot give. This
+  // way a failed task write leaves an approved request against an unchanged date --
+  // visible and correctable, rather than silent.
+  //
+  // The due-date change goes through update() rather than a direct write so it
+  // flows through the existing extension-detection block, which stamps
+  // extended_from/at/by and writes the audit entry carrying both dates. One
+  // mechanism. Note that block only stamps when the OLD date had already passed,
+  // so an EARLY approved extension shows no chip -- ruled 3 Sep, the request row
+  // is the stronger record.
+  const approveExtRequest = async () => {
+    if(!extReq || !sel || extBusy) return
+    setExtBusy(true)
+    const { data, error } = await supabase.from('task_extension_requests').update({
+      status:'approved', decided_by:user.id, decided_by_name:user.name,
+      decided_at:new Date().toISOString(), decision_note: extNote.trim() || null
+    }).eq('id', extReq.id).eq('status','open').select()
+    setExtBusy(false)
+    if(error || !data || !data.length){
+      alert('Could not approve: ' + (error?.message || 'the request was already decided'))
+      loadExtReq(sel.id); return
+    }
+    const _newDate = extReq.requested_due_date
+    setExtReq(null); setExtNote('')
+    update(sel.id, { due_date: _newDate })
+  }
+  // Decline leaves the task alone: the deadline stands. The row records that the
+  // ask was made and refused, and by whom.
+  const declineExtRequest = async () => {
+    if(!extReq || extBusy) return
+    if(!extNote.trim()){ alert('Please give a reason for declining.'); return }
+    setExtBusy(true)
+    const { data, error } = await supabase.from('task_extension_requests').update({
+      status:'declined', decided_by:user.id, decided_by_name:user.name,
+      decided_at:new Date().toISOString(), decision_note: extNote.trim()
+    }).eq('id', extReq.id).eq('status','open').select()
+    setExtBusy(false)
+    if(error || !data || !data.length){
+      alert('Could not decline: ' + (error?.message || 'the request was already decided'))
+      loadExtReq(sel?.id); return
+    }
+    setExtReq(null); setExtNote('')
   }
   // Withdrawing releases the partial index, so the worker can ask again with a
   // different date. The withdrawn row is KEPT -- every ask stays on the record.
@@ -4976,10 +5039,43 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
           {/* EXT-REQUEST-V1: one-off tasks only. A recurring task's due_date is the
               ANCHOR its cycle walks count from, so extending it would move every
               future cycle -- not an extension, a schedule change. */}
+          {/* EXT-DECIDE-V1: the approver's view of an open request. Sits above the
+              worker's own panel; the two are mutually exclusive in practice because
+              amAssigned and canReviewTask exclude each other for the same person. */}
+          {!amAssigned&&extReq&&extReq.status!=='open'&&extReq.status!=='withdrawn'&&canReviewTask(sel)&&(
+            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:8}}>Extension {extReq.status}</div>
+              <div style={{fontSize:13,marginBottom:4}}>
+                {extReq.requested_by_name||'A worker'} asked to move this to <strong>{extReq.requested_due_date}</strong>.
+                {' '}You {extReq.status} it{extReq.decided_at?' on '+String(extReq.decided_at).slice(0,10):''}.
+              </div>
+              {extReq.decision_note&&<div style={{fontSize:12,color:'var(--t2)'}}>Your note: {extReq.decision_note}</div>}
+            </div>
+          )}
+          {!amAssigned&&extReq&&extReq.status==='open'&&canReviewTask(sel)&&(
+            <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.35)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Extension requested</div>
+              <div style={{fontSize:13,marginBottom:6}}>
+                <strong>{extReq.requested_by_name||'A worker'}</strong>
+                {' asked to move this from '}<strong>{extReq.current_due_date||'—'}</strong>
+                {' to '}<strong>{extReq.requested_due_date}</strong>
+              </div>
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Their reason: {extReq.reason}</div>
+              <textarea value={extNote} onChange={e=>setExtNote(e.target.value)}
+                placeholder="Note (required if declining)"
+                style={{width:'100%',minHeight:52,padding:8,boxSizing:'border-box',fontSize:13,marginBottom:8}}/>
+              <div style={{display:'flex',gap:8}}>
+                <button className="btn btn-primary" style={{flex:1}} disabled={extBusy}
+                  onClick={approveExtRequest}>Approve new date</button>
+                <button className="btn btn-danger" style={{flex:1}} disabled={extBusy}
+                  onClick={declineExtRequest}>Decline</button>
+              </div>
+            </div>
+          )}
           {amAssigned&&isOneOff(sel)&&sel.due_date&&!['approved','completed'].includes(sel.status)&&(
             <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>More time</div>
-              {extReq ? (
+              {extReq&&extReq.status==='open' ? (
                 <div>
                   <div style={{fontSize:13,marginBottom:6}}>
                     <span style={{fontWeight:700,color:'#D97706'}}>⏳ Awaiting a decision</span>
@@ -4987,6 +5083,21 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   </div>
                   <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Your reason: {extReq.reason}</div>
                   <button className="btn" onClick={withdrawExtRequest} disabled={extBusy}>Withdraw request</button>
+                </div>
+              ) : extReq&&(extReq.status==='approved'||extReq.status==='declined')&&!extPanel ? (
+                /* EXT-OUTCOME-V1: the answer, and for a decline the route to ask
+                   again with a different date. Stays for the life of the task. */
+                <div>
+                  <div style={{fontSize:13,marginBottom:4}}>
+                    <span style={{fontWeight:700,color:extReq.status==='approved'?'var(--green)':'var(--red)'}}>
+                      {extReq.status==='approved'?'✓ Approved':'✗ Declined'}
+                    </span>
+                    {' — you asked to move this to '}<strong>{extReq.requested_due_date}</strong>
+                    {extReq.decided_by_name?' · decided by '+extReq.decided_by_name:''}
+                    {extReq.decided_at?' on '+String(extReq.decided_at).slice(0,10):''}
+                  </div>
+                  {extReq.decision_note&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Their note: {extReq.decision_note}</div>}
+                  {extReq.status==='declined'&&<button className="btn" onClick={()=>setExtPanel(true)}>⏳ Ask again with a different date</button>}
                 </div>
               ) : extPanel ? (
                 <div>
