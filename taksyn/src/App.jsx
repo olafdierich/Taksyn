@@ -3954,6 +3954,19 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // keyed on `selected`. maybeSingle() because ter_one_open_per_task guarantees
   // at most one open row per task; .single() would throw on zero, which is the
   // normal case.
+  // DECLINED-ACTION-V1: MY declined requests, for the Action Needed box. Scoped to
+  // this user, not the org -- RLS would permit the whole org's rows but this reader
+  // only ever needs its own. Fetched once on mount, not per task and not per render.
+  // Shows to whoever ASKED, whatever their role: requested_by is on the row, so it
+  // follows the person rather than a job title.
+  const [myDeclinedExt, setMyDeclinedExt] = useState([])
+  useEffect(()=>{
+    if(!isConfigured() || !user?.id){ setMyDeclinedExt([]); return }
+    supabase.from('task_extension_requests').select('*')
+      .eq('requested_by', user.id).eq('status','declined')
+      .order('id',{ascending:false})
+      .then(({data})=>{ setMyDeclinedExt(data||[]) }).catch(()=>{ setMyDeclinedExt([]) })
+  },[user?.id])
   // EXT-OUTCOME-V1: the LATEST request, whatever its status -- not only the open
   // one. Filtering on open meant a decision vanished the moment it was made, so
   // the worker who asked was never told the answer. On a feature built to close an
@@ -5913,6 +5926,17 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── WORKER VIEW ──────────────────────────────────
                     if(user.role==='worker') {
                       const actionNeeded = activeFiltered.filter(t=>t.status==='rejected').sort(byDate)
+                      // DECLINED-ACTION-V1: matched against activeFiltered, so a decline
+                      // clears itself when the task leaves the active list -- no expiry
+                      // logic and nothing to maintain. LATEST request per task only:
+                      // without that, a task asked about three times and declined twice
+                      // would post two entries about the same deadline.
+                      const _declSeen = new Set()
+                      const declinedExt = myDeclinedExt.filter(r=>{
+                        if(_declSeen.has(r.task_id)) return false
+                        _declSeen.add(r.task_id)
+                        return activeFiltered.some(t=>t.id===r.task_id)
+                      })
                       const submitted = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
                       // TODO-RECURRING-V1: hoisted from the IIFE below, which declared
@@ -5935,7 +5959,29 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {renderSection('wk-action', (actionNeeded.length>0?'🔴 ':'')+'Action Needed — Sent Back', actionNeeded.length,
                             {background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12},
                             actionNeeded.length>0?'var(--red)':'var(--text)',
-                            (actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
+                            (<>
+                              {declinedExt.map(r=>{
+                                const _dt = activeFiltered.find(t=>t.id===r.task_id)
+                                return (
+                                  <div key={'decl'+r.id} onClick={()=>setSelected(r.task_id)}
+                                    style={{cursor:'pointer',background:'#fff',border:'1px solid rgba(239,68,68,.3)',borderRadius:10,padding:'10px 12px',marginBottom:8}}>
+                                    <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>
+                                      <span style={{color:'var(--red)'}}>✗ Extension declined</span>
+                                      {' for '}{_dt?.title||r.task_id}
+                                    </div>
+                                    <div style={{fontSize:12,color:'var(--t2)'}}>
+                                      You asked to move it to {r.requested_due_date}
+                                      {r.decided_by_name?' · declined by '+r.decided_by_name:''}
+                                      {r.decided_at?' on '+String(r.decided_at).slice(0,10):''}
+                                    </div>
+                                    {r.decision_note&&<div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>Their note: {r.decision_note}</div>}
+                                  </div>
+                                )
+                              })}
+                              {actionNeeded.length===0&&declinedExt.length===0
+                                ? <div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing needs your attention</div>
+                                : actionNeeded.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)}
+                            </>))}
                           {renderSection('wk-todo', '📋 To Do', toDo.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
