@@ -3303,6 +3303,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // Deliberately separate from `selected`: an occurrence is a dated
   // snapshot, the task row is the live template. Conflating the two is
   // exactly the bug this fixes.
+  // TASKCARD-TODAY-ALL-V1: THE org day for every TaskCard in this component.
+  // Hoisted here because orgTz is a TasksView prop and therefore in scope at all 28
+  // call sites, and because the three branch-local copies this replaces were all
+  // UNGUARDED -- they called orgToday(orgTz) directly -- and orgToday(null) silently
+  // returns UTC (F14-ORGDAY). Threading the prop from those would have spread the
+  // bug Patch D removed from the Dashboard into every card in three role branches.
+  // Null until the timezone resolves: cards then fall back to the anchor with a grey
+  // block, which is briefly stale rather than confidently wrong.
+  const _today = orgTz ? orgToday(orgTz) : null
   const [selectedOcc, setSelectedOcc] = useState(null)
   const [archiveOutcome, setArchiveOutcome] = useState('')
   // TASK-REGISTER-V1: collapsed by default -- the register is a reference surface,
@@ -5695,7 +5704,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               })()}
               {filter!=='all' ? (
                     // Flat list when specific filter selected
-                    <div>{filtered.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>:filtered.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>
+                    <div>{filtered.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No tasks here</div></div>:filtered.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)}</div>
                   ) : (()=>{
                     const byDate = (a,b) => new Date(a.due_date||'9999')-new Date(b.due_date||'9999')
 
@@ -5711,7 +5720,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       // orgTz GUARDED: orgToday(null) silently returns UTC (F14-ORGDAY), and
                       // hoisting an unguarded call would spread that to a second section. An
                       // unresolved timezone yields one-offs only -- briefly short, never wrong.
-                      const _today = orgTz ? orgToday(orgTz) : null
                       const recurringInWin = _today ? recurring.filter(t=>recurringDueNow(t,_today)) : []
                       // To Do answers "what do I have to do today", so a recurring task in its
                       // window belongs here as well as in Recurring. SAME status filter on both
@@ -5725,7 +5733,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {renderSection('wk-action', (actionNeeded.length>0?'🔴 ':'')+'Action Needed — Sent Back', actionNeeded.length,
                             {background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12},
                             actionNeeded.length>0?'var(--red)':'var(--text)',
-                            (actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            (actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('wk-todo', '📋 To Do', toDo.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
@@ -5748,7 +5756,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           })()}
                           {renderSection('wk-submitted', '⏳ Submitted — Awaiting Review', submitted.length,
                             {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
-                            (submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            (submitted.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>Nothing submitted yet</div>:submitted.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                         </div>
                       )
                     }
@@ -5770,20 +5778,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         <div>
                           {renderSection('sv-review', '🔍 Needs My Review', needsReview.length,
                             {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
-                            (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('sv-self', '👤 Self-Tasks', mySelfTasks.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                            (mySelfTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:mySelfTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            (mySelfTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:mySelfTasks.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('sv-mine', '📋 Assigned Tasks', myTasks.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:(
                               <div>
                                 {renderSection('sv-mine-oneoff', '📋 One-off', myTasksOneOff.length,
                                   {marginBottom:10}, 'var(--t2)',
-                                  (myTasksOneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksOneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                  (myTasksOneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksOneOff.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                                 {renderSection('sv-mine-recurring', '🔁 Recurring', myTasksRecurring.length,
                                   {marginBottom:0}, 'var(--t2)',
-                                  (myTasksRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksRecurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                  (myTasksRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksRecurring.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                               </div>
                             )))}
                           {(()=>{
@@ -5791,7 +5799,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             // following up - they are the named approver, or they created it.
                             // Three sub-groups preserve the Point 3 behaviour (recurring due now
                             // vs scheduled) inside the parent rather than as siblings.
-                            const _today = orgToday(orgTz)
                             const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
                             const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
                             return renderSection('sv-others', '📤 Tasks Assigned to Others', iAssigned.length,
@@ -5800,13 +5807,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                 <div>
                                   {renderSection('sv-others-oneoff', '📋 One-off', oneOff.length,
                                     {marginBottom:10}, 'var(--t2)',
-                                    (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                    (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:oneOff.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                                   {renderSection('sv-others-recurring', '🔁 Recurring', recurringInWin.length,
                                     {marginBottom:10}, 'var(--t2)',
-                                    (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                    (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                                   {renderSection('sv-others-scheduled', '🕓 Scheduled — not due yet', recurringSched.length,
                                     {marginBottom:0}, 'var(--t2)',
-                                    (recurringSched.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None scheduled</div>:recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                    (recurringSched.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None scheduled</div>:recurringSched.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                                 </div>
                               )))
                           })()}
@@ -5831,20 +5838,20 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         <div>
                           {renderSection('mg-review', '🔍 Needs My Review', needsReview.length,
                             {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
-                            (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('mg-self', '👤 Self-Tasks', mySelfTasks.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                            (mySelfTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:mySelfTasks.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            (mySelfTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:mySelfTasks.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('mg-mine', '📋 Assigned Tasks', myTasks.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:(
                               <div>
                                 {renderSection('mg-mine-oneoff', '📋 One-off', myTasksOneOff.length,
                                   {marginBottom:10}, 'var(--t2)',
-                                  (myTasksOneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksOneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                  (myTasksOneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksOneOff.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                                 {renderSection('mg-mine-recurring', '🔁 Recurring', myTasksRecurring.length,
                                   {marginBottom:0}, 'var(--t2)',
-                                  (myTasksRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksRecurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                  (myTasksRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myTasksRecurring.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                               </div>
                             )))}
                           {(()=>{
@@ -5852,7 +5859,6 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             // following up - they are the named approver, or they created it.
                             // Three sub-groups preserve the Point 3 behaviour (recurring due now
                             // vs scheduled) inside the parent rather than as siblings.
-                            const _today = orgToday(orgTz)
                             const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
                             const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
                             return renderSection('mg-others', '📤 Tasks Assigned to Others', iAssigned.length,
@@ -5861,13 +5867,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                 <div>
                                   {renderSection('mg-others-oneoff', '📋 One-off', oneOff.length,
                                     {marginBottom:10}, 'var(--t2)',
-                                    (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:oneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                    (oneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:oneOff.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                                   {renderSection('mg-others-recurring', '🔁 Recurring', recurringInWin.length,
                                     {marginBottom:10}, 'var(--t2)',
-                                    (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                    (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                                   {renderSection('mg-others-scheduled', '🕓 Scheduled — not due yet', recurringSched.length,
                                     {marginBottom:0}, 'var(--t2)',
-                                    (recurringSched.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None scheduled</div>:recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                    (recurringSched.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None scheduled</div>:recurringSched.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                                 </div>
                               )))
                           })()}
@@ -5895,51 +5901,50 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       <div>
                         {renderSection('ca-review', '🔍 Needs My Review', needsReview.length,
                           {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
-                          (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                         {attention.length>0&&renderSection('ca-attention', '⚠️ Needs Attention — Overdue & Escalated', attention.length,
                           {background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}, 'var(--red)',
-                          attention.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
+                          attention.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>))}
                         {renderSection('ca-mine', '👤 Self-Tasks', myOwn.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                          (myOwn.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:myOwn.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          (myOwn.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:myOwn.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                         {renderSection('ca-assigned-me', '📋 Assigned Tasks', myAssigned.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (myAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:(
                             <div>
                               {renderSection('ca-assigned-me-oneoff', '📋 One-off', myAssignedOneOff.length,
                                 {marginBottom:10}, 'var(--t2)',
-                                (myAssignedOneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myAssignedOneOff.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                (myAssignedOneOff.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myAssignedOneOff.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                               {renderSection('ca-assigned-me-recurring', '🔁 Recurring', myAssignedRecurring.length,
                                 {marginBottom:0}, 'var(--t2)',
-                                (myAssignedRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myAssignedRecurring.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                (myAssignedRecurring.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>None</div>:myAssignedRecurring.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                             </div>
                           )))}
                         {renderSection('ca-assigned', '📤 Tasks I Assigned', iAssigned.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
                             <div>
-                              {assignedToMgr.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3B82F6',display:'inline-block'}}/> To Managers ({assignedToMgr.length})</div>{assignedToMgr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
-                              {assignedToSup.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#10B981',display:'inline-block'}}/> To Supervisors ({assignedToSup.length})</div>{assignedToSup.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
-                              {assignedToWkr.length>0&&<div><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#6B7280',display:'inline-block'}}/> To Staff ({assignedToWkr.length})</div>{assignedToWkr.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)}</div>}
+                              {assignedToMgr.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3B82F6',display:'inline-block'}}/> To Managers ({assignedToMgr.length})</div>{assignedToMgr.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)}</div>}
+                              {assignedToSup.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#10B981',display:'inline-block'}}/> To Supervisors ({assignedToSup.length})</div>{assignedToSup.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)}</div>}
+                              {assignedToWkr.length>0&&<div><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#6B7280',display:'inline-block'}}/> To Staff ({assignedToWkr.length})</div>{assignedToWkr.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)}</div>}
                             </div>
                           )))}
                         {renderSection('ca-oneoff', '📋 One-off Tasks', oneOffAll.length,
                           {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                          (oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                          (oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                         {(()=>{
                           // Point 3: default Tasks view surfaces only recurring tasks in their
                           // current due window; out-of-window ones move to a collapsed Scheduled
                           // section. Nothing is hidden — the filter tabs still reach everything.
-                          const _today = orgToday(orgTz)
                           const recurringInWin = recurringAll.filter(t=>recurringDueNow(t,_today))
                           const recurringSched = recurringAll.filter(t=>!recurringDueNow(t,_today))
                           return (<>
                             {renderSection('ca-recurring', '🔁 Recurring Tasks', recurringInWin.length,
                               {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
-                              (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                              (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                             {recurringSched.length>0&&renderSection('ca-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
                               {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                              recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
+                              recurringSched.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>))}
                           </>)
                         })()}
                       </div>
