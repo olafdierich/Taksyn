@@ -5956,9 +5956,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                     ...recurringInWin.filter(_todoStatus)].sort(byDate)
                       return (
                         <div>
-                          {renderSection('wk-action', (actionNeeded.length>0?'🔴 ':'')+'Action Needed — Sent Back', actionNeeded.length,
+                          {/* DECLINED-ACTION-V1: the box holds returned tasks AND declined extension
+                              requests, so the count, the dot and the title colour all key off
+                              both. "Sent Back" was dropped: it described only half the
+                              contents, and a header reading (0) above a red decline
+                              contradicted itself. */}
+                          {renderSection('wk-action', ((actionNeeded.length+declinedExt.length)>0?'🔴 ':'')+'Action Needed', actionNeeded.length+declinedExt.length,
                             {background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12},
-                            actionNeeded.length>0?'var(--red)':'var(--text)',
+                            (actionNeeded.length+declinedExt.length)>0?'var(--red)':'var(--text)',
                             (<>
                               {declinedExt.map(r=>{
                                 const _dt = activeFiltered.find(t=>t.id===r.task_id)
