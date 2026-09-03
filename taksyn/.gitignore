@@ -10,3 +10,5 @@ src/*.bak-*
 backups/
 src/App.jsx.*
 src/*.bak*
+scripts/.env*
+.vercel/
