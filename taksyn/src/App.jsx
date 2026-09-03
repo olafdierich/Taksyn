@@ -3894,6 +3894,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const loadWorkerTimes = (tid) => { if(!tid||!isConfigured()){ setWorkerTimes([]); return } supabase.from('task_worker_times').select('*').eq('task_id',tid).then(({data})=>{ setWorkerTimes(data||[]) }).catch(()=>{}) }
   useEffect(()=>{ loadWorkerTimes(selected) },[selected])
   const workerTimeIn = (tid) => {
+    // TIMEIN-WINDOW-GATE-V1: refuse BEFORE the upsert. Previously nothing gated this,
+    // so on a not-yet-open cycle the write LANDED and was then hidden by
+    // currentWorkerTimes (which keeps only rows dated inside the current cycle). The
+    // screen still offered Time In, so the worker pressed again and wrote a second
+    // orphan row. Measured on Test Org: two rows at 00:26 and 00:28 for a cycle dated
+    // 5 Sep, neither ever visible. Same window as submission -- if you can submit it,
+    // you can start it. orgTz unresolved: no gate rather than a wrong one (~4018).
+    const _tiTask = tasks.find(x=>x.id===tid)
+    if(_tiTask && orgTz && completionWindow(_tiTask, orgToday(orgTz))) return
     const now=new Date().toISOString()
     const setRow=async(gps)=>{
       // WORKER-TIMES-CYCLE-V2: a new cycle's clock-in must NOT inherit the previous
@@ -4454,7 +4463,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [reminder, setReminder] = useState(null)
   const _remTimer = useRef(null)
   const _showReminder = (msg) => { setReminder(msg); if(_remTimer.current) clearTimeout(_remTimer.current); _remTimer.current = setTimeout(()=>setReminder(null), 5000) }
-  useEffect(()=>{ if(sel && amAssigned && !myTime?.started_at){ _showReminder('\u25B6 Don\u2019t forget to Time In') } }, [sel?.id])
+  // TIMEIN-WINDOW-GATE-V1: do not nag someone to Time In on a cycle that has not
+  // opened -- the button is disabled, so the reminder would be an instruction the
+  // worker cannot follow.
+  useEffect(()=>{ if(sel && amAssigned && !myTime?.started_at && !(orgTz && completionWindow(sel, orgToday(orgTz)))){ _showReminder('\u25B6 Don\u2019t forget to Time In') } }, [sel?.id])
 
   const AssignField = ({ value, onChange, compact=false }) => (
     teamUsers.length > 0 ? (
@@ -4874,7 +4886,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
-                {!myTime?.started_at&&<button className="btn btn-green" style={{flex:1}} onClick={()=>workerTimeIn(sel.id)}>▶ Time In</button>}
+                {/* TIMEIN-WINDOW-GATE-V1: _tiWin is the SAME expression workerTimeIn
+                    guards on. Label and guard must never diverge -- see the
+                    change-both-or-neither comment on the Submit button. */}
+                {!myTime?.started_at&&(()=>{
+                  const _tiWin = (orgTz && sel) ? completionWindow(sel, orgToday(orgTz)) : null
+                  return <button className="btn btn-green" style={{flex:1,opacity:_tiWin?0.55:1}} disabled={!!_tiWin} onClick={()=>workerTimeIn(sel.id)}>{_tiWin?'⏳ Opens '+_tiWin.opensOn:'▶ Time In'}</button>
+                })()}
                 {myTime?.started_at&&!myTime?.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>workerTimeOut(sel.id)}>⏹ Time Out</button>}
               </div>
               {/* F70 - "Not applicable today". OUTSIDE the myTime conditional on purpose:
