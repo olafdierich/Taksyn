@@ -1473,9 +1473,12 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .fb{padding:4px 10px;border-radius:var(--rs);border:1px solid var(--border);background:transparent;color:var(--t2);font-size:11px;font-weight:500;cursor:pointer;font-family:inherit}
 .fb.active{background:var(--brand-lt);border-color:var(--brand);color:var(--brand)}
 .task-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:8px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
-.task-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
-.task-card.critical::before{background:var(--red)}.task-card.high::before{background:#F97316}.task-card.medium::before{background:var(--amber)}.task-card.low::before{background:var(--green)}
-.task-card.task-done{background:rgba(16,185,129,.05);border-color:rgba(16,185,129,.3)}.task-card.task-done::before{background:var(--green)!important}
+.task-card.task-done{background:rgba(16,185,129,.05);border-color:rgba(16,185,129,.3)}
+.tc-row{display:flex;align-items:stretch;gap:12px}
+.tc-date{flex:0 0 58px;margin:-14px 0 -14px -14px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 0}
+.tc-date-d{font-size:22px;font-weight:700;line-height:1.05}
+.tc-date-m{font-size:11px;font-weight:600;margin-top:1px}
+.tc-body{flex:1;min-width:0}
 .task-card:hover{border-color:var(--border2);transform:translateY(-1px);box-shadow:0 2px 12px rgba(0,0,0,.06)}
 .tc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .tc-title{font-size:14px;font-weight:600;flex:1}
@@ -1838,8 +1841,28 @@ const TaskCard = ({ task, onClick, today=null }) => {
     ? (currentOccurrenceDate(task.due_date, task.recurrence, today) || task.due_date)
     : task.due_date
   const isDone = ['awaiting_review','approved','completed'].includes(task.status)
+  // CARD-DATE-BLOCK-V1: the date moves to a block on the left, replacing the 3px
+  // priority stripe. Priority is already stated in words by PriBadge below; due state
+  // was stated nowhere except a date the reader had to compare against today.
+  // Colour needs `today`, absent at 29 of the 37 call sites, so grey is the fallback
+  // rather than a guess -- same discipline as CYCLE-DATE-DISPLAY-V1.
+  const _dParts = String(_cardDate||'').slice(0,10).split('-')
+  const _dOk = _dParts.length===3 && _dParts[0].length===4
+  const _dDay = _dOk ? String(Number(_dParts[2])) : ''
+  const _dMon = _dOk ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(_dParts[1])-1] : ''
+  const _dState = (!today||isDone||!_dOk) ? 'none'
+    : (_cardDate < today ? 'over' : _cardDate === today ? 'now' : 'ahead')
+  const _dStyle = _dState==='over' ? {background:'rgba(239,68,68,.10)',color:'#A32D2D'}
+    : _dState==='now' ? {background:'rgba(245,158,11,.14)',color:'#854F0B'}
+    : {background:'var(--s3)',color:'var(--t2)'}
   return (
     <div className={"task-card "+task.priority+(isDone?' task-done':'')} onClick={onClick}>
+     <div className="tc-row">
+      <div className="tc-date" style={_dStyle} title={_cardDate||''}>
+        <div className="tc-date-d">{_dDay||'\u2014'}</div>
+        <div className="tc-date-m">{_dMon}</div>
+      </div>
+      <div className="tc-body">
       <div className="tc-top">
         <div style={{flex:1}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:5}}>
@@ -1855,7 +1878,10 @@ const TaskCard = ({ task, onClick, today=null }) => {
       </div>
       <div className="tc-meta">
         <PriBadge priority={task.priority} />
-        <span style={{fontSize:11,color:'var(--t2)'}}>📅 {_cardDate}{dueTimeSuffix(task)}</span>
+        {/* CARD-DATE-BLOCK-V1: the date chip is GONE from here -- it is the block on
+            the left. dueTimeSuffix survives on its own because a due TIME cannot be
+            expressed in a day/month block. */}
+        {dueTimeSuffix(task)&&<span style={{fontSize:11,color:'var(--t2)'}}>⏰{dueTimeSuffix(task)}</span>}
         {task.extended_from&&<span title={'Extended from '+task.extended_from+(task.extended_by?' by '+task.extended_by:'')} style={{fontSize:11,color:'#D97706',background:'rgba(217,119,6,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600}}>⇔ Extended</span>}
         {assigneeNames(task)&&<span style={{fontSize:11,color:'var(--t2)'}}>👤 {assigneeNames(task)}</span>}{task.lead_user_name&&<span style={{fontSize:11,color:'var(--brand)',fontWeight:600,marginLeft:6}}>★ {task.lead_user_name}</span>}
         {task.evidence?.length>0&&<span style={{fontSize:11,color:'var(--t2)'}}>📷 {task.evidence.length}</span>}
@@ -1875,6 +1901,8 @@ const TaskCard = ({ task, onClick, today=null }) => {
         return <div className="mini-prog" style={{marginTop:6}}><div className="mini-prog-bar"><div className="mini-prog-fill" style={{width:pct+'%',background:pct===100?'var(--green)':'var(--brand)'}}/></div><span style={{fontSize:10,color:'var(--t2)'}}>{done}/{subs.length} items</span></div>
       })()}
       {task.escalation&&<div className="esc-flag">⚠️ Escalated</div>}
+      </div>
+     </div>
     </div>
   )
 }
