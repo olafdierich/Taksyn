@@ -5656,9 +5656,24 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     // ── WORKER VIEW ──────────────────────────────────
                     if(user.role==='worker') {
                       const actionNeeded = activeFiltered.filter(t=>t.status==='rejected').sort(byDate)
-                      const toDo = activeFiltered.filter(t=>['pending','in_progress','overdue'].includes(t.status)&&isOneOff(t)).sort(byDate)
                       const submitted = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
                       const recurring = activeFiltered.filter(t=>isRecurring(t)).sort(byDate)
+                      // TODO-RECURRING-V1: hoisted from the IIFE below, which declared
+                      // recurringInWin AFTER wk-todo had already rendered and so could not
+                      // share it. One definition now, so To Do and Recurring cannot drift
+                      // apart on what "due now" means.
+                      // orgTz GUARDED: orgToday(null) silently returns UTC (F14-ORGDAY), and
+                      // hoisting an unguarded call would spread that to a second section. An
+                      // unresolved timezone yields one-offs only -- briefly short, never wrong.
+                      const _today = orgTz ? orgToday(orgTz) : null
+                      const recurringInWin = _today ? recurring.filter(t=>recurringDueNow(t,_today)) : []
+                      // To Do answers "what do I have to do today", so a recurring task in its
+                      // window belongs here as well as in Recurring. SAME status filter on both
+                      // halves: without it a recurring task at awaiting_review would sit in To Do
+                      // and Submitted at once.
+                      const _todoStatus = t=>['pending','in_progress','overdue'].includes(t.status)
+                      const toDo = [...activeFiltered.filter(t=>_todoStatus(t)&&isOneOff(t)),
+                                    ...recurringInWin.filter(_todoStatus)].sort(byDate)
                       return (
                         <div>
                           {renderSection('wk-action', (actionNeeded.length>0?'🔴 ':'')+'Action Needed — Sent Back', actionNeeded.length,
@@ -5667,21 +5682,22 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             (actionNeeded.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No rejected tasks</div>:actionNeeded.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('wk-todo', '📋 To Do', toDo.length,
                             {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                            (toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                            (toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {(()=>{
                             // Point 3: default Tasks view surfaces only recurring tasks in their
                             // current due window; out-of-window ones move to a collapsed Scheduled
                             // section. Nothing is hidden — the filter tabs still reach everything.
-                            const _today = orgToday(orgTz)
-                            const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
-                            const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
+                            // TODO-RECURRING-V1: _today and recurringInWin are now declared at the
+                            // top of this branch so wk-todo can share them. Only Scheduled is
+                            // derived here. Do not redeclare either one.
+                            const recurringSched = _today ? recurring.filter(t=>!recurringDueNow(t,_today)) : []
                             return (<>
                               {renderSection('wk-recurring', '🔁 Recurring Tasks', recurringInWin.length,
                                 {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
-                                (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>)))}
+                                (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                               {recurringSched.length>0&&renderSection('wk-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
                                 {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
-                                recurringSched.map(t=><TaskCard key={t.id} task={t} onClick={()=>setSelected(t.id)}/>))}
+                                recurringSched.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>))}
                             </>)
                           })()}
                           {renderSection('wk-submitted', '⏳ Submitted — Awaiting Review', submitted.length,
