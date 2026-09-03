@@ -1761,11 +1761,11 @@ const RISK_INFO = {
   likelihood: {
     title: 'Likelihood',
     rows: [
-      ['5 \u00b7 Certain', '>50% \u2014 expected to occur in most circumstances'],
-      ['4 \u00b7 Likely', '21\u201350% \u2014 will probably occur in most circumstances'],
-      ['3 \u00b7 Possible', '6\u201320% \u2014 might occur at some time'],
-      ['2 \u00b7 Unlikely', '2\u20135% \u2014 could occur at some time'],
-      ['1 \u00b7 Rare', '<2% \u2014 may occur only in exceptional circumstances'],
+      ['5 \u00b7 Certain', '>50% — expected to occur in most circumstances'],
+      ['4 \u00b7 Likely', '21\u201350% — will probably occur in most circumstances'],
+      ['3 \u00b7 Possible', '6\u201320% — might occur at some time'],
+      ['2 \u00b7 Unlikely', '2\u20135% — could occur at some time'],
+      ['1 \u00b7 Rare', '<2% — may occur only in exceptional circumstances'],
     ],
   },
   consequence: {
@@ -1859,7 +1859,7 @@ const TaskCard = ({ task, onClick, today=null }) => {
     <div className={"task-card "+task.priority+(isDone?' task-done':'')} onClick={onClick}>
      <div className="tc-row">
       <div className="tc-date" style={_dStyle} title={_cardDate||''}>
-        <div className="tc-date-d">{_dDay||'\u2014'}</div>
+        <div className="tc-date-d">{_dDay||'—'}</div>
         <div className="tc-date-m">{_dMon}</div>
       </div>
       <div className="tc-body">
@@ -3023,7 +3023,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         <div className="ph-sub">{isWkr?'Hello '+user.name.split(' ')[0]+' — your tasks for today':user.org+(user.industry?' · 🏭 '+user.industry:'')+' · '+visible.length+' tasks'}</div>
       </div>
       <div className="stat-grid">
-        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋" onClick={()=>go('all')}/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Completion" val={occRate===null?'\u2014':occRate+"%"} sub={occRate===null?'loading\u2026':occDone+" of "+occClosed+", 30 days"} color={occRate===null?'#6B7280':occRate>=80?'#10B981':occRate>=50?'#F59E0B':'#EF4444'} bg={occRate===null?'rgba(107,114,128,.1)':occRate>=80?'rgba(16,185,129,.1)':occRate>=50?'rgba(245,158,11,.1)':'rgba(239,68,68,.1)'} icon="✅" onClick={()=>setPage('reports')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Missed" val={missedCount===null?'—':missedCount} sub={missedCount===null?'loading…':'last 30 days'} color={missedCount===null?'#6B7280':missedCount>0?'#EF4444':'#10B981'} bg={missedCount===null?'rgba(107,114,128,.1)':missedCount>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="🔴" onClick={()=>setPage('reports')}/><Stat label="Late" val={lateCount===null?'—':lateCount} sub={lateCount===null?'loading…':'outside grace, 30 days'} color={lateCount===null?'#6B7280':lateCount>0?'#F59E0B':'#10B981'} bg={lateCount===null?'rgba(107,114,128,.1)':lateCount>0?'rgba(245,158,11,.1)':'rgba(16,185,129,.1)'} icon="🟡" onClick={()=>setPage('reports')}/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨" onClick={()=>setPage('users')}/>{isCA&&<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div>}<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">Open Incidents</span><div className="sc-icon" style={{background:openIncidents>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIncidents>0?'#EF4444':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:openIncidents>0?'#EF4444':'#6B7280'}}>{openIncidents}</div><div className="sc-sub">being handled</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incident_register')}><div className="sc-top"><span className="sc-label">Breached</span><div className="sc-icon" style={{background:breachedIncidents>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)',color:breachedIncidents>0?'#EF4444':'#10B981'}}>⏱</div></div><div className="sc-val" style={{color:breachedIncidents>0?'#EF4444':overdueIncidents>0?'#EA580C':'#10B981'}}>{breachedIncidents}<span style={{fontSize:'0.5em',fontWeight:500,color:'var(--t3)'}}> / {overdueIncidents}</span></div><div className="sc-sub">breached / overdue</div></div></>}
+        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋" onClick={()=>go('all')}/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Completion" val={occRate===null?'—':occRate+"%"} sub={occRate===null?'loading\u2026':occDone+" of "+occClosed+", 30 days"} color={occRate===null?'#6B7280':occRate>=80?'#10B981':occRate>=50?'#F59E0B':'#EF4444'} bg={occRate===null?'rgba(107,114,128,.1)':occRate>=80?'rgba(16,185,129,.1)':occRate>=50?'rgba(245,158,11,.1)':'rgba(239,68,68,.1)'} icon="✅" onClick={()=>setPage('reports')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Missed" val={missedCount===null?'—':missedCount} sub={missedCount===null?'loading…':'last 30 days'} color={missedCount===null?'#6B7280':missedCount>0?'#EF4444':'#10B981'} bg={missedCount===null?'rgba(107,114,128,.1)':missedCount>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="🔴" onClick={()=>setPage('reports')}/><Stat label="Late" val={lateCount===null?'—':lateCount} sub={lateCount===null?'loading…':'outside grace, 30 days'} color={lateCount===null?'#6B7280':lateCount>0?'#F59E0B':'#10B981'} bg={lateCount===null?'rgba(107,114,128,.1)':lateCount>0?'rgba(245,158,11,.1)':'rgba(16,185,129,.1)'} icon="🟡" onClick={()=>setPage('reports')}/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨" onClick={()=>setPage('users')}/>{isCA&&<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div>}<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">Open Incidents</span><div className="sc-icon" style={{background:openIncidents>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIncidents>0?'#EF4444':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:openIncidents>0?'#EF4444':'#6B7280'}}>{openIncidents}</div><div className="sc-sub">being handled</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incident_register')}><div className="sc-top"><span className="sc-label">Breached</span><div className="sc-icon" style={{background:breachedIncidents>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)',color:breachedIncidents>0?'#EF4444':'#10B981'}}>⏱</div></div><div className="sc-val" style={{color:breachedIncidents>0?'#EF4444':overdueIncidents>0?'#EA580C':'#10B981'}}>{breachedIncidents}<span style={{fontSize:'0.5em',fontWeight:500,color:'var(--t3)'}}> / {overdueIncidents}</span></div><div className="sc-sub">breached / overdue</div></div></>}
         {isSup&&<><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={done} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Escalated" val={esc} sub={esc>0?'Active':'None'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.1)" icon="⚠️" onClick={()=>go('escalated')}/><Stat label="Overdue" val={overdue} sub="Needs attention" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">My Incidents</span><div className="sc-icon" style={{background:myIncidents>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)',color:myIncidents>0?'#F59E0B':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:myIncidents>0?'#F59E0B':'#6B7280'}}>{myIncidents}</div><div className="sc-sub">assigned to me</div></div></>}
         {isWkr&&<><Stat label="My Tasks" val={visible.filter(t=>!['awaiting_review','approved','completed'].includes(t.status)||isRecurring(t)).length} sub="remaining to do" icon="📋" onClick={()=>go('all')}/><Stat label="Submitted" val={visible.filter(t=>['awaiting_review','approved','completed'].includes(t.status)).length} sub="done or in review" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('awaiting_review')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Complete soon':'All good'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Rejected" val={rejected} sub={rejected>0?'Action needed':'All good'} color={rejected>0?'#EF4444':'#6B7280'} bg={rejected>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)'} icon="✗" onClick={()=>go('rejected')}/></>}
       </div>
@@ -3378,6 +3378,15 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   // reason panel is open (null = closed). Shaped after naPrompt/naReason below, which is
   // the established pattern in this component for "guard, ask why, then proceed".
   const [earlyPrompt, setEarlyPrompt] = useState(null)
+  // EXT-REQUEST-V1: the OPEN extension request for the selected task, or null.
+  // Loaded per task exactly like workerTimes, so it cannot go stale when the
+  // selection changes. Decided and withdrawn rows are deliberately not loaded
+  // here -- this state answers "is there an ask outstanding", nothing more.
+  const [extReq, setExtReq] = useState(null)
+  const [extPanel, setExtPanel] = useState(false)
+  const [extDate, setExtDate] = useState('')
+  const [extReason, setExtReason] = useState('')
+  const [extBusy, setExtBusy] = useState(false)
   const [earlyReason, setEarlyReason] = useState('')
   // F70 - "Not applicable today". naPrompt holds the task id whose reason panel is
   // open (null = closed). naBusy guards the four awaited round trips in
@@ -3930,6 +3939,51 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   const loadWorkerTimes = (tid) => { if(!tid||!isConfigured()){ setWorkerTimes([]); return } supabase.from('task_worker_times').select('*').eq('task_id',tid).then(({data})=>{ setWorkerTimes(data||[]) }).catch(()=>{}) }
   useEffect(()=>{ loadWorkerTimes(selected) },[selected])
+  // EXT-REQUEST-V1: same shape as loadWorkerTimes above -- loader plus an effect
+  // keyed on `selected`. maybeSingle() because ter_one_open_per_task guarantees
+  // at most one open row per task; .single() would throw on zero, which is the
+  // normal case.
+  const loadExtReq = (tid) => {
+    if(!tid || !isConfigured()){ setExtReq(null); return }
+    supabase.from('task_extension_requests').select('*')
+      .eq('task_id',tid).eq('status','open').maybeSingle()
+      .then(({data})=>{ setExtReq(data||null) }).catch(()=>{ setExtReq(null) })
+  }
+  useEffect(()=>{ loadExtReq(selected); setExtPanel(false); setExtDate(''); setExtReason('') },[selected])
+  // Writes the ask. The database is the real guard -- ter_forward_chk refuses a
+  // date on or before the current one and ter_one_open_per_task refuses a second
+  // open ask -- so .select() is used to confirm the row LANDED. PostgREST returns
+  // 200 with error null when RLS blocks a write, so a silent failure here would
+  // otherwise look like success.
+  const raiseExtRequest = async (t) => {
+    if(!t || !extDate || !extReason.trim() || extBusy) return
+    setExtBusy(true)
+    const { data, error } = await supabase.from('task_extension_requests').insert({
+      task_id: t.id, org: t.org,
+      current_due_date: t.due_date || null,
+      requested_due_date: extDate,
+      reason: extReason.trim(),
+      requested_by: user.id, requested_by_name: user.name
+    }).select()
+    setExtBusy(false)
+    if(error || !data || !data.length){
+      alert('Could not send the request: ' + (error?.message || 'no row was written'))
+      return
+    }
+    setExtReq(data[0]); setExtPanel(false); setExtDate(''); setExtReason('')
+  }
+  // Withdrawing releases the partial index, so the worker can ask again with a
+  // different date. The withdrawn row is KEPT -- every ask stays on the record.
+  const withdrawExtRequest = async () => {
+    if(!extReq || extBusy) return
+    setExtBusy(true)
+    const { data, error } = await supabase.from('task_extension_requests')
+      .update({ status:'withdrawn', decided_at:new Date().toISOString() })
+      .eq('id', extReq.id).select()
+    setExtBusy(false)
+    if(error || !data || !data.length){ alert('Could not withdraw: ' + (error?.message || 'no row was updated')); return }
+    setExtReq(null)
+  }
   const workerTimeIn = (tid) => {
     // TIMEIN-WINDOW-GATE-V1: refuse BEFORE the upsert. Previously nothing gated this,
     // so on a not-yet-open cycle the write LANDED and was then hidden by
@@ -4883,7 +4937,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       )}
       {sel ? (
         <div className="anim">
-          <button className="back-btn" onClick={()=>{ if(amAssigned && myTime?.started_at && !myTime?.completed_at) _showReminder('\u23F9 Still clocked in \u2014 don\u2019t forget to Time Out & Submit'); setSelected(null);setShowDeleteConfirm(false);setDeleteScope('') }}><IC n="x" s={14}/> {showArchive?'Back to Archive':'Back to Tasks'}</button>
+          <button className="back-btn" onClick={()=>{ if(amAssigned && myTime?.started_at && !myTime?.completed_at) _showReminder('\u23F9 Still clocked in — don\u2019t forget to Time Out & Submit'); setSelected(null);setShowDeleteConfirm(false);setDeleteScope('') }}><IC n="x" s={14}/> {showArchive?'Back to Archive':'Back to Tasks'}</button>
           <div className="detail-header">
             <div style={{flex:1}}>
               <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
@@ -4916,6 +4970,43 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Duration</div>
                   <div style={{fontSize:15,fontWeight:800,color:'var(--t1)'}}>{fmtDuration(myTime?.started_at,myTime?.completed_at)}</div>
                 </div>
+              )}
+            </div>
+          )}
+          {/* EXT-REQUEST-V1: one-off tasks only. A recurring task's due_date is the
+              ANCHOR its cycle walks count from, so extending it would move every
+              future cycle -- not an extension, a schedule change. */}
+          {amAssigned&&isOneOff(sel)&&sel.due_date&&!['approved','completed'].includes(sel.status)&&(
+            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>More time</div>
+              {extReq ? (
+                <div>
+                  <div style={{fontSize:13,marginBottom:6}}>
+                    <span style={{fontWeight:700,color:'#D97706'}}>⏳ Awaiting a decision</span>
+                    {' — you asked to move this to '}<strong>{extReq.requested_due_date}</strong>
+                  </div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Your reason: {extReq.reason}</div>
+                  <button className="btn" onClick={withdrawExtRequest} disabled={extBusy}>Withdraw request</button>
+                </div>
+              ) : extPanel ? (
+                <div>
+                  <div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>
+                    Currently due {sel.due_date}. Ask your approver for a later date and say why.
+                  </div>
+                  <input type="date" className="form-input" value={extDate} min={sel.due_date}
+                    onChange={e=>setExtDate(e.target.value)} style={{marginBottom:8}}/>
+                  <textarea value={extReason} onChange={e=>setExtReason(e.target.value)}
+                    placeholder="Why do you need more time?"
+                    style={{width:'100%',minHeight:60,padding:8,boxSizing:'border-box',fontSize:13,marginBottom:8}}/>
+                  <div style={{display:'flex',gap:8}}>
+                    <button className="btn btn-primary" style={{flex:1}}
+                      disabled={extBusy||!extReason.trim()||!extDate||extDate<=sel.due_date}
+                      onClick={()=>raiseExtRequest(sel)}>Send request</button>
+                    <button className="btn" style={{flex:1}} onClick={()=>{setExtPanel(false);setExtDate('');setExtReason('')}}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="btn" onClick={()=>setExtPanel(true)}>⏳ Request more time</button>
               )}
             </div>
           )}
@@ -6568,8 +6659,8 @@ function ReviewView({ user }) {
                 <tr key={o.id}>
                   <td style={td}>{taskById[o.task_id]?.title || o.task_id}</td>
                   <td style={td}>{o.occurrence_date}</td>
-                  <td style={td}>{o.na_by_name || '\u2014'}</td>
-                  <td style={td}>{o.na_reason || '\u2014'}</td>
+                  <td style={td}>{o.na_by_name || '—'}</td>
+                  <td style={td}>{o.na_reason || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -6822,10 +6913,10 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       const doneOn=orgDayOf(o.at, orgTimezone)||''
       const late=!!(doneOn&&o.status==='completed'&&doneOn>_recurPlusDays(o.d,grace))
       const tip=o.status===OCC_NOT_APPLICABLE
-        ? 'Cycle '+o.d+' \u2014 not applicable'
+        ? 'Cycle '+o.d+' — not applicable'
         : o.status==='missed'
-        ? 'Cycle '+o.d+' \u2014 missed'
-        : 'Cycle '+o.d+(doneOn&&doneOn!==o.d?' \u2014 completed '+doneOn:' \u2014 completed')+(late?' (outside grace window)':'')+(o.by?' by '+o.by:'')
+        ? 'Cycle '+o.d+' — missed'
+        : 'Cycle '+o.d+(doneOn&&doneOn!==o.d?' — completed '+doneOn:' — completed')+(late?' (outside grace window)':'')+(o.by?' by '+o.by:'')
       return {...o,late,tip}
     })
     return {title:t.title||t.id,rec:t.recurrence,cells,
@@ -8830,7 +8921,7 @@ function SubscriptionsView({ user, setPage }) {
           <div key={r.id} style={{padding:'10px 12px',borderRadius:6,marginBottom:8,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
             <div style={{fontSize:14,fontWeight:700,marginBottom:3}}>
               <OrgLink orgId={r.org}/>
-              <span style={{fontWeight:400,color:'var(--t2)'}}> &middot; {planTier(r.current_plan)||'\u2014'} &rarr; {planTier(r.requested_plan)}</span>
+              <span style={{fontWeight:400,color:'var(--t2)'}}> &middot; {planTier(r.current_plan)||'—'} &rarr; {planTier(r.requested_plan)}</span>
             </div>
             <div style={{fontSize:12,color:'var(--t2)'}}>{r.reason}</div>
             <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>Raised {new Date(r.requested_at).toLocaleDateString('en-AU')} &middot; open the organisation to approve or decline</div>
@@ -11661,7 +11752,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                 <div className="form-field"><label className="form-label">ABN / Business Number</label><input className="form-input" placeholder="12 345 678 901" {...fld('abn')}/></div>
               </div>
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Industries</label><input className="form-input" {...fld("industry")} value={orgIndustryNames.length?orgIndustryNames.join(' \u00b7 '):(form.industry||'\u2014')} disabled readOnly/><div style={{fontSize:12,color:"var(--t2)",marginTop:4}}>Every service your organisation runs, primary first. These decide which incident categories you get — contact support to add or change one.</div></div>
+                <div className="form-field"><label className="form-label">Industries</label><input className="form-input" {...fld("industry")} value={orgIndustryNames.length?orgIndustryNames.join(' \u00b7 '):(form.industry||'—')} disabled readOnly/><div style={{fontSize:12,color:"var(--t2)",marginTop:4}}>Every service your organisation runs, primary first. These decide which incident categories you get — contact support to add or change one.</div></div>
                 <div className="form-field"><label className="form-label">Website</label><input className="form-input" placeholder="https://example.com" {...fld('website')}/></div>
               </div>
               <div className="form-field"><label className="form-label">Timezone</label><select className="form-input" {...fld('timezone')}><option value="">— Select timezone —</option>{TIMEZONES.map(tz=><option key={tz} value={tz}>{tz==='UTC'?'UTC (Coordinated Universal Time)':tz.split('/').pop().replace(/_/g,' ')+' — '+tz}</option>)}</select></div>
@@ -11708,12 +11799,12 @@ function CompanySettingsView({ user, onSettingsSaved }) {
             return (
               <>
                 <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:10}}>
-                  <span style={{fontSize:12,fontWeight:700,letterSpacing:'.4px',textTransform:'uppercase',padding:'3px 12px',borderRadius:6,color:t?.color||'var(--t2)',background:(t?.color||'#888')+'18',border:'1px solid '+((t?.color||'#888')+'30')}}>{tierName||'\u2014'}</span>
+                  <span style={{fontSize:12,fontWeight:700,letterSpacing:'.4px',textTransform:'uppercase',padding:'3px 12px',borderRadius:6,color:t?.color||'var(--t2)',background:(t?.color||'#888')+'18',border:'1px solid '+((t?.color||'#888')+'30')}}>{tierName||'—'}</span>
                   {t&&<span style={{fontSize:13,color:'var(--t2)'}}>{t.base}/mo base &middot; {t.perUser} per user</span>}
                 </div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
                   <span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:overSeats?'rgba(239,68,68,.1)':'var(--s3)',color:overSeats?'var(--red)':'var(--t2)',fontWeight:600}}>
-                    Seats: {subSeats==null?'\u2014':subSeats}{Number.isFinite(maxSeats)?' of '+maxSeats:(t?' of '+t.users:'')}
+                    Seats: {subSeats==null?'—':subSeats}{Number.isFinite(maxSeats)?' of '+maxSeats:(t?' of '+t.users:'')}
                   </span>
                   {t&&<span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'var(--s3)',color:'var(--t2)'}}>{t.retention} retention</span>}
                   {t&&<span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'var(--s3)',color:'var(--t2)'}}>{t.storage}</span>}
@@ -11837,7 +11928,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                     )}
                     {subConfirm&&(
                       <div style={{padding:'10px 12px',borderRadius:6,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
-                        <div style={{fontSize:13,marginBottom:8}}>Move <strong>{form.name||'this organisation'}</strong> from <strong>{tierName||'\u2014'}</strong> to <strong>{planTier(subNew)}</strong>?</div>
+                        <div style={{fontSize:13,marginBottom:8}}>Move <strong>{form.name||'this organisation'}</strong> from <strong>{tierName||'—'}</strong> to <strong>{planTier(subNew)}</strong>?</div>
                         <div style={{display:'flex',gap:6}}>
                           <button className="btn btn-primary btn-sm" disabled={subBusy} onClick={subChangePlan}>{subBusy?'Working\u2026':'Confirm'}</button>
                           <button className="btn btn-secondary btn-sm" disabled={subBusy} onClick={()=>setSubConfirm(false)}>Cancel</button>
@@ -11853,7 +11944,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                         <div style={{display:'flex',flexDirection:'column',gap:6}}>
                           {subHist.map(h=>(
                             <div key={h.id} style={{fontSize:12,padding:'6px 10px',borderRadius:5,background:'var(--s3)'}}>
-                              <div><strong>{planTier(h.old_plan)||h.old_plan||'\u2014'} {'\u2192'} {planTier(h.new_plan)||h.new_plan}</strong> <span style={{color:'var(--t2)'}}>&middot; {h.source}</span></div>
+                              <div><strong>{planTier(h.old_plan)||h.old_plan||'—'} {'\u2192'} {planTier(h.new_plan)||h.new_plan}</strong> <span style={{color:'var(--t2)'}}>&middot; {h.source}</span></div>
                               <div style={{color:'var(--t2)'}}>{new Date(h.created_at).toLocaleString()}{h.note?' \u00b7 '+h.note:''}</div>
                             </div>
                           ))}
@@ -12357,7 +12448,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                 )
               })}
 
-              {/* IND: adding an industry here is gone \u2014 see the Industries
+              {/* IND: adding an industry here is gone — see the Industries
                   button on the Organisations screen. Roles below are unaffected. */}
             </div>
           )}
@@ -14503,7 +14594,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
                   <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>{t.users}</span>
                   <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'var(--s3)',color:'var(--t2)'}}>{t.retention}</span>
                   <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'var(--s3)',color:'var(--t2)'}}>{t.storage}</span>
-                  {t.images!=='\u2014'&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'var(--s3)',color:'var(--t2)'}}>{t.images}</span>}
+                  {t.images!=='—'&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:'var(--s3)',color:'var(--t2)'}}>{t.images}</span>}
                 </div>
                 <ul style={{margin:0,padding:'0 0 0 16px',fontSize:12,color:'var(--t2)',lineHeight:1.7}}>
                   {t.features.map((f,i)=><li key={i}>{f}</li>)}
@@ -17964,7 +18055,7 @@ function IncidentRegisterView({ user, setPage }) {
   const rowData = (i) => {
     const ac = actionCounts[i.id]||{open:0,total:0}
     return {
-      ref:i.ref, date:fmtDay(i.occurred_at), title:(i.title||"\u2014"), category:(categoryLabels[i.category]||i.category),
+      ref:i.ref, date:fmtDay(i.occurred_at), title:(i.title||"—"), category:(categoryLabels[i.category]||i.category),
       severity:`${i.severity} ${(INC_SEVERITY_CFG[i.severity]||{}).label||''}`.trim(),
       status:(INC_STATUS_CFG[i.status]||{}).label||i.status,
       affected:i.affected_type||'', assigned:names[i.assigned_to]||i.assigned_to_name||'',
@@ -18832,7 +18923,7 @@ function IncidentsAdminView({ user, setPage }) {
           if (tk && tk.status !== 'approved') {
             const note = {
               id: Date.now()+'', author: user.name, authorId: user.id,
-              text: 'Withdrawn \u2014 the corrective action on ' + (sel.ref || 'this incident') +
+              text: 'Withdrawn — the corrective action on ' + (sel.ref || 'this incident') +
                     ' was voided. Reason: ' + reason.trim() +
                     '. No work is required; approve to close this task.',
               timestamp: new Date().toISOString(), edits: [],
