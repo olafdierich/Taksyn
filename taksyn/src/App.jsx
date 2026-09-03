@@ -3972,6 +3972,53 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     }
     setExtReq(data[0]); setExtPanel(false); setExtDate(''); setExtReason('')
   }
+  // EXT-DECIDE-V1: the approver's note. Required on decline, optional on approve --
+  // "no" is the answer a worker will want explained.
+  const [extNote, setExtNote] = useState('')
+  // Approve: request row FIRST, then the task. update() does not return its write
+  // result, so ordering task-first would promise a guarantee it cannot give. This
+  // way a failed task write leaves an approved request against an unchanged date --
+  // visible and correctable, rather than silent.
+  //
+  // The due-date change goes through update() rather than a direct write so it
+  // flows through the existing extension-detection block, which stamps
+  // extended_from/at/by and writes the audit entry carrying both dates. One
+  // mechanism. Note that block only stamps when the OLD date had already passed,
+  // so an EARLY approved extension shows no chip -- ruled 3 Sep, the request row
+  // is the stronger record.
+  const approveExtRequest = async () => {
+    if(!extReq || !sel || extBusy) return
+    setExtBusy(true)
+    const { data, error } = await supabase.from('task_extension_requests').update({
+      status:'approved', decided_by:user.id, decided_by_name:user.name,
+      decided_at:new Date().toISOString(), decision_note: extNote.trim() || null
+    }).eq('id', extReq.id).eq('status','open').select()
+    setExtBusy(false)
+    if(error || !data || !data.length){
+      alert('Could not approve: ' + (error?.message || 'the request was already decided'))
+      loadExtReq(sel.id); return
+    }
+    const _newDate = extReq.requested_due_date
+    setExtReq(null); setExtNote('')
+    update(sel.id, { due_date: _newDate })
+  }
+  // Decline leaves the task alone: the deadline stands. The row records that the
+  // ask was made and refused, and by whom.
+  const declineExtRequest = async () => {
+    if(!extReq || extBusy) return
+    if(!extNote.trim()){ alert('Please give a reason for declining.'); return }
+    setExtBusy(true)
+    const { data, error } = await supabase.from('task_extension_requests').update({
+      status:'declined', decided_by:user.id, decided_by_name:user.name,
+      decided_at:new Date().toISOString(), decision_note: extNote.trim()
+    }).eq('id', extReq.id).eq('status','open').select()
+    setExtBusy(false)
+    if(error || !data || !data.length){
+      alert('Could not decline: ' + (error?.message || 'the request was already decided'))
+      loadExtReq(sel?.id); return
+    }
+    setExtReq(null); setExtNote('')
+  }
   // Withdrawing releases the partial index, so the worker can ask again with a
   // different date. The withdrawn row is KEPT -- every ask stays on the record.
   const withdrawExtRequest = async () => {
@@ -4976,6 +5023,29 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
           {/* EXT-REQUEST-V1: one-off tasks only. A recurring task's due_date is the
               ANCHOR its cycle walks count from, so extending it would move every
               future cycle -- not an extension, a schedule change. */}
+          {/* EXT-DECIDE-V1: the approver's view of an open request. Sits above the
+              worker's own panel; the two are mutually exclusive in practice because
+              amAssigned and canReviewTask exclude each other for the same person. */}
+          {!amAssigned&&extReq&&canReviewTask(sel)&&(
+            <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.35)',borderRadius:10,padding:14,marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Extension requested</div>
+              <div style={{fontSize:13,marginBottom:6}}>
+                <strong>{extReq.requested_by_name||'A worker'}</strong>
+                {' asked to move this from '}<strong>{extReq.current_due_date||'—'}</strong>
+                {' to '}<strong>{extReq.requested_due_date}</strong>
+              </div>
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Their reason: {extReq.reason}</div>
+              <textarea value={extNote} onChange={e=>setExtNote(e.target.value)}
+                placeholder="Note (required if declining)"
+                style={{width:'100%',minHeight:52,padding:8,boxSizing:'border-box',fontSize:13,marginBottom:8}}/>
+              <div style={{display:'flex',gap:8}}>
+                <button className="btn btn-primary" style={{flex:1}} disabled={extBusy}
+                  onClick={approveExtRequest}>Approve new date</button>
+                <button className="btn btn-danger" style={{flex:1}} disabled={extBusy}
+                  onClick={declineExtRequest}>Decline</button>
+              </div>
+            </div>
+          )}
           {amAssigned&&isOneOff(sel)&&sel.due_date&&!['approved','completed'].includes(sel.status)&&(
             <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>More time</div>
