@@ -6890,7 +6890,7 @@ function ReviewView({ user }) {
   )
 }
 
-function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=null }) {
+function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=null, orgSLA=DEFAULT_SLA }) {
   const [reportType, setReportType] = useState('compliance')
   const [period, setPeriod] = useState('weekly')
   const [teamsList, setTeamsList] = useState([])
@@ -7063,7 +7063,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   const pendingReview=filteredPt.filter(t=>t.status==='awaiting_review').length
   const reviewed=filteredPt.filter(t=>['approved','rejected'].includes(t.status)).length
   const totalToReview=filteredPt.filter(t=>['awaiting_review','approved','rejected'].includes(t.status)).length
-  const reviewedInTime=filteredPt.filter(t=>t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000).length
+  const reviewedInTime=filteredPt.filter(t=>t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=getSLAMinutes(t.priority,orgSLA)*60000).length
   const reviewedInTimePct=pct(reviewedInTime,totalToReview)
   const doneOnDay=filteredPt.filter(t=>t.due_date&&t.completed_at&&new Date(t.completed_at).toDateString()===new Date(t.due_date).toDateString()).length
   const tasksDueToday=filteredPt.filter(t=>t.due_date).length
@@ -7134,7 +7134,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
         if (t.started_at && t.completed_at) workerMap[key].avgMins.push((new Date(t.completed_at)-new Date(t.started_at))/60000)
       }
       if (['awaiting_review','approved','rejected'].includes(t.status)) workerMap[key].toReview++
-      if (t.reviewed_at && t.submitted_at && (new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) workerMap[key].reviewedInTime++
+      if (t.reviewed_at && t.submitted_at && (new Date(t.reviewed_at)-new Date(t.submitted_at))<=getSLAMinutes(t.priority,orgSLA)*60000) workerMap[key].reviewedInTime++
     })
   })
   const workerRows = Object.values(workerMap).sort((a,b) => b.total-a.total)
@@ -13459,7 +13459,7 @@ function ProjectsView({ user }) {
   )
 }
 
-function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, orgMembers: _orgMembersProp=null }) {
+function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, orgMembers: _orgMembersProp=null, orgSLA=DEFAULT_SLA }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
   const [selectedTeam, setSelectedTeam] = useState('all')
@@ -13581,7 +13581,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
       p.slaTotal++
       if(reviewMinutes<=slaMinutes) p.slaOnTime++
     }
-    if(t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=86400000) p.reviewedInTime++
+    if(t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=getSLAMinutes(t.priority,orgSLA)*60000) p.reviewedInTime++
   })
 
   const memberTeams={}; teamMembers.forEach(m=>{ (memberTeams[m.user_id]=memberTeams[m.user_id]||[]).push(m.team_id) })
