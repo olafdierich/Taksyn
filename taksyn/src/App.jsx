@@ -773,7 +773,7 @@ const workingDaysBetween = (start, end) => {
   return count
 }
 
-const computeAlerts = (tasks, user, leaveRecords=[]) => {
+const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA) => {
   const now = new Date()
   const today = now.toISOString().split('T')[0]
   const alerts = []
@@ -817,7 +817,7 @@ const computeAlerts = (tasks, user, leaveRecords=[]) => {
 
     // Alert 4: SLA warning — review deadline approaching or breached
     if(t.status==='awaiting_review'&&t.submitted_at&&['supervisor','manager','client_admin'].includes(user.role)) {
-      const sla = getSLAStatus(t, null)
+      const sla = getSLAStatus(t, orgSLA)  // ALERTS-ORGSLA-V1: null fell through to DEFAULT_SLA, ignoring org settings
       if(sla?.status==='breached') {
         alerts.push({ type:'sla_breach', task:t, msg:`Response time exceeded: "${t.title}" — review overdue (${t.priority} priority)`, level:'red' })
       } else if(sla?.status==='warning') {
@@ -3030,7 +3030,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
       {overdue>0&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Escalations</div><div className="esc-banner-sub">View escalation queue</div></div><button className="btn btn-danger btn-sm" onClick={()=>setPage('escalations')}>View</button></div>}
       {/* Smart Alerts */}
       {(()=>{
-        const smartAlerts = computeAlerts(tasks, user, leaveRecords)
+        const smartAlerts = computeAlerts(tasks, user, leaveRecords, orgSLA)
         if(smartAlerts.length===0) return null
         return (
           <div className="section" style={{marginBottom:14,border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.03)'}}>
