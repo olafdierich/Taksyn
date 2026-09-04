@@ -4218,7 +4218,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     }
     const updatedComments = comment.trim() ? [...(task.comments||[]), user.name+': '+comment.trim()] : task.comments||[]
     const doSubmit = (extra={}) => {
-      update(tid, { status:'awaiting_review', completed_by:user.name, submitted_at:new Date().toISOString(), comments:updatedComments, ...(_bypassWindow && earlyReason.trim() ? { early_completion_reason: earlyReason.trim() } : {}), ...extra })
+      update(tid, { status:'awaiting_review', completed_by:user.name, submitted_at:new Date().toISOString(), reviewed_at:null, comments:updatedComments, ...(_bypassWindow && earlyReason.trim() ? { early_completion_reason: earlyReason.trim() } : {}), ...extra })
       setCelebration(true); setComment(''); if(_bypassWindow) setEarlyReason('')
       // ARCHIVE-ONEOFF-V1: one-off tasks wrote no task_occurrences row, so the
       // Archive - which reads occurrences only - showed recurring work and
@@ -6477,7 +6477,7 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
 
   const resubmit = () => {
     if (note.trim()) saveAmendment()
-    update(sel.id, { status: 'awaiting_review', submitted_at: new Date().toISOString() })
+    update(sel.id, { status: 'awaiting_review', submitted_at: new Date().toISOString(), reviewed_at: null })
     setOpen(false)
     setHasAmendment(false)
   }
@@ -19126,6 +19126,7 @@ function IncidentsAdminView({ user, setPage }) {
             await supabase.from('tasks').update({
               status: 'awaiting_review',
               submitted_at: new Date().toISOString(),
+              reviewed_at: null,   // REVIEWEDAT-RESUBMIT-V1
               comments: [...(parseSafe(tk.comments, []) || []), note],
             }).eq('id', a.task_id)
           }
