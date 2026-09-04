@@ -19432,9 +19432,9 @@ function IncidentsAdminView({ user, setPage }) {
       field('Location', sel.location_text)
       field('Department', sel.department)
       field('Shift', sel.shift)
-      field('Reported by', sel.reported_by_name)
-      field('Assigned to', sel.assigned_to_name)
-      field('Investigator', sel.investigator_name)
+      field('Reported by', names[sel.reported_by]||sel.reported_by_name)
+      field('Assigned to', names[sel.assigned_to]||sel.assigned_to_name)
+      field('Investigator', names[sel.investigator_id]||sel.investigator_name)
       field('Closed by', names[sel.closed_by]||sel.closed_by)
 
       // ---- what happened ----
@@ -19719,7 +19719,7 @@ function IncidentsAdminView({ user, setPage }) {
                 <select className="inp" value={sel.assigned_to||''} disabled={busy}
                   onChange={e=>{
                     const uid=e.target.value; const m=members.find(x=>x.user_id===uid)
-                    patchIncident({ assigned_to:uid||null, assigned_to_name:m?.name||null, assigned_role:m?.role||null, assigned_at:new Date().toISOString() },
+                    patchIncident({ assigned_to:uid||null, assigned_role:m?.role||null, assigned_at:new Date().toISOString() },
                       sel.assigned_to?'reassigned':'assigned', { from: names[sel.assigned_to]||null, to: m?.name||null })
                   }}
                   style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',marginTop:4}}>
