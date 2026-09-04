@@ -13499,6 +13499,11 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   const naDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status===OCC_NOT_APPLICABLE&&o.d>=_rsStr&&o.d<=_reStr).length
 
   // Build leave day lookup per user
+  // PERF-MISSED-V1: recurring misses only. The miss writer (~20982) filters
+  // on isRecurring, and LIVE holds zero occurrence rows with recurrence
+  // 'once', so there is nothing else to count. A missed one-off is not a
+  // state the system detects - it belongs to the expiry design (v68).
+  const missedDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
   const leaveDaysByUser = {}
   leaveRecords.forEach(l=>{
     if(!leaveDaysByUser[l.user_id]) leaveDaysByUser[l.user_id]=new Set()
@@ -13527,7 +13532,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
       roster: m.roster||[], regularly_rostered: !!m.regularly_rostered,
       total:0, done:0, onTime:0, rejected:0, overdue:0,
       avgMins:[], submitted:0, reviewedInTime:0,
-      clDone:0, clTotal:0, slaTotal:0, slaOnTime:0
+      clDone:0, clTotal:0, slaTotal:0, slaOnTime:0, missed:0
     }
   })
 
@@ -13554,7 +13559,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
 
     const p = peopleMap[resolvedId]
     if (!p) return
-    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
+    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); p.missed+=missedDaysFor(t.id); return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
@@ -13714,6 +13719,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                     ['Completed',p.done,'#10B981'],
                     ['Checklist',p.clTotal>0?pct(p.clDone,p.clTotal)+'%':'—',p.clTotal>0&&pct(p.clDone,p.clTotal)>=80?'#10B981':p.clTotal>0?'#F59E0B':'#6B7280'],
                     ['Rejected',p.rejected,p.rejected>0?'#EF4444':'#6B7280'],
+                    ['Missed',p.missed,p.missed>0?'#EF4444':'#6B7280'],
                     ['Overdue',p.overdue,p.overdue>0?'#EF4444':'#6B7280'],
                     ['Avg Time',fmtAvg(p.avgMins),'#8B5CF6'],
                     ['Response Time Met',p.slaTotal>0?pct(p.slaOnTime,p.slaTotal)+'%':'—',p.slaTotal>0&&pct(p.slaOnTime,p.slaTotal)>=80?'#10B981':'#EF4444'],
