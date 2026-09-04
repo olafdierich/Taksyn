@@ -13627,6 +13627,17 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
       }
     }
   })
+  // CA-APPROVER-SORT-V1: a client admin needs the approver roll-up, not to scroll
+  // every card hunting for panels. Three tiers: biggest review queue first, then
+  // other approvers, then everyone else by volume. Other roles keep the old order -
+  // a worker should not open Performance to their manager's review stats.
+  // Second sort, run after approverMap exists. sort() mutates in place.
+  if(user.role==='client_admin') people.sort((a,b)=>{
+    const q = ((approverMap[b.id]||{}).awaiting||0) - ((approverMap[a.id]||{}).awaiting||0)
+    if(q) return q
+    const r = (approverMap[b.id]?1:0) - (approverMap[a.id]?1:0)
+    return r || (b.total - a.total)
+  })
   const teamMap={}; teamsList.forEach(t=>{ teamMap[t.id]={id:t.id,name:t.name,total:0,done:0} })
   pt.forEach(t=>{
     const tset=new Set()
