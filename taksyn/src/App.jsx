@@ -815,6 +815,18 @@ const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA, occurre
       }
     }
 
+    // ALERTS-ESCALATED-V1: escalated tasks had exactly one home - the Escalations
+    // page, which is being removed in favour of Action Required. Six tasks carry
+    // this status on LIVE right now (Clinic 2, Demo 3, Kemrose 1), so they are
+    // surfaced HERE before that page goes, not after.
+    //
+    // Both representations are checked. The SLA writer (~20899) sets escalation:true
+    // AND status:'escalated' together, but they can diverge, and other readers
+    // (~4576, ~21671) already OR them. One-sided checks are how tasks go missing.
+    if ((t.escalation === true || t.status === 'escalated') &&
+        ['supervisor','manager','client_admin'].includes(user.role)) {
+      alerts.push({ type:'escalated', task:t, msg:`"${t.title}" is escalated - no one has picked it up`, level:'red' })
+    }
     // Alert 4: SLA warning — review deadline approaching or breached
     if(t.status==='awaiting_review'&&t.submitted_at&&['supervisor','manager','client_admin'].includes(user.role)) {
       const sla = getSLAStatus(t, orgSLA)  // ALERTS-ORGSLA-V1: null fell through to DEFAULT_SLA, ignoring org settings
