@@ -4185,7 +4185,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     if(_naAudErr) console.warn('audit_log insert error (N/A):', _naAudErr.message)
     // Reset mirrors the completion reconcile's reset exactly. Direct, not via update().
     const { error:_naRstErr } = await supabase.from('tasks').update(
-      {status:'pending',started_at:null,completed_at:null,submitted_at:null,
+      {status:'pending',started_at:null,completed_at:null,submitted_at:null,reviewed_at:null,
        completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}
     ).eq('id', tid)
     if(_naRstErr) console.warn('task reset after N/A failed - occurrence row IS written:', _naRstErr.message)
@@ -5557,7 +5557,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
           </div>
           <div className="btn-row">
             {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>✏️ Edit</button>}
-            {canReviewTask(sel)&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved'})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
+            {canReviewTask(sel)&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
               {/* Escalate button hidden (path 2): pathway retained in code, not user-reachable */}
@@ -20946,7 +20946,7 @@ export default function App() {
           // design cannot be corrected. On failure we leave the task alone and retry next load.
           const { error:_occErr } = await supabase.from('task_occurrences').upsert({task_id:t.id,org:t.org,occurrence_date:occDate,status:'completed',completed_late:_occLate,completed_by:t.completed_by,completed_by_name:t.completed_by,completed_at:t.completed_at||t.submitted_at||new Date().toISOString(),recurrence:t.recurrence,evidence:taskPhotoIndex(t).filter(p=>p.ts&&orgDayOf(p.ts,orgTimezone)===_occDone)},{onConflict:'task_id,occurrence_date'})
           if(_occErr){ console.warn('task_occurrences upsert failed — reset skipped, will retry next load:', _occErr.message); return }
-          supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
+          supabase.from('tasks').update({status:'pending',started_at:null,completed_at:null,submitted_at:null,reviewed_at:null,completed_by:null,gps_start:null,gps_end:null,evidence:'[]',comments:'[]'}).eq('id',t.id).then(()=>{})
         })
       }
       // Auto-log MISSED recurring occurrences — grace-aware, future-only, insert-if-absent,
