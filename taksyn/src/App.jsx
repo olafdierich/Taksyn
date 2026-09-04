@@ -15125,6 +15125,18 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [generating, setGenerating] = useState(false)
+  // EXT-RESPONSE-SYNC-V1: useState reads its argument ONCE, on first render.
+  // orgSLA arrives from an async fetch (~21401) AFTER this component mounts, so
+  // initialising from it is not enough - the saved values never reach the state
+  // and every pill shows a hardcoded default. Proven: Test Org has
+  // extension_response:240 and monthly_review:20160 saved, and the page showed
+  // 1d and 1 week. The save was always fine; the read-back was not.
+  useEffect(()=>{
+    if(!orgSLA) return
+    setSla({...DEFAULT_SLA, ...orgSLA})
+    if(orgSLA.monthly_review) setReviewSLA(orgSLA.monthly_review)
+    if(orgSLA.extension_response) setExtSLA(orgSLA.extension_response)
+  }, [orgSLA])
 
   const fmtMinutes = m => m<60?m+'m':m<1440?(m/60)+'h':Math.round(m/1440)+'d'
   const PRIORITIES = ['low','medium','high','critical']
