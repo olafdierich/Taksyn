@@ -851,6 +851,12 @@ const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA, occurre
       if (c >= 3) alerts.push({ type:'repeat_miss', msg: nm + ' - ' + c + ' tasks missed in the last 7 days', level:'red' })
     })
   }
+  // ALERTS-SEVERITY-SORT-V1: the render caps at slice(0,5). Repeat-miss alerts are
+  // generated last, so without this a fifth amber review alert would push the red
+  // ones off the list entirely. Severity decides what survives the cap, not
+  // generation order.
+  const _sevRank = { red: 0, amber: 1 }
+  alerts.sort((a, b) => (_sevRank[a.level] ?? 9) - (_sevRank[b.level] ?? 9))
   return alerts
 }
 
