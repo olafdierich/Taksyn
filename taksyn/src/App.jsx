@@ -3380,7 +3380,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [orgsList, setOrgsList] = useState([])
   const [selected, setSelected] = useState(null)
   // Deep-link: dashboard task cards write 'taksyn-open-task'; open it once on mount, then clear.
-  useEffect(()=>{ try{ const _t=sessionStorage.getItem('taksyn-open-task'); if(_t){ setSelected(_t); sessionStorage.removeItem('taksyn-open-task') } }catch(e){} },[])
+  // CAL-OPEN-V1: was mount-only ([]). That works arriving from another page,
+  // but the calendar panel opens OVER whatever page you are on - click a card
+  // while already on Tasks and setPage('tasks') is a no-op, nothing remounts,
+  // and the key was never read. No dep array = runs after every render, and it
+  // is self-limiting because it clears the key on the first read.
+  useEffect(()=>{ try{ const _t=sessionStorage.getItem('taksyn-open-task'); if(_t){ setSelected(_t); sessionStorage.removeItem('taksyn-open-task') } }catch(e){} })
   // Open-hydration: opening a task detail refetches its full row (evidence/subtasks) as ONE single-row select.
   // `selected` is always a scalar task id (never bulk), so this fires exactly one refetch per open.
   useEffect(()=>{ if(selected) loadTaskById(selected) }, [selected])
@@ -21828,7 +21833,7 @@ export default function App() {
                     if(!i.assigned_at) _due = i.assign_due_at
                     else if(!i.root_cause) _due = i.investigate_due_at
                     else _due = i.close_due_at
-                    if(_due) add(orgDayOf(_due,orgTimezone),{k:'incident',t:{ id:i.id, title:(i.ref||i.category||'Incident') }})
+                    if(_due) add(orgDayOf(_due,orgTimezone),{k:'incident',t:{ id:i.id, ref:i.ref, title:(i.ref||i.category||'Incident') }})
                   })
                   // One definition of a day's cards, used by BOTH the drill-down
                   // view and the Today view, so the two cannot drift apart.
@@ -21838,7 +21843,20 @@ export default function App() {
                     return (
                       <div style={{display:'flex',flexDirection:'column',gap:8}}>
                         {_its.map((it,i)=>(
-                          <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',
+                          <div key={i}
+                            onClick={()=>{
+                              // CAL-OPEN-V1: same sessionStorage deep-link the dashboard
+                              // cards use (~3113 task, ~18391 incident). Readers: ~3383
+                              // wants a task ID, ~18996 wants an incident REF - hence the
+                              // ref carried on the synthetic incident object above.
+                              try{
+                                if(it.k==='incident'){ if(it.t.ref) sessionStorage.setItem('taksyn-open-incident', it.t.ref) }
+                                else sessionStorage.setItem('taksyn-open-task', it.t.id)
+                              }catch(e){}
+                              setShowCalPanel(false)
+                              setPage(it.k==='incident'?'incidents':'tasks')
+                            }}
+                            style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',cursor:'pointer',
                             background:(_tint(it.t)||{}).bg||'transparent',
                             borderLeft:'3px solid '+_kindCol(it)}}>
                             <div style={{fontSize:13,color:'var(--text)',fontWeight:500}}>{it.t.title}</div>
