@@ -15117,10 +15117,26 @@ function SuperAdminAccountView({ user, setUser, darkMode, toggleDarkMode }) {
 
 function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }) {
   const [sla, setSla] = useState(orgSLA || DEFAULT_SLA)
-  const [reviewSLA, setReviewSLA] = useState(10080) // 1 week in minutes
+  // EXT-RESPONSE-V1: both of these now initialise FROM orgSLA. reviewSLA was
+  // useState(10080) unconditionally, so the monthly review value saved to the
+  // database but was never read back - set 2 weeks, save, reload, see 1 week.
+  const [reviewSLA, setReviewSLA] = useState((orgSLA && orgSLA.monthly_review) || 10080)
+  const [extSLA, setExtSLA] = useState((orgSLA && orgSLA.extension_response) || 1440)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [generating, setGenerating] = useState(false)
+  // EXT-RESPONSE-SYNC-V1: useState reads its argument ONCE, on first render.
+  // orgSLA arrives from an async fetch (~21401) AFTER this component mounts, so
+  // initialising from it is not enough - the saved values never reach the state
+  // and every pill shows a hardcoded default. Proven: Test Org has
+  // extension_response:240 and monthly_review:20160 saved, and the page showed
+  // 1d and 1 week. The save was always fine; the read-back was not.
+  useEffect(()=>{
+    if(!orgSLA) return
+    setSla({...DEFAULT_SLA, ...orgSLA})
+    if(orgSLA.monthly_review) setReviewSLA(orgSLA.monthly_review)
+    if(orgSLA.extension_response) setExtSLA(orgSLA.extension_response)
+  }, [orgSLA])
 
   const fmtMinutes = m => m<60?m+'m':m<1440?(m/60)+'h':Math.round(m/1440)+'d'
   const PRIORITIES = ['low','medium','high','critical']
@@ -15128,7 +15144,7 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
 
   const saveSLA = async () => {
     setSaving(true)
-    const settings = {...sla, monthly_review: reviewSLA}
+    const settings = {...sla, monthly_review: reviewSLA, extension_response: extSLA}
     if(isConfigured()) {
       await supabase.from('organisations').update({sla_settings:JSON.stringify(settings)}).eq('name',user.org)
     }
@@ -15212,6 +15228,23 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
         ))}
       </div>
 
+      <div className="section" style={{marginBottom:14}}>
+        <div className="section-title">⏳ Extension Response Time</div>
+        <div style={{fontSize:12,color:'var(--t2)',marginBottom:12,lineHeight:1.6}}>
+          How long an approver has to answer a worker's request for more time. Shorter than a review window on purpose &mdash; the worker is asking because the deadline is close.
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          {[[30,'30m'],[60,'1h'],[240,'4h'],[480,'8h'],[1440,'1d'],[2880,'2d'],[4320,'3d']].map(([mins,label])=>(
+            <button key={mins} onClick={()=>setExtSLA(mins)}
+              style={{fontSize:12,padding:'6px 14px',borderRadius:8,border:'1px solid var(--border)',cursor:'pointer',fontFamily:'inherit',fontWeight:600,
+                background:extSLA===mins?'var(--brand)':'var(--s3)',
+                color:extSLA===mins?'#fff':'var(--t2)'}}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>Current: {fmtMinutes(extSLA)}</div>
+      </div>
       <div className="section" style={{marginBottom:14}}>
         <div className="section-title">📊 Monthly Review Response Time</div>
         <div style={{fontSize:12,color:'var(--t2)',marginBottom:12,lineHeight:1.6}}>
