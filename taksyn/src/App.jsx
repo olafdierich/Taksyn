@@ -773,7 +773,7 @@ const workingDaysBetween = (start, end) => {
   return count
 }
 
-const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA) => {
+const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA, occurrences=null) => {
   const now = new Date()
   const today = now.toISOString().split('T')[0]
   const alerts = []
@@ -826,6 +826,31 @@ const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA) => {
     }
   })
 
+  // ALERTS-REPEATMISS-V1: per-PERSON, so it sits outside the per-task forEach
+  // that produces the four alerts above.
+  //
+  // Missed occurrence rows carry a NULL completed_by_name - nobody did the work,
+  // so there is nobody on the row to name. The name comes from the task instead.
+  //
+  // Fixed 7-day window, NOT the MISSED tile's 30 days: three misses in a week is
+  // a pattern, three in a month is noise. Threshold 3 is a judgement call.
+  if (Array.isArray(occurrences) && ['supervisor','manager','client_admin'].includes(user.role)) {
+    const _rmFrom = new Date(Date.now() - 7*86400000).toISOString().slice(0,10)
+    const _rmWho = {}
+    orgTasks.forEach(t => { _rmWho[t.id] = t.assigned_user_name })
+    const _rmTally = {}
+    occurrences.forEach(o => {
+      if (o.status !== 'missed') return
+      if (o.occurrence_date < _rmFrom) return
+      const nm = _rmWho[o.task_id]
+      if (!nm) return
+      _rmTally[nm] = (_rmTally[nm] || 0) + 1
+    })
+    Object.keys(_rmTally).forEach(nm => {
+      const c = _rmTally[nm]
+      if (c >= 3) alerts.push({ type:'repeat_miss', msg: nm + ' - ' + c + ' tasks missed in the last 7 days', level:'red' })
+    })
+  }
   return alerts
 }
 
@@ -3030,7 +3055,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
       {overdue>0&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Escalations</div><div className="esc-banner-sub">View escalation queue</div></div><button className="btn btn-danger btn-sm" onClick={()=>setPage('escalations')}>View</button></div>}
       {/* Smart Alerts */}
       {(()=>{
-        const smartAlerts = computeAlerts(tasks, user, leaveRecords, orgSLA)
+        const smartAlerts = computeAlerts(tasks, user, leaveRecords, orgSLA, orgOccurrences)
         if(smartAlerts.length===0) return null
         return (
           <div className="section" style={{marginBottom:14,border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.03)'}}>
