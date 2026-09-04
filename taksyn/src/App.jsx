@@ -4220,6 +4220,33 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const doSubmit = (extra={}) => {
       update(tid, { status:'awaiting_review', completed_by:user.name, submitted_at:new Date().toISOString(), comments:updatedComments, ...(_bypassWindow && earlyReason.trim() ? { early_completion_reason: earlyReason.trim() } : {}), ...extra })
       setCelebration(true); setComment(''); if(_bypassWindow) setEarlyReason('')
+      // ARCHIVE-ONEOFF-V1: one-off tasks wrote no task_occurrences row, so the
+      // Archive - which reads occurrences only - showed recurring work and
+      // nothing else. 348 rows on LIVE, zero with recurrence 'once'.
+      //
+      // occurrence_date is the DUE date, never today. The key is
+      // (task_id, occurrence_date): submit -> rejected -> resubmit tomorrow must
+      // update ONE row, not create a second on a different day.
+      //
+      // Fire-and-forget by design. The submission above has already happened and
+      // is never blocked by this write. A frontline worker must not be stopped
+      // from finishing a task because a history row failed to land; the task row
+      // and the audit log still hold the work.
+      if (!isRecurring(task) && task.due_date && isConfigured()) {
+        supabase.from('task_occurrences').upsert({
+          task_id: tid,
+          org: task.org,
+          occurrence_date: task.due_date,
+          status: 'completed',
+          completed_by: user.name,
+          completed_by_name: user.name,
+          completed_at: new Date().toISOString(),
+          recurrence: 'once',
+          evidence: currentCyclePhotos(task, orgTz) || []
+        }, { onConflict: 'task_id,occurrence_date' })
+          .then(({ error }) => { if (error) console.warn('task_occurrences one-off upsert failed - task IS submitted, archive row missing:', error.message) })
+          .catch(e => console.warn('task_occurrences one-off upsert threw:', e && e.message))
+      }
     }
     if (gpsEnabled === false || !navigator.geolocation) { doSubmit(); return }
     navigator.geolocation.getCurrentPosition(
