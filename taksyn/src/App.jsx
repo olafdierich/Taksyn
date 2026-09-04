@@ -13596,6 +13596,37 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     .filter(p=>selectedTeam==='all'||(memberTeams[p.id]||[]).includes(selectedTeam))
     .filter(p=>!_nq||(p.name||'').toLowerCase().includes(_nq))
     .sort((a,b)=>b.total-a.total)
+  // APPROVER-INSET-V1: work this person was responsible for REVIEWING.
+  // Keyed on approver_id, NOT the assignee - p.slaTotal/p.slaOnTime measure the
+  // opposite direction (their own work reviewed by someone above them), which is
+  // why the two labels differ on the card.
+  const _median = arr => { if(!arr.length) return null; const s=[...arr].sort((x,y)=>x-y); const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2 }
+  const _fmtMins = m => m===null ? '\u2014' : (m<60 ? Math.round(m)+'m' : (m<1440 ? (m/60).toFixed(1)+'h' : (m/1440).toFixed(1)+'d'))
+  const approverMap = {}
+  const _nowMs = Date.now()
+  orgTasks.forEach(t=>{
+    const aid = t.approver_id
+    if(!aid || !peopleMap[aid]) return
+    const a = approverMap[aid] || (approverMap[aid] = { awaiting:0, oldestDays:0, decided:0, onTime:0, approved:0, sentBack:0, mins:[] })
+    if(t.status==='awaiting_review' && t.submitted_at){
+      a.awaiting++
+      const d = Math.floor((_nowMs - new Date(t.submitted_at).getTime())/86400000)
+      if(d > a.oldestDays) a.oldestDays = d
+    }
+    if(t.reviewed_at && t.submitted_at){
+      const mins = (new Date(t.reviewed_at).getTime() - new Date(t.submitted_at).getTime())/60000
+      // Negative means a legacy row from before the resubmit fix (f54b852):
+      // reviewed_at survived a resubmit and now precedes it. Excluded, not counted
+      // as instant - it would otherwise read as perfectly on time.
+      if(mins >= 0){
+        a.decided++
+        a.mins.push(mins)
+        if(mins <= getSLAMinutes(t.priority, orgSLA)) a.onTime++
+        if(t.status==='approved') a.approved++
+        if(t.status==='rejected') a.sentBack++
+      }
+    }
+  })
   const teamMap={}; teamsList.forEach(t=>{ teamMap[t.id]={id:t.id,name:t.name,total:0,done:0} })
   pt.forEach(t=>{
     const tset=new Set()
@@ -13730,6 +13761,29 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                     </div>
                   ))}
                 </div>
+                {approverMap[p.id] && (()=>{ const a = approverMap[p.id]; const _ot = a.decided>0?pct(a.onTime,a.decided):null; const _sb = a.decided>0?pct(a.sentBack,a.decided):null; return (
+                  <div style={{marginTop:12,border:'1px solid #C7D2FE',background:'rgba(99,102,241,.05)',borderRadius:10,padding:10}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                      <span style={{fontSize:11,fontWeight:700,color:'#4F46E5',textTransform:'uppercase',letterSpacing:'.5px'}}>As approver</span>
+                      {a.awaiting>0&&<span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'rgba(239,68,68,.1)',color:'var(--red)'}}>{a.awaiting} awaiting{a.oldestDays>0?' \u00b7 oldest '+a.oldestDays+'d':''}</span>}
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(95px,1fr))',gap:8}}>
+                      {[
+                        ['Awaiting',a.awaiting,a.awaiting>0?'#EF4444':'#6B7280'],
+                        ['Reviewed on time',_ot===null?'\u2014':_ot+'%',_ot===null?'#6B7280':_ot>=80?'#10B981':'#EF4444'],
+                        ['Median response',_fmtMins(_median(a.mins)),'#8B5CF6'],
+                        ['Decisions',a.decided>0?a.approved+' / '+a.sentBack:'\u2014','#5BC8C0'],
+                        ['Send-back rate',_sb===null?'\u2014':_sb+'%','#6B7280'],
+                      ].map(([l,v,c])=>(
+                        <div key={l} style={{background:'#fff',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
+                          <div style={{fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+                          <div style={{fontSize:9,color:'var(--t2)',marginTop:3,textTransform:'uppercase',fontWeight:600}}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{fontSize:10,color:'var(--t2)',marginTop:7}}>Send-back rate has no target. Read it beside response time: high speed with zero send-backs is a rubber stamp, not a good reviewer.</div>
+                  </div>
+                )})()}
                 {/* Performance bar */}
                 <div style={{marginTop:10}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--t2)',marginBottom:3}}>
