@@ -13576,7 +13576,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     if(t.status==='overdue') p.overdue++
     if(['awaiting_review','approved','rejected'].includes(t.status)) p.submitted++
     if(t.reviewed_at && t.submitted_at) {
-      const slaMinutes = getSLAMinutes(t.priority, null)
+      const slaMinutes = getSLAMinutes(t.priority, orgSLA)
       const reviewMinutes = (new Date(t.reviewed_at)-new Date(t.submitted_at))/60000
       p.slaTotal++
       if(reviewMinutes<=slaMinutes) p.slaOnTime++
