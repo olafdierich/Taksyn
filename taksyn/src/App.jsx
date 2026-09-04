@@ -3380,7 +3380,12 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   const [orgsList, setOrgsList] = useState([])
   const [selected, setSelected] = useState(null)
   // Deep-link: dashboard task cards write 'taksyn-open-task'; open it once on mount, then clear.
-  useEffect(()=>{ try{ const _t=sessionStorage.getItem('taksyn-open-task'); if(_t){ setSelected(_t); sessionStorage.removeItem('taksyn-open-task') } }catch(e){} },[])
+  // CAL-OPEN-V1: was mount-only ([]). That works arriving from another page,
+  // but the calendar panel opens OVER whatever page you are on - click a card
+  // while already on Tasks and setPage('tasks') is a no-op, nothing remounts,
+  // and the key was never read. No dep array = runs after every render, and it
+  // is self-limiting because it clears the key on the first read.
+  useEffect(()=>{ try{ const _t=sessionStorage.getItem('taksyn-open-task'); if(_t){ setSelected(_t); sessionStorage.removeItem('taksyn-open-task') } }catch(e){} })
   // Open-hydration: opening a task detail refetches its full row (evidence/subtasks) as ONE single-row select.
   // `selected` is always a scalar task id (never bulk), so this fires exactly one refetch per open.
   useEffect(()=>{ if(selected) loadTaskById(selected) }, [selected])
