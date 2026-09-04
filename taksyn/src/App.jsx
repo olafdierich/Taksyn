@@ -21828,7 +21828,7 @@ export default function App() {
                     if(!i.assigned_at) _due = i.assign_due_at
                     else if(!i.root_cause) _due = i.investigate_due_at
                     else _due = i.close_due_at
-                    if(_due) add(orgDayOf(_due,orgTimezone),{k:'incident',t:{ id:i.id, title:(i.ref||i.category||'Incident') }})
+                    if(_due) add(orgDayOf(_due,orgTimezone),{k:'incident',t:{ id:i.id, ref:i.ref, title:(i.ref||i.category||'Incident') }})
                   })
                   // One definition of a day's cards, used by BOTH the drill-down
                   // view and the Today view, so the two cannot drift apart.
@@ -21838,7 +21838,20 @@ export default function App() {
                     return (
                       <div style={{display:'flex',flexDirection:'column',gap:8}}>
                         {_its.map((it,i)=>(
-                          <div key={i} style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',
+                          <div key={i}
+                            onClick={()=>{
+                              // CAL-OPEN-V1: same sessionStorage deep-link the dashboard
+                              // cards use (~3113 task, ~18391 incident). Readers: ~3383
+                              // wants a task ID, ~18996 wants an incident REF - hence the
+                              // ref carried on the synthetic incident object above.
+                              try{
+                                if(it.k==='incident'){ if(it.t.ref) sessionStorage.setItem('taksyn-open-incident', it.t.ref) }
+                                else sessionStorage.setItem('taksyn-open-task', it.t.id)
+                              }catch(e){}
+                              setShowCalPanel(false)
+                              setPage(it.k==='incident'?'incidents':'tasks')
+                            }}
+                            style={{border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',cursor:'pointer',
                             background:(_tint(it.t)||{}).bg||'transparent',
                             borderLeft:'3px solid '+_kindCol(it)}}>
                             <div style={{fontSize:13,color:'var(--text)',fontWeight:500}}>{it.t.title}</div>
