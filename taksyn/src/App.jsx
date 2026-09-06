@@ -7159,9 +7159,19 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       // grace > 0 (six of eight cadences) a scheduled row can be past due and
       // still inside grace -- that is overdue, not 'not yet due'. orgToday(null)
       // falls back to UTC silently, so an unresolved tz gets the bare label.
+      // SCHED-GRACE-V1: three cases, not two. The past-due branch splits on whether
+      // the cadence HAS a grace window at all. daily and weekdays are grace 0, so
+      // 'within grace' names a state they can never be in -- they go due -> missed
+      // directly. Short-lived (patch 1c converts these on the next load) but it was
+      // observed on screen, and reading more forgiving than reality is the wrong
+      // direction on a compliance surface.
       const _schedTip = !orgTimezone
         ? ' — scheduled'
-        : (o.d >= orgToday(orgTimezone) ? ' — not yet due' : ' — due, within grace')
+        : o.d >= orgToday(orgTimezone)
+        ? ' — not yet due'
+        : grace > 0
+        ? ' — due, within grace'
+        : ' — overdue'
       const tip=o.status===OCC_NOT_APPLICABLE
         ? 'Cycle '+o.d+' — not applicable'
         : o.status==='missed'
