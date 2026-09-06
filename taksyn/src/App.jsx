@@ -7132,7 +7132,16 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='semiannually'?Math.max(1,Math.round(_periodDays/182)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  // EXPECTED-ROWS-V1: COUNT the occurrence rows in the window. This used to divide
+  // the window by the cadence, which made the denominator arithmetic while every
+  // numerator beside it (done/na/missed) was a row count -- two units in one card,
+  // never reconcilable. Sharon Kengozi read 30 TASKS / 9 MISSED against ONE daily
+  // task holding TEN rows (LIVE, CHK-PERF-01/02, 6 Sep 2026).
+  // No status test, by design: every row in the window is an expected cycle
+  // whatever its state, so the strip's CYCLES column and these tiles agree by
+  // construction. The Math.max(1,...) floor is gone with the arithmetic -- a
+  // cadence longer than the window now reads 0 expected, not a manufactured 1.
+  const expectedFor=t=>(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr).length
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
   // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
   // completed_late null means nothing was ever written there (July migration
@@ -7199,7 +7208,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     const role = t.assigned_role || 'worker'
     keys.forEach(key => {
       if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
-      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
+      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
       workerMap[key].total++
       if (['completed','approved'].includes(t.status)) {
         workerMap[key].done++
@@ -7217,7 +7226,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     const tset=new Set()
     if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
     else { let uids=[]; if(Array.isArray(t.assigned_user_ids)&&t.assigned_user_ids.length) uids=t.assigned_user_ids; else if(t.assigned_user_id) uids=[t.assigned_user_id]; uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) })) }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const teamRows = Object.values(teamMap).sort((a,b)=>b.total-a.total)
   // --- Approver (review) performance stats ---
@@ -13561,7 +13570,16 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='semiannually'?Math.max(1,Math.round(_periodDays/182)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  // EXPECTED-ROWS-V1: COUNT the occurrence rows in the window. This used to divide
+  // the window by the cadence, which made the denominator arithmetic while every
+  // numerator beside it (done/na/missed) was a row count -- two units in one card,
+  // never reconcilable. Sharon Kengozi read 30 TASKS / 9 MISSED against ONE daily
+  // task holding TEN rows (LIVE, CHK-PERF-01/02, 6 Sep 2026).
+  // No status test, by design: every row in the window is an expected cycle
+  // whatever its state, so the strip's CYCLES column and these tiles agree by
+  // construction. The Math.max(1,...) floor is gone with the arithmetic -- a
+  // cadence longer than the window now reads 0 expected, not a manufactured 1.
+  const expectedFor=t=>(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr).length
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
   // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
   // completed_late null means nothing was ever written there (July migration
@@ -13632,7 +13650,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
 
     const p = peopleMap[resolvedId]
     if (!p) return
-    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); p.missed+=missedDaysFor(t.id); return }
+    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); p.missed+=missedDaysFor(t.id); return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
@@ -13722,7 +13740,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
       else if(t.assigned_user_name){ const mid=memberNameMap[t.assigned_user_name.toLowerCase().trim()]; if(mid) uids=[mid] }
       uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) }))
     }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const _teamIdsWithMatches = new Set()
   people.forEach(p=>{ (memberTeams[p.id]||[]).forEach(tid=>_teamIdsWithMatches.add(tid)) })
