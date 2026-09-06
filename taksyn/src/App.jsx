@@ -598,6 +598,12 @@ const RECUR_WINDOW_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:4, monthl
 // task_occurrences.status has NO CHECK constraint, so a typo here becomes a silent
 // third status that no reader knows about. Never type this literal at a call site.
 const OCC_NOT_APPLICABLE = 'not_applicable'
+// SCHED-V1: the cycle the miss-writer walk breaks on -- neither missed nor
+// done. Exists so expectedFor can COUNT rows instead of dividing a window
+// by a cadence constant. Display must derive its label from the date, not
+// from this name: with grace > 0 (weekly 2 ... annually 14) a row can be
+// past due and still inside grace, which is overdue, not 'not yet due'.
+const OCC_SCHEDULED = 'scheduled'
 const _recurPlusDays = (dstr,n)=> new Date(new Date(dstr+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
 // Single walk bound, shared by recurringDueNow and the occurrence miss-writer.
 // (Was 400 here and 370 in the miss-writer — one number now, so they cannot drift.)
@@ -7126,7 +7132,16 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='semiannually'?Math.max(1,Math.round(_periodDays/182)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  // EXPECTED-ROWS-V1: COUNT the occurrence rows in the window. This used to divide
+  // the window by the cadence, which made the denominator arithmetic while every
+  // numerator beside it (done/na/missed) was a row count -- two units in one card,
+  // never reconcilable. Sharon Kengozi read 30 TASKS / 9 MISSED against ONE daily
+  // task holding TEN rows (LIVE, CHK-PERF-01/02, 6 Sep 2026).
+  // No status test, by design: every row in the window is an expected cycle
+  // whatever its state, so the strip's CYCLES column and these tiles agree by
+  // construction. The Math.max(1,...) floor is gone with the arithmetic -- a
+  // cadence longer than the window now reads 0 expected, not a manufactured 1.
+  const expectedFor=t=>(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr).length
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
   // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
   // completed_late null means nothing was ever written there (July migration
@@ -7149,10 +7164,29 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       // throwing, so an unresolved prop renders old behaviour and self-corrects.
       const doneOn=orgDayOf(o.at, orgTimezone)||''
       const late=!!(doneOn&&o.status==='completed'&&doneOn>_recurPlusDays(o.d,grace))
+      // SCHED-V1: label derived from the DATE, never from the status name. With
+      // grace > 0 (six of eight cadences) a scheduled row can be past due and
+      // still inside grace -- that is overdue, not 'not yet due'. orgToday(null)
+      // falls back to UTC silently, so an unresolved tz gets the bare label.
+      // SCHED-GRACE-V1: three cases, not two. The past-due branch splits on whether
+      // the cadence HAS a grace window at all. daily and weekdays are grace 0, so
+      // 'within grace' names a state they can never be in -- they go due -> missed
+      // directly. Short-lived (patch 1c converts these on the next load) but it was
+      // observed on screen, and reading more forgiving than reality is the wrong
+      // direction on a compliance surface.
+      const _schedTip = !orgTimezone
+        ? ' — scheduled'
+        : o.d >= orgToday(orgTimezone)
+        ? ' — not yet due'
+        : grace > 0
+        ? ' — due, within grace'
+        : ' — overdue'
       const tip=o.status===OCC_NOT_APPLICABLE
         ? 'Cycle '+o.d+' — not applicable'
         : o.status==='missed'
         ? 'Cycle '+o.d+' — missed'
+        : o.status===OCC_SCHEDULED
+        ? 'Cycle '+o.d+_schedTip
         : 'Cycle '+o.d+(doneOn&&doneOn!==o.d?' — completed '+doneOn:' — completed')+(late?' (outside grace window)':'')+(o.by?' by '+o.by:'')
       return {...o,late,tip}
     })
@@ -7174,7 +7208,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     const role = t.assigned_role || 'worker'
     keys.forEach(key => {
       if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
-      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
+      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
       workerMap[key].total++
       if (['completed','approved'].includes(t.status)) {
         workerMap[key].done++
@@ -7192,7 +7226,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     const tset=new Set()
     if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
     else { let uids=[]; if(Array.isArray(t.assigned_user_ids)&&t.assigned_user_ids.length) uids=t.assigned_user_ids; else if(t.assigned_user_id) uids=[t.assigned_user_id]; uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) })) }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const teamRows = Object.values(teamMap).sort((a,b)=>b.total-a.total)
   // --- Approver (review) performance stats ---
@@ -7686,7 +7720,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                       <div>{r.title}</div>
                       <div style={{display:'flex',flexWrap:'wrap',gap:0,marginTop:6}}>
                         {r.cells.map((c,j)=>(
-                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.status===OCC_NOT_APPLICABLE?'#6B7280':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
+                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.status===OCC_NOT_APPLICABLE?'#6B7280':c.status===OCC_SCHEDULED?'#D1D5DB':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
                         ))}
                       </div>
                     </td>
@@ -13536,7 +13570,16 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   const occByTask={}; occurrences.forEach(o=>{ (occByTask[o.task_id]=occByTask[o.task_id]||[]).push({d:o.occurrence_date,status:o.status,late:o.completed_late,at:o.completed_at,by:o.completed_by_name,rec:o.recurrence,ev:o.evidence}) })
   const _dayMs=86400000, _periodDays=Math.max(1,Math.round((re-rs)/_dayMs)+1)
   const _rsStr=rs.toISOString().slice(0,10), _reStr=re.toISOString().slice(0,10), _wdayCount=(()=>{let n=0,d=new Date(_rsStr+'T00:00:00Z');const e=new Date(_reStr+'T00:00:00Z');while(d<=e){const w=d.getUTCDay();if(w>0&&w<6)n++;d=new Date(d.getTime()+_dayMs)}return Math.max(1,n)})()
-  const expectedFor=rec=>rec==='daily'?_periodDays:rec==='weekdays'?_wdayCount:rec==='weekly'?Math.max(1,Math.round(_periodDays/7)):rec==='fortnightly'?Math.max(1,Math.round(_periodDays/14)):rec==='monthly'?Math.max(1,Math.round(_periodDays/30)):rec==='quarterly'?Math.max(1,Math.round(_periodDays/91)):rec==='semiannually'?Math.max(1,Math.round(_periodDays/182)):rec==='annually'?Math.max(1,Math.round(_periodDays/365)):_periodDays
+  // EXPECTED-ROWS-V1: COUNT the occurrence rows in the window. This used to divide
+  // the window by the cadence, which made the denominator arithmetic while every
+  // numerator beside it (done/na/missed) was a row count -- two units in one card,
+  // never reconcilable. Sharon Kengozi read 30 TASKS / 9 MISSED against ONE daily
+  // task holding TEN rows (LIVE, CHK-PERF-01/02, 6 Sep 2026).
+  // No status test, by design: every row in the window is an expected cycle
+  // whatever its state, so the strip's CYCLES column and these tiles agree by
+  // construction. The Math.max(1,...) floor is gone with the arithmetic -- a
+  // cadence longer than the window now reads 0 expected, not a manufactured 1.
+  const expectedFor=t=>(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr).length
   const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
   // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
   // completed_late null means nothing was ever written there (July migration
@@ -13607,7 +13650,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
 
     const p = peopleMap[resolvedId]
     if (!p) return
-    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); p.missed+=missedDaysFor(t.id); return }
+    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); p.missed+=missedDaysFor(t.id); return }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
@@ -13697,7 +13740,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
       else if(t.assigned_user_name){ const mid=memberNameMap[t.assigned_user_name.toLowerCase().trim()]; if(mid) uids=[mid] }
       uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) }))
     }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t.recurrence)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
   })
   const _teamIdsWithMatches = new Set()
   people.forEach(p=>{ (memberTeams[p.id]||[]).forEach(tid=>_teamIdsWithMatches.add(tid)) })
@@ -21155,9 +21198,10 @@ export default function App() {
           if(!cur) return
           const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
           let guard=0
+          let sched=null   // SCHED-V1: set ONLY on the break path -- see below
           while(cur && guard < RECUR_WALK_GUARD){
             const graceDeadline = _msPlusDays(cur, grace)
-            if(graceDeadline >= _msToday) break
+            if(graceDeadline >= _msToday){ sched=cur; break }
             if(cur >= _msFloor){
               supabase.from('task_occurrences').upsert(
                 {task_id:t.id,org:t.org,occurrence_date:cur,status:'missed',recurrence:t.recurrence},
@@ -21165,6 +21209,35 @@ export default function App() {
               ).then(()=>{})
             }
             cur=nextOccurrenceDate(cur,t.recurrence); guard++
+          }
+          // SCHED-V1: stamp the current cycle. Disjoint from the miss-writer by
+          // construction -- the loop above breaks BEFORE writing this date, so the
+          // two writers can never target the same (task_id, occurrence_date).
+          // sched is null on guard exhaustion, so a runaway walk writes nothing.
+          // SCHED-STALE-V1: convert stale scheduled rows to missed. The miss-writer
+          // upserts with ignoreDuplicates, so it SKIPS any date that already holds
+          // a scheduled row -- freezing that cycle as scheduled forever. It would
+          // then sit in the denominator (patch 2 counts rows) while never matching
+          // missedDaysFor, quietly understating misses. Every date below sched has
+          // already been proven past its grace deadline by the walk above, so
+          // 'missed' is exact. Scoped to status=scheduled and < sched: a
+          // completion, a miss and an N/A declaration are all untouchable.
+          if(sched){
+            supabase.from('task_occurrences').update({status:'missed'})
+              .eq('task_id',t.id).eq('status',OCC_SCHEDULED).lt('occurrence_date',sched)
+              .select('occurrence_date')
+              .then(({data,error})=>{
+                // PostgREST answers 200/error:null when RLS refuses the write, so
+                // the returned row count is the only honest signal that it landed.
+                if(error) console.warn('stale scheduled -> missed failed:', error.message)
+                else if(data && data.length) console.info('stale scheduled converted:', t.id, data.map(r=>r.occurrence_date).join(','))
+              })
+          }
+          if(sched && sched >= _msFloor){
+            supabase.from('task_occurrences').upsert(
+              {task_id:t.id,org:t.org,occurrence_date:sched,status:OCC_SCHEDULED,recurrence:t.recurrence},
+              {onConflict:'task_id,occurrence_date',ignoreDuplicates:true}
+            ).then(()=>{})
           }
         })
       }
