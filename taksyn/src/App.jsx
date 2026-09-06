@@ -598,6 +598,12 @@ const RECUR_WINDOW_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:4, monthl
 // task_occurrences.status has NO CHECK constraint, so a typo here becomes a silent
 // third status that no reader knows about. Never type this literal at a call site.
 const OCC_NOT_APPLICABLE = 'not_applicable'
+// SCHED-V1: the cycle the miss-writer walk breaks on -- neither missed nor
+// done. Exists so expectedFor can COUNT rows instead of dividing a window
+// by a cadence constant. Display must derive its label from the date, not
+// from this name: with grace > 0 (weekly 2 ... annually 14) a row can be
+// past due and still inside grace, which is overdue, not 'not yet due'.
+const OCC_SCHEDULED = 'scheduled'
 const _recurPlusDays = (dstr,n)=> new Date(new Date(dstr+'T00:00:00Z').getTime()+n*86400000).toISOString().slice(0,10)
 // Single walk bound, shared by recurringDueNow and the occurrence miss-writer.
 // (Was 400 here and 370 in the miss-writer — one number now, so they cannot drift.)
@@ -7149,10 +7155,19 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       // throwing, so an unresolved prop renders old behaviour and self-corrects.
       const doneOn=orgDayOf(o.at, orgTimezone)||''
       const late=!!(doneOn&&o.status==='completed'&&doneOn>_recurPlusDays(o.d,grace))
+      // SCHED-V1: label derived from the DATE, never from the status name. With
+      // grace > 0 (six of eight cadences) a scheduled row can be past due and
+      // still inside grace -- that is overdue, not 'not yet due'. orgToday(null)
+      // falls back to UTC silently, so an unresolved tz gets the bare label.
+      const _schedTip = !orgTimezone
+        ? ' — scheduled'
+        : (o.d >= orgToday(orgTimezone) ? ' — not yet due' : ' — due, within grace')
       const tip=o.status===OCC_NOT_APPLICABLE
         ? 'Cycle '+o.d+' — not applicable'
         : o.status==='missed'
         ? 'Cycle '+o.d+' — missed'
+        : o.status===OCC_SCHEDULED
+        ? 'Cycle '+o.d+_schedTip
         : 'Cycle '+o.d+(doneOn&&doneOn!==o.d?' — completed '+doneOn:' — completed')+(late?' (outside grace window)':'')+(o.by?' by '+o.by:'')
       return {...o,late,tip}
     })
@@ -7686,7 +7701,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                       <div>{r.title}</div>
                       <div style={{display:'flex',flexWrap:'wrap',gap:0,marginTop:6}}>
                         {r.cells.map((c,j)=>(
-                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.status===OCC_NOT_APPLICABLE?'#6B7280':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
+                          <span key={j} title={c.tip} style={{width:21,height:21,borderRadius:8,padding:5,display:'inline-block',cursor:'default',background:c.status==='missed'?'var(--red)':c.status===OCC_NOT_APPLICABLE?'#6B7280':c.status===OCC_SCHEDULED?'#D1D5DB':c.late?'#F59E0B':'var(--green)',backgroundClip:'content-box'}} />
                         ))}
                       </div>
                     </td>
@@ -21155,9 +21170,10 @@ export default function App() {
           if(!cur) return
           const grace = RECUR_GRACE_DAYS[t.recurrence] ?? 0
           let guard=0
+          let sched=null   // SCHED-V1: set ONLY on the break path -- see below
           while(cur && guard < RECUR_WALK_GUARD){
             const graceDeadline = _msPlusDays(cur, grace)
-            if(graceDeadline >= _msToday) break
+            if(graceDeadline >= _msToday){ sched=cur; break }
             if(cur >= _msFloor){
               supabase.from('task_occurrences').upsert(
                 {task_id:t.id,org:t.org,occurrence_date:cur,status:'missed',recurrence:t.recurrence},
@@ -21165,6 +21181,16 @@ export default function App() {
               ).then(()=>{})
             }
             cur=nextOccurrenceDate(cur,t.recurrence); guard++
+          }
+          // SCHED-V1: stamp the current cycle. Disjoint from the miss-writer by
+          // construction -- the loop above breaks BEFORE writing this date, so the
+          // two writers can never target the same (task_id, occurrence_date).
+          // sched is null on guard exhaustion, so a runaway walk writes nothing.
+          if(sched && sched >= _msFloor){
+            supabase.from('task_occurrences').upsert(
+              {task_id:t.id,org:t.org,occurrence_date:sched,status:OCC_SCHEDULED,recurrence:t.recurrence},
+              {onConflict:'task_id,occurrence_date',ignoreDuplicates:true}
+            ).then(()=>{})
           }
         })
       }
