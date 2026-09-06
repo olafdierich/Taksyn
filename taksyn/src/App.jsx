@@ -21186,6 +21186,25 @@ export default function App() {
           // construction -- the loop above breaks BEFORE writing this date, so the
           // two writers can never target the same (task_id, occurrence_date).
           // sched is null on guard exhaustion, so a runaway walk writes nothing.
+          // SCHED-STALE-V1: convert stale scheduled rows to missed. The miss-writer
+          // upserts with ignoreDuplicates, so it SKIPS any date that already holds
+          // a scheduled row -- freezing that cycle as scheduled forever. It would
+          // then sit in the denominator (patch 2 counts rows) while never matching
+          // missedDaysFor, quietly understating misses. Every date below sched has
+          // already been proven past its grace deadline by the walk above, so
+          // 'missed' is exact. Scoped to status=scheduled and < sched: a
+          // completion, a miss and an N/A declaration are all untouchable.
+          if(sched){
+            supabase.from('task_occurrences').update({status:'missed'})
+              .eq('task_id',t.id).eq('status',OCC_SCHEDULED).lt('occurrence_date',sched)
+              .select('occurrence_date')
+              .then(({data,error})=>{
+                // PostgREST answers 200/error:null when RLS refuses the write, so
+                // the returned row count is the only honest signal that it landed.
+                if(error) console.warn('stale scheduled -> missed failed:', error.message)
+                else if(data && data.length) console.info('stale scheduled converted:', t.id, data.map(r=>r.occurrence_date).join(','))
+              })
+          }
           if(sched && sched >= _msFloor){
             supabase.from('task_occurrences').upsert(
               {task_id:t.id,org:t.org,occurrence_date:sched,status:OCC_SCHEDULED,recurrence:t.recurrence},
