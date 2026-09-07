@@ -9,6 +9,10 @@ import { isSameOrgDay, orgToday, orgDayOf } from './lib/orgTime'
 import ImportPanel from './ImportPanel.jsx'
 // [PATCH:staff-import-panel]
 import StaffImportPanel from './StaffImportPanel.jsx'
+// PRJ-VIEW-V1: the projects module lives OUTSIDE App.jsx. It is the
+// first net-new module since the decision to stop growing this file,
+// and it has no legacy readers, so it is the safest thing to extract.
+import ProjectsModule from './ProjectsView.jsx'
 
 // Module-level ref shared between AuthView and App — tracks a pending invite to apply after sign-in.
 // Declared here (outside all components) so it is always in scope everywhere in this file.
@@ -3537,9 +3541,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   useEffect(()=>{
     if(isConfigured()&&user.org) {
-      supabase.from('projects').select('*').eq('org',user.org).eq('status','active').order('name')
-        .then(({data})=>{ if(data) setOrgProjects(data) })
-        .catch(()=>{}) // table may not exist yet
+      // PRJ-WIRE-V1: same name-vs-ID fix as the Projects view. See the
+      // note there.
+      resolveOrgId(user).then(oid=>{
+        if(!oid){ setOrgProjects([]); return }
+        supabase.from('projects').select('*').eq('org',oid).eq('status','active').order('name')
+          .then(({data})=>{ if(data) setOrgProjects(data) })
+          .catch(()=>{})
+      }).catch(()=>{})
     }
   },[user.org])
 
@@ -13421,27 +13430,59 @@ function SuperAdminTaskStats({ tasks, setTasks, loadTasks }) {
 }
 
 
-function ProjectsView({ user }) {
+// PRJ-VIEW-V1: superseded by src/ProjectsView.jsx. Kept, unreferenced,
+// so reverting is a one-line change at the mount below. Delete once the
+// new view has been used in anger.
+function ProjectsViewLegacy({ user }) {
   const [projects, setProjects] = useState([])
   const [showCreate, setShowCreate] = useState(false)
   const [newProject, setNewProject] = useState({name:'',description:'',status:'active'})
   const [saving, setSaving] = useState(false)
 
+  // PRJ-WIRE-V1: projects.org stores the org ID (ORG...), while user.org
+  // holds the NAME. Filtering on the name matched nothing and the page
+  // showed "0 active projects" whatever was in the table. resolveOrgId
+  // is the existing helper (~2891) and cross-checks against the caller's
+  // own memberships, so it cannot resolve to an org they are not in.
+  const [prjOrgId, setPrjOrgId] = useState('')
   useEffect(()=>{
-    if(isConfigured()&&user.org) {
-      supabase.from('projects').select('*').eq('org',user.org).order('created_at',{ascending:false})
-        .then(({data})=>{ if(data) setProjects(data) })
+    let dead = false
+    if(!isConfigured()){ return }
+    resolveOrgId(user).then(oid=>{
+      if(dead) return
+      setPrjOrgId(oid||'')
+      if(!oid){ setProjects([]); return }
+      supabase.from('projects').select('*').eq('org',oid).order('created_at',{ascending:false})
+        .then(({data})=>{ if(!dead && data) setProjects(data) })
         .catch(()=>{})
-    }
-  },[user.org])
+    })
+    return ()=>{ dead = true }
+  },[user.org, user.id])
 
   const createProject = async () => {
     if(!newProject.name.trim()||saving) return
     setSaving(true)
-    const entry = { id:'PRJ'+Date.now(), name:newProject.name.trim(), description:newProject.description.trim(), org:user.org, status:'active', created_by:user.name, created_at:new Date().toISOString() }
+    // PRJ-WIRE-V1: create_project allocates the PRJ-YYYY-NNNN ref, sets
+    // owner_id and created_by_id as uuids, and enforces the org check.
+    // The old path hand-built a row with a text epoch id, created_by as a
+    // display NAME (LIVE has three profiles called Olaf Rusoke-Dierich, so
+    // a name identifies nobody) and no ref at all. ref is NOT NULL, so
+    // that insert now fails outright.
+    let entry = null
     if(isConfigured()) {
-      const {error} = await supabase.from('projects').insert(entry)
+      const oid = prjOrgId || await resolveOrgId(user)
+      if(!oid){ alert('Could not work out which organisation to create this in.'); setSaving(false); return }
+      const { data, error } = await supabase.rpc('create_project', {
+        p_org: oid,
+        p_name: newProject.name.trim(),
+        p_description: newProject.description.trim() || null
+      })
       if(error) { alert('Error: '+error.message); setSaving(false); return }
+      entry = Array.isArray(data) ? data[0] : data
+      if(!entry) { alert('The project was not created.'); setSaving(false); return }
+    } else {
+      entry = { id:'local-'+Date.now(), ref:'PRJ-LOCAL', name:newProject.name.trim(),
+                description:newProject.description.trim(), status:'active' }
     }
     setProjects(prev=>[entry,...prev])
     setShowCreate(false)
@@ -13450,14 +13491,24 @@ function ProjectsView({ user }) {
   }
 
   const toggleProject = async (p) => {
-    const newStatus = p.status==='active'?'inactive':'active'
+    // PRJ-WIRE-V1: the vocabulary is active / awaiting_signoff / closed /
+    // cancelled, enforced by projects_status_check. 'inactive' is refused.
+    const newStatus = p.status==='active'?'cancelled':'active'
     if(isConfigured()) await supabase.from('projects').update({status:newStatus}).eq('id',p.id)
     setProjects(prev=>prev.map(x=>x.id===p.id?{...x,status:newStatus}:x))
   }
 
   const deleteProject = async (id) => {
-    if(!confirm('Delete this project?')) return
-    if(isConfigured()) await supabase.from('projects').delete().eq('id',id)
+    // PRJ-WIRE-V1: archive, not delete. There is deliberately no DELETE
+    // policy on projects (deleting one would orphan its schedule events
+    // and take its sections with it), so .delete() failed silently and
+    // the row stayed while the screen said otherwise.
+    if(!confirm('Archive this project?')) return
+    if(isConfigured()) {
+      const {error} = await supabase.from('projects')
+        .update({status:'cancelled'}).eq('id',id).select()
+      if(error){ alert('Could not archive: '+error.message); return }
+    }
     setProjects(prev=>prev.filter(p=>p.id!==id))
   }
 
@@ -22469,7 +22520,7 @@ export default function App() {
                 {page==='tiers'       && user.role!=='super_admin' && hasAccess(user.role,4) && <TiersView      {...pageProps}/>}
                 {page==='support'     && user.role==='super_admin' && <SupportView {...pageProps}/>}
                 {page==='help'        && ['client_admin','super_admin'].includes(user.role) && <HelpView {...pageProps}/>}
-                {page==='projects'    && user.role!=='super_admin' && hasAccess(user.role,2) && <ProjectsView {...pageProps}/>}
+                {page==='projects'    && user.role!=='super_admin' && hasAccess(user.role,2) && <ProjectsModule user={user} resolveOrgId={resolveOrgId}/>}
                 {page==='performance' && user.role!=='super_admin' && hasAccess(user.role,4) && <PerformanceView {...pageProps}/>}
                 {page==='leave'       && user.role!=='super_admin' && <LeaveView {...pageProps}/>}
                 {page==='teams'       && hasAccess(user.role,2) && <TeamsView {...pageProps}/>}
