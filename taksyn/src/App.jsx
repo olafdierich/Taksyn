@@ -788,6 +788,36 @@ const fmtAvg = mins => {
   return avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
 }
 
+// PATCH-HOIST-OPENREPORT-V1
+// Opens a generated report in a new tab. Module scope so every view that
+// builds a report can use the same opener — ReportsView today,
+// PerformanceView once the per-member export lands.
+// Blob URL so the current tab is never navigated away from.
+// window.open('','_blank') + document.write is blocked by mobile browsers as a popup
+// and can cause the current tab to reload, losing the session.
+const openReport = (html) => {
+  try {
+    const blob = new Blob([html], {type:'text/html;charset=utf-8'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(()=>URL.revokeObjectURL(url), 15000)
+  } catch(e) {
+    // Last-resort fallback: download as an HTML file
+    const a = document.createElement('a')
+    a.href = 'data:text/html;charset=utf-8,'+encodeURIComponent(html)
+    a.download = 'taksyn-report.html'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+}
+
 const isOverdueOneOff = (t, today) => !isRecurring(t) && t.status==='pending' && t.due_date && t.due_date < today
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
 // Optional time-of-day suffix for a task's due date (compliance tasks only). '' when no due_time set.
@@ -7330,31 +7360,6 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   }
   const reportFooter = `<div class="ft"><span>Taksyn — Task Compliance & Accountability Platform</span><span>taksyn.vercel.app</span></div>`
 
-  const openReport = (html) => {
-    // Use a Blob URL so the current tab is never navigated away from.
-    // window.open('','_blank') + document.write is blocked by mobile browsers as a popup
-    // and can cause the current tab to reload, losing the session.
-    try {
-      const blob = new Blob([html], {type:'text/html;charset=utf-8'})
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.target = '_blank'
-      a.rel = 'noopener noreferrer'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      setTimeout(()=>URL.revokeObjectURL(url), 15000)
-    } catch(e) {
-      // Last-resort fallback: download as an HTML file
-      const a = document.createElement('a')
-      a.href = 'data:text/html;charset=utf-8,'+encodeURIComponent(html)
-      a.download = 'taksyn-report.html'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-    }
-  }
 
   const exportCompliancePDF = () => {
     const rows = filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(', ')||'—'; return '<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.started_at?fmtTime(t.started_at):'—')+'</td><td>'+(t.completed_at?fmtTime(t.completed_at):'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.gps_start||t.gps_end?'Yes':'No')+'</td><td>'+(parseSafe(t.evidence).length>0?'Yes':'No')+'</td><td style="font-size:10px">'+clTs+'</td><td>'+(assigneeFull(t)||t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>' }).join('')
