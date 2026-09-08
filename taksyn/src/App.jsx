@@ -7361,14 +7361,27 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     openReport(html)
   }
 
+  /* PATCH-AVERAGE-ROWS-V2 */
+  // Average-row helpers. Counts divide by headcount; rates are pooled;
+  // durations average only over rows that actually carry a value.
+  const _avgCount = (arr, get) => arr.length ? Math.round(arr.reduce((s,x)=>s+(get(x)||0),0)/arr.length) : 0
+  const _pooled   = (arr, num, den) => {
+    const d = arr.reduce((s,x)=>s+(den(x)||0),0)
+    return d ? Math.round(arr.reduce((s,x)=>s+(num(x)||0),0)*100/d) : 0
+  }
+  const _avgRowStyle = 'background:#EEF2FF;font-weight:700'
+
   const exportWorkerPDF = () => {
-    const rows = workerRows.map(w => {
+    const _wAvgMins = workerRows.filter(w=>w.avgMins && w.avgMins.length)
+    const _wAvgHtml = workerRows.length ? '<tr style="'+_avgRowStyle+'"><td>Average · '+workerRows.length+' staff</td><td></td><td>'+_avgCount(workerRows,w=>w.total)+'</td><td>'+_avgCount(workerRows,w=>w.done)+'</td><td>'+_pooled(workerRows,w=>w.done,w=>w.total)+'%</td><td>'+(_wAvgMins.length?fmtAvg([].concat.apply([],_wAvgMins.map(w=>w.avgMins))):'—')+'</td><td>'+_avgCount(workerRows,w=>w.reviewedInTime)+'</td></tr>' : ''
+    const rows = _wAvgHtml + workerRows.map(w => {
       const compPct = pct(w.done,w.total)
       const onTimePct = pct(w.onTime,w.done)
       const avgStr = fmtAvg(w.avgMins)  /* PATCH-FMTAVG-REPOINT-V2 */
       return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
     }).join('')
-    const teamHtml = teamRows.map(tm=>'<tr><td>'+tm.name+'</td><td>'+tm.total+'</td><td>'+tm.done+'</td><td>'+pct(tm.done,tm.total)+'%</td></tr>').join('')
+    const teamAvgHtml = teamRows.length ? '<tr style="'+_avgRowStyle+'"><td>Average · '+teamRows.length+' teams</td><td>'+_avgCount(teamRows,t=>t.total)+'</td><td>'+_avgCount(teamRows,t=>t.done)+'</td><td>'+_pooled(teamRows,t=>t.done,t=>t.total)+'%</td></tr>' : ''
+    const teamHtml = teamAvgHtml + teamRows.map(tm=>'<tr><td>'+tm.name+'</td><td>'+tm.total+'</td><td>'+tm.done+'</td><td>'+pct(tm.done,tm.total)+'%</td></tr>').join('')
     const approverHtml = approverRows.map(a=>{
       const reviewed=a.approved+a.sentBack
       const sbPct=pct(a.sentBack,reviewed)
@@ -7376,7 +7389,13 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       const turnLabel=avgH==null?'—':avgH<24?Math.round(avgH)+'h':(avgH/24).toFixed(1)+'d'
       return '<tr><td><strong>'+a.name+'</strong></td><td>'+reviewed+'</td><td style="color:#10B981">'+a.approved+'</td><td style="color:'+(a.sentBack>0?'#F59E0B':'#5a6478')+'">'+a.sentBack+'</td><td>'+sbPct+'%</td><td>'+turnLabel+'</td><td style="color:'+(a.pending>0?'#F59E0B':'#5a6478')+'">'+a.pending+'</td></tr>'
     }).join('')
-    const approverSec = (isClientAdmin && approverRows.length) ? '<div class="sec"><div class="sec-title">🔍 Approver Review Performance</div><table><thead><tr><th>Approver</th><th>Reviewed</th><th>Approved</th><th>Sent Back</th><th>Send-Back %</th><th>Avg Turnaround</th><th>Pending</th></tr></thead><tbody>'+approverHtml+'</tbody></table></div>' : ''
+    const _appReviewed = a => a.approved + a.sentBack
+    const _appTurns = approverRows.filter(a=>a.turn.length)
+    const _appAvgH = _appTurns.length
+      ? _appTurns.reduce((s,a)=>s+a.turn.reduce((x,y)=>x+y,0)/a.turn.length,0)/_appTurns.length
+      : null
+    const _appAvgHtml = approverRows.length ? '<tr style="'+_avgRowStyle+'"><td>Average · '+approverRows.length+' approvers</td><td>'+_avgCount(approverRows,_appReviewed)+'</td><td>'+_avgCount(approverRows,a=>a.approved)+'</td><td>'+_avgCount(approverRows,a=>a.sentBack)+'</td><td>'+_pooled(approverRows,a=>a.sentBack,_appReviewed)+'%</td><td>'+(_appAvgH==null?'—':_appAvgH<24?Math.round(_appAvgH)+'h':(_appAvgH/24).toFixed(1)+'d')+'</td><td>'+_avgCount(approverRows,a=>a.pending)+'</td></tr>' : ''
+    const approverSec = (isClientAdmin && approverRows.length) ? '<div class="sec"><div class="sec-title">🔍 Approver Review Performance</div><table><thead><tr><th>Approver</th><th>Reviewed</th><th>Approved</th><th>Sent Back</th><th>Send-Back %</th><th>Avg Turnaround</th><th>Pending</th></tr></thead><tbody>'+_appAvgHtml+approverHtml+'</tbody></table></div>' : ''
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Staff Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Staff Performance Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Staff</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${pct(compDone,compT.length)}%</div><div class="sl">Overall Compliance</div></div></div>${teamRows.length?'<div class="sec"><div class="sec-title">Team Performance</div><table><thead><tr><th>Team</th><th>Tasks</th><th>Done</th><th>Rate</th></tr></thead><tbody>'+teamHtml+'</tbody></table></div>':''}${approverSec}<table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
     openReport(html)
   }
@@ -7722,6 +7741,21 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
               </thead>
               <tbody>
                 {workerRows.length===0 && <tr><td colSpan={7} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No worker data for this period</td></tr>}
+                {workerRows.length>0 && (()=>{ /* PATCH-AVERAGE-ROWS-V2 */
+                  const _am = workerRows.filter(w=>w.avgMins&&w.avgMins.length)
+                  const _cell = {padding:'8px 10px',fontWeight:700}
+                  return (
+                    <tr style={{background:'#EEF2FF',borderBottom:'1px solid var(--border)'}}>
+                      <td style={_cell}>Average · {workerRows.length} staff</td>
+                      <td style={_cell}></td>
+                      <td style={_cell}>{_avgCount(workerRows,w=>w.total)}</td>
+                      <td style={_cell}>{_avgCount(workerRows,w=>w.done)}</td>
+                      <td style={_cell}>{_pooled(workerRows,w=>w.done,w=>w.total)}%</td>
+                      <td style={_cell}>{_am.length?fmtAvg([].concat.apply([],_am.map(w=>w.avgMins))):'—'}</td>
+                      <td style={_cell}>{_avgCount(workerRows,w=>w.reviewedInTime)}</td>
+                    </tr>
+                  )
+                })()}
                 {workerRows.map((w,i)=>{
                   const cp=pct(w.done,w.total)
                   const avgStr=fmtAvg(w.avgMins)  /* PATCH-FMTAVG-REPOINT-V2 */
