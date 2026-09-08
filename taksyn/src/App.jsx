@@ -778,6 +778,16 @@ const assigneeIds = t => {
 }
 const isAssignedTo = (t, uid) => !!uid && uid !== '' && assigneeIds(t).indexOf(uid) !== -1
 // One-off "overdue". Recurring overdue is per-occurrence and owned by the miss-writer — never computed here.
+// PATCH-FMTAVG-HOIST-V1
+// Minutes array -> display string, module scope so BOTH the Performance card
+// and the report can call it. Empty array returns an em dash, never '0m':
+// a zero here reads as "took no time" when it means "never measured".
+const fmtAvg = mins => {
+  if(!mins || !mins.length) return '—'
+  const avg = Math.round(mins.reduce((a,b)=>a+b,0)/mins.length)
+  return avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
+}
+
 const isOverdueOneOff = (t, today) => !isRecurring(t) && t.status==='pending' && t.due_date && t.due_date < today
 const hasAccess = (userRole, requiredLevel) => (ROLE_LEVEL[userRole]||0) >= requiredLevel
 // Optional time-of-day suffix for a task's due date (compliance tasks only). '' when no due_time set.
@@ -13681,11 +13691,6 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     .filter(tm=>(selectedRole==='all'&&!_nq)||_teamIdsWithMatches.has(tm.id))
     .sort((a,b)=>b.total-a.total)
 
-  const fmtAvg = mins => {
-    if(!mins.length) return '—'
-    const avg = Math.round(mins.reduce((a,b)=>a+b,0)/mins.length)
-    return avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
-  }
 
   const getGrade = (rate) => {
     if(rate>=90) return {grade:'A',color:'#10B981'}
