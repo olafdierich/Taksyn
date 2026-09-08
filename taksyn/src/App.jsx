@@ -401,7 +401,7 @@ function NoteEditor({ value, setValue, onBlurSave, placeholder }) {
     restore(ls + block.length, ls + block.length)
   }
 
-  const tbBtn = {fontSize:12,minWidth:30,height:28,borderRadius:5,border:'1px solid var(--border)',
+  const tbBtn = {fontSize:12,minWidth:30,height:28,borderRadius:4,border:'1px solid var(--border)',
                  background:'var(--s2)',color:'var(--text)',cursor:'pointer',lineHeight:1}
 
   return (
@@ -1465,7 +1465,7 @@ const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;touch-action:manipulation}
 html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
-:root{--brand:#00A87E;--brand-dk:#008A68;--brand-lt:rgba(0,168,126,.1);--card:#fff;--s3:#F0F2F5;--s4:#E8EBF0;--border:rgba(0,0,0,.08);--border2:rgba(0,0,0,.14);--text:#1A2033;--t2:#5A6478;--t3:#9AA3B2;--red:#EF4444;--amber:#F59E0B;--blue:#3B82F6;--green:#10B981;--r:10px;--rs:6px;--shadow:0 4px 20px rgba(0,0,0,.08);--sidebar-w:214px}
+:root{--brand:#00A87E;--brand-dk:#008A68;--brand-lt:rgba(0,168,126,.1);--card:#fff;--s3:#F0F2F5;--s4:#E8EBF0;--border:rgba(0,0,0,.08);--border2:rgba(0,0,0,.14);--text:#1A2033;--t2:#5A6478;--t3:#9AA3B2;--red:#EF4444;--amber:#F59E0B;--blue:#3B82F6;--green:#10B981;--r:12px;--rs:6px;--shadow:0 4px 20px rgba(0,0,0,.08);--sidebar-w:214px}
 .auth-bg{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;background:linear-gradient(135deg,#F0F7F4,#E8F4F0);padding:20px;overflow-y:auto}
 .auth-card{background:#fff;border:1px solid var(--border2);border-radius:16px;padding:36px;width:100%;max-width:420px;box-shadow:var(--shadow)}
 .auth-logo{display:flex;align-items:center;justify-content:center;margin-bottom:28px}
@@ -1529,20 +1529,20 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .ph-sub{font-size:12px;color:var(--t2);margin-top:3px}
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
 @media(max-width:900px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
-.stat-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px}
+.stat-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:18px}
 .sc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .sc-label{font-size:10px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .sc-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px}
 .sc-val{font-size:22px;font-weight:800;letter-spacing:-1px;line-height:1}
 .sc-sub{font-size:11px;color:var(--t2);margin-top:2px}
-.section{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.section{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:14px}
 .section-title{font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:640px){.two-col{grid-template-columns:1fr}}
 .filter-bar{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
 .fb{padding:4px 10px;border-radius:var(--rs);border:1px solid var(--border);background:transparent;color:var(--t2);font-size:11px;font-weight:500;cursor:pointer;font-family:inherit}
 .fb.active{background:var(--brand-lt);border-color:var(--brand);color:var(--brand)}
-.task-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:8px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
+.task-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:12px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
 .task-card.task-done{background:rgba(16,185,129,.05);border-color:rgba(16,185,129,.3)}
 .tc-row{display:flex;align-items:stretch;gap:12px}
 .tc-date{flex:0 0 58px;margin:-14px 0 -14px -14px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 0}
@@ -1876,7 +1876,7 @@ const InfoDot = ({ kind }) => {
           <div onClick={()=>setOpen(false)}
             style={{position:'fixed',inset:0,zIndex:9998}}/>
           <div style={{position:'absolute',top:20,left:0,zIndex:9999,width:280,
-            background:'var(--card)',border:'1px solid var(--border2)',borderRadius:10,
+            background:'var(--card)',border:'1px solid var(--border2)',borderRadius:12,
             boxShadow:'0 8px 28px rgba(0,0,0,.25)',padding:'12px 14px'}}>
             <div style={{fontSize:13,fontWeight:700,color:'var(--text)',marginBottom:8}}>{info.title}</div>
             {info.rows.map((r,i)=>(
@@ -2638,7 +2638,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           ) : (
             <>
               {/* Read-only details */}
-              <div style={{background:'var(--s3)',borderRadius:10,padding:'4px 14px',marginBottom:16}}>
+              <div style={{background:'var(--s3)',borderRadius:12,padding:'4px 14px',marginBottom:16}}>
                 <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',padding:'10px 0 6px'}}>Your Details</div>
                 {inviteParams.name ? (
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderTop:'1px solid var(--border)'}}>
@@ -2811,7 +2811,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         <div className="auth-title">{mode==='login'?'Sign in to your account':mode==='register'?'Create your account':'Reset your password'}</div>
         <div className="auth-sub">Task compliance & accountability platform</div>
         {inviteSignInPrompt&&mode==='login'&&(
-          <div style={{background:'rgba(99,102,241,.08)',border:'1px solid rgba(99,102,241,.25)',borderRadius:10,padding:'14px 16px',marginBottom:12,textAlign:'center'}}>
+          <div style={{background:'rgba(99,102,241,.08)',border:'1px solid rgba(99,102,241,.25)',borderRadius:12,padding:'14px 16px',marginBottom:12,textAlign:'center'}}>
             <div style={{fontSize:14,fontWeight:700,color:'var(--brand)',marginBottom:4}}>You already have an account</div>
             <div style={{fontSize:13,color:'var(--t2)'}}>Sign in below to accept the invitation and join the team.</div>
           </div>
@@ -2822,7 +2822,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         <div className="auth-field"><label className="auth-label">Email</label><input className="auth-input" type="email" placeholder="you@organisation.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} /></div>
         {mode!=='forgot'&&<div className="auth-field"><label className="auth-label">Password</label><div style={{position:'relative'}}><input className="auth-input" type={showPw?'text':'password'} placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSubmit()} style={{paddingRight:36}}/><button type="button" onClick={()=>setShowPw(!showPw)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--t2)',fontSize:16,lineHeight:1,padding:2}}>{showPw?'👁':'🔒'}</button></div></div>}
         {mode==='register'&&<div className="auth-field"><label className="auth-label">Organisation Name</label><input className="auth-input" placeholder="e.g. Sunrise Aged Care" value={org} onChange={e=>setOrg(e.target.value)} /></div>}
-        {mode==='register'&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>🏢 You will be set up as the Client Admin for your organisation</div>}
+        {mode==='register'&&<div style={{fontSize:11,color:'var(--t2)',marginBottom:8,padding:'6px 10px',background:'var(--s3)',borderRadius:8}}>🏢 You will be set up as the Client Admin for your organisation</div>}
         {mode==='forgot'
           ? <button className="auth-btn" onClick={handleForgotPassword} disabled={loading}>{loading?'Sending…':'Send Reset Email'}</button>
           : <button className="auth-btn" onClick={handleSubmit} disabled={loading}>{loading?'Please wait…':mode==='login'?'Sign In':'Create Account'}</button>
@@ -3177,7 +3177,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
           <div onClick={()=>setDashOpen(o=>({...o,invites:!o.invites}))} className="section-title" style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',userSelect:'none'}}>
             <span style={{fontSize:12,color:'var(--t2)',transform:dashOpen.invites?'rotate(90deg)':'rotate(0deg)',transition:'transform .15s'}}>▶</span>
             📨 Pending Invitations
-            {pendingInvites.length>0&&<span style={{background:'#F59E0B',color:'#fff',borderRadius:10,fontSize:11,fontWeight:700,padding:'2px 7px'}}>{pendingInvites.length}</span>}
+            {pendingInvites.length>0&&<span style={{background:'#F59E0B',color:'#fff',borderRadius:12,fontSize:11,fontWeight:700,padding:'2px 7px'}}>{pendingInvites.length}</span>}
           </div>
           {dashOpen.invites&&(<>
           {inviteMsg&&<div style={{fontSize:12,color:'#059669',padding:'4px 0',fontWeight:600}}>{inviteMsg}</div>}
@@ -3275,7 +3275,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
         <div className="ph-sub">Organisation structure and support tools — operational data is private to each org</div>
       </div>
 
-      <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.25)',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'center'}}>
+      <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:'10px 14px',marginBottom:16,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'center'}}>
         <span style={{fontSize:15,flexShrink:0}}>🔒</span>
         <span>You have read/write access to organisation settings and user management only. Task content, evidence, checklists, leave, and reports are strictly private to each organisation.</span>
       </div>
@@ -3343,7 +3343,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
               <div key={i} onClick={()=>setPage('support')} style={{padding:'8px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                   <div style={{fontSize:12,fontWeight:600,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.user_name} · {t.org}</div>
-                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:600,background:t.status==='open'?'rgba(245,158,11,.15)':'rgba(59,130,246,.15)',color:t.status==='open'?'#F59E0B':'#3B82F6',flexShrink:0}}>{t.status?.replace('_',' ').toUpperCase()}</span>
+                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:12,fontWeight:600,background:t.status==='open'?'rgba(245,158,11,.15)':'rgba(59,130,246,.15)',color:t.status==='open'?'#F59E0B':'#3B82F6',flexShrink:0}}>{t.status?.replace('_',' ').toUpperCase()}</span>
                 </div>
                 <div style={{fontSize:11,color:'var(--t2)'}}>{fmtTs(t.created_at)}</div>
               </div>
@@ -3372,7 +3372,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
         <div className="section-title">Quick Navigation</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8}}>
           {[['orgs','🏢','Organisations','View & manage orgs'],['users','👥','Users','Fix role & access issues'],['teams','👤','Teams','View team structure'],['audit','📋','Audit Log','Structural activity only'],['support','🎫','Support Tickets','Resolve user issues'],['subscriptions','💳','Subscriptions','Plan change requests'],['notifications','📢','Announcements','Platform-wide messages'],['platform_industries','🏭','Platform Industries','Manage global industry list']].map(([pg,icon,label,sub])=>(
-            <div key={pg} onClick={()=>setPage(pg)} style={{padding:'12px',borderRadius:10,border:'1px solid var(--border)',background:'var(--s2)',cursor:'pointer',textAlign:'center'}}>
+            <div key={pg} onClick={()=>setPage(pg)} style={{padding:'12px',borderRadius:12,border:'1px solid var(--border)',background:'var(--s2)',cursor:'pointer',textAlign:'center'}}>
               <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
               <div style={{fontSize:12,fontWeight:700}}>{label}</div>
               <div style={{fontSize:10,color:'var(--t2)',marginTop:2}}>{sub}</div>
@@ -4637,7 +4637,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const td = { padding:'9px 6px', fontSize:12, borderBottom:'1px solid var(--border)',
       verticalAlign:'top' }
     return (
-      <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginTop:14}}>
+      <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginTop:14}}>
         <div onClick={()=>setShowRegister(v=>!v)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
           <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>
             📋 Task Register · {_regActive ? _regShown.length+' of '+rows.length : rows.length}
@@ -4827,7 +4827,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                   return {...prev,assigned_user_ids:ids,assigned_user_names:names,assigned_user_id:'',assigned_user_name:'',lead_user_id:clr?'':prev.lead_user_id,lead_user_name:clr?'':prev.lead_user_name}
                                 })}/>
                                 <span style={{flex:1,fontSize:13}}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</span>
-                                {checked&&<button type="button" onClick={()=>setEditTask(prev=>({...prev,lead_user_id:isLead?'':u.id,lead_user_name:isLead?'':u.name}))} style={{fontSize:11,padding:'2px 8px',borderRadius:6,border:'1px solid var(--line)',background:isLead?'var(--brand)':'transparent',color:isLead?'#fff':'var(--t2)',cursor:'pointer'}}>{isLead?'★ Lead':'☆ Lead'}</button>}
+                                {checked&&<button type="button" onClick={()=>setEditTask(prev=>({...prev,lead_user_id:isLead?'':u.id,lead_user_name:isLead?'':u.name}))} style={{fontSize:11,padding:'2px 8px',borderRadius:8,border:'1px solid var(--line)',background:isLead?'var(--brand)':'transparent',color:isLead?'#fff':'var(--t2)',cursor:'pointer'}}>{isLead?'★ Lead':'☆ Lead'}</button>}
                               </div>
                             )
                           })}
@@ -4998,7 +4998,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                   return {...prev,assigned_user_ids:ids,assigned_user_names:names,assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',lead_user_id:clr?'':prev.lead_user_id,lead_user_name:clr?'':prev.lead_user_name}
                                 })}/>
                                 <span style={{flex:1,fontSize:13}}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</span>
-                                {checked&&<button type="button" onClick={()=>setNewTask(prev=>({...prev,lead_user_id:isLead?'':u.id,lead_user_name:isLead?'':u.name}))} style={{fontSize:11,padding:'2px 8px',borderRadius:6,border:'1px solid var(--line)',background:isLead?'var(--brand)':'transparent',color:isLead?'#fff':'var(--t2)',cursor:'pointer'}}>{isLead?'★ Lead':'☆ Lead'}</button>}
+                                {checked&&<button type="button" onClick={()=>setNewTask(prev=>({...prev,lead_user_id:isLead?'':u.id,lead_user_name:isLead?'':u.name}))} style={{fontSize:11,padding:'2px 8px',borderRadius:8,border:'1px solid var(--line)',background:isLead?'var(--brand)':'transparent',color:isLead?'#fff':'var(--t2)',cursor:'pointer'}}>{isLead?'★ Lead':'☆ Lead'}</button>}
                               </div>
                             )
                           })}
@@ -5093,7 +5093,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setNewTask({...newTask,subtasks:[...(newTask.subtasks||[]),{id:Date.now()+'',text:'',done:false,mandatory:false,requirePhoto:false,requireTimestamp:false,note:'',instruction:'',photo:null,history:[]}]})}>+ Add Item</button>
                 </div>
                 {pendingDelete&&(
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6,padding:'6px 10px',marginBottom:6,fontSize:12}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8,padding:'6px 10px',marginBottom:6,fontSize:12}}>
                     <span style={{color:'var(--t1)'}}>Item removed — <button type="button" style={{background:'none',border:'none',color:'var(--brand)',cursor:'pointer',fontWeight:600,padding:0,fontSize:12}} onClick={()=>{ setNewTask(prev=>{ const subs=[...(prev.subtasks||[])]; subs.splice(pendingDelete.idx,0,pendingDelete.item); return {...prev,subtasks:subs} }); setPendingDelete(null) }}>Undo</button></span>
                   </div>
                 )}
@@ -5114,7 +5114,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 ))}
                 {!(newTask.subtasks||[]).length&&!pendingDelete&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
               </div>
-              {createError&&<div style={{color:'var(--red)',fontSize:12,marginBottom:6,padding:'6px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.2)',borderRadius:6}}>{createError}</div>}
+              {createError&&<div style={{color:'var(--red)',fontSize:12,marginBottom:6,padding:'6px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8}}>{createError}</div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null); setCreateError(''); setTaskTeamMembers([]); setUserSearch(''); setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[],team_id:'',team_name:''}) }}>Cancel</button>
                 <button className="btn btn-primary" disabled={creating||!newTask.title.trim()||(teamUsers.length>0&&!newTask.assigned_user_id&&!newTask.team_id)||(teamUsers.length>0&&!newTask.approver_id)} onClick={createTask}>{creating?'Creating…':'Submit Task'}</button>
@@ -5175,7 +5175,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               worker's own panel; the two are mutually exclusive in practice because
               amAssigned and canReviewTask exclude each other for the same person. */}
           {!amAssigned&&extReq&&extReq.status!=='open'&&extReq.status!=='withdrawn'&&canReviewTask(sel)&&(
-            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
+            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:8}}>Extension {extReq.status}</div>
               <div style={{fontSize:13,marginBottom:4}}>
                 {extReq.requested_by_name||'A worker'} asked to move this to <strong>{extReq.requested_due_date}</strong>.
@@ -5185,7 +5185,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             </div>
           )}
           {!amAssigned&&extReq&&extReq.status==='open'&&canReviewTask(sel)&&(
-            <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.35)',borderRadius:10,padding:14,marginBottom:14}}>
+            <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.35)',borderRadius:12,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Extension requested</div>
               <div style={{fontSize:13,marginBottom:6}}>
                 <strong>{extReq.requested_by_name||'A worker'}</strong>
@@ -5205,7 +5205,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             </div>
           )}
           {amAssigned&&isOneOff(sel)&&sel.due_date&&!['approved','completed'].includes(sel.status)&&(
-            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
+            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>More time</div>
               {extReq&&extReq.status==='open' ? (
                 <div>
@@ -5254,7 +5254,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             </div>
           )}
           {amAssigned&&(
-            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}}>
+            <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Task Timer</div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
                 {/* TIMEIN-WINDOW-GATE-V1: _tiWin is the SAME expression workerTimeIn
@@ -5296,7 +5296,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         onChange={e=>setNaReason(e.target.value)}
                         rows={3}
                         placeholder="e.g. no sterilisation performed today - no instruments used"
-                        style={{width:'100%',padding:8,borderRadius:6,border:'1px solid var(--border)',background:'transparent',color:'inherit',fontSize:13,fontFamily:'inherit',resize:'vertical'}}
+                        style={{width:'100%',padding:8,borderRadius:8,border:'1px solid var(--border)',background:'transparent',color:'inherit',fontSize:13,fontFamily:'inherit',resize:'vertical'}}
                       />
                       <div style={{display:'flex',gap:8,marginTop:8}}>
                         <button
@@ -5349,9 +5349,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   in the checklist block in v3 and was unreachable on any task without a
                   checklist -- the gate fired and nothing rendered. Keep it in this group,
                   which renders for every task. */}
-              {earlyPrompt&&<div style={{background:'rgba(245,158,11,.10)',border:'1px solid rgba(245,158,11,.40)',borderRadius:6,padding:'12px',fontSize:13,marginTop:8}}><div style={{fontWeight:700,marginBottom:6}}>⏳ Early — this task opens {earlyPrompt.opensOn}</div><div style={{marginBottom:8}}>Its scheduled date is {earlyPrompt.cycleDate}. You can still submit, but please record why it is being done early.</div><textarea value={earlyReason} onChange={e=>setEarlyReason(e.target.value)} placeholder="Reason for early completion" style={{width:'100%',minHeight:60,padding:8,boxSizing:'border-box',fontSize:13}}/><div style={{marginTop:8,display:'flex',gap:8}}><button className="btn btn-primary" style={{flex:1,opacity:earlyReason.trim()?1:0.55}} disabled={!earlyReason.trim()} onClick={()=>{const _t=earlyPrompt.tid; setEarlyPrompt(null); submitTask(_t, true)}}>Submit anyway</button><button className="btn" style={{flex:1}} onClick={()=>{setEarlyPrompt(null); setEarlyReason('')}}>Cancel</button></div></div>}
-              {sel.status==='awaiting_review'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Done — awaiting review</div>}
-              {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:6,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Approved</div>}
+              {earlyPrompt&&<div style={{background:'rgba(245,158,11,.10)',border:'1px solid rgba(245,158,11,.40)',borderRadius:8,padding:'12px',fontSize:13,marginTop:8}}><div style={{fontWeight:700,marginBottom:6}}>⏳ Early — this task opens {earlyPrompt.opensOn}</div><div style={{marginBottom:8}}>Its scheduled date is {earlyPrompt.cycleDate}. You can still submit, but please record why it is being done early.</div><textarea value={earlyReason} onChange={e=>setEarlyReason(e.target.value)} placeholder="Reason for early completion" style={{width:'100%',minHeight:60,padding:8,boxSizing:'border-box',fontSize:13}}/><div style={{marginTop:8,display:'flex',gap:8}}><button className="btn btn-primary" style={{flex:1,opacity:earlyReason.trim()?1:0.55}} disabled={!earlyReason.trim()} onClick={()=>{const _t=earlyPrompt.tid; setEarlyPrompt(null); submitTask(_t, true)}}>Submit anyway</button><button className="btn" style={{flex:1}} onClick={()=>{setEarlyPrompt(null); setEarlyReason('')}}>Cancel</button></div></div>}
+              {sel.status==='awaiting_review'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:8,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Done — awaiting review</div>}
+              {sel.status==='approved'&&<div style={{background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.35)',borderRadius:8,padding:'12px',fontSize:13,color:'var(--green)',fontWeight:700,textAlign:'center'}}>✅ Approved</div>}
             </div>
           )}
           {(sel.created_by===user.name||user.role==='client_admin'||user.role==='super_admin')&&(
@@ -5381,11 +5381,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             </div>
           )}
           {sel.status==='rejected'&&(
-            <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:10,padding:14,marginBottom:14}}>
+            <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:12,padding:14,marginBottom:14}}>
               <div style={{fontSize:13,fontWeight:700,color:'var(--red)',marginBottom:6}}>⚠️ Task Sent Back</div>
               {parseSafe(sel.comments,[]).filter(c=>(typeof c==='object'?c.isRejection:String(c||'').startsWith('⚠️'))).slice(-1).map((c,i)=>{
                 const txt=typeof c==='object'?c.text:String(c||'').split(': ').slice(1).join(': ')
-                return <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:6,padding:'8px 10px'}}><NoteText t={txt}/></div>
+                return <div key={i} style={{fontSize:13,color:'var(--text)',background:'rgba(239,68,68,.04)',borderRadius:8,padding:'8px 10px'}}><NoteText t={txt}/></div>
               })}
             </div>
           )}
@@ -5446,13 +5446,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             <span style={{fontSize:10,color:'var(--t3)'}} title="Timestamp will be recorded on completion">🕐</span>
                           )}
                           {todayCount>0&&(
-                            <span style={{fontSize:10,fontWeight:700,color:'#10B981',background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.25)',borderRadius:10,padding:'1px 7px'}}>
+                            <span style={{fontSize:10,fontWeight:700,color:'#10B981',background:'rgba(16,185,129,.12)',border:'1px solid rgba(16,185,129,.25)',borderRadius:12,padding:'1px 7px'}}>
                               {todayCount}× today
                             </span>
                           )}
                         </div>
                         {s.instruction&&s.instruction.trim()&&(
-                          <div style={{marginTop:4,fontSize:12,color:'#0B6E4F',background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.3)',borderRadius:6,padding:'6px 9px',lineHeight:1.4}}>
+                          <div style={{marginTop:4,fontSize:12,color:'#0B6E4F',background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.3)',borderRadius:8,padding:'6px 9px',lineHeight:1.4}}>
                             <span style={{fontWeight:700}}>💬 Instruction:</span> {s.instruction}
                           </div>
                         )}
@@ -5477,7 +5477,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         {[...(s.attachments||[]),...(s.attachment?[s.attachment]:[])].map((at,ai)=><div key={ai} style={{marginTop:4,fontSize:11}}><EvidenceDocLink entry={at}/> <span style={{color:'var(--t2)'}}>· supporting document (not verified evidence)</span></div>)}
                         {canAct&&(isMarkOpen&&canAct?(
                           <div style={{marginTop:6}}>
-                            <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
+                            <textarea style={{width:'100%',padding:'6px 8px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Optional note for this completion…" value={clMarkNote} onChange={e=>setClMarkNote(e.target.value)}/>
                             <div style={{display:'flex',gap:6,marginTop:4}}>
                               <button className="btn btn-primary btn-sm" onClick={async ()=>{ await markChecklistItem(sel.id,idx,clMarkNote||null); setClMarkOpen(null); setClMarkNote('') }}>✓ Mark Done</button>
                               <button className="btn btn-secondary btn-sm" onClick={()=>{setClMarkOpen(null);setClMarkNote('')}}>Cancel</button>
@@ -5499,7 +5499,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         ))}
                         {isWorker&&isNoteOpen&&(
                           <div style={{marginTop:6}}>
-                            <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Add a note for this item…" value={clNoteText} onChange={e=>setClNoteText(e.target.value)}/>
+                            <textarea style={{width:'100%',padding:'6px 8px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)',fontSize:12,resize:'none',fontFamily:'inherit',boxSizing:'border-box',minHeight:52}} placeholder="Add a note for this item…" value={clNoteText} onChange={e=>setClNoteText(e.target.value)}/>
                             <div style={{display:'flex',gap:6,marginTop:4}}>
                               <button className="btn btn-primary btn-sm" onClick={()=>{ addSubNote(sel.id,idx,clNoteText); setClNoteOpen(null); setClNoteText('') }}>Save Note</button>
                               <button className="btn btn-secondary btn-sm" onClick={()=>{setClNoteOpen(null);setClNoteText('')}}>Cancel</button>
@@ -5592,7 +5592,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               const commentId=isObj?c.id:i+''
               const isEditing=editingComment&&editingComment.taskId===sel.id&&editingComment.commentId===commentId
               return (
-                <div key={i} style={{borderLeft:isAmendment?'3px solid #6366F1':isRejection?'3px solid var(--red)':'3px solid var(--border)',marginBottom:8,background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}>
+                <div key={i} style={{borderLeft:isAmendment?'3px solid #6366F1':isRejection?'3px solid var(--red)':'3px solid var(--border)',marginBottom:8,background:'var(--s3)',borderRadius:8,padding:'8px 10px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
                     <div style={{flex:1}}>
                       <span style={{fontWeight:700,fontSize:12,color:isAmendment?'#6366F1':isRejection?'var(--red)':'var(--brand)'}}>{isAmendment?'✏️':isRejection?'⚠️':'💬'} {author}</span>
@@ -5607,7 +5607,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                   </div>
                   {isEditing?(
                     <div style={{marginTop:6}}>
-                      <textarea style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:56,fontFamily:'inherit',boxSizing:'border-box'}} value={editingComment.text} onChange={e=>setEditingComment({...editingComment,text:e.target.value})}/>
+                      <textarea style={{width:'100%',padding:'6px 8px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:56,fontFamily:'inherit',boxSizing:'border-box'}} value={editingComment.text} onChange={e=>setEditingComment({...editingComment,text:e.target.value})}/>
                       <div style={{display:'flex',gap:6,marginTop:6}}>
                         <button className="btn btn-primary btn-sm" onClick={()=>{ const all=parseSafe(sel.comments,[]); update(sel.id,{comments:all.map((cm,j)=>j!==i?cm:{...(typeof cm==='object'?cm:{id:i+'',author,authorId:user.id,text,timestamp:new Date().toISOString(),edits:[]}),edits:[...((typeof cm==='object'?cm.edits:null)||[]),{text:typeof cm==='object'?cm.text:text,editedAt:new Date().toISOString()}],text:editingComment.text})}); setEditingComment(null) }}>Save</button>
                         <button className="btn btn-secondary btn-sm" onClick={()=>setEditingComment(null)}>Cancel</button>
@@ -5725,7 +5725,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               </div>
               <div style={{display:'flex',gap:8,alignItems:'center'}}>
                 <button className={'btn btn-sm '+(showArchive?'btn-primary':'btn-secondary')} onClick={()=>{setShowArchive(v=>!v);setSelected(null)}}>📦 {showArchive?'Active':'Archive'}</button>
-                {canCreate&&(user.role==='super_admin'?<div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:6}}>🔧 View only</div>:<button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}
+                {canCreate&&(user.role==='super_admin'?<div style={{fontSize:11,color:'#F59E0B',padding:'6px 10px',background:'rgba(245,158,11,.08)',borderRadius:8}}>🔧 View only</div>:<button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Task</button>)}
               </div>
             </div>
             {user.role==='super_admin'&&(
@@ -5745,7 +5745,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               <div className="section">
                 <button className="back-btn" style={{marginBottom:10}} onClick={()=>setShowArchive(false)}><IC n="x" s={14}/> Back to Tasks</button>
                 <div className="section-title" style={{marginBottom:12}}>📦 Archive — Task Occurrences</div>
-                <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
+                <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:12}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>🔍 Search & Filter</div>
                   <div style={{display:'flex',flexDirection:'column',gap:8}}>
                     <input className="form-input" placeholder="Search task name or worker..." value={archiveSearch} onChange={e=>setArchiveSearch(e.target.value)} style={{fontSize:12}}/>
@@ -5790,7 +5790,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       </div>
                       {calPicking&&(
                         <div style={{position:'fixed',inset:0,zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,.4)',backdropFilter:'blur(2px)'}} onClick={()=>setCalPicking(null)}>
-                          <div style={{background:'var(--card)',borderRadius:16,padding:16,width:300,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}} onClick={e=>e.stopPropagation()}>
+                          <div style={{background:'var(--card)',borderRadius:12,padding:16,width:300,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}} onClick={e=>e.stopPropagation()}>
                             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
                               <div style={{fontSize:13,fontWeight:700,color:calPicking==='from'?'var(--brand)':'#8B5CF6'}}>
                                 {calPicking==='from'?'📅 Select Start Date':'📅 Select End Date'}
@@ -5798,14 +5798,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                               <button style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:'var(--t2)',lineHeight:1}} onClick={()=>setCalPicking(null)}>×</button>
                             </div>
                             <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:10}}>
-                              <button style={{background:'none',border:'1px solid var(--border)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:14,color:'var(--t2)'}} onClick={()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1)}else setCalMonth(m=>m-1)}}>‹</button>
-                              <select value={calMonth} onChange={e=>setCalMonth(+e.target.value)} style={{flex:1,fontSize:12,fontWeight:700,border:'1px solid var(--border)',borderRadius:6,padding:'5px 6px',background:'var(--s3)',cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+                              <button style={{background:'none',border:'1px solid var(--border)',borderRadius:8,padding:'3px 8px',cursor:'pointer',fontSize:14,color:'var(--t2)'}} onClick={()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1)}else setCalMonth(m=>m-1)}}>‹</button>
+                              <select value={calMonth} onChange={e=>setCalMonth(+e.target.value)} style={{flex:1,fontSize:12,fontWeight:700,border:'1px solid var(--border)',borderRadius:8,padding:'5px 6px',background:'var(--s3)',cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
                                 {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m,i)=><option key={i} value={i}>{m}</option>)}
                               </select>
-                              <select value={calYear} onChange={e=>setCalYear(+e.target.value)} style={{fontSize:12,fontWeight:700,border:'1px solid var(--border)',borderRadius:6,padding:'5px 6px',background:'var(--s3)',cursor:'pointer',outline:'none',fontFamily:'inherit',width:72}}>
+                              <select value={calYear} onChange={e=>setCalYear(+e.target.value)} style={{fontSize:12,fontWeight:700,border:'1px solid var(--border)',borderRadius:8,padding:'5px 6px',background:'var(--s3)',cursor:'pointer',outline:'none',fontFamily:'inherit',width:72}}>
                                 {Array.from({length:10},(_,i)=>new Date().getFullYear()-i).map(y=><option key={y} value={y}>{y}</option>)}
                               </select>
-                              <button style={{background:'none',border:'1px solid var(--border)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:14,color:'var(--t2)'}} onClick={()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1)}else setCalMonth(m=>m+1)}}>›</button>
+                              <button style={{background:'none',border:'1px solid var(--border)',borderRadius:8,padding:'3px 8px',cursor:'pointer',fontSize:14,color:'var(--t2)'}} onClick={()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1)}else setCalMonth(m=>m+1)}}>›</button>
                             </div>
                             <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4,textAlign:'center'}}>
                               {['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={{fontSize:10,color:'var(--t2)',fontWeight:700,padding:'2px 0'}}>{d}</div>)}
@@ -5822,7 +5822,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                     if(isDisabled) return
                                     if(calPicking==='from'){setArchiveDateFrom(k);setArchiveDateTo('');setCalPicking('to')}
                                     else{setArchiveDateTo(k);setCalPicking(null)}
-                                  }} style={{textAlign:'center',padding:'7px 2px',borderRadius:6,fontSize:12,cursor:isDisabled?'default':'pointer',background:isFr||isTo?'var(--brand)':inR?'rgba(0,168,126,.15)':'transparent',color:isFr||isTo?'#fff':isDisabled?'var(--t3)':'var(--text)',fontWeight:isFr||isTo?700:400,opacity:isDisabled?0.3:1,transition:'background .1s'}}>{d}</div>
+                                  }} style={{textAlign:'center',padding:'7px 2px',borderRadius:8,fontSize:12,cursor:isDisabled?'default':'pointer',background:isFr||isTo?'var(--brand)':inR?'rgba(0,168,126,.15)':'transparent',color:isFr||isTo?'#fff':isDisabled?'var(--t3)':'var(--text)',fontWeight:isFr||isTo?700:400,opacity:isDisabled?0.3:1,transition:'background .1s'}}>{d}</div>
                                 )
                               })}
                             </div>
@@ -5834,14 +5834,14 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       )}
                     </div>
                     {(archiveSearch||archiveCategory||archiveWorker||archiveOutcome||archiveDateFrom||archiveDateTo)&&(
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:'var(--brand-lt)',borderRadius:6,border:'1px solid rgba(0,168,126,.2)'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:'var(--brand-lt)',borderRadius:8,border:'1px solid rgba(0,168,126,.2)'}}>
                         <span style={{fontSize:12,color:'var(--brand)',fontWeight:600}}>✓ Filters active</span>
                         <button className="btn btn-secondary btn-sm" onClick={()=>{setArchiveSearch('');setArchiveCategory('');setArchiveWorker('');setArchiveOutcome('');setArchiveDateFrom('');setArchiveDateTo('');setCalPicking('from')}}>✕ Clear All</button>
                       </div>
                     )}
                   </div>
                 </div>
-                <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14}}>
+                <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:14}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 Results</div>
                   {(()=>{
                     // ARCHIVE-OCC-V2: the archive is now a flat chronological list of
@@ -5913,7 +5913,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                               {Array.isArray(o.evidence)&&o.evidence.length>0&&<span>📷 {o.evidence.length}</span>}
                             </div>
                           </div>
-                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:badge.bg,color:badge.fg,whiteSpace:'nowrap'}}>{badge.label}</span>
+                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:12,fontWeight:600,background:badge.bg,color:badge.fg,whiteSpace:'nowrap'}}>{badge.label}</span>
                         </div>
                       )
                     }
@@ -5966,13 +5966,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           <button className="back-btn" style={{marginBottom:10}} onClick={()=>setSelectedOcc(null)}><IC n="x" s={14}/> Back to Archive</button>
                           <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:4}}>
                             <div style={{fontSize:16,fontWeight:700}}>{o.title}</div>
-                            <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:badge.bg,color:badge.fg,whiteSpace:'nowrap'}}>{badge.label}</span>
+                            <span style={{fontSize:10,padding:'2px 8px',borderRadius:12,fontWeight:600,background:badge.bg,color:badge.fg,whiteSpace:'nowrap'}}>{badge.label}</span>
                           </div>
                           <div style={{fontSize:12,color:'var(--t2)',marginBottom:14}}>
                             Cycle of {o.occurrence_date}
                             {o.recurrence&&o.recurrence!=='once'?' \u00b7 '+(RECURRENCE_LABELS[o.recurrence]||o.recurrence):''}
                           </div>
-                          <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
+                          <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>This cycle</div>
                             <div style={{display:'flex',flexDirection:'column',gap:6,fontSize:13}}>
                               {o.completed_by_name&&<div><span style={{color:'var(--t2)'}}>Completed by:</span> {o.completed_by_name}</div>}
@@ -5982,7 +5982,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                               {o.na_by_name&&<div><span style={{color:'var(--t2)'}}>Marked not applicable by:</span> {o.na_by_name}{o.na_at?' \u00b7 '+fmtDateTime(o.na_at):''}</div>}
                             </div>
                           </div>
-                          <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
+                          <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Evidence for this cycle</div>
                             {photos.length>0
                               ? <div style={{display:'flex',flexWrap:'wrap'}}>{photos.map((p,i)=><OccPhoto key={(p&&p.path)||i} p={p}/>)}</div>
@@ -6026,7 +6026,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 const myReview = activeFiltered.filter(t=>t.status==='awaiting_review' && t.approver_id===user.id)
                 if(myReview.length===0) return null
                 return (
-                  <div onClick={()=>setFilter('awaiting_review')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.35)',borderRadius:10,padding:'10px 14px',marginBottom:12}}>
+                  <div onClick={()=>setFilter('awaiting_review')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.35)',borderRadius:12,padding:'10px 14px',marginBottom:12}}>
                     <span style={{fontSize:18}}>⏳</span>
                     <div style={{flex:1}}>
                       <div style={{fontSize:13,fontWeight:700,color:'#B45309'}}>{myReview.length} task{myReview.length!==1?'s':''} awaiting your review</div>
@@ -6088,7 +6088,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                 const _dt = activeFiltered.find(t=>t.id===r.task_id)
                                 return (
                                   <div key={'decl'+r.id} onClick={()=>setSelected(r.task_id)}
-                                    style={{cursor:'pointer',background:'var(--card)',border:'1px solid rgba(239,68,68,.3)',borderRadius:10,padding:'10px 12px',marginBottom:8}}>
+                                    style={{cursor:'pointer',background:'var(--card)',border:'1px solid rgba(239,68,68,.3)',borderRadius:12,padding:'10px 12px',marginBottom:8}}>
                                     <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>
                                       <span style={{color:'var(--red)'}}>✗ Extension declined</span>
                                       {' for '}{_dt?.title||r.task_id}
@@ -6350,7 +6350,7 @@ function EscalationsView({ tasks, setTasks, user, setAuditLog }) {
       {esc.length===0
         ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No active escalations</div></div>
         : esc.map(t=>(
-          <div key={t.id} style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.15)',borderRadius:10,padding:14,marginBottom:10}}>
+          <div key={t.id} style={{background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.15)',borderRadius:12,padding:14,marginBottom:10}}>
             <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
               <div>
                 <div style={{fontSize:14,fontWeight:700}}>{t.title}</div>
@@ -6457,7 +6457,7 @@ function OrgEscalationsView({ user, setAuditLog }) {
         archived.length===0
           ? <div className="empty"><div className="empty-icon">🗄</div><div className="empty-text">No archived escalations</div></div>
           : archived.map(r=>(
-            <div key={r.id} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:10}}>
+            <div key={r.id} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:10}}>
               <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
                 <div style={{fontSize:14,fontWeight:700}}>{r.task_title||'—'}</div>
                 <span className="badge" style={{background:'var(--border)',color:'var(--t2)',flexShrink:0}}>Archived</span>
@@ -6476,7 +6476,7 @@ function OrgEscalationsView({ user, setAuditLog }) {
           : active.map(r=>{
             const isOpen = r.status==='open'
             return (
-              <div key={r.id} style={{background:isOpen?'rgba(239,68,68,.04)':'rgba(16,185,129,.04)',border:'1px solid '+(isOpen?'rgba(239,68,68,.15)':'rgba(16,185,129,.2)'),borderRadius:10,padding:14,marginBottom:10}}>
+              <div key={r.id} style={{background:isOpen?'rgba(239,68,68,.04)':'rgba(16,185,129,.04)',border:'1px solid '+(isOpen?'rgba(239,68,68,.15)':'rgba(16,185,129,.2)'),borderRadius:12,padding:14,marginBottom:10}}>
                 <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
                   <div style={{fontSize:14,fontWeight:700}}>{r.task_title||'—'}</div>
                   <span className="badge" style={{background:isOpen?'rgba(239,68,68,.1)':'rgba(16,185,129,.12)',color:isOpen?'var(--red)':'var(--green)',flexShrink:0}}>{isOpen?'🚨 Open':'✓ Resolved'}</span>
@@ -6591,7 +6591,7 @@ function AmendmentPanel({ sel, user, update, parseSafe }) {
             placeholder="Describe your amendment..."
             value={note}
             onChange={e=>setNote(e.target.value)}
-            style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:72,fontFamily:'inherit',boxSizing:'border-box'}}
+            style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s2)',color:'var(--text)',fontSize:12,resize:'vertical',minHeight:72,fontFamily:'inherit',boxSizing:'border-box'}}
           />
           <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
             <button className="btn btn-secondary" style={{flex:1,fontSize:12,minWidth:120}} onClick={()=>document.getElementById('amend-img-'+sel.id).click()}>
@@ -6841,7 +6841,7 @@ function ReviewView({ user }) {
               onClick={approve}
               disabled={!selectedIds.length || busy}
               style={{
-                padding: '10px 18px', borderRadius: 6, border: 'none', fontWeight: 600,
+                padding: '10px 18px', borderRadius: 8, border: 'none', fontWeight: 600,
                 cursor: (!selectedIds.length || busy) ? 'not-allowed' : 'pointer',
                 background: (!selectedIds.length || busy) ? '#cbd5e1' : '#16a34a', color: '#fff',
               }}>
@@ -6851,7 +6851,7 @@ function ReviewView({ user }) {
         </div>
         {msg && (
           <div style={{
-            marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 14,
+            marginTop: 12, padding: '10px 12px', borderRadius: 8, fontSize: 14,
             background: msg.kind === 'ok' ? '#f0fdf4' : '#fef2f2',
             color: msg.kind === 'ok' ? '#166534' : '#991b1b',
           }}>{msg.text}</div>
@@ -7424,7 +7424,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
             style={{display:'flex',alignItems:'center',gap:6}}
           >
             🔍 Filters
-            {activeFilterCount>0&&<span style={{background:'rgba(255,255,255,0.3)',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:800}}>{activeFilterCount}</span>}
+            {activeFilterCount>0&&<span style={{background:'rgba(255,255,255,0.3)',borderRadius:12,padding:'1px 7px',fontSize:10,fontWeight:800}}>{activeFilterCount}</span>}
             <span style={{fontSize:11,opacity:.7}}>{showFilters?'▲':'▼'}</span>
           </button>
           {activeFilterCount>0&&(
@@ -7487,7 +7487,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
               <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.5px'}}>Status</div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                 {[['pending','Pending','#6B7280'],['in_progress','In Progress','#3B82F6'],['awaiting_review','Awaiting Review','#F59E0B'],['approved','Approved','#10B981'],['rejected','Rejected','#EF4444'],['overdue','Overdue','#DC2626']].map(([v,l,col])=>(
-                  <button key={v} onClick={()=>toggleFStatus(v)} style={{padding:'4px 11px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',border:'none',background:filterStatuses.includes(v)?col:'var(--s3)',color:filterStatuses.includes(v)?'#fff':'var(--t2)',transition:'all .15s'}}>{l}</button>
+                  <button key={v} onClick={()=>toggleFStatus(v)} style={{padding:'4px 11px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',border:'none',background:filterStatuses.includes(v)?col:'var(--s3)',color:filterStatuses.includes(v)?'#fff':'var(--t2)',transition:'all .15s'}}>{l}</button>
                 ))}
               </div>
             </div>
@@ -7497,7 +7497,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
               <div style={{fontSize:10,fontWeight:700,color:'var(--t2)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.5px'}}>Priority</div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                 {[['critical','Critical','#EF4444'],['high','High','#F59E0B'],['medium','Medium','#3B82F6'],['low','Low','#10B981']].map(([v,l,col])=>(
-                  <button key={v} onClick={()=>toggleFPriority(v)} style={{padding:'4px 11px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',border:'none',background:filterPriorities.includes(v)?col:'var(--s3)',color:filterPriorities.includes(v)?'#fff':'var(--t2)',transition:'all .15s'}}>{l}</button>
+                  <button key={v} onClick={()=>toggleFPriority(v)} style={{padding:'4px 11px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',border:'none',background:filterPriorities.includes(v)?col:'var(--s3)',color:filterPriorities.includes(v)?'#fff':'var(--t2)',transition:'all .15s'}}>{l}</button>
                 ))}
               </div>
             </div>
@@ -7582,9 +7582,9 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
             <div style={{display:'flex',gap:4,alignItems:'flex-end',height:80,marginTop:10}}>
               {last7.map((d,i)=>(
                 <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
-                  <div style={{width:'100%',background:'var(--s3)',borderRadius:3,position:'relative',height:60,display:'flex',alignItems:'flex-end'}}>
-                    <div style={{width:'100%',background:'var(--brand)',borderRadius:3,height:(d.total/maxBar*56)+'px',opacity:.3}}/>
-                    <div style={{position:'absolute',bottom:0,width:'100%',background:'var(--brand)',borderRadius:3,height:(d.done/maxBar*56)+'px'}}/>
+                  <div style={{width:'100%',background:'var(--s3)',borderRadius:4,position:'relative',height:60,display:'flex',alignItems:'flex-end'}}>
+                    <div style={{width:'100%',background:'var(--brand)',borderRadius:4,height:(d.total/maxBar*56)+'px',opacity:.3}}/>
+                    <div style={{position:'absolute',bottom:0,width:'100%',background:'var(--brand)',borderRadius:4,height:(d.done/maxBar*56)+'px'}}/>
                   </div>
                   <div style={{fontSize:9,color:'var(--t2)'}}>{d.label}</div>
                 </div>
@@ -7737,7 +7737,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
           <div style={{display:'flex',gap:14,marginTop:8,fontSize:10,color:'var(--t2)',flexWrap:'wrap'}}>
             {[['var(--green)','Completed'],['#F59E0B','Outside grace'],['var(--red)','Missed'],['#6B7280','Not applicable']].map(([c,l])=>(
               <span key={l} style={{display:'inline-flex',alignItems:'center',gap:5}}>
-                <span style={{width:9,height:9,borderRadius:3,background:c,display:'inline-block'}} />{l}
+                <span style={{width:9,height:9,borderRadius:4,background:c,display:'inline-block'}} />{l}
               </span>
             ))}
           </div>
@@ -8491,7 +8491,7 @@ function UsersView({ user, setAuditLog }) {
                   {(orgAssignments[editingUser.id]||[]).length>0&&(
                     <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:5}}>
                       {(orgAssignments[editingUser.id]||[]).map((a,ai)=>(
-                        <span key={ai} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>
+                        <span key={ai} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:12,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>
                           {[a.industry,a.position||ROLE_LABELS[a.role]||a.role].filter(Boolean).join(' · ')}
                         </span>
                       ))}
@@ -8617,7 +8617,7 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{fontSize:13,fontWeight:600}}>Regularly Rostered</div>
                   <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>If on, only tasks due during rostered hours count toward this worker's KPI.</div>
                 </div>
-                <button type="button" style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:editForm.regularly_rostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setEditForm({...editForm,regularly_rostered:!editForm.regularly_rostered})}>
+                <button type="button" style={{width:40,height:22,borderRadius:12,border:'none',cursor:'pointer',background:editForm.regularly_rostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setEditForm({...editForm,regularly_rostered:!editForm.regularly_rostered})}>
                   <div style={{width:16,height:16,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:editForm.regularly_rostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
                 </button>
               </div>
@@ -8666,7 +8666,7 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{fontSize:13,fontWeight:600}}>Regularly Rostered</div>
                   <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>If on, only tasks due during rostered hours count toward this worker's KPI.</div>
                 </div>
-                <button type="button" style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:rosterOnlyRegRostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setRosterOnlyRegRostered(v=>!v)}>
+                <button type="button" style={{width:40,height:22,borderRadius:12,border:'none',cursor:'pointer',background:rosterOnlyRegRostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setRosterOnlyRegRostered(v=>!v)}>
                   <div style={{width:16,height:16,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:rosterOnlyRegRostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
                 </button>
               </div>
@@ -8777,7 +8777,7 @@ function UsersView({ user, setAuditLog }) {
                 </div>
               </div>
               {duplicateInvite ? (
-                <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.3)',borderRadius:10,padding:'14px 16px',marginTop:4}}>
+                <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.3)',borderRadius:12,padding:'14px 16px',marginTop:4}}>
                   <div style={{fontWeight:700,fontSize:13,color:'#D97706',marginBottom:6}}>⚠️ Invite already sent</div>
                   <div style={{fontSize:13,color:'var(--text)',marginBottom:12}}>An invite has already been sent to this email. Do you want to resend it instead?</div>
                   <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
@@ -8812,7 +8812,7 @@ function UsersView({ user, setAuditLog }) {
               <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>These are the industries Taksyn supports. Your organisation's services are set by Taksyn — contact support to add or change one.</div>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Preset Industries</div>
               <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
-                {PRESET_INDUSTRIES.map(i=><span key={i} style={{fontSize:11,padding:'3px 10px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:500}}>{i}</span>)}
+                {PRESET_INDUSTRIES.map(i=><span key={i} style={{fontSize:11,padding:'3px 10px',borderRadius:12,background:'var(--s3)',color:'var(--t2)',fontWeight:500}}>{i}</span>)}
               </div>
             </div>
           </div>
@@ -8870,20 +8870,20 @@ function UsersView({ user, setAuditLog }) {
                   <div className="user-info" style={{flex:1}}>
                     <div className="user-name" style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                       {u.name}
-                      {isUserPending(u)&&<span style={{background:'rgba(245,158,11,.15)',color:'#D97706',border:'1px solid rgba(245,158,11,.3)',borderRadius:10,fontSize:10,fontWeight:700,padding:'2px 7px',letterSpacing:.2}}>Pending</span>}
+                      {isUserPending(u)&&<span style={{background:'rgba(245,158,11,.15)',color:'#D97706',border:'1px solid rgba(245,158,11,.3)',borderRadius:12,fontSize:10,fontWeight:700,padding:'2px 7px',letterSpacing:.2}}>Pending</span>}
                     </div>
                     <div className="user-email">{u.email||'—'}</div>
                     {user.role==='super_admin' && allOrgMemberships[u.id]?.length > 0 ? (
                       <div style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:4,marginTop:3}}>
                         {allOrgMemberships[u.id].map((m,mi)=>(
-                          <span key={mi} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>{m.orgName} · {ROLE_LABELS[m.role]||m.role}{m.position ? ' · '+m.position : ''}</span>
+                          <span key={mi} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:12,background:'var(--brand-bg,#e8f0ff)',border:'1px solid var(--brand-border,#b3c9ff)',color:'var(--brand,#2563eb)',whiteSpace:'nowrap'}}>{m.orgName} · {ROLE_LABELS[m.role]||m.role}{m.position ? ' · '+m.position : ''}</span>
                         ))}
                       </div>
                     ) : orgAssignments[u.id]?.length > 0 ? (
                       <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
                         {orgAssignments[u.id].map((a,ai)=>{
                           const label = [a.industry, a.position || ROLE_LABELS[a.role] || a.role].filter(Boolean).join(' · ')
-                          return <span key={ai} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:'var(--s3)',border:'1px solid var(--border)',color:'var(--t2)',whiteSpace:'nowrap'}}>{label}</span>
+                          return <span key={ai} style={{display:'inline-block',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:12,background:'var(--s3)',border:'1px solid var(--border)',color:'var(--t2)',whiteSpace:'nowrap'}}>{label}</span>
                         })}
                       </div>
                     ) : userPositions[u.id]?.length > 0 ? (
@@ -8965,7 +8965,7 @@ function UsersView({ user, setAuditLog }) {
                             <div className="user-info" style={{flex:1}}>
                               <div className="user-name" style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                                 {nm}
-                                <span style={{background:'rgba(245,158,11,.15)',color:'#D97706',border:'1px solid rgba(245,158,11,.3)',borderRadius:10,fontSize:10,fontWeight:700,padding:'2px 7px'}}>Pending</span>
+                                <span style={{background:'rgba(245,158,11,.15)',color:'#D97706',border:'1px solid rgba(245,158,11,.3)',borderRadius:12,fontSize:10,fontWeight:700,padding:'2px 7px'}}>Pending</span>
                               </div>
                               {inv.invited_email&&<div className="user-email">{inv.invited_email}</div>}
                               {inv.invited_industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {inv.invited_industry}</div>}
@@ -9013,8 +9013,8 @@ function TiersView({ user }) {
         {Object.entries(TIERS).map(([name,tier])=>(
           <div key={name} className={"tier-card "+(currentTier===name?'active':'')} style={{borderColor:currentTier===name?tier.color:'var(--border)'}}>
             <div><div className="tier-name" style={{color:tier.color}}>{name}</div><div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>{tier.users} users</div></div>
-            <div style={{background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Base / month</div><div style={{fontSize:18,fontWeight:800,color:tier.color}}>{tier.base}</div></div>
-            <div style={{background:'var(--s3)',borderRadius:6,padding:'8px 10px'}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Per user / month</div><div style={{fontSize:18,fontWeight:800,color:tier.color}}>{tier.perUser}</div></div>
+            <div style={{background:'var(--s3)',borderRadius:8,padding:'8px 10px'}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Base / month</div><div style={{fontSize:18,fontWeight:800,color:tier.color}}>{tier.base}</div></div>
+            <div style={{background:'var(--s3)',borderRadius:8,padding:'8px 10px'}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Per user / month</div><div style={{fontSize:18,fontWeight:800,color:tier.color}}>{tier.perUser}</div></div>
             {currentTier===name&&<span className="badge" style={{background:tier.color+'22',color:tier.color,width:'fit-content'}}>✓ Current Plan</span>}
             <div style={{fontSize:11,color:'var(--t2)',display:'flex',flexDirection:'column',gap:3}}><div>💾 {tier.storage}</div><div>📷 {tier.images}</div><div>🗓 {tier.retention}</div></div>
             <div style={{display:'flex',flexDirection:'column',gap:4,borderTop:'1px solid var(--border)',paddingTop:8}}>
@@ -9229,7 +9229,7 @@ function SubscriptionsView({ user, setPage }) {
           <div style={{fontSize:13,color:'var(--t2)'}}>No open requests. Nothing is waiting on you.</div>
         )}
         {open.map(r=>(
-          <div key={r.id} style={{padding:'10px 12px',borderRadius:6,marginBottom:8,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
+          <div key={r.id} style={{padding:'10px 12px',borderRadius:8,marginBottom:8,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
             <div style={{fontSize:14,fontWeight:700,marginBottom:3}}>
               <OrgLink orgId={r.org}/>
               <span style={{fontWeight:400,color:'var(--t2)'}}> &middot; {planTier(r.current_plan)||'—'} &rarr; {planTier(r.requested_plan)}</span>
@@ -9246,7 +9246,7 @@ function SubscriptionsView({ user, setPage }) {
           <div style={{fontSize:13,color:'var(--t2)'}}>Nothing decided yet.</div>
         )}
         {decided.map(r=>(
-          <div key={r.id} style={{padding:'8px 12px',borderRadius:6,marginBottom:6,background:'var(--s3)'}}>
+          <div key={r.id} style={{padding:'8px 12px',borderRadius:8,marginBottom:6,background:'var(--s3)'}}>
             <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>
               <OrgLink orgId={r.org}/>
               <span style={{fontWeight:400,color:'var(--t2)'}}> &middot; {planTier(r.requested_plan)} &middot; {r.status}</span>
@@ -9858,7 +9858,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
         </div>
         <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,flexWrap:'wrap'}}>
           {[['members','👥 Members'],['teams','🏷 Teams'],['settings','⚙️ Settings'],['sla','⏱ Response Time'],['audit','📋 Audit Log'],['support','🎫 Support']].map(([k,l])=>(
-            <button key={k} onClick={()=>setOrgContextTab(k)} style={{flex:'1 1 auto',padding:'6px 8px',borderRadius:6,border:'none',background:orgContextTab===k?'#fff':'transparent',color:orgContextTab===k?'var(--text)':'var(--t2)',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:orgContextTab===k?'0 1px 4px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>{l}</button>
+            <button key={k} onClick={()=>setOrgContextTab(k)} style={{flex:'1 1 auto',padding:'6px 8px',borderRadius:8,border:'none',background:orgContextTab===k?'#fff':'transparent',color:orgContextTab===k?'var(--text)':'var(--t2)',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:orgContextTab===k?'0 1px 4px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
         {orgContextTab==='members'&&(
@@ -9898,7 +9898,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                 {loadingProfiles?(
                   <div style={{textAlign:'center',padding:12,color:'var(--t2)',fontSize:13}}>Loading users...</div>
                 ):(
-                  <div style={{maxHeight:200,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6}}>
+                  <div style={{maxHeight:200,overflowY:'auto',border:'1px solid var(--border)',borderRadius:8}}>
                     {allProfiles.filter(p=>!orgMembers.some(m=>m.id===p.id)).filter(p=>!addMemberSearch||p.name?.toLowerCase().includes(addMemberSearch.toLowerCase())||p.email?.toLowerCase().includes(addMemberSearch.toLowerCase())).map(p=>(
                       <div key={p.id} onClick={()=>setAddMemberSelectedId(p.id===addMemberSelectedId?null:p.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',cursor:'pointer',background:p.id===addMemberSelectedId?'var(--brand-lt)':'transparent',borderBottom:'1px solid var(--border)'}}>
                         <div style={{flex:1}}>
@@ -9922,7 +9922,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                   </div>
                 )}
                 {addMemberMsg&&(
-                  <div style={{marginTop:8,fontSize:13,padding:'6px 10px',borderRadius:6,background:addMemberMsg.startsWith('✅')?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)',color:addMemberMsg.startsWith('✅')?'var(--green)':'#EF4444'}}>{addMemberMsg}</div>
+                  <div style={{marginTop:8,fontSize:13,padding:'6px 10px',borderRadius:8,background:addMemberMsg.startsWith('✅')?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)',color:addMemberMsg.startsWith('✅')?'var(--green)':'#EF4444'}}>{addMemberMsg}</div>
                 )}
               </div>
             )}
@@ -9965,7 +9965,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                   <div style={{flex:1}}>
                     <div style={{fontSize:16,fontWeight:800}}>{viewingMember.name||'—'}</div>
                     <div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>{viewingMember.email||'—'}</div>
-                    <div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap'}}><RolePill role={viewingMember.role}/>{viewingMember.tier&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>{viewingMember.tier}</span>}</div>
+                    <div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap'}}><RolePill role={viewingMember.role}/>{viewingMember.tier&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:12,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>{viewingMember.tier}</span>}</div>
                   </div>
                 </div>
                 <div className="two-col" style={{gap:8}}>
@@ -9984,7 +9984,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                   {showMemberOrgChange&&(
                     <div style={{marginTop:10}}>
                       <input className="form-input" placeholder="Filter organisations..." value={memberOrgSearch} onChange={e=>setMemberOrgSearch(e.target.value)} style={{fontSize:13,marginBottom:6}}/>
-                      <div style={{maxHeight:180,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6}}>
+                      <div style={{maxHeight:180,overflowY:'auto',border:'1px solid var(--border)',borderRadius:8}}>
                         {[...orgs].sort((a,b)=>a.name.localeCompare(b.name)).filter(o=>!memberOrgSearch||o.name.toLowerCase().includes(memberOrgSearch.toLowerCase())).map(o=>(
                           <div key={o.id} onClick={()=>changeViewingMemberOrg(o.name)} style={{padding:'8px 12px',cursor:'pointer',fontSize:13,fontWeight:o.name===viewingMember.org?700:400,color:o.name===viewingMember.org?'var(--t2)':'inherit',background:o.name===viewingMember.org?'var(--s3)':'transparent',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                             {o.name}
@@ -10138,13 +10138,13 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
       ) : (
         <div className="org-grid">
           {filtered.map(org=>(
-            <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',borderLeft:'4px solid var(--green)'}}>
+            <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:12,padding:'12px 14px',borderLeft:'4px solid var(--green)'}}>
               {/* Name + chips row */}
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:5}}>
                 {org.logo&&<img src={org.logo} alt={org.name} style={{height:28,width:'auto',maxWidth:80,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>}
                 <span style={{fontWeight:700,fontSize:14,cursor:'pointer',color:'var(--brand)',textDecoration:'underline',flex:'1 1 120px',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} onClick={()=>enterOrgContext(org)}>{org.name}</span>
-                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:600,flexShrink:0,background:'rgba(16,185,129,.12)',color:'var(--green)'}}>ACTIVE</span>
-                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[planTier(org.plan)]?.color||'var(--t2)',fontWeight:600,flexShrink:0}}>{planTier(org.plan)||'—'}</span>
+                <span style={{fontSize:10,padding:'2px 7px',borderRadius:12,fontWeight:600,flexShrink:0,background:'rgba(16,185,129,.12)',color:'var(--green)'}}>ACTIVE</span>
+                <span style={{fontSize:10,padding:'2px 7px',borderRadius:12,background:'var(--s3)',color:TIERS[planTier(org.plan)]?.color||'var(--t2)',fontWeight:600,flexShrink:0}}>{planTier(org.plan)||'—'}</span>
               </div>
               {/* Metadata row */}
               <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}}>
@@ -10165,7 +10165,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                 <button className="btn btn-secondary btn-sm" onClick={()=>enterOrgContext(org)}>👥 View & Manage</button>
                 <button className="btn btn-secondary btn-sm" onClick={()=>openOrgIndustries(org)}>🏭 Industries</button>
                 <button className="btn btn-primary btn-sm" onClick={()=>{ setShowInvite(org); setInviteEmail(''); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email') }}>✉️ Invite Admin</button>
-                <label style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:'1px dashed '+(dragOver===org.id?'var(--brand)':'var(--border)'),background:dragOver===org.id?'var(--brand-lt)':'transparent',color:dragOver===org.id?'var(--brand)':'var(--t2)'}}
+                <label style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:'1px dashed '+(dragOver===org.id?'var(--brand)':'var(--border)'),background:dragOver===org.id?'var(--brand-lt)':'transparent',color:dragOver===org.id?'var(--brand)':'var(--t2)'}}
                   onDragOver={e=>{ e.preventDefault(); setDragOver(org.id) }}
                   onDragLeave={()=>setDragOver(null)}
                   onDrop={e=>{ e.preventDefault(); setDragOver(null); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/')) uploadOrgLogo(org.id,f) }}>
@@ -10184,7 +10184,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
         <div style={{marginTop:24}}>
           <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'var(--s3)',borderRadius:8,cursor:'pointer',marginBottom:archiveExpanded?8:0,userSelect:'none'}} onClick={()=>setArchiveExpanded(p=>!p)}>
             <span style={{fontWeight:700,fontSize:13,flex:1,color:'var(--t2)'}}>Archived Organisations</span>
-            <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:'var(--s2)',border:'1px solid var(--border)',color:'var(--t2)',fontWeight:600}}>{archivedOrgs.length}</span>
+            <span style={{fontSize:11,padding:'2px 8px',borderRadius:12,background:'var(--s2)',border:'1px solid var(--border)',color:'var(--t2)',fontWeight:600}}>{archivedOrgs.length}</span>
             <span style={{fontSize:12,color:'var(--t2)',marginLeft:4}}>{archiveExpanded?'▼':'▶'}</span>
           </div>
           {archiveExpanded&&(
@@ -10197,12 +10197,12 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
               ):(
                 <div className="org-grid">
                   {filteredArchive.map(org=>(
-                    <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px',opacity:0.75}}>
+                    <div key={org.id} style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:12,padding:'12px 14px',opacity:0.75}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:5}}>
                         {org.logo&&<img src={org.logo} alt={org.name} style={{height:28,width:'auto',maxWidth:80,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0,filter:'grayscale(1)'}}/>}
                         <span style={{fontWeight:700,fontSize:14,flex:'1 1 120px',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--t2)'}}>{org.name}</span>
-                        <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>ARCHIVED</span>
-                        {planTier(org.plan)&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'var(--s3)',color:TIERS[planTier(org.plan)]?.color||'var(--t2)',fontWeight:600}}>{planTier(org.plan)}</span>}
+                        <span style={{fontSize:10,padding:'2px 7px',borderRadius:12,background:'var(--s3)',color:'var(--t2)',fontWeight:600}}>ARCHIVED</span>
+                        {planTier(org.plan)&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:12,background:'var(--s3)',color:TIERS[planTier(org.plan)]?.color||'var(--t2)',fontWeight:600}}>{planTier(org.plan)}</span>}
                       </div>
                       <div style={{fontSize:11,color:'var(--t2)',display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}}>
                         {org.industry&&<span>🏭 {org.industry}</span>}
@@ -10224,7 +10224,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
 
       {/* Toast */}
       {toastMsg&&(
-        <div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',background:'#1A2033',color:'#fff',borderRadius:10,padding:'10px 20px',fontSize:13,fontWeight:500,zIndex:500,boxShadow:'0 8px 32px rgba(0,0,0,.25)',whiteSpace:'nowrap',pointerEvents:'none'}}>
+        <div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',background:'#1A2033',color:'#fff',borderRadius:12,padding:'10px 20px',fontSize:13,fontWeight:500,zIndex:500,boxShadow:'0 8px 32px rgba(0,0,0,.25)',whiteSpace:'nowrap',pointerEvents:'none'}}>
           {toastMsg}
         </div>
       )}
@@ -10380,7 +10380,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
               onChange={e=>{setInviteEmail(e.target.value); setInviteEmailExistsMsg('')}}
               onBlur={async()=>{ if(!inviteEmail.trim()||!showInvite){setInviteEmailExistsMsg('');return} const{data}=await supabase.from('profiles').select('id').eq('email',inviteEmail.trim().toLowerCase()).maybeSingle(); setInviteEmailExistsMsg(data?'ℹ️ This user already exists — they will be added to '+showInvite.name+' as Client Admin':'') }}
               style={{fontSize:13}}/>
-            {inviteEmailExistsMsg&&<div style={{fontSize:13,padding:'8px 12px',borderRadius:6,background:'rgba(99,102,241,.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,.3)'}}>{inviteEmailExistsMsg}</div>}
+            {inviteEmailExistsMsg&&<div style={{fontSize:13,padding:'8px 12px',borderRadius:8,background:'rgba(99,102,241,.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,.3)'}}>{inviteEmailExistsMsg}</div>}
             <input className="form-input" type="tel" placeholder="Phone (for WhatsApp invite)" value={invitePhone} onChange={e=>setInvitePhone(e.target.value)} style={{fontSize:13}}/>
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Role</div>
@@ -10435,7 +10435,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
               </select>
             </div>
             {existingUserMsg && (
-              <div style={{fontSize:13,padding:'8px 12px',borderRadius:6,background:existingUserMsg.startsWith('✅')?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)',color:existingUserMsg.startsWith('✅')?'var(--green)':'#EF4444',border:'1px solid '+(existingUserMsg.startsWith('✅')?'var(--green)':'#EF4444')+'44'}}>
+              <div style={{fontSize:13,padding:'8px 12px',borderRadius:8,background:existingUserMsg.startsWith('✅')?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)',color:existingUserMsg.startsWith('✅')?'var(--green)':'#EF4444',border:'1px solid '+(existingUserMsg.startsWith('✅')?'var(--green)':'#EF4444')+'44'}}>
                 {existingUserMsg}
               </div>
             )}
@@ -10592,7 +10592,7 @@ function SuperAdminTemplatesView({ user }) {
         const indCollapsed = collapsed.has(ind)
         const indCount = Object.values(hier[ind]).flatMap(r=>Object.values(r)).flat().length
         return (
-          <div key={ind} style={{marginBottom:10,borderRadius:10,overflow:'hidden',border:'1px solid var(--border)'}}>
+          <div key={ind} style={{marginBottom:10,borderRadius:12,overflow:'hidden',border:'1px solid var(--border)'}}>
             <div onClick={()=>toggle(ind)} style={{display:'flex',alignItems:'center',gap:8,padding:'11px 16px',background:'var(--brand)',cursor:'pointer',userSelect:'none'}}>
               <span style={{color:'#fff',fontWeight:700,fontSize:14,flex:1}}>{ind}</span>
               <span style={{color:'rgba(255,255,255,.65)',fontSize:11}}>{indCount} template{indCount!==1?'s':''}</span>
@@ -11048,7 +11048,7 @@ function RolesPositionsView({ user }) {
       {!isSuper&&<div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',borderRadius:8,padding:'8px 14px',fontSize:12,color:'var(--amber)',marginBottom:12}}>🔒 Roles and positions are managed by Super Admin. Contact your platform administrator to add or modify entries.</div>}
 
       <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16}}>
-        {TABS.map(([k,l])=><button key={k} onClick={()=>setActiveTab(k)} style={{flex:'1 1 auto',padding:'6px 10px',borderRadius:6,border:'none',background:activeTab===k?'#fff':'transparent',color:activeTab===k?'var(--text)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:activeTab===k?'0 1px 4px rgba(0,0,0,.1)':'none'}}>{l}</button>)}
+        {TABS.map(([k,l])=><button key={k} onClick={()=>setActiveTab(k)} style={{flex:'1 1 auto',padding:'6px 10px',borderRadius:8,border:'none',background:activeTab===k?'#fff':'transparent',color:activeTab===k?'var(--text)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:activeTab===k?'0 1px 4px rgba(0,0,0,.1)':'none'}}>{l}</button>)}
       </div>
 
       {rpMsg&&<div style={{padding:'8px 14px',borderRadius:8,marginBottom:12,fontSize:12,fontWeight:600,background:rpMsg.startsWith('✓')?'rgba(16,185,129,.1)':'rgba(239,68,68,.1)',color:rpMsg.startsWith('✓')?'#10B981':'#EF4444',border:'1px solid '+(rpMsg.startsWith('✓')?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)')}}>{rpMsg}</div>}
@@ -11099,7 +11099,7 @@ function RolesPositionsView({ user }) {
               <>
                 {/* Global industries (read-only in this view) */}
                 {globalNames.map(n=>(
-                  <button key={n} onClick={()=>setSelectedIndustry(n)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',textAlign:'left',padding:'7px 8px',borderRadius:7,border:'none',background:selectedIndustry===n?'var(--brand-lt)':'transparent',color:selectedIndustry===n?'var(--brand)':'var(--text)',fontSize:12,fontWeight:selectedIndustry===n?600:400,cursor:'pointer',fontFamily:'inherit',marginBottom:2}}>
+                  <button key={n} onClick={()=>setSelectedIndustry(n)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',textAlign:'left',padding:'7px 8px',borderRadius:8,border:'none',background:selectedIndustry===n?'var(--brand-lt)':'transparent',color:selectedIndustry===n?'var(--brand)':'var(--text)',fontSize:12,fontWeight:selectedIndustry===n?600:400,cursor:'pointer',fontFamily:'inherit',marginBottom:2}}>
                     <span style={{flex:1}}>{n}</span>
                     {BADGE('Global','#6B7280')}
                   </button>
@@ -11114,8 +11114,8 @@ function RolesPositionsView({ user }) {
                         <button className="btn btn-secondary btn-sm" style={{fontSize:10,padding:'3px 7px'}} onClick={()=>{setEditIndId(null);setEditIndName('')}}>✕</button>
                       </div>
                     ) : (
-                      <div style={{display:'flex',alignItems:'center',gap:4,padding:'4px 2px',borderRadius:7,background:selectedIndustry===ind.name?'var(--brand-lt)':'transparent'}}>
-                        <button onClick={()=>setSelectedIndustry(ind.name)} style={{flex:1,textAlign:'left',padding:'3px 6px',borderRadius:6,border:'none',background:'transparent',color:selectedIndustry===ind.name?'var(--brand)':'var(--text)',fontSize:12,fontWeight:selectedIndustry===ind.name?600:400,cursor:'pointer',fontFamily:'inherit'}}>{ind.name}</button>
+                      <div style={{display:'flex',alignItems:'center',gap:4,padding:'4px 2px',borderRadius:8,background:selectedIndustry===ind.name?'var(--brand-lt)':'transparent'}}>
+                        <button onClick={()=>setSelectedIndustry(ind.name)} style={{flex:1,textAlign:'left',padding:'3px 6px',borderRadius:8,border:'none',background:'transparent',color:selectedIndustry===ind.name?'var(--brand)':'var(--text)',fontSize:12,fontWeight:selectedIndustry===ind.name?600:400,cursor:'pointer',fontFamily:'inherit'}}>{ind.name}</button>
                         {isSuper&&<button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--t2)',padding:'2px 3px',lineHeight:1}} onClick={()=>{setEditIndId(ind.id);setEditIndName(ind.name)}} title="Edit"><IC n="pencil" s={11}/></button>}
                         {isSuper&&<button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--red)',padding:'2px 3px',lineHeight:1}} onClick={()=>deleteOrgIndustry(ind.id,ind.name)} title="Delete">✕</button>}
                       </div>
@@ -11585,7 +11585,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
     const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent) || window.innerWidth < 768
     const zoneStyle = {
       border: `2px dashed ${logoDragOver ? '#3B82F6' : 'var(--border)'}`,
-      borderRadius: 10,
+      borderRadius: 12,
       background: logoDragOver ? 'rgba(59,130,246,.07)' : 'var(--s3)',
       padding: form.logo ? '10px' : '28px 16px',
       display: 'flex',
@@ -11613,7 +11613,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
           }}
         >
           {form.logo ? (
-            <img src={form.logo} alt="logo preview" style={{maxHeight:100,maxWidth:'100%',objectFit:'contain',borderRadius:6,display:'block'}}/>
+            <img src={form.logo} alt="logo preview" style={{maxHeight:100,maxWidth:'100%',objectFit:'contain',borderRadius:8,display:'block'}}/>
           ) : (
             <>
               <div style={{fontSize:28,marginBottom:8,opacity:.5}}>🖼</div>
@@ -12004,7 +12004,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
   const setD  = (k,v) => setSettings(p=>({...p,data:{...p.data,[k]:v}}))
 
   const Tog = ({on,toggle}) => (
-    <button style={{width:38,height:21,borderRadius:11,border:'none',cursor:'pointer',background:on?'var(--green)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggle}>
+    <button style={{width:38,height:21,borderRadius:12,border:'none',cursor:'pointer',background:on?'var(--green)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggle}>
       <div style={{width:15,height:15,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:on?20:3,boxShadow:'0 1px 3px rgba(0,0,0,.25)'}}/>
     </button>
   )
@@ -12014,8 +12014,8 @@ function CompanySettingsView({ user, onSettingsSaved }) {
       {children}
     </div>
   )
-  const MsgBanner = () => msg ? <div style={{background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),borderRadius:6,padding:'10px 14px',fontSize:13,color:msg.startsWith('✓')?'var(--green)':'var(--red)',marginBottom:16}}>{msg}</div> : null
-  const PillBtn = ({active,onClick,children}) => <button onClick={onClick} style={{padding:'5px 12px',borderRadius:6,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand-lt)':'transparent',color:active?'var(--brand)':'var(--t2)',fontWeight:active?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>{children}</button>
+  const MsgBanner = () => msg ? <div style={{background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),borderRadius:8,padding:'10px 14px',fontSize:13,color:msg.startsWith('✓')?'var(--green)':'var(--red)',marginBottom:16}}>{msg}</div> : null
+  const PillBtn = ({active,onClick,children}) => <button onClick={onClick} style={{padding:'5px 12px',borderRadius:8,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand-lt)':'transparent',color:active?'var(--brand)':'var(--t2)',fontWeight:active?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>{children}</button>
   const SaveFooter = () => <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button></div>
 
   if (loading) return <div className="loading"><div className="spinner"/><span>Loading...</span></div>
@@ -12028,7 +12028,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
   return (
     <div className="anim">
       {savedToast&&(
-        <div style={{position:'fixed',top:20,left:'50%',transform:'translateX(-50%)',background:'#10B981',color:'#fff',borderRadius:10,padding:'12px 22px',fontSize:14,fontWeight:600,zIndex:9999,boxShadow:'0 8px 32px rgba(16,185,129,.35)',display:'flex',alignItems:'center',gap:8,animation:'fadeUp .25s ease',pointerEvents:'none'}}>
+        <div style={{position:'fixed',top:20,left:'50%',transform:'translateX(-50%)',background:'#10B981',color:'#fff',borderRadius:12,padding:'12px 22px',fontSize:14,fontWeight:600,zIndex:9999,boxShadow:'0 8px 32px rgba(16,185,129,.35)',display:'flex',alignItems:'center',gap:8,animation:'fadeUp .25s ease',pointerEvents:'none'}}>
           <span style={{fontSize:16}}>✓</span> Settings saved successfully
         </div>
       )}
@@ -12040,7 +12040,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
       <MsgBanner/>
 
       <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,flexWrap:'wrap'}}>
-        {TABS.map(([k,l])=><button key={k} onClick={()=>{setActiveTab(k);setMsg('')}} style={{flex:'1 1 auto',padding:'6px 8px',borderRadius:6,border:'none',background:activeTab===k?'#fff':'transparent',color:activeTab===k?'var(--text)':'var(--t2)',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:activeTab===k?'0 1px 4px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>{l}</button>)}
+        {TABS.map(([k,l])=><button key={k} onClick={()=>{setActiveTab(k);setMsg('')}} style={{flex:'1 1 auto',padding:'6px 8px',borderRadius:8,border:'none',background:activeTab===k?'#fff':'transparent',color:activeTab===k?'var(--text)':'var(--t2)',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:activeTab===k?'0 1px 4px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>{l}</button>)}
       </div>
 
       {/* ── COMPANY ─────────────────────────────── */}
@@ -12112,32 +12112,32 @@ function CompanySettingsView({ user, onSettingsSaved }) {
             return (
               <>
                 <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:10}}>
-                  <span style={{fontSize:12,fontWeight:700,letterSpacing:'.4px',textTransform:'uppercase',padding:'3px 12px',borderRadius:6,color:t?.color||'var(--t2)',background:(t?.color||'#888')+'18',border:'1px solid '+((t?.color||'#888')+'30')}}>{tierName||'—'}</span>
+                  <span style={{fontSize:12,fontWeight:700,letterSpacing:'.4px',textTransform:'uppercase',padding:'3px 12px',borderRadius:8,color:t?.color||'var(--t2)',background:(t?.color||'#888')+'18',border:'1px solid '+((t?.color||'#888')+'30')}}>{tierName||'—'}</span>
                   {t&&<span style={{fontSize:13,color:'var(--t2)'}}>{t.base}/mo base &middot; {t.perUser} per user</span>}
                 </div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
-                  <span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:overSeats?'rgba(239,68,68,.1)':'var(--s3)',color:overSeats?'var(--red)':'var(--t2)',fontWeight:600}}>
+                  <span style={{fontSize:11,padding:'3px 9px',borderRadius:4,background:overSeats?'rgba(239,68,68,.1)':'var(--s3)',color:overSeats?'var(--red)':'var(--t2)',fontWeight:600}}>
                     Seats: {subSeats==null?'—':subSeats}{Number.isFinite(maxSeats)?' of '+maxSeats:(t?' of '+t.users:'')}
                   </span>
-                  {t&&<span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'var(--s3)',color:'var(--t2)'}}>{t.retention} retention</span>}
-                  {t&&<span style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'var(--s3)',color:'var(--t2)'}}>{t.storage}</span>}
+                  {t&&<span style={{fontSize:11,padding:'3px 9px',borderRadius:4,background:'var(--s3)',color:'var(--t2)'}}>{t.retention} retention</span>}
+                  {t&&<span style={{fontSize:11,padding:'3px 9px',borderRadius:4,background:'var(--s3)',color:'var(--t2)'}}>{t.storage}</span>}
                 </div>
                 {overSeats&&<div style={{fontSize:12,color:'var(--red)',marginBottom:10}}>This organisation is over the seat maximum for its plan.</div>}
 
                 {/* [BILLING-NOTE] the card shows prices next to a live seat
                     count and reads like an invoice. Nothing bills yet. */}
-                <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,padding:'7px 10px',borderRadius:5,background:'var(--s3)',lineHeight:1.6}}>
+                <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,padding:'7px 10px',borderRadius:4,background:'var(--s3)',lineHeight:1.6}}>
                   Plans are not billed yet. The pricing shown is for reference &mdash; you will be told before any charging begins.
                 </div>
                 {subIsSuper&&subExempt&&(
-                  <div style={{fontSize:11,marginBottom:10,padding:'7px 10px',borderRadius:5,background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',color:'var(--t2)',lineHeight:1.6}}>
+                  <div style={{fontSize:11,marginBottom:10,padding:'7px 10px',borderRadius:4,background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',color:'var(--t2)',lineHeight:1.6}}>
                     <strong style={{color:'var(--green)'}}>Billing exempt.</strong> {subExempt}
                   </div>
                 )}
 
                 {/* [PLAN-REQUEST] request state, shown to everyone who can see the card */}
                 {subReq&&subReq.status==='open'&&(
-                  <div style={{padding:'10px 12px',borderRadius:6,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',marginBottom:10}}>
+                  <div style={{padding:'10px 12px',borderRadius:8,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)',marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>Plan change requested: {planTier(subReq.requested_plan)}</div>
                     <div style={{fontSize:12,color:'var(--t2)'}}>{subReq.reason}</div>
                     <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>Awaiting a decision from Taksyn &middot; raised {new Date(subReq.requested_at).toLocaleDateString('en-AU')}</div>
@@ -12147,7 +12147,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                   </div>
                 )}
                 {subReq&&(subReq.status==='declined'||subReq.status==='approved')&&(
-                  <div style={{padding:'10px 12px',borderRadius:6,marginBottom:10,background:subReq.status==='approved'?'rgba(16,185,129,.08)':'var(--s3)',border:'1px solid '+(subReq.status==='approved'?'rgba(16,185,129,.2)':'var(--border)')}}>
+                  <div style={{padding:'10px 12px',borderRadius:8,marginBottom:10,background:subReq.status==='approved'?'rgba(16,185,129,.08)':'var(--s3)',border:'1px solid '+(subReq.status==='approved'?'rgba(16,185,129,.2)':'var(--border)')}}>
                     <div style={{fontSize:12,fontWeight:600,marginBottom:2}}>
                       Last request: {planTier(subReq.requested_plan)} &middot; {subReq.status==='approved'?'approved':'declined'}
                     </div>
@@ -12158,7 +12158,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
 
                 {!subIsSuper&&(
                   <>
-                    {subReqMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:subReqMsg.startsWith('\u2713')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subReqMsg.startsWith('\u2713')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subReqMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subReqMsg}</div>}
+                    {subReqMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,fontSize:13,background:subReqMsg.startsWith('\u2713')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subReqMsg.startsWith('\u2713')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subReqMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subReqMsg}</div>}
                     {subIsClientAdmin&&(!subReq||subReq.status!=='open')?(
                       <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
                         <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:8}}>Request a plan change</div>
@@ -12195,7 +12195,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                   <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
                     {/* [PLAN-REQUEST-DECIDE] act on an open request */}
                     {subReq&&subReq.status==='open'&&(
-                      <div style={{marginBottom:14,padding:'10px 12px',borderRadius:6,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
+                      <div style={{marginBottom:14,padding:'10px 12px',borderRadius:8,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
                         <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>Open request: move to {planTier(subReq.requested_plan)}</div>
                         <div style={{fontSize:12,color:'var(--t2)'}}>{subReq.reason}</div>
                         <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>Raised {new Date(subReq.requested_at).toLocaleDateString('en-AU')}</div>
@@ -12220,7 +12220,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                       </div>
                     )}
                     <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:8}}>Change plan &middot; super admin</div>
-                    {subMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:subMsg.startsWith('\u2713')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subMsg.startsWith('\u2713')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subMsg}</div>}
+                    {subMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,fontSize:13,background:subMsg.startsWith('\u2713')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subMsg.startsWith('\u2713')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subMsg}</div>}
                     <div className="two-col">
                       <div className="form-field">
                         <label className="form-label">New plan</label>
@@ -12240,7 +12240,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                         onClick={()=>setSubConfirm(true)}>Change plan</button>
                     )}
                     {subConfirm&&(
-                      <div style={{padding:'10px 12px',borderRadius:6,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
+                      <div style={{padding:'10px 12px',borderRadius:8,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.25)'}}>
                         <div style={{fontSize:13,marginBottom:8}}>Move <strong>{form.name||'this organisation'}</strong> from <strong>{tierName||'—'}</strong> to <strong>{planTier(subNew)}</strong>?</div>
                         <div style={{display:'flex',gap:6}}>
                           <button className="btn btn-primary btn-sm" disabled={subBusy} onClick={subChangePlan}>{subBusy?'Working\u2026':'Confirm'}</button>
@@ -12256,7 +12256,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                       {Array.isArray(subHist)&&subHist.length>0&&(
                         <div style={{display:'flex',flexDirection:'column',gap:6}}>
                           {subHist.map(h=>(
-                            <div key={h.id} style={{fontSize:12,padding:'6px 10px',borderRadius:5,background:'var(--s3)'}}>
+                            <div key={h.id} style={{fontSize:12,padding:'6px 10px',borderRadius:4,background:'var(--s3)'}}>
                               <div><strong>{planTier(h.old_plan)||h.old_plan||'—'} {'\u2192'} {planTier(h.new_plan)||h.new_plan}</strong> <span style={{color:'var(--t2)'}}>&middot; {h.source}</span></div>
                               <div style={{color:'var(--t2)'}}>{new Date(h.created_at).toLocaleString()}{h.note?' \u00b7 '+h.note:''}</div>
                             </div>
@@ -12346,7 +12346,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
             <div style={{padding:'8px 0'}}>
               <label className="form-label">Minimum photos required</label>
               <div style={{display:'flex',gap:6,marginTop:4}}>
-                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setT('min_evidence_photos',n)} style={{width:36,height:36,borderRadius:6,border:'1px solid '+(settings.tasks.min_evidence_photos===n?'var(--brand)':'var(--border)'),background:settings.tasks.min_evidence_photos===n?'var(--brand-lt)':'transparent',color:settings.tasks.min_evidence_photos===n?'var(--brand)':'var(--t2)',fontWeight:700,cursor:'pointer',fontSize:13}}>{n}</button>)}
+                {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setT('min_evidence_photos',n)} style={{width:36,height:36,borderRadius:8,border:'1px solid '+(settings.tasks.min_evidence_photos===n?'var(--brand)':'var(--border)'),background:settings.tasks.min_evidence_photos===n?'var(--brand-lt)':'transparent',color:settings.tasks.min_evidence_photos===n?'var(--brand)':'var(--t2)',fontWeight:700,cursor:'pointer',fontSize:13}}>{n}</button>)}
               </div>
             </div>
           )}
@@ -12385,7 +12385,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
           <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
             {Object.keys(CAT_ICONS).map(cat=>{
               const active=settings.compliance.critical_categories.includes(cat)
-              return <button key={cat} onClick={()=>setC('critical_categories',active?settings.compliance.critical_categories.filter(c=>c!==cat):[...settings.compliance.critical_categories,cat])} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:6,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand-lt)':'transparent',color:active?'var(--brand)':'var(--t2)',cursor:'pointer',fontSize:12,fontWeight:active?700:400,fontFamily:'inherit'}}>{CAT_ICONS[cat]} {cat.replace(/_/g,' ')}</button>
+              return <button key={cat} onClick={()=>setC('critical_categories',active?settings.compliance.critical_categories.filter(c=>c!==cat):[...settings.compliance.critical_categories,cat])} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:8,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand-lt)':'transparent',color:active?'var(--brand)':'var(--t2)',cursor:'pointer',fontSize:12,fontWeight:active?700:400,fontFamily:'inherit'}}>{CAT_ICONS[cat]} {cat.replace(/_/g,' ')}</button>
             })}
           </div>
         </div>
@@ -12420,7 +12420,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
         <div className="section" style={{marginBottom:14}}>
           <div className="section-title">Brand Colour</div>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
-            <input type="color" value={settings.branding.primary_color} onChange={e=>setB('primary_color',e.target.value)} style={{width:48,height:38,borderRadius:6,border:'1px solid var(--border)',cursor:'pointer',padding:2,background:'transparent'}}/>
+            <input type="color" value={settings.branding.primary_color} onChange={e=>setB('primary_color',e.target.value)} style={{width:48,height:38,borderRadius:8,border:'1px solid var(--border)',cursor:'pointer',padding:2,background:'transparent'}}/>
             <div><div style={{fontSize:13,fontWeight:600}}>{settings.branding.primary_color}</div><div style={{fontSize:11,color:'var(--t2)'}}>Used in report headers and accent colours</div></div>
             <button className="btn btn-secondary btn-sm" onClick={()=>setB('primary_color','#00A87E')}>Reset</button>
           </div>
@@ -12441,7 +12441,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
             <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10,fontSize:12}}>
               <span style={{color:'var(--t2)'}}>Group by:</span>
               {['position','team'].map(g=>(
-                <button key={g} type="button" onClick={()=>setTplGroupBy(g)} style={{fontSize:12,cursor:'pointer',borderRadius:14,padding:'3px 12px',textTransform:'capitalize',border:tplGroupBy===g?'1px solid var(--brand)':'1px solid var(--border)',background:tplGroupBy===g?'var(--brand)':'var(--s3)',color:tplGroupBy===g?'#fff':'var(--t2)',fontWeight:tplGroupBy===g?600:400}}>{g}</button>
+                <button key={g} type="button" onClick={()=>setTplGroupBy(g)} style={{fontSize:12,cursor:'pointer',borderRadius:12,padding:'3px 12px',textTransform:'capitalize',border:tplGroupBy===g?'1px solid var(--brand)':'1px solid var(--border)',background:tplGroupBy===g?'var(--brand)':'var(--s3)',color:tplGroupBy===g?'#fff':'var(--t2)',fontWeight:tplGroupBy===g?600:400}}>{g}</button>
               ))}
             </div>
           )}
@@ -12457,7 +12457,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                   <span style={{marginLeft:'auto',fontSize:11,color:'var(--t2)',fontWeight:500}}>{_g[pos].length}</span>
                 </div>
                 {_open && <div style={{marginTop:6}}>{_g[pos].map(t=>(
-            <div key={t.id} style={{background:'var(--s3)',border:'1px solid '+(editingTpl?.id===t.id?'rgba(99,102,241,.4)':'var(--border)'),borderRadius:10,padding:12,marginBottom:8,transition:'border-color .2s'}}>
+            <div key={t.id} style={{background:'var(--s3)',border:'1px solid '+(editingTpl?.id===t.id?'rgba(99,102,241,.4)':'var(--border)'),borderRadius:12,padding:12,marginBottom:8,transition:'border-color .2s'}}>
               <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}}>
@@ -12540,7 +12540,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
               <>
                 <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
                   {getPositionsForIndustry(tplIndustry,tplRole,tmCustomPos.map(p=>p.position_name),tmAllRoles).map(p=>{ const on=tplPosition.includes(p); return (
-                    <button key={p} type="button" onClick={()=>setTplPosition(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])} style={{fontSize:12,cursor:'pointer',borderRadius:16,padding:'5px 12px',fontWeight:on?600:400,border:on?'1px solid var(--brand)':'1px solid var(--border)',background:on?'var(--brand)':'var(--s3)',color:on?'#fff':'var(--t2)'}}>{on?'✓ ':''}{p}</button>
+                    <button key={p} type="button" onClick={()=>setTplPosition(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])} style={{fontSize:12,cursor:'pointer',borderRadius:12,padding:'5px 12px',fontWeight:on?600:400,border:on?'1px solid var(--brand)':'1px solid var(--border)',background:on?'var(--brand)':'var(--s3)',color:on?'#fff':'var(--t2)'}}>{on?'✓ ':''}{p}</button>
                   )})}
                 </div>
               </>
@@ -12609,7 +12609,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
         return <>
           {showContactModal&&(
             <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={()=>setShowContactModal(false)}>
-              <div style={{background:'var(--bg)',borderRadius:14,padding:24,maxWidth:420,width:'100%',boxShadow:'0 8px 32px rgba(0,0,0,.2)'}} onClick={e=>e.stopPropagation()}>
+              <div style={{background:'var(--bg)',borderRadius:12,padding:24,maxWidth:420,width:'100%',boxShadow:'0 8px 32px rgba(0,0,0,.2)'}} onClick={e=>e.stopPropagation()}>
                 <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>Request 7-Year Retention Upgrade</div>
                 <div style={{fontSize:13,color:'var(--t2)',marginBottom:16}}>Contact our team to upgrade your data retention to 7 years. We'll enable this on your account within 1 business day.</div>
                 <div style={{background:'var(--s2)',borderRadius:8,padding:'12px 14px',marginBottom:16,fontSize:12,color:'var(--t2)'}}>
@@ -12623,9 +12623,9 @@ function CompanySettingsView({ user, onSettingsSaved }) {
 
           <div className="section" style={{marginBottom:14}}>
             <div className="section-title">Data Retention Policy</div>
-            <div style={{background:'var(--s2)',borderRadius:10,padding:'14px 16px',border:'1px solid var(--border)'}}>
+            <div style={{background:'var(--s2)',borderRadius:12,padding:'14px 16px',border:'1px solid var(--border)'}}>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                <span style={{fontSize:11,fontWeight:700,color:planColor,background:`${planColor}18`,border:`1px solid ${planColor}30`,borderRadius:6,padding:'2px 10px',letterSpacing:'.4px',textTransform:'uppercase'}}>{planCfg.display}</span>
+                <span style={{fontSize:11,fontWeight:700,color:planColor,background:`${planColor}18`,border:`1px solid ${planColor}30`,borderRadius:8,padding:'2px 10px',letterSpacing:'.4px',textTransform:'uppercase'}}>{planCfg.display}</span>
                 <span style={{fontSize:11,color:'var(--t2)'}}>plan</span>
               </div>
               <div style={{fontSize:13,color:'var(--text)',lineHeight:1.55}}>
@@ -12670,10 +12670,10 @@ function CompanySettingsView({ user, onSettingsSaved }) {
       })()}
 
       {activeTab==='team'&&(()=>{
-        const TM_BTN = {fontSize:11,padding:'3px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',fontFamily:'inherit',color:'var(--text)'}
-        const TM_INPUT = {fontSize:12,padding:'5px 8px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',flex:1,minWidth:0}
-        const TM_SAVE_BTN = {fontSize:11,padding:'3px 10px',borderRadius:6,border:'none',background:'var(--brand)',color:'#fff',cursor:'pointer',fontFamily:'inherit'}
-        const TM_DEL_BTN = {fontSize:11,padding:'3px 8px',borderRadius:6,border:'1px solid var(--red)',color:'var(--red)',background:'transparent',cursor:'pointer',fontFamily:'inherit'}
+        const TM_BTN = {fontSize:11,padding:'3px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',fontFamily:'inherit',color:'var(--text)'}
+        const TM_INPUT = {fontSize:12,padding:'5px 8px',borderRadius:8,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',flex:1,minWidth:0}
+        const TM_SAVE_BTN = {fontSize:11,padding:'3px 10px',borderRadius:8,border:'none',background:'var(--brand)',color:'#fff',cursor:'pointer',fontFamily:'inherit'}
+        const TM_DEL_BTN = {fontSize:11,padding:'3px 8px',borderRadius:8,border:'1px solid var(--red)',color:'var(--red)',background:'transparent',cursor:'pointer',fontFamily:'inherit'}
         const TM_MOVE_BTN = {fontSize:11,padding:'2px 6px',borderRadius:4,border:'1px solid var(--border)',background:'var(--s3)',cursor:'pointer',fontFamily:'inherit',color:'var(--t2)',lineHeight:1}
 
         const allOrgInds = [...tmGlobalInds.map(i=>({...i,global:true})), ...tmOrgInds.map(i=>({...i,global:false}))]
@@ -12683,14 +12683,14 @@ function CompanySettingsView({ user, onSettingsSaved }) {
           {user?.role==='super_admin'&&(
             <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,width:'fit-content'}}>
               {[['industries','Industries & Roles'],['positions','Positions'],['global','Global Industries']].map(([k,l])=>(
-                <button key={k} onClick={()=>setTmSubTab(k)} style={{padding:'5px 14px',borderRadius:6,border:'none',background:tmSubTab===k?'var(--brand)':'transparent',color:tmSubTab===k?'#fff':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{l}</button>
+                <button key={k} onClick={()=>setTmSubTab(k)} style={{padding:'5px 14px',borderRadius:8,border:'none',background:tmSubTab===k?'var(--brand)':'transparent',color:tmSubTab===k?'#fff':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{l}</button>
               ))}
             </div>
           )}
           {user?.role!=='super_admin'&&(
             <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,width:'fit-content'}}>
               {[['industries','Industries & Roles'],['positions','Positions']].map(([k,l])=>(
-                <button key={k} onClick={()=>setTmSubTab(k)} style={{padding:'5px 14px',borderRadius:6,border:'none',background:tmSubTab===k?'var(--brand)':'transparent',color:tmSubTab===k?'#fff':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{l}</button>
+                <button key={k} onClick={()=>setTmSubTab(k)} style={{padding:'5px 14px',borderRadius:8,border:'none',background:tmSubTab===k?'var(--brand)':'transparent',color:tmSubTab===k?'#fff':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{l}</button>
               ))}
             </div>
           )}
@@ -12706,7 +12706,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                 const roles=tmRolesFor(ind.name)
                 const isExpanded=tmExpanded.has(ind.name)
                 return (
-                  <div key={ind.id||ind.name} style={{border:'1px solid var(--border)',borderRadius:10,marginBottom:8,overflow:'hidden'}}>
+                  <div key={ind.id||ind.name} style={{border:'1px solid var(--border)',borderRadius:12,marginBottom:8,overflow:'hidden'}}>
                     <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'var(--s2)',cursor:'pointer'}} onClick={()=>tmToggle(ind.name)}>
                       <span style={{fontSize:13,transform:isExpanded?'rotate(90deg)':'none',transition:'transform .15s',color:'var(--t2)',lineHeight:1}}>▶</span>
                       {tmEditInd?.id===ind.id&&!ind.global?(
@@ -12731,7 +12731,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                       <div style={{padding:'10px 14px',background:'var(--bg)'}}>
                         {roles.length===0&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>No roles yet for this industry.</div>}
                         {roles.map((r,ri)=>(
-                          <div key={r.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,padding:'6px 8px',background:'var(--s2)',borderRadius:7}}>
+                          <div key={r.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,padding:'6px 8px',background:'var(--s2)',borderRadius:8}}>
                             <div style={{display:'flex',flexDirection:'column',gap:1,marginRight:2}}>
                               <button style={TM_MOVE_BTN} onClick={()=>tmMoveRole(r.id,ind.name,-1)} disabled={ri===0}>▲</button>
                               <button style={TM_MOVE_BTN} onClick={()=>tmMoveRole(r.id,ind.name,1)} disabled={ri===roles.length-1}>▼</button>
@@ -12781,7 +12781,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
 
               {tmCustomPos.length>0&&<div style={{marginTop:12,marginBottom:6,fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.4px'}}>Custom Positions</div>}
               {[...tmCustomPos].sort((a,b)=>(a.sort_order??999)-(b.sort_order??999)).map((p,pi)=>(
-                <div key={p.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,padding:'6px 8px',background:'var(--s2)',borderRadius:7,border:'1px solid var(--border)'}}>
+                <div key={p.id} style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,padding:'6px 8px',background:'var(--s2)',borderRadius:8,border:'1px solid var(--border)'}}>
                   <div style={{display:'flex',flexDirection:'column',gap:1,marginRight:2}}>
                     <button style={TM_MOVE_BTN} onClick={()=>tmMovePos(p.id,-1)} disabled={pi===0}>▲</button>
                     <button style={TM_MOVE_BTN} onClick={()=>tmMovePos(p.id,1)} disabled={pi===tmCustomPos.length-1}>▼</button>
@@ -12965,7 +12965,7 @@ function TemplatesView({ user }) {
         {tplList.length===0?(
           <div style={{fontSize:13,color:'var(--t2)'}}>{canEdit?'No templates yet — create one below.':'No templates have been created yet.'}</div>
         ):tplList.map(t=>(
-          <div key={t.id} style={{background:'var(--s3)',border:'1px solid '+(editingTpl?.id===t.id?'rgba(99,102,241,.4)':'var(--border)'),borderRadius:10,padding:12,marginBottom:8,transition:'border-color .2s'}}>
+          <div key={t.id} style={{background:'var(--s3)',border:'1px solid '+(editingTpl?.id===t.id?'rgba(99,102,241,.4)':'var(--border)'),borderRadius:12,padding:12,marginBottom:8,transition:'border-color .2s'}}>
             <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}}>
@@ -13049,7 +13049,7 @@ function TemplatesView({ user }) {
               <>
                 <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
                   {getPositionsForIndustry(tplIndustry,tplRole,tvCustomPositions,tvCustomRoles).map(p=>{ const on=tplPosition.includes(p); return (
-                    <button key={p} type="button" onClick={()=>setTplPosition(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])} style={{fontSize:12,cursor:'pointer',borderRadius:16,padding:'5px 12px',fontWeight:on?600:400,border:on?'1px solid var(--brand)':'1px solid var(--border)',background:on?'var(--brand)':'var(--s3)',color:on?'#fff':'var(--t2)'}}>{on?'✓ ':''}{p}</button>
+                    <button key={p} type="button" onClick={()=>setTplPosition(prev=>prev.includes(p)?prev.filter(x=>x!==p):[...prev,p])} style={{fontSize:12,cursor:'pointer',borderRadius:12,padding:'5px 12px',fontWeight:on?600:400,border:on?'1px solid var(--brand)':'1px solid var(--border)',background:on?'var(--brand)':'var(--s3)',color:on?'#fff':'var(--t2)'}}>{on?'✓ ':''}{p}</button>
                   )})}
                 </div>
               </>
@@ -13223,7 +13223,7 @@ function AuditLogView({ tasks, user, auditLog, setAuditLog }) {
         <div className="ph-title">Activity &amp; History Log</div>
         <div className="ph-sub">{logs.length} events recorded · preserved after task deletion</div>
       </div>
-      {isSA&&<div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.25)',borderRadius:10,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'center'}}><span style={{fontSize:15,flexShrink:0}}>🔒</span><span>Showing structural data only: who acted, what type of action, and when. Task names, details, and operational content are not visible to platform support.</span></div>}
+      {isSA&&<div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'center'}}><span style={{fontSize:15,flexShrink:0}}>🔒</span><span>Showing structural data only: who acted, what type of action, and when. Task names, details, and operational content are not visible to platform support.</span></div>}
 
       <div className="section" style={{marginBottom:14}}>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
@@ -13342,7 +13342,7 @@ function SuperAdminTaskStats({ tasks, setTasks, loadTasks }) {
         <div className="ph-sub">Aggregate statistics only — task content is private to each organisation</div>
       </div>
 
-      <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.2)',borderRadius:10,padding:12,marginBottom:16,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'center'}}>
+      <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:12,marginBottom:16,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'center'}}>
         <span style={{fontSize:16}}>🔒</span>
         <span>Task content, titles and worker details are private to each organisation. Only aggregate statistics are shown here.</span>
       </div>
@@ -13410,7 +13410,7 @@ function SuperAdminTaskStats({ tasks, setTasks, loadTasks }) {
             setOrphanScanning(false)
           }}>{orphanScanning?'Scanning…':'🔍 Scan for Orphaned Assignments'}</button>
         </div>
-        {orphanMsg&&<div style={{fontSize:12,color:orphanMsg.startsWith('✅')?'var(--green)':'var(--red)',marginBottom:10,padding:'8px 12px',background:orphanMsg.startsWith('✅')?'rgba(16,185,129,.08)':'rgba(239,68,68,.06)',borderRadius:6,border:'1px solid '+(orphanMsg.startsWith('✅')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)')}}>{orphanMsg}</div>}
+        {orphanMsg&&<div style={{fontSize:12,color:orphanMsg.startsWith('✅')?'var(--green)':'var(--red)',marginBottom:10,padding:'8px 12px',background:orphanMsg.startsWith('✅')?'rgba(16,185,129,.08)':'rgba(239,68,68,.06)',borderRadius:8,border:'1px solid '+(orphanMsg.startsWith('✅')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)')}}>{orphanMsg}</div>}
         {orphanedTasks&&orphanedTasks.length>0&&(
           <div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -13728,7 +13728,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
               {label:'Tasks Assigned',val:pt.length,color:'#5BC8C0'},
               {label:'Completed',val:pt.filter(t=>['completed','approved'].includes(t.status)).length,color:'#10B981'},
             ].map(s=>(
-              <div key={s.label} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
+              <div key={s.label} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:'12px 14px'}}>
                 <div style={{fontSize:22,fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
                 <div style={{fontSize:10,color:'var(--t2)',marginTop:4,textTransform:'uppercase',fontWeight:600,letterSpacing:'.5px'}}>{s.label}</div>
               </div>
@@ -13789,10 +13789,10 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                   ))}
                 </div>
                 {approverMap[p.id] && (()=>{ const a = approverMap[p.id]; const _ot = a.decided>0?pct(a.onTime,a.decided):null; const _sb = a.decided>0?pct(a.sentBack,a.decided):null; return (
-                  <div style={{marginTop:12,border:'1px solid #C7D2FE',background:'rgba(99,102,241,.05)',borderRadius:10,padding:10}}>
+                  <div style={{marginTop:12,border:'1px solid #C7D2FE',background:'rgba(99,102,241,.05)',borderRadius:12,padding:10}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                       <span style={{fontSize:11,fontWeight:700,color:'#4F46E5',textTransform:'uppercase',letterSpacing:'.5px'}}>As approver</span>
-                      {a.awaiting>0&&<span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'rgba(239,68,68,.1)',color:'var(--red)'}}>{a.awaiting} awaiting{a.oldestDays>0?' \u00b7 oldest '+a.oldestDays+'d':''}</span>}
+                      {a.awaiting>0&&<span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:12,background:'rgba(239,68,68,.1)',color:'var(--red)'}}>{a.awaiting} awaiting{a.oldestDays>0?' \u00b7 oldest '+a.oldestDays+'d':''}</span>}
                     </div>
                     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(95px,1fr))',gap:8}}>
                       {[
@@ -13816,13 +13816,13 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--t2)',marginBottom:3}}>
                     <span>Performance</span><span style={{fontWeight:600,color}}>{compRate}%</span>
                   </div>
-                  <div style={{height:6,background:'var(--s3)',borderRadius:3,overflow:'hidden'}}>
-                    <div style={{height:'100%',width:compRate+'%',background:color,borderRadius:3,transition:'width .5s'}}/>
+                  <div style={{height:6,background:'var(--s3)',borderRadius:4,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:compRate+'%',background:color,borderRadius:4,transition:'width .5s'}}/>
                   </div>
                 </div>
-                {p.rejected>0&&<div style={{marginTop:8,fontSize:11,color:'#F97316',background:'rgba(249,115,22,.08)',borderRadius:6,padding:'4px 8px'}}>⚠️ {p.rejected} task{p.rejected>1?'s':''} rejected — may need coaching</div>}
-                {p.overdue>0&&<div style={{marginTop:4,fontSize:11,color:'var(--red)',background:'rgba(239,68,68,.06)',borderRadius:6,padding:'4px 8px'}}>🔴 {p.overdue} overdue task{p.overdue>1?'s':''}</div>}
-                {compRate>=90&&<div style={{marginTop:4,fontSize:11,color:'var(--green)',background:'rgba(16,185,129,.06)',borderRadius:6,padding:'4px 8px'}}>⭐ Outstanding performance</div>}
+                {p.rejected>0&&<div style={{marginTop:8,fontSize:11,color:'#F97316',background:'rgba(249,115,22,.08)',borderRadius:8,padding:'4px 8px'}}>⚠️ {p.rejected} task{p.rejected>1?'s':''} rejected — may need coaching</div>}
+                {p.overdue>0&&<div style={{marginTop:4,fontSize:11,color:'var(--red)',background:'rgba(239,68,68,.06)',borderRadius:8,padding:'4px 8px'}}>🔴 {p.overdue} overdue task{p.overdue>1?'s':''}</div>}
+                {compRate>=90&&<div style={{marginTop:4,fontSize:11,color:'var(--green)',background:'rgba(16,185,129,.06)',borderRadius:8,padding:'4px 8px'}}>⭐ Outstanding performance</div>}
               </div>
             )
           })}
@@ -13963,7 +13963,7 @@ function LeaveView({ user, tasks, setAuditLog }) {
       </div>
 
       {isOnLeave&&(
-        <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.2)',borderRadius:10,padding:12,marginBottom:14,fontSize:13,color:'#92400E'}}>
+        <div style={{background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.2)',borderRadius:12,padding:12,marginBottom:14,fontSize:13,color:'#92400E'}}>
           🟡 <strong>You are on leave today.</strong> Tasks due on your leave days are excluded from your performance review.
         </div>
       )}
@@ -14021,7 +14021,7 @@ function LeaveView({ user, tasks, setAuditLog }) {
                 {l.reason&&<div style={{fontSize:11,color:'var(--t2)',fontStyle:'italic',marginTop:1}}>{l.reason}</div>}
                 {l.replacement_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:1}}>👤 Cover: {l.replacement_name}</div>}
               </div>
-              <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:(LEAVE_COLORS[l.type]||'#6B7280')+'22',color:LEAVE_COLORS[l.type]||'#6B7280'}}>{l.type.replace('_',' ').toUpperCase()}</span>
+              <span style={{fontSize:10,padding:'2px 8px',borderRadius:12,fontWeight:600,background:(LEAVE_COLORS[l.type]||'#6B7280')+'22',color:LEAVE_COLORS[l.type]||'#6B7280'}}>{l.type.replace('_',' ').toUpperCase()}</span>
               {l.date_from>=today&&<button className="btn btn-danger btn-sm" onClick={()=>deleteLeave(l.id)}>Cancel</button>}
             </div>
           ))
@@ -14363,7 +14363,7 @@ function TeamsView({ user }) {
     return (
       <div className="anim">
         <div className="ph"><div className="ph-title">My Team</div><div className="ph-sub">{myTeam.name}{myTeam.type?' · '+myTeam.type:''}</div></div>
-        <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:14,padding:20}}>
+        <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:20}}>
           <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>{myTeam.name}</div>
           {myTeam.description&&<div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>{myTeam.description}</div>}
           <div style={{fontSize:12,color:'var(--t2)',marginBottom:myMembers.length?16:0}}>👥 {myMembers.length} member{myMembers.length!==1?'s':''}</div>
@@ -14478,7 +14478,7 @@ function TeamsView({ user }) {
               </div>
 
               {showInviteLink&&(
-                <div style={{background:'rgba(16,185,129,.06)',border:'1px solid rgba(16,185,129,.2)',borderRadius:10,padding:14,marginBottom:14}}>
+                <div style={{background:'rgba(16,185,129,.06)',border:'1px solid rgba(16,185,129,.2)',borderRadius:12,padding:14,marginBottom:14}}>
                   <div style={{fontSize:11,fontWeight:700,color:'#10B981',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:10}}>💬 WhatsApp Invite Link</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
                     <div className="form-field">
@@ -14499,7 +14499,7 @@ function TeamsView({ user }) {
                       </select>
                     </div>
                   </div>
-                  <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,padding:'6px 10px',background:'var(--s3)',borderRadius:6}}>
+                  <div style={{fontSize:11,color:'var(--t2)',marginBottom:10,padding:'6px 10px',background:'var(--s3)',borderRadius:8}}>
                     Link will pre-fill: <strong>{selectedTeam.name}</strong> · <strong>{ROLE_LABELS[inviteLinkRole]}</strong>{teamOrgIndustry&&<> · <strong>{teamOrgIndustry}</strong></>}{inviteLinkPosition&&<> · <strong>{inviteLinkPosition}</strong></>}
                   </div>
                   <div style={{display:'flex',gap:8}}>
@@ -14511,7 +14511,7 @@ function TeamsView({ user }) {
               )}
 
               {showAddMember&&(
-                <div style={{background:'var(--s3)',borderRadius:10,padding:14,marginBottom:14}}>
+                <div style={{background:'var(--s3)',borderRadius:12,padding:14,marginBottom:14}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',marginBottom:10}}>Add Member</div>
                   <div style={{display:'flex',gap:8,marginBottom:8}}>
                     <input className="form-input" style={{flex:1,fontSize:13}} placeholder="Search by name…" value={addMemberSearch} onChange={e=>{setAddMemberSearch(e.target.value);setAddMemberUser('')}}/>
@@ -14578,7 +14578,7 @@ function TeamsView({ user }) {
       ) : (
         <div>
           {teams.length===0 ? (
-            <div className="empty" style={{background:'var(--card)',borderRadius:16,border:'1px solid var(--border)',padding:40}}>
+            <div className="empty" style={{background:'var(--card)',borderRadius:12,border:'1px solid var(--border)',padding:40}}>
               <div className="empty-icon">👥</div>
               <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>{isCA?'No teams yet':'No teams set up'}</div>
               <div className="empty-text">{isCA?'Create your first team to organise your staff.':'Your Client Admin will set up teams for this organisation.'}</div>
@@ -14695,7 +14695,7 @@ function PlatformAnnouncementsView({ user }) {
           <label className="form-label">Message</label>
           <textarea className="form-input" value={body} onChange={e=>setBody(e.target.value)} rows={4} style={{resize:'vertical'}} placeholder="Optional body text…"/>
         </div>
-        {msg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:msg.startsWith('✓')?'var(--green)':'var(--red)'}}>{msg}</div>}
+        {msg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,fontSize:13,background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:msg.startsWith('✓')?'var(--green)':'var(--red)'}}>{msg}</div>}
         <button className="btn btn-primary" onClick={send} disabled={saving}>{saving?'Sending…':'📢 Send Announcement'}</button>
       </div>
 
@@ -14709,7 +14709,7 @@ function PlatformAnnouncementsView({ user }) {
               <div key={a.id||i} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,flexWrap:'wrap',marginBottom:3}}>
                   <span style={{fontSize:13,fontWeight:700}}>{a.title}</span>
-                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:a.target_org?'rgba(59,130,246,.12)':'rgba(16,185,129,.12)',color:a.target_org?'#3B82F6':'#10B981',fontWeight:600,flexShrink:0}}>{a.target_org||'All orgs'}</span>
+                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:12,background:a.target_org?'rgba(59,130,246,.12)':'rgba(16,185,129,.12)',color:a.target_org?'#3B82F6':'#10B981',fontWeight:600,flexShrink:0}}>{a.target_org||'All orgs'}</span>
                 </div>
                 {a.body&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:3}}>{a.body}</div>}
                 <div style={{fontSize:11,color:'var(--t3)'}}>{a.sent_by} · {fmtTs(a.created_at)}</div>
@@ -14811,7 +14811,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
       </div>
 
       <div style={{display:'flex',gap:2,background:'var(--s3)',borderRadius:8,padding:3,marginBottom:16,flexWrap:'wrap'}}>
-        {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{flex:'1 1 auto',padding:'6px 10px',borderRadius:6,border:'none',background:tab===k?'#fff':'transparent',color:tab===k?'var(--text)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:tab===k?'0 1px 4px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>{l}</button>)}
+        {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{flex:'1 1 auto',padding:'6px 10px',borderRadius:8,border:'none',background:tab===k?'#fff':'transparent',color:tab===k?'var(--text)':'var(--t2)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',boxShadow:tab===k?'0 1px 4px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>{l}</button>)}
       </div>
 
       {tab==='industries'&&(
@@ -14862,7 +14862,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
             {Object.entries(TIERS).map(([key,t])=>(
               <div key={key} style={{border:'2px solid '+t.color+'40',borderRadius:12,padding:'16px',background:'var(--bg)',boxShadow:'0 2px 8px rgba(0,0,0,.06)'}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-                  <span style={{fontSize:11,fontWeight:700,color:t.color,background:t.color+'18',border:'1px solid '+t.color+'30',borderRadius:6,padding:'2px 10px',letterSpacing:'.4px',textTransform:'uppercase'}}>{key}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:t.color,background:t.color+'18',border:'1px solid '+t.color+'30',borderRadius:8,padding:'2px 10px',letterSpacing:'.4px',textTransform:'uppercase'}}>{key}</span>
                 </div>
                 <div style={{fontSize:22,fontWeight:800,color:t.color,marginBottom:2}}>{t.base}<span style={{fontSize:12,fontWeight:400,color:'var(--t2)'}}>/mo base</span></div>
                 <div style={{fontSize:13,fontWeight:600,color:'var(--text)',marginBottom:8}}>+ {t.perUser}<span style={{fontSize:11,fontWeight:400,color:'var(--t2)'}}> per user / mo</span></div>
@@ -14907,7 +14907,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
             <div className="form-field"><label className="form-label">Message</label>
               <textarea className="form-input" value={anBody} onChange={e=>setAnBody(e.target.value)} rows={4} style={{resize:'vertical'}} placeholder="Optional body text…"/>
             </div>
-            {anMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:anMsg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(anMsg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:anMsg.startsWith('✓')?'var(--green)':'var(--red)'}}>{anMsg}</div>}
+            {anMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,fontSize:13,background:anMsg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(anMsg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:anMsg.startsWith('✓')?'var(--green)':'var(--red)'}}>{anMsg}</div>}
             <button className="btn btn-primary" onClick={sendAnn} disabled={anSaving}>{anSaving?'Sending…':'Send Announcement'}</button>
           </div>
           <div className="section">
@@ -14918,7 +14918,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
                 <div key={a.id||i} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,flexWrap:'wrap',marginBottom:3}}>
                     <span style={{fontSize:13,fontWeight:700}}>{a.title}</span>
-                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:a.target_org?'rgba(59,130,246,.12)':'rgba(16,185,129,.12)',color:a.target_org?'#3B82F6':'#10B981',fontWeight:600,flexShrink:0}}>{a.target_org||'All orgs'}</span>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:12,background:a.target_org?'rgba(59,130,246,.12)':'rgba(16,185,129,.12)',color:a.target_org?'#3B82F6':'#10B981',fontWeight:600,flexShrink:0}}>{a.target_org||'All orgs'}</span>
                   </div>
                   {a.body&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:3}}>{a.body}</div>}
                   <div style={{fontSize:11,color:'var(--t3)'}}>{a.sent_by} · {fmtTs(a.created_at)}</div>
@@ -14932,12 +14932,12 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
         <div className="section">
           <div className="section-title">Session Security</div>
           <div style={{fontSize:13,color:'var(--t2)',marginBottom:16}}>Configure auto-logout timeout for your super admin session. This is stored locally and applies only to this device.</div>
-          <div style={{background:'var(--s2)',borderRadius:10,padding:'14px 16px',border:'1px solid var(--border)',marginBottom:16}}>
+          <div style={{background:'var(--s2)',borderRadius:12,padding:'14px 16px',border:'1px solid var(--border)',marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:600,marginBottom:10}}>Auto-logout after inactivity</div>
             <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
               {SESSION_TIMEOUTS.map(v=>{
                 const active = sessionTimeout===v||(sessionTimeout===null&&v===10)
-                return <button key={v} style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand)':'transparent',color:active?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:active?700:400}} onClick={()=>{
+                return <button key={v} style={{fontSize:12,padding:'6px 14px',borderRadius:8,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand)':'transparent',color:active?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:active?700:400}} onClick={()=>{
                   const isDefault = v===10
                   if(isDefault) localStorage.removeItem('taksyn_session_timeout'); else localStorage.setItem('taksyn_session_timeout',String(v))
                   setSessionTimeout(isDefault?null:v)
@@ -14945,7 +14945,7 @@ function PlatformSettingsView({ user, sessionTimeout, setSessionTimeout }) {
                   setTimeout(()=>setSecMsg(''),3000)
                 }}>{SESSION_LABELS[v]}</button>
               })}
-              <button style={{fontSize:12,padding:'6px 14px',borderRadius:6,border:'1px solid '+(sessionTimeout===0?'var(--brand)':'var(--border)'),background:sessionTimeout===0?'var(--brand)':'transparent',color:sessionTimeout===0?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:sessionTimeout===0?700:400}} onClick={()=>{localStorage.setItem('taksyn_session_timeout','0');setSessionTimeout(0);setSecMsg('Session will never expire');setTimeout(()=>setSecMsg(''),3000)}}>Never</button>
+              <button style={{fontSize:12,padding:'6px 14px',borderRadius:8,border:'1px solid '+(sessionTimeout===0?'var(--brand)':'var(--border)'),background:sessionTimeout===0?'var(--brand)':'transparent',color:sessionTimeout===0?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:sessionTimeout===0?700:400}} onClick={()=>{localStorage.setItem('taksyn_session_timeout','0');setSessionTimeout(0);setSecMsg('Session will never expire');setTimeout(()=>setSecMsg(''),3000)}}>Never</button>
             </div>
             <div style={{fontSize:11,color:'var(--t2)'}}>Default for super admin: <strong>10 min</strong></div>
             {secMsg&&<div style={{marginTop:8,fontSize:12,color:'var(--green)',fontWeight:500}}>{secMsg}</div>}
@@ -15024,7 +15024,7 @@ function SuperAdminAccountView({ user, setUser, darkMode, toggleDarkMode }) {
         <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:12}}>
           <Avatar name={form.name||'?'} role="super_admin" size={64} avatarUrl={avatarUrl}/>
           <div>
-            <label style={{display:'inline-block',padding:'7px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:7,fontSize:12,cursor:'pointer',fontFamily:'inherit',color:'var(--text)'}}>
+            <label style={{display:'inline-block',padding:'7px 14px',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,fontSize:12,cursor:'pointer',fontFamily:'inherit',color:'var(--text)'}}>
               {uploading?'Uploading…':'Upload Photo'}
               <input type="file" accept="image/*" style={{display:'none'}} onChange={uploadAvatar} disabled={uploading}/>
             </label>
@@ -15042,7 +15042,7 @@ function SuperAdminAccountView({ user, setUser, darkMode, toggleDarkMode }) {
           <input className="form-input" type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/>
           <div style={{fontSize:10,color:'var(--t2)',marginTop:3}}>Changing email sends a confirmation link to the new address</div>
         </div>
-        {msg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:13,background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:msg.startsWith('✓')?'var(--green)':'var(--red)'}}>{msg}</div>}
+        {msg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,fontSize:13,background:msg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(msg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:msg.startsWith('✓')?'var(--green)':'var(--red)'}}>{msg}</div>}
         <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving…':'Save Profile'}</button>
       </div>
 
@@ -15055,7 +15055,7 @@ function SuperAdminAccountView({ user, setUser, darkMode, toggleDarkMode }) {
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <span style={{fontSize:11,fontWeight:600,color:darkMode?'var(--brand)':'var(--t2)'}}>{darkMode?'On':'Off'}</span>
-            <button style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:darkMode?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggleDarkMode}>
+            <button style={{width:40,height:22,borderRadius:12,border:'none',cursor:'pointer',background:darkMode?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggleDarkMode}>
               <div style={{width:16,height:16,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:darkMode?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
             </button>
           </div>
@@ -15168,7 +15168,7 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
         <div className="ph-sub">{user.org} · Configure review response time limits</div>
       </div>
 
-      {saved&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:10,padding:12,marginBottom:14,fontSize:13,color:'var(--green)',fontWeight:600}}>✅ Settings saved successfully</div>}
+      {saved&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:12,padding:12,marginBottom:14,fontSize:13,color:'var(--green)',fontWeight:600}}>✅ Settings saved successfully</div>}
 
       <div className="section" style={{marginBottom:14}}>
         <div className="section-title">⏱ Review Response Times</div>
@@ -15185,7 +15185,7 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
             <div style={{display:'flex',gap:6,alignItems:'center'}}>
               {[[30,'30m'],[60,'1h'],[240,'4h'],[480,'8h'],[1440,'1d'],[2880,'2d'],[4320,'3d']].map(([mins,label])=>(
                 <button key={mins} onClick={()=>setSla({...sla,[p]:mins})}
-                  style={{fontSize:11,padding:'4px 10px',borderRadius:6,border:'1px solid var(--border)',cursor:'pointer',fontFamily:'inherit',fontWeight:600,
+                  style={{fontSize:11,padding:'4px 10px',borderRadius:8,border:'1px solid var(--border)',cursor:'pointer',fontFamily:'inherit',fontWeight:600,
                     background:sla[p]===mins?PRIORITY_COLORS[p]:sla[p]===mins?PRIORITY_COLORS[p]:'var(--s3)',
                     color:sla[p]===mins?'#fff':'var(--t2)'}}>
                   {label}
@@ -15239,7 +15239,7 @@ function SLASettingsView({ user, orgSLA, setOrgSLA, tasks, setTasks, loadTasks }
         <div style={{fontSize:12,color:'var(--t2)',marginBottom:14,lineHeight:1.6}}>
           Generate monthly review tasks for all managers and supervisors. Each person gets a task to complete their monthly report. Response time: <strong>{fmtMinutes(reviewSLA)}</strong>.
         </div>
-        <div style={{background:'var(--s3)',borderRadius:10,padding:14,marginBottom:14,fontSize:12}}>
+        <div style={{background:'var(--s3)',borderRadius:12,padding:14,marginBottom:14,fontSize:12}}>
           <div style={{fontWeight:600,marginBottom:4}}>📅 What gets created:</div>
           <div style={{color:'var(--t2)',lineHeight:1.8}}>
             • Task title: "Monthly Review — {new Date().toLocaleString('en-AU',{month:'long',year:'numeric'})}"<br/>
@@ -15597,7 +15597,7 @@ function GuidePrintDocument({ guide, roleName, user, orgLogo }) {
         <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center',width:'100%'}}>
           <img src={orgLogo || '/logo.jpeg'} crossOrigin="anonymous" alt="Logo" style={{maxWidth:120,height:'auto',objectFit:'contain',marginBottom:16,display:'block'}}/>
           <div style={{fontSize:13,color:'#aaa',marginBottom:48,letterSpacing:'1px',textTransform:'uppercase'}}>Workforce Management Platform</div>
-          <div style={{width:56,height:4,background:accentColor,marginBottom:40,borderRadius:2}}/>
+          <div style={{width:56,height:4,background:accentColor,marginBottom:40,borderRadius:4}}/>
           <div style={{fontSize:36,fontWeight:800,color:'#1A2033',marginBottom:14,lineHeight:1.2}}>Taksyn {roleName} Guide</div>
           <div style={{fontSize:20,color:'#5A6478',marginBottom:44}}>Getting Started Guide</div>
           {user.org && <div style={{fontSize:16,color:'#1A2033',marginBottom:14,fontWeight:600}}>{user.org}</div>}
@@ -15906,7 +15906,7 @@ function GettingStartedGuide({ user, setPage }) {
 
         {/* Footer */}
         {['client_admin','super_admin'].includes(user.role) && (
-        <div style={{marginTop:20,padding:'14px 16px',background:'var(--s3)',borderRadius:10,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        <div style={{marginTop:20,padding:'14px 16px',background:'var(--s3)',borderRadius:12,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
           <div style={{fontSize:12,color:'var(--t2)',flex:1}}>Need more help? Go to <strong>Help &amp; Support</strong> to raise a ticket and the Taksyn support team will respond within 24 hours.</div>
           <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setPage('help')}>Go to Support →</button>
         </div>
@@ -15976,7 +15976,7 @@ function HelpView({ user }) {
         <div className="ph-sub">Report an issue or get help with Taksyn</div>
       </div>
 
-      {submitted&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:10,padding:14,marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
+      {submitted&&<div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.2)',borderRadius:12,padding:14,marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
         <span style={{fontSize:20}}>✅</span>
         <div><div style={{fontWeight:700,color:'var(--green)'}}>Ticket submitted!</div><div style={{fontSize:12,color:'var(--t2)',marginTop:2}}>The Taksyn support team will get back to you shortly.</div></div>
       </div>}
@@ -16002,7 +16002,7 @@ function HelpView({ user }) {
           <label className="form-label">Screenshot (optional)</label>
           {screenshot
             ? <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <img src={screenshot} alt="screenshot" style={{height:60,borderRadius:6,border:'1px solid var(--border)'}}/>
+                <img src={screenshot} alt="screenshot" style={{height:60,borderRadius:8,border:'1px solid var(--border)'}}/>
                 <button className="btn btn-secondary btn-sm" onClick={()=>setScreenshot(null)}>✕ Remove</button>
               </div>
             : <button className="btn btn-secondary" onClick={()=>document.getElementById('support-img').click()}><IC n="camera" s={14}/> Attach Screenshot</button>
@@ -16025,9 +16025,9 @@ function HelpView({ user }) {
                   <div style={{fontSize:12,fontWeight:600,marginBottom:3,color:'var(--text)'}}>{t.description?.slice(0,80)}{t.description?.length>80?'...':''}</div>
                   <div style={{fontSize:10,color:'var(--t2)'}}>{new Date(t.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} · {t.device} · v{t.app_version}</div>
                 </div>
-                <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:(STATUS_COLORS[t.status]||'#6B7280')+'22',color:STATUS_COLORS[t.status]||'#6B7280',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
+                <span style={{fontSize:10,padding:'2px 8px',borderRadius:12,fontWeight:600,background:(STATUS_COLORS[t.status]||'#6B7280')+'22',color:STATUS_COLORS[t.status]||'#6B7280',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
               </div>
-              {t.response&&<div style={{marginTop:6,background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.15)',borderRadius:6,padding:'6px 10px',fontSize:12}}><span style={{color:'var(--brand)',fontWeight:600}}>💬 Taksyn Support:</span> {t.response}</div>}
+              {t.response&&<div style={{marginTop:6,background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.15)',borderRadius:8,padding:'6px 10px',fontSize:12}}><span style={{color:'var(--brand)',fontWeight:600}}>💬 Taksyn Support:</span> {t.response}</div>}
             </div>
           ))
         }
@@ -16133,7 +16133,7 @@ function CapaActionForm({ sel, orgId, user, busy, setBusy, capaStaff, isAdmin, o
   return (
     <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)'}}>
       <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>Create a corrective action (becomes a task)</div>
-      <div style={{fontSize:11,color:'#DC2626',background:'rgba(220,38,38,.08)',padding:'6px 8px',borderRadius:6,marginBottom:8}}>
+      <div style={{fontSize:11,color:'#DC2626',background:'rgba(220,38,38,.08)',padding:'6px 8px',borderRadius:8,marginBottom:8}}>
         &#9888;&#65039; This title is visible to the assigned worker — do not include incident detail (category, people involved, or clinical information).
       </div>
       <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="What needs to be done (worker-safe wording)…"
@@ -16284,7 +16284,7 @@ function PeopleSubmissionsView({ user, setPage }) {
     await resolve(row, 'match', person.id)
   }
 
-  const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:16, marginBottom:14 }
+  const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:16, marginBottom:14 }
   const inp  = { width:'100%', padding:'9px 11px', borderRadius:8, border:'1px solid var(--border)', fontSize:14, marginBottom:8, background:'var(--card)', color:'var(--text)' }
   const btn  = (bg,fg) => ({ padding:'8px 12px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', border:'1px solid var(--border)', background:bg||'transparent', color:fg||'var(--text)' })
 
@@ -16593,7 +16593,7 @@ function ContactsView({ user, setPage }) {
     (!q.trim() || String(r.full_name||'').toLowerCase().includes(q.trim().toLowerCase())
                || String(r.id||'').toLowerCase().startsWith(q.trim().toLowerCase())))
 
-  const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:16, marginBottom:14 }
+  const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:16, marginBottom:14 }
   const inp  = { width:'100%', padding:'9px 11px', borderRadius:8, border:'1px solid var(--border)', fontSize:14, marginBottom:8, background:'var(--card)', color:'var(--text)' }
   const lbl  = { display:'block', fontSize:12, fontWeight:700, color:'var(--t2)', marginBottom:6, textTransform:'uppercase', letterSpacing:.3 }
   const chip = (on) => ({ padding:'7px 12px', borderRadius:20, fontSize:13, cursor:'pointer',
@@ -16708,7 +16708,7 @@ function ContactsView({ user, setPage }) {
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:10}}>
             <span style={{fontSize:11,color:'var(--t2)',fontWeight:600}}>ID</span>
-            <code style={{fontSize:11,color:'var(--t2)',background:'var(--s3)',padding:'3px 7px',borderRadius:5,wordBreak:'break-all'}}>{r.id}</code>
+            <code style={{fontSize:11,color:'var(--t2)',background:'var(--s3)',padding:'3px 7px',borderRadius:4,wordBreak:'break-all'}}>{r.id}</code>
             <button style={{...btn(),padding:'3px 9px',fontSize:11}} onClick={()=>{ try{ navigator.clipboard.writeText(r.id) }catch(e){} }}>Copy</button>
           </div>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -16817,7 +16817,7 @@ function IncidentHubView({ user, setPage }) {
                 <div key={i.id} onClick={()=>openIncidentBar(i.ref)}
                   style={{cursor:'pointer',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',
                     background:'var(--card)',border:'1px solid '+(i._breached?'#EF4444':i._late?'#EA580C':'var(--border)'),
-                    borderLeft:'4px solid '+(i._breached?'#EF4444':i._late?'#EA580C':sev.color),borderRadius:10,padding:'10px 14px',
+                    borderLeft:'4px solid '+(i._breached?'#EF4444':i._late?'#EA580C':sev.color),borderRadius:12,padding:'10px 14px',
                     transition:'box-shadow .15s'}}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 3px 12px rgba(0,0,0,.09)'}
                   onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
@@ -17417,7 +17417,7 @@ function IncidentReportView({ user }) {
         )}
         {CATEGORIES.map(([k,title,sub]) => (
           <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcomes([]); setSeverity(0)}}
-            style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:8,borderRadius:10,
+            style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:8,borderRadius:12,
               border: category===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.12)',
               background: category===k ? 'rgba(79,70,229,.06)' : 'transparent', cursor:'pointer'}}>
             <div style={{fontWeight:600,fontSize:14}}>{title}</div>
@@ -17474,7 +17474,7 @@ function IncidentReportView({ user }) {
                       <div style={{fontWeight:700,fontSize:14}}>{affectedPerson.full_name}</div>
                     </div>
                     <button onClick={()=>{ setAffectedPerson(null); setPersonQuery(''); setPersonResults([]); setPersonSearched(false) }}
-                      style={{padding:'6px 10px',borderRadius:16,fontSize:12,cursor:'pointer',
+                      style={{padding:'6px 10px',borderRadius:12,fontSize:12,cursor:'pointer',
                         border:'1px solid rgba(0,0,0,.15)',background:'transparent'}}>Change</button>
                   </div>
                 ) : (
@@ -17739,7 +17739,7 @@ function IncidentReportView({ user }) {
           </div>
         )}
         <button onClick={submit} disabled={!canSubmit||submitting}
-          style={{width:'100%',padding:'14px',borderRadius:10,border:'none',fontSize:15,fontWeight:600,cursor:canSubmit&&!submitting?'pointer':'not-allowed',
+          style={{width:'100%',padding:'14px',borderRadius:12,border:'none',fontSize:15,fontWeight:600,cursor:canSubmit&&!submitting?'pointer':'not-allowed',
             background: canSubmit&&!submitting ? 'var(--brand,#4F46E5)' : 'rgba(0,0,0,.15)', color:'#fff'}}>
           {submitting ? 'Submitting…' : 'Submit incident report'}
         </button>
@@ -17955,14 +17955,14 @@ function ReportIssueView({ user, embedded }) {
               const pc = ISSUE_PRIORITY_CFG[issue.priority]||ISSUE_PRIORITY_CFG.medium
               const sc = ISSUE_STATUS_CFG[issue.status]||ISSUE_STATUS_CFG.open
               return (
-                <div key={issue.id} style={{background:'var(--card)',borderRadius:10,border:'1px solid var(--border)',padding:'12px 16px'}}>
+                <div key={issue.id} style={{background:'var(--card)',borderRadius:12,border:'1px solid var(--border)',padding:'12px 16px'}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
                     <span style={{fontWeight:700,flex:1,minWidth:0}}>{issue.title}</span>
                     <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:pc.bg,color:pc.color}}>{pc.emoji} {pc.label}</span>
                     <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:sc.bg,color:sc.color}}>{sc.label}</span>
                   </div>
                   <div style={{fontSize:12,color:'var(--t2)',marginBottom:4}}>{issue.description}</div>
-                  {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:180,maxHeight:120,borderRadius:6,border:'1px solid var(--border)',display:'block',marginBottom:4}}/>}
+                  {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:180,maxHeight:120,borderRadius:8,border:'1px solid var(--border)',display:'block',marginBottom:4}}/>}
                   <div style={{fontSize:11,color:'var(--t3)'}}>{new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</div>
                 </div>
               )
@@ -18480,7 +18480,7 @@ function IncidentRegisterView({ user, setPage }) {
   const tPeriodLabel = tMonths[0].label+' – '+tMonths[5].label
 
 
-  const card={background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:14}
+  const card={background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:14}
   const th={textAlign:'left',fontSize:11,fontWeight:700,color:'var(--t2)',padding:'6px 8px',textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}
   const td={fontSize:12,padding:'8px',borderTop:'1px solid var(--border)',whiteSpace:'nowrap'}
   const sel={padding:'6px 8px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',fontSize:12}
@@ -18498,7 +18498,7 @@ function IncidentRegisterView({ user, setPage }) {
         const byDomain=tByDomain, topCats=tTopCats
         const notifReq=tNotifReq, notifDone=tNotifDone, notifRate=tNotifRate
         const sevByMonth=tSevByMonth
-        const trCard={background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14}
+        const trCard={background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:14}
         const trH={fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:.4,marginBottom:10}
         return (
           <div style={{marginBottom:18}}>
@@ -18528,8 +18528,8 @@ function IncidentRegisterView({ user, setPage }) {
                   })}
                 </div>
                 <div style={{display:'flex',gap:12,marginTop:6}}>
-                  <span style={{fontSize:10,color:'var(--t2)',display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,background:'var(--brand)',borderRadius:2,display:'inline-block'}}/> This year</span>
-                  <span style={{fontSize:10,color:'var(--t2)',display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,background:'var(--border2)',borderRadius:2,display:'inline-block'}}/> Prior year</span>
+                  <span style={{fontSize:10,color:'var(--t2)',display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,background:'var(--brand)',borderRadius:4,display:'inline-block'}}/> This year</span>
+                  <span style={{fontSize:10,color:'var(--t2)',display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,background:'var(--border2)',borderRadius:4,display:'inline-block'}}/> Prior year</span>
                 </div>
               </div>
               <div style={{...trCard,flex:'1 1 200px'}}>
@@ -18546,7 +18546,7 @@ function IncidentRegisterView({ user, setPage }) {
                     <span style={{color:'var(--text)',fontWeight:500}}>{categoryLabels[key]||key}</span>
                     <span style={{color:'var(--t2)',fontWeight:700}}>{n} ({pc}%)</span>
                   </div>
-                  <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:pc+'%',background:'var(--brand)',borderRadius:2}}/></div>
+                  <div style={{height:4,background:'var(--border)',borderRadius:4}}><div style={{height:4,width:pc+'%',background:'var(--brand)',borderRadius:4}}/></div>
                 </div>})}
               </div>
             </div>
@@ -18560,7 +18560,7 @@ function IncidentRegisterView({ user, setPage }) {
                     <span style={{color:'var(--text)',fontWeight:500}}>{HARM_LABEL[key]||key.replace(/_/g,' ')}</span>
                     <span style={{color:'var(--t2)',fontWeight:700}}>{n} ({pc}%)</span>
                   </div>
-                  <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:pc+'%',background:'var(--brand)',borderRadius:2}}/></div>
+                  <div style={{height:4,background:'var(--border)',borderRadius:4}}><div style={{height:4,width:pc+'%',background:'var(--brand)',borderRadius:4}}/></div>
                 </div>})}
               </div>
               <div style={{...trCard,flex:'1 1 200px'}}>
@@ -18572,7 +18572,7 @@ function IncidentRegisterView({ user, setPage }) {
                     <span style={{color:'var(--text)',fontWeight:500,textTransform:'capitalize'}}>{String(key).replace(/_/g,' ')}</span>
                     <span style={{color:'var(--t2)',fontWeight:700}}>{n} ({pc}%)</span>
                   </div>
-                  <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:pc+'%',background:'var(--brand)',borderRadius:2}}/></div>
+                  <div style={{height:4,background:'var(--border)',borderRadius:4}}><div style={{height:4,width:pc+'%',background:'var(--brand)',borderRadius:4}}/></div>
                 </div>})}
                 {tRepeatPeople>0&&<div style={{fontSize:11,color:'var(--t2)',marginTop:8,paddingTop:8,borderTop:'1px solid var(--border)'}}>{tRepeatPeople} individual{tRepeatPeople!==1?'s':''} with 2+ incidents — see register for detail</div>}
               </div>
@@ -18588,7 +18588,7 @@ function IncidentRegisterView({ user, setPage }) {
                     </span>
                     <span style={{color:'var(--t2)',fontWeight:700}}>{n} ({pc}%)</span>
                   </div>
-                  <div style={{height:4,background:'var(--border)',borderRadius:2}}><div style={{height:4,width:pc+'%',background:'var(--brand)',borderRadius:2}}/></div>
+                  <div style={{height:4,background:'var(--border)',borderRadius:4}}><div style={{height:4,width:pc+'%',background:'var(--brand)',borderRadius:4}}/></div>
                 </div>})}
               </div>
             </div>
@@ -18629,7 +18629,7 @@ function IncidentRegisterView({ user, setPage }) {
           <div style={{display:'flex',gap:6,alignItems:'flex-end',height:36}}>
             {bySev.map(({s,n})=>{ const mx=Math.max(1,...bySev.map(b=>b.n)); const c=(INC_SEVERITY_CFG[s]||{}).color||'var(--brand)'
               return <div key={s} style={{flex:1,textAlign:'center'}} title={`Severity ${s}: ${n}`}>
-                <div style={{height:Math.round((n/mx)*28)+2,background:c,borderRadius:3}}/>
+                <div style={{height:Math.round((n/mx)*28)+2,background:c,borderRadius:4}}/>
                 <div style={{fontSize:9,color:'var(--t3)',marginTop:2}}>{s}·{n}</div>
               </div> })}
           </div>
@@ -18700,7 +18700,7 @@ function IncidentRegisterView({ user, setPage }) {
       {/* table */}
       {loading ? <div style={{color:'var(--t2)',fontSize:13}}>Loading…</div> :
         rows.length===0 ? <div className="empty"><div className="empty-icon">📋</div><div className="empty-text">No incidents match these filters</div></div> :
-        <div style={{overflowX:'auto',border:'1px solid var(--border)',borderRadius:10}}>
+        <div style={{overflowX:'auto',border:'1px solid var(--border)',borderRadius:12}}>
           <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
             <thead><tr>
               {['Ref','Date','Title','Category','Severity','Status','Assigned','Root cause','Actions','Closed','Days open','Target','Regulator'].map(h=><th key={h} style={th}>{h}</th>)}
@@ -19599,7 +19599,7 @@ function IncidentsAdminView({ user, setPage }) {
   })
   const bySeverity = [5,4,3,2,1].map(s => ({ s, items: visible.filter(i=>i.severity===s) })).filter(g=>g.items.length)
 
-  const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:16, marginBottom:14 }
+  const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:16, marginBottom:14 }
   const lbl = { display:'block', fontSize:12, fontWeight:700, color:'var(--t2)', marginBottom:6, textTransform:'uppercase', letterSpacing:.3 }
   const pill = (color,bg) => ({ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:12, background:bg||'var(--brand-lt)', color, flexShrink:0 })
 
@@ -20011,7 +20011,7 @@ function IncidentsAdminView({ user, setPage }) {
                             const box = document.getElementById('find-c-'+f.id)
                             saveFinding(f, val, box ? box.value : undefined)
                           }}
-                          style={{fontSize:12,padding:'4px 10px',borderRadius:14,
+                          style={{fontSize:12,padding:'4px 10px',borderRadius:12,
                             cursor:(busy||!canEdit)?'default':'pointer',
                             border:'1px solid '+(f.state===val?'transparent':'var(--border2)'),
                             background: f.state===val
@@ -20112,7 +20112,7 @@ function IncidentsAdminView({ user, setPage }) {
               )}
               {!isVoid && isAdmin && editAct === a.id && (
                 <div style={{marginBottom:8,padding:'8px',borderRadius:8,border:'1px solid var(--border2)'}}>
-                  <div style={{fontSize:11,color:'#DC2626',background:'rgba(220,38,38,.08)',padding:'6px 8px',borderRadius:6,marginBottom:8}}>
+                  <div style={{fontSize:11,color:'#DC2626',background:'rgba(220,38,38,.08)',padding:'6px 8px',borderRadius:8,marginBottom:8}}>
                     ⚠️ This title is visible to the assigned worker — do not include incident detail (category, people involved, or clinical information).
                   </div>
                   <textarea id={'act-ed-desc-'+a.id} defaultValue={a.description||''} disabled={busy}
@@ -20474,7 +20474,7 @@ function IncidentsAdminView({ user, setPage }) {
                   const st = INC_STATUS_CFG[inc.status]||INC_STATUS_CFG.reported
                   return (
                     <div key={inc.id} onClick={()=>openIncident(inc)}
-                      style={{background:'var(--card)',borderRadius:10,border:`1px solid ${breached(inc)?'var(--red)':'var(--border)'}`,padding:'14px 16px',cursor:'pointer'}}>
+                      style={{background:'var(--card)',borderRadius:12,border:`1px solid ${breached(inc)?'var(--red)':'var(--border)'}`,padding:'14px 16px',cursor:'pointer'}}>
                       <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:4}}>
                         <span style={{fontWeight:700}}>{inc.ref}</span>
                         <span style={pill(st.color)}>{st.label}</span>
@@ -20610,15 +20610,15 @@ function IssueReportsAdminView({ user }) {
                   const sc = ISSUE_STATUS_CFG[issue.status]||ISSUE_STATUS_CFG.open
                   const pc = ISSUE_PRIORITY_CFG[issue.priority]||ISSUE_PRIORITY_CFG.medium
                   return (
-                    <div key={issue.id} style={{background:'var(--card)',borderRadius:10,border:`1px solid ${issue.status==='open'?pc.color+'44':'var(--border)'}`,padding:'14px 16px'}}>
+                    <div key={issue.id} style={{background:'var(--card)',borderRadius:12,border:`1px solid ${issue.status==='open'?pc.color+'44':'var(--border)'}`,padding:'14px 16px'}}>
                       <div style={{display:'flex',alignItems:'flex-start',gap:10,flexWrap:'wrap',marginBottom:6}}>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:2,flexWrap:'wrap'}}>
                             <span style={{fontWeight:700}}>{issue.title}</span>
-                            {(()=>{ const t=issue.type||'request'; const tc={request:['📋','#6366F1'],complaint:['⚠️','#EF4444'],feedback:['💬','#10B981']}[t]||['📋','#6366F1']; return <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:tc[1]+'1a',color:tc[1],textTransform:'capitalize'}}>{tc[0]} {t}</span> })()}
+                            {(()=>{ const t=issue.type||'request'; const tc={request:['📋','#6366F1'],complaint:['⚠️','#EF4444'],feedback:['💬','#10B981']}[t]||['📋','#6366F1']; return <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:12,background:tc[1]+'1a',color:tc[1],textTransform:'capitalize'}}>{tc[0]} {t}</span> })()}
                           </div>
                           <div style={{fontSize:12,color:'var(--t2)',marginBottom:6}}>{issue.description}</div>
-                          {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:220,maxHeight:150,borderRadius:6,border:'1px solid var(--border)',display:'block',marginBottom:6}}/>}
+                          {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:220,maxHeight:150,borderRadius:8,border:'1px solid var(--border)',display:'block',marginBottom:6}}/>}
                           <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
                             {issue.is_anonymous ? <span style={{color:'var(--t2)',fontWeight:600}}>🔒 Anonymous</span> : <span>👤 {reporterNames[issue.reported_by]||'Team member'}</span>}
                             <span>📅 {new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</span>
@@ -20691,13 +20691,13 @@ function SupportView({ user, tickets=[], setTickets }) {
                 .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
               if(archived.length===0) return <div className="empty"><div className="empty-icon">📦</div><div className="empty-text">No archived tickets</div></div>
               return archived.map((t,i)=>(
-                <div key={i} onClick={()=>{setSelected(t);setShowArchive(false)}} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:10,padding:12,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(t.status==='resolved'?'#10B981':'#6B7280')}}>
+                <div key={i} onClick={()=>{setSelected(t);setShowArchive(false)}} style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:12,padding:12,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(t.status==='resolved'?'#10B981':'#6B7280')}}>
                   <div style={{display:'flex',justifyContent:'space-between',gap:8}}>
                     <div style={{flex:1}}>
                       <div style={{fontSize:12,fontWeight:600,marginBottom:2}}>{t.description?.slice(0,80)}{t.description?.length>80?'...':''}</div>
                       <div style={{fontSize:11,color:'var(--t2)'}}>{t.user_name} · {t.org} · {new Date(t.created_at).toLocaleDateString('en-AU')}</div>
                     </div>
-                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:t.status==='resolved'?'rgba(16,185,129,.12)':'var(--s4)',color:t.status==='resolved'?'var(--green)':'var(--t2)',whiteSpace:'nowrap',alignSelf:'flex-start'}}>{t.status.toUpperCase()}</span>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:12,fontWeight:600,background:t.status==='resolved'?'rgba(16,185,129,.12)':'var(--s4)',color:t.status==='resolved'?'var(--green)':'var(--t2)',whiteSpace:'nowrap',alignSelf:'flex-start'}}>{t.status.toUpperCase()}</span>
                   </div>
                   {t.response&&<div style={{fontSize:11,color:'var(--green)',marginTop:4}}>💬 Replied</div>}
                 </div>
@@ -20751,7 +20751,7 @@ function SupportView({ user, tickets=[], setTickets }) {
               {filtered.length===0
                 ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No {filter==='all'?'active':filter} tickets</div></div>
                 : filtered.map((t,i)=>(
-                  <div key={i} onClick={()=>setSelected(t)} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(STATUS_COLORS[t.status]||'var(--border)')}}>
+                  <div key={i} onClick={()=>setSelected(t)} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(STATUS_COLORS[t.status]||'var(--border)')}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
                       <div style={{flex:1}}>
                         <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
@@ -20764,7 +20764,7 @@ function SupportView({ user, tickets=[], setTickets }) {
                         <div style={{fontSize:10,color:'var(--t3)',marginTop:2}}>{new Date(t.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
                       </div>
                       <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'flex-end'}}>
-                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:(STATUS_COLORS[t.status]||'#6B7280')+'22',color:STATUS_COLORS[t.status]||'#6B7280',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
+                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:12,fontWeight:600,background:(STATUS_COLORS[t.status]||'#6B7280')+'22',color:STATUS_COLORS[t.status]||'#6B7280',whiteSpace:'nowrap'}}>{t.status?.replace('_',' ').toUpperCase()}</span>
                         {t.screenshot&&<span style={{fontSize:10,color:'var(--t2)'}}>📷</span>}
                         {t.response&&<span style={{fontSize:10,color:'var(--green)'}}>💬 Replied</span>}
                       </div>
@@ -21776,7 +21776,7 @@ export default function App() {
               <div style={{padding:'10px 14px',display:'flex',gap:6,borderBottom:'1px solid var(--border)',flexShrink:0}}>
                 {[['today','Today'],['weekly','Weekly'],['monthly','Monthly']].map(([k,label])=>(
                   <button key={k} onClick={()=>{ setCalDay(null); setCalOffset(0); setCalRange(k) }}
-                    style={{fontSize:12,padding:'4px 10px',borderRadius:6,border:'none',cursor:'pointer',fontFamily:'inherit',
+                    style={{fontSize:12,padding:'4px 10px',borderRadius:8,border:'none',cursor:'pointer',fontFamily:'inherit',
                       background:calRange===k?'var(--brand)':'transparent',
                       color:calRange===k?'#fff':'var(--t2)',
                       fontWeight:calRange===k?600:400}}>{label}</button>
@@ -21800,7 +21800,7 @@ export default function App() {
                     withMon?{day:'numeric',month:'short',timeZone:'UTC'}:{day:'numeric',timeZone:'UTC'})
                   _label = _fmt(_f, _f.getUTCMonth()!==_l.getUTCMonth()) + ' – ' + _fmt(_l,true)
                 }
-                const _btn = (enabled)=>({fontSize:15,lineHeight:1,padding:'2px 9px',borderRadius:6,
+                const _btn = (enabled)=>({fontSize:15,lineHeight:1,padding:'2px 9px',borderRadius:8,
                   border:'1px solid var(--border)',background:'transparent',fontFamily:'inherit',
                   color:enabled?'var(--t2)':'var(--border)',cursor:enabled?'pointer':'default'})
                 const _canBack = calOffset > -12, _canFwd = calOffset < 12
@@ -21921,7 +21921,7 @@ export default function App() {
                       <div>
                         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
                           <button onClick={()=>setCalDay(null)}
-                            style={{fontSize:12,padding:'4px 10px',borderRadius:6,border:'1px solid var(--border)',
+                            style={{fontSize:12,padding:'4px 10px',borderRadius:8,border:'1px solid var(--border)',
                               background:'transparent',color:'var(--t2)',cursor:'pointer',fontFamily:'inherit'}}>← Back</button>
                           <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{_lbl}</div>
                         </div>
@@ -21964,7 +21964,7 @@ export default function App() {
                     const _first = new Date(from+'T00:00:00Z').getUTCDay()
                     const _lead = (_first+6)%7
                     const _len = Number(to.slice(8,10))
-                    const _cell = { aspectRatio:'1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:6 }
+                    const _cell = { aspectRatio:'1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', borderRadius:8 }
                     return (
                       <div>
                         <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:6}}>
@@ -22036,7 +22036,7 @@ export default function App() {
               <div style={{position:'fixed',inset:0,zIndex:249}} onClick={()=>{ setShowNotifPanel(false); setShowNotifSettings(false) }}/>
               <div className="notif-panel">
                 <div style={{padding:'12px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-                  <div style={{fontWeight:700,fontSize:14}}>🔔 Notifications{unreadCount>0&&<span style={{marginLeft:6,background:'var(--brand)',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{unreadCount}</span>}</div>
+                  <div style={{fontWeight:700,fontSize:14}}>🔔 Notifications{unreadCount>0&&<span style={{marginLeft:6,background:'var(--brand)',color:'#fff',borderRadius:12,padding:'1px 7px',fontSize:10,fontWeight:700}}>{unreadCount}</span>}</div>
                   <div style={{display:'flex',gap:6,alignItems:'center'}}>
                     {unreadCount>0&&<button style={{fontSize:11,color:'var(--brand)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:600}} onClick={()=>setNotifications(prev=>prev.map(n=>({...n,read:true})))}>Mark all read</button>}
                     <button className="notif-icon-btn" title="Notification settings" onClick={e=>{e.stopPropagation();setShowNotifSettings(s=>!s)}}>⚙️</button>
@@ -22122,7 +22122,7 @@ export default function App() {
                     <div style={{marginTop:4}}><RolePill role={user.role}/></div>
                   </div>
                 </div>
-                {profileMsg&&<div style={{background:profileMsg.startsWith('✗')?'rgba(239,68,68,.08)':'rgba(16,185,129,.08)',border:'1px solid '+(profileMsg.startsWith('✗')?'rgba(239,68,68,.25)':'rgba(16,185,129,.2)'),borderRadius:6,padding:'8px 12px',fontSize:13,color:profileMsg.startsWith('✗')?'#DC2626':'var(--green)',marginBottom:14}}>{profileMsg}</div>}
+                {profileMsg&&<div style={{background:profileMsg.startsWith('✗')?'rgba(239,68,68,.08)':'rgba(16,185,129,.08)',border:'1px solid '+(profileMsg.startsWith('✗')?'rgba(239,68,68,.25)':'rgba(16,185,129,.2)'),borderRadius:8,padding:'8px 12px',fontSize:13,color:profileMsg.startsWith('✗')?'#DC2626':'var(--green)',marginBottom:14}}>{profileMsg}</div>}
                 <div className="form-field"><label className="form-label">Display Name</label><input className="form-input" value={profileName} onChange={e=>setProfileName(e.target.value)}/></div>
                 <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
 
@@ -22184,7 +22184,7 @@ export default function App() {
                     setProfileMsg('✓ Confirmation sent to '+newEmail.trim()+' — click the link in that inbox to finish. Until you do, keep signing in with '+currentEmail)
                     setNewEmail('')
                   }}>Update Email</button>
-                  {profileMsg&&<div style={{background:profileMsg.startsWith('✗')?'rgba(239,68,68,.08)':'rgba(16,185,129,.08)',border:'1px solid '+(profileMsg.startsWith('✗')?'rgba(239,68,68,.25)':'rgba(16,185,129,.2)'),borderRadius:6,padding:'8px 12px',fontSize:13,color:profileMsg.startsWith('✗')?'#DC2626':'var(--green)',marginBottom:14,lineHeight:1.5}}>{profileMsg}</div>}
+                  {profileMsg&&<div style={{background:profileMsg.startsWith('✗')?'rgba(239,68,68,.08)':'rgba(16,185,129,.08)',border:'1px solid '+(profileMsg.startsWith('✗')?'rgba(239,68,68,.25)':'rgba(16,185,129,.2)'),borderRadius:8,padding:'8px 12px',fontSize:13,color:profileMsg.startsWith('✗')?'#DC2626':'var(--green)',marginBottom:14,lineHeight:1.5}}>{profileMsg}</div>}
                 </div>
 
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16}}>
@@ -22202,7 +22202,7 @@ export default function App() {
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
                       <span style={{fontSize:11,fontWeight:600,color:gpsEnabled===false?'var(--red)':'var(--green)'}}>{gpsEnabled===false?'Disabled':'Enabled'}</span>
-                      <button style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:gpsEnabled===false?'var(--border)':'var(--green)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>{
+                      <button style={{width:40,height:22,borderRadius:12,border:'none',cursor:'pointer',background:gpsEnabled===false?'var(--border)':'var(--green)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>{
                         if(gpsEnabled===false){
                           if(!navigator.geolocation){setProfileMsg('✗ Your device does not support location services.');return}
                           navigator.geolocation.getCurrentPosition(
@@ -22227,7 +22227,7 @@ export default function App() {
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
                       <span style={{fontSize:11,fontWeight:600,color:darkMode?'var(--brand)':'var(--t2)'}}>{darkMode?'On':'Off'}</span>
-                      <button style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:darkMode?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggleDarkMode}>
+                      <button style={{width:40,height:22,borderRadius:12,border:'none',cursor:'pointer',background:darkMode?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggleDarkMode}>
                         <div style={{width:16,height:16,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:darkMode?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
                       </button>
                     </div>
@@ -22240,7 +22240,7 @@ export default function App() {
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                       {[{label:'30 min',v:30},{label:'60 min',v:60},{label:'2 hrs',v:120},{label:'4 hrs',v:240},{label:'8 hrs',v:480},{label:'Never',v:0}].map(({label,v})=>{
                         const active = sessionTimeout===v||(sessionTimeout===null&&v===(SESSION_ROLE_TIMEOUTS[user.role]||60))
-                        return <button key={v} style={{fontSize:11,padding:'4px 10px',borderRadius:5,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand)':'transparent',color:active?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:active?700:400}} onClick={()=>{
+                        return <button key={v} style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'1px solid '+(active?'var(--brand)':'var(--border)'),background:active?'var(--brand)':'transparent',color:active?'#fff':'var(--t2)',cursor:'pointer',fontFamily:'inherit',fontWeight:active?700:400}} onClick={()=>{
                           const pref = v===(SESSION_ROLE_TIMEOUTS[user.role]||60)?null:v
                           if(pref===null) localStorage.removeItem('taksyn_session_timeout'); else localStorage.setItem('taksyn_session_timeout',String(v))
                           setSessionTimeout(pref===null?null:v)
@@ -22273,7 +22273,7 @@ export default function App() {
               <div className="modal-body">
                 {userPositionsList.map((pos,i)=>(
                   <div key={i} onClick={()=>{ setActivePosition(pos); sessionStorage.setItem('taksyn-active-position',JSON.stringify(pos)); setShowRoleSelector(false) }}
-                    style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:10,border:'1px solid var(--border)',marginBottom:8,cursor:'pointer',transition:'all .15s',background:'var(--s3)'}}
+                    style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,border:'1px solid var(--border)',marginBottom:8,cursor:'pointer',transition:'all .15s',background:'var(--s3)'}}
                     onMouseOver={e=>e.currentTarget.style.borderColor='var(--brand)'}
                     onMouseOut={e=>e.currentTarget.style.borderColor='var(--border)'}>
                     <div style={{flex:1}}>
@@ -22351,7 +22351,7 @@ export default function App() {
               </div>
               <div className="sb-bottom">
                 {activePosition&&!['super_admin','client_admin'].includes(user.role)&&(
-                  <div style={{marginBottom:6,padding:'6px 8px',borderRadius:6,background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',cursor:'pointer',display:'flex',alignItems:'center',gap:6}} onClick={()=>setShowRoleSelector(true)} title="Switch role">
+                  <div style={{marginBottom:6,padding:'6px 8px',borderRadius:8,background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)',cursor:'pointer',display:'flex',alignItems:'center',gap:6}} onClick={()=>setShowRoleSelector(true)} title="Switch role">
                     <div className="sb-user-info" style={{flex:1}}>
                       <div style={{fontSize:10,color:'var(--brand)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px'}}>Active Role</div>
                       <div style={{fontSize:11,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{activePosition.position_title||ROLE_LABELS[activePosition.role]}</div>

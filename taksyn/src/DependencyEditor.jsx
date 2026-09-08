@@ -227,7 +227,7 @@ export default function DependencyEditor({ project, stage, sections, links, onCh
   )
 }
 
-const inp = { padding: '6px 8px', border: `1px solid ${C.line2}`, borderRadius: 7,
+const inp = { padding: '6px 8px', border: `1px solid ${C.line2}`, borderRadius: 8,
   fontSize: 12, fontFamily: 'inherit', background: 'var(--s4)' }
 const btn = { background: 'var(--brand)', color: '#fff', border: 0, borderRadius: 8,
   padding: '7px 13px', fontSize: 12, cursor: 'pointer' }

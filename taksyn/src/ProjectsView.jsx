@@ -677,7 +677,7 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
   const StageName = ({ pk, extra }) => renaming === pk.id ? (
     <span style={{ display: 'flex', gap: 6, flex: 1 }}>
       <input style={{ flex: 1, padding: '5px 8px', border: `1px solid ${C.line2}`,
-               borderRadius: 6, fontSize: 13, fontFamily: 'inherit' }}
+               borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }}
              value={renameTo} autoFocus
              onChange={e => setRenameTo(e.target.value)}
              onKeyDown={e => { if (e.key === 'Enter') renameStage(pk)
@@ -801,16 +801,16 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12, fontSize: 11, color: C.ink3 }}>
         {teamOrder.map(k => (
           <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <i style={{ width: 9, height: 9, borderRadius: 3, background: teamColour(k).solid }} />
+            <i style={{ width: 9, height: 9, borderRadius: 4, background: teamColour(k).solid }} />
             {teamNames[k]}
           </span>
         ))}
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <i style={{ width: 16, height: 9, borderRadius: 3, background: C.ink3, opacity: .3 }} />
+          <i style={{ width: 16, height: 9, borderRadius: 4, background: C.ink3, opacity: .3 }} />
           faded = still open
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <i style={{ width: 4, height: 11, borderRadius: 1, background: C.red }} />
+          <i style={{ width: 4, height: 11, borderRadius: 4, background: C.red }} />
           overdue
         </span>
       </div>
@@ -865,7 +865,7 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                     <span style={{ fontSize: 11, color: C.ink3, overflow: 'hidden',
                              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                              display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <i style={{ width: 9, height: 9, borderRadius: 3, flex: 'none',
+                      <i style={{ width: 9, height: 9, borderRadius: 4, flex: 'none',
                              background: teamColour(bar.key).solid }} />
                       {bar.name}
                     </span>
@@ -975,7 +975,7 @@ function TeamBlock({ name, tasks, moved, sections, flag, colour,
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 12, color: flag ? C.amberDeep : C.ink3, marginBottom: 4,
              display: 'flex', alignItems: 'center', gap: 6 }}>
-        {colour && <i style={{ width: 9, height: 9, borderRadius: 3, flex: 'none', background: colour }} />}
+        {colour && <i style={{ width: 9, height: 9, borderRadius: 4, flex: 'none', background: colour }} />}
         {flag && '⚑ '}{name}
       </div>
       {tasks.slice().sort((a, b) => (a.due_date || '').localeCompare(b.due_date || '')).map(t => {
@@ -1020,7 +1020,7 @@ function TeamBlock({ name, tasks, moved, sections, flag, colour,
 
 /* ===================================================================== */
 function Bar({ pct }) {
-  return <div style={{ height: 5, background: C.line, borderRadius: 3, overflow: 'hidden', margin: '7px 0' }}>
+  return <div style={{ height: 5, background: C.line, borderRadius: 4, overflow: 'hidden', margin: '7px 0' }}>
     <div style={{ width: `${pct}%`, height: 5, background: C.green }} /></div>
 }
 function Note({ tone, children }) {
@@ -1040,7 +1040,7 @@ function DragHandle({ id }) {
     <span data-stage-handle={id} title="Drag to reorder"
           style={{ cursor: 'grab', touchAction: 'none', display: 'inline-flex',
                    alignItems: 'center', justifyContent: 'center',
-                   width: 30, height: 26, borderRadius: 7,
+                   width: 30, height: 26, borderRadius: 8,
                    border: `1px solid ${C.line2}`, color: C.ink2 }}>
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"
@@ -1063,7 +1063,7 @@ function Pill({ children }) {
 }
 
 const miniBtn = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
-  borderRadius: 6, padding: '1px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1.3 }
+  borderRadius: 8, padding: '1px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1.3 }
 const miniGhost = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
   borderRadius: 8, padding: '4px 10px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }
 const crumb = { fontSize: 12, color: C.ink2, cursor: 'pointer', marginBottom: 6 }
@@ -1074,4 +1074,4 @@ const inp = { width: '100%', padding: '9px 10px', border: `1px solid ${C.line2}`
   fontSize: 14, fontFamily: 'inherit' }
 const modalWrap = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', display: 'flex',
   alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }
-const modalBox = { background: 'var(--s4)', borderRadius: 14, padding: 18, width: '100%', maxWidth: 460 }
+const modalBox = { background: 'var(--s4)', borderRadius: 12, padding: 18, width: '100%', maxWidth: 460 }

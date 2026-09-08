@@ -219,4 +219,4 @@ const btn = { background: 'var(--brand)', color: '#fff', border: 0, borderRadius
 const btnGhost = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
   borderRadius: 8, padding: '4px 9px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }
 const btnIcon = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
-  borderRadius: 6, padding: '2px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1.2 }
+  borderRadius: 8, padding: '2px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1.2 }
