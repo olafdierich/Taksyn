@@ -71,7 +71,7 @@ const CSS = `
     text-transform:uppercase;color:var(--brand)}
   .note{font-size:12.5px;color:var(--ink-2)}
   .masthead{border-bottom:3px solid var(--ink);padding-bottom:20px}
-  .mast-top{display:flex;align-items:center;gap:16px;margin-bottom:6px}
+  .mast-top{display:flex;align-items:center;gap:18px;margin-bottom:10px}
   .mast-logo{max-height:52px;max-width:180px;object-fit:contain;flex:none}
   .mast-org{min-width:0}
   .mast-name{font-family:'Bricolage Grotesque',system-ui,sans-serif;
@@ -273,10 +273,10 @@ export async function openProjectReport(o) {
 
   P(`<div class="masthead">
        <div class="mast-top">
-         ${logo ? `<img class="mast-logo" src="${logo}" alt="">` : ''}
+         ${logo ? `<img class="mast-logo" src="${logo}" alt="${esc(org?.name || orgName)}">` : ''}
          <div class="mast-org">
            <div class="eyebrow">Project report</div>
-           <div class="mast-name">${esc(org?.name || orgName)}</div>
+           ${logo ? '' : `<div class="mast-name">${esc(org?.name || orgName)}</div>`}
            ${place || org?.website
              ? `<div class="mast-meta">${esc(place)}${
                  place && org?.website ? ' · ' : ''}${esc(org?.website || '')}</div>` : ''}
