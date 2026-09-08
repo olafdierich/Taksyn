@@ -2007,7 +2007,7 @@ const TERMS_CONTENT = [
 
 function TermsOfUseView({ onBack, isModal }) {
   return (
-    <div style={{background:'#fff',borderRadius:isModal?16:0,maxWidth:isModal?660:'100%',width:'100%',padding:isModal?'32px 40px':'24px 20px',boxSizing:'border-box',minHeight:isModal?'auto':'100vh',fontFamily:'"DM Sans",Arial,sans-serif',margin:isModal?'0 auto':'0'}}>
+    <div style={{background:'var(--card)',borderRadius:isModal?16:0,maxWidth:isModal?660:'100%',width:'100%',padding:isModal?'32px 40px':'24px 20px',boxSizing:'border-box',minHeight:isModal?'auto':'100vh',fontFamily:'"DM Sans",Arial,sans-serif',margin:isModal?'0 auto':'0'}}>
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:24}}>
         <button onClick={onBack} style={{background:'none',border:'1px solid #ddd',borderRadius:8,padding:'6px 16px',cursor:'pointer',fontSize:13,color:'#555',flexShrink:0}}>← Back</button>
         <img src="/logo.jpeg" alt="Taksyn" style={{height:30,objectFit:'contain'}}/>
@@ -4637,7 +4637,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     const td = { padding:'9px 6px', fontSize:12, borderBottom:'1px solid var(--border)',
       verticalAlign:'top' }
     return (
-      <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginTop:14}}>
+      <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginTop:14}}>
         <div onClick={()=>setShowRegister(v=>!v)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
           <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>
             📋 Task Register · {_regActive ? _regShown.length+' of '+rows.length : rows.length}
@@ -5790,7 +5790,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       </div>
                       {calPicking&&(
                         <div style={{position:'fixed',inset:0,zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,.4)',backdropFilter:'blur(2px)'}} onClick={()=>setCalPicking(null)}>
-                          <div style={{background:'#fff',borderRadius:16,padding:16,width:300,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}} onClick={e=>e.stopPropagation()}>
+                          <div style={{background:'var(--card)',borderRadius:16,padding:16,width:300,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}} onClick={e=>e.stopPropagation()}>
                             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
                               <div style={{fontSize:13,fontWeight:700,color:calPicking==='from'?'var(--brand)':'#8B5CF6'}}>
                                 {calPicking==='from'?'📅 Select Start Date':'📅 Select End Date'}
@@ -5841,7 +5841,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     )}
                   </div>
                 </div>
-                <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14}}>
+                <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>📋 Results</div>
                   {(()=>{
                     // ARCHIVE-OCC-V2: the archive is now a flat chronological list of
@@ -5982,7 +5982,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                               {o.na_by_name&&<div><span style={{color:'var(--t2)'}}>Marked not applicable by:</span> {o.na_by_name}{o.na_at?' \u00b7 '+fmtDateTime(o.na_at):''}</div>}
                             </div>
                           </div>
-                          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
+                          <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>Evidence for this cycle</div>
                             {photos.length>0
                               ? <div style={{display:'flex',flexWrap:'wrap'}}>{photos.map((p,i)=><OccPhoto key={(p&&p.path)||i} p={p}/>)}</div>
@@ -6088,7 +6088,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                 const _dt = activeFiltered.find(t=>t.id===r.task_id)
                                 return (
                                   <div key={'decl'+r.id} onClick={()=>setSelected(r.task_id)}
-                                    style={{cursor:'pointer',background:'#fff',border:'1px solid rgba(239,68,68,.3)',borderRadius:10,padding:'10px 12px',marginBottom:8}}>
+                                    style={{cursor:'pointer',background:'var(--card)',border:'1px solid rgba(239,68,68,.3)',borderRadius:10,padding:'10px 12px',marginBottom:8}}>
                                     <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>
                                       <span style={{color:'var(--red)'}}>✗ Extension declined</span>
                                       {' for '}{_dt?.title||r.task_id}
@@ -6107,7 +6107,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                 : actionNeeded.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)}
                             </>))}
                           {renderSection('wk-todo', '📋 To Do', toDo.length,
-                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (toDo.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to do right now</div>:toDo.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {(()=>{
                             // Point 3: default Tasks view surfaces only recurring tasks in their
@@ -6122,7 +6122,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                                 {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
                                 (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                               {recurringSched.length>0&&renderSection('wk-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
-                                {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                                {background:'var(--card)',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                                 recurringSched.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>))}
                             </>)
                           })()}
@@ -6152,10 +6152,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
                             (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('sv-self', '👤 Self-Tasks', mySelfTasks.length,
-                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (mySelfTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:mySelfTasks.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('sv-mine', '📋 Assigned Tasks', myTasks.length,
-                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:(
                               <div>
                                 {renderSection('sv-mine-oneoff', '📋 One-off', myTasksOneOff.length,
@@ -6174,7 +6174,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
                             const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
                             return renderSection('sv-others', '📤 Tasks Assigned to Others', iAssigned.length,
-                              {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                              {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                               (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned to others</div>:(
                                 <div>
                                   {renderSection('sv-others-oneoff', '📋 One-off', oneOff.length,
@@ -6212,10 +6212,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             {background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.25)',borderRadius:12,padding:16,marginBottom:12}, '#F59E0B',
                             (needsReview.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ Nothing to review</div>:needsReview.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('mg-self', '👤 Self-Tasks', mySelfTasks.length,
-                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (mySelfTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:mySelfTasks.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                           {renderSection('mg-mine', '📋 Assigned Tasks', myTasks.length,
-                            {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                            {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                             (myTasks.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:(
                               <div>
                                 {renderSection('mg-mine-oneoff', '📋 One-off', myTasksOneOff.length,
@@ -6234,7 +6234,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             const recurringInWin = recurring.filter(t=>recurringDueNow(t,_today))
                             const recurringSched = recurring.filter(t=>!recurringDueNow(t,_today))
                             return renderSection('mg-others', '📤 Tasks Assigned to Others', iAssigned.length,
-                              {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                              {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                               (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned to others</div>:(
                                 <div>
                                   {renderSection('mg-others-oneoff', '📋 One-off', oneOff.length,
@@ -6278,10 +6278,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                           {background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.2)',borderRadius:12,padding:16,marginBottom:12}, 'var(--red)',
                           attention.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>))}
                         {renderSection('ca-mine', '👤 Self-Tasks', myOwn.length,
-                          {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                          {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (myOwn.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No self-tasks</div>:myOwn.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                         {renderSection('ca-assigned-me', '📋 Assigned Tasks', myAssigned.length,
-                          {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                          {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (myAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No tasks assigned to you</div>:(
                             <div>
                               {renderSection('ca-assigned-me-oneoff', '📋 One-off', myAssignedOneOff.length,
@@ -6293,7 +6293,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             </div>
                           )))}
                         {renderSection('ca-assigned', '📤 Tasks I Assigned', iAssigned.length,
-                          {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                          {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (iAssigned.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>No tasks assigned by you</div>:(
                             <div>
                               {assignedToMgr.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:'var(--t2)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3B82F6',display:'inline-block'}}/> To Managers ({assignedToMgr.length})</div>{assignedToMgr.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)}</div>}
@@ -6302,7 +6302,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                             </div>
                           )))}
                         {renderSection('ca-oneoff', '📋 One-off Tasks', oneOffAll.length,
-                          {background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                          {background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                           (oneOffAll.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No one-off tasks · <span style={{color:'var(--brand)',cursor:'pointer'}} onClick={()=>setShowArchive(true)}>View Archive</span></div>:oneOffAll.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                         {(()=>{
                           // Point 3: default Tasks view surfaces only recurring tasks in their
@@ -6315,7 +6315,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                               {background:'rgba(0,168,126,.03)',border:'1px solid rgba(0,168,126,.15)',borderRadius:12,padding:16,marginBottom:12}, 'var(--brand)',
                               (recurringInWin.length===0?<div style={{fontSize:12,color:'var(--t2)',padding:'6px 0'}}>✅ No recurring tasks due now</div>:recurringInWin.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>)))}
                             {recurringSched.length>0&&renderSection('ca-scheduled', '🕓 Scheduled — recurring, not due yet', recurringSched.length,
-                              {background:'#fff',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
+                              {background:'var(--card)',border:'1px dashed var(--border)',borderRadius:12,padding:16,marginBottom:12}, 'var(--t2)',
                               recurringSched.map(t=><TaskCard key={t.id} task={t} today={_today} onClick={()=>setSelected(t.id)}/>))}
                           </>)
                         })()}
@@ -6802,7 +6802,7 @@ function ReviewView({ user }) {
     setBusy(false)
   }
 
-  const box = { border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 16, background: '#fff' }
+  const box = { border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 16, background: 'var(--card)' }
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 12, color: '#64748b', fontWeight: 600 }
   const td = { padding: '8px 10px', fontSize: 14, borderTop: '1px solid #f1f5f9' }
 
@@ -8618,7 +8618,7 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>If on, only tasks due during rostered hours count toward this worker's KPI.</div>
                 </div>
                 <button type="button" style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:editForm.regularly_rostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setEditForm({...editForm,regularly_rostered:!editForm.regularly_rostered})}>
-                  <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:editForm.regularly_rostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                  <div style={{width:16,height:16,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:editForm.regularly_rostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
                 </button>
               </div>
               <div style={{borderTop:'1px solid var(--border)',paddingTop:12,marginBottom:12,opacity:editForm.regularly_rostered?1:0.4,pointerEvents:editForm.regularly_rostered?'auto':'none',transition:'opacity .2s'}}>
@@ -8667,7 +8667,7 @@ function UsersView({ user, setAuditLog }) {
                   <div style={{fontSize:11,color:'var(--t2)',marginTop:2}}>If on, only tasks due during rostered hours count toward this worker's KPI.</div>
                 </div>
                 <button type="button" style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:rosterOnlyRegRostered?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={()=>setRosterOnlyRegRostered(v=>!v)}>
-                  <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:rosterOnlyRegRostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                  <div style={{width:16,height:16,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:rosterOnlyRegRostered?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
                 </button>
               </div>
               <div style={{opacity:rosterOnlyRegRostered?1:0.4,pointerEvents:rosterOnlyRegRostered?'auto':'none',transition:'opacity .2s'}}>
@@ -9006,7 +9006,7 @@ function TiersView({ user }) {
       <div className="section" style={{marginBottom:16,background:'var(--brand-lt)',border:'1px solid rgba(0,168,126,.2)'}}>
         <div style={{display:'flex',gap:16,flexWrap:'wrap',alignItems:'center'}}>
           <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:'var(--brand)',marginBottom:4}}>How pricing works</div><div style={{fontSize:13,color:'var(--t2)',lineHeight:1.6}}>Each plan has a <strong>base monthly fee</strong> plus a <strong>per user fee</strong>.</div></div>
-          <div style={{background:'#fff',borderRadius:8,padding:'10px 16px',fontSize:12,color:'var(--t2)',textAlign:'center',flexShrink:0}}><div style={{fontSize:11,marginBottom:2}}>Example: Growth plan, 20 users</div><div style={{fontWeight:700,color:'var(--text)',fontSize:14}}>$39 + (20 × $8) = <span style={{color:'var(--brand)'}}>$199/mo</span></div></div>
+          <div style={{background:'var(--card)',borderRadius:8,padding:'10px 16px',fontSize:12,color:'var(--t2)',textAlign:'center',flexShrink:0}}><div style={{fontSize:11,marginBottom:2}}>Example: Growth plan, 20 users</div><div style={{fontWeight:700,color:'var(--text)',fontSize:14}}>$39 + (20 × $8) = <span style={{color:'var(--brand)'}}>$199/mo</span></div></div>
         </div>
       </div>
       <div className="tier-grid">
@@ -12005,7 +12005,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
 
   const Tog = ({on,toggle}) => (
     <button style={{width:38,height:21,borderRadius:11,border:'none',cursor:'pointer',background:on?'var(--green)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggle}>
-      <div style={{width:15,height:15,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:on?20:3,boxShadow:'0 1px 3px rgba(0,0,0,.25)'}}/>
+      <div style={{width:15,height:15,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:on?20:3,boxShadow:'0 1px 3px rgba(0,0,0,.25)'}}/>
     </button>
   )
   const Row = ({label,sub,children}) => (
@@ -13728,7 +13728,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
               {label:'Tasks Assigned',val:pt.length,color:'#5BC8C0'},
               {label:'Completed',val:pt.filter(t=>['completed','approved'].includes(t.status)).length,color:'#10B981'},
             ].map(s=>(
-              <div key={s.label} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
+              <div key={s.label} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
                 <div style={{fontSize:22,fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
                 <div style={{fontSize:10,color:'var(--t2)',marginTop:4,textTransform:'uppercase',fontWeight:600,letterSpacing:'.5px'}}>{s.label}</div>
               </div>
@@ -13740,7 +13740,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
               <div style={{fontSize:13,fontWeight:700,color:'var(--t1)',marginBottom:8}}>👥 Team Performance</div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
                 {teams.map((tm,i)=>{ const rate=pct(tm.done,tm.total); const g=getGrade(rate); return (
-                  <div key={i} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:14}}>
+                  <div key={i} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:14}}>
                     <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>{tm.name}</div>
                     <div style={{display:'flex',gap:12,alignItems:'baseline'}}>
                       <div><span style={{fontSize:20,fontWeight:800}}>{tm.total}</span><span style={{fontSize:10,color:'var(--t2)',marginLeft:3}}>TASKS</span></div>
@@ -13759,7 +13759,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
             const onTimeRate = pct(p.onTime,p.done)
             const {grade,color} = getGrade(compRate)
             return (
-              <div key={i} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:10}}>
+              <div key={i} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,marginBottom:10}}>
                 <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
                   <div style={{width:44,height:44,borderRadius:'50%',background:color+'22',color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:800,flexShrink:0}}>{grade}</div>
                   <div style={{flex:1}}>
@@ -13802,7 +13802,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                         ['Decisions',a.decided>0?a.approved+' / '+a.sentBack:'\u2014','#5BC8C0'],
                         ['Send-back rate',_sb===null?'\u2014':_sb+'%','#6B7280'],
                       ].map(([l,v,c])=>(
-                        <div key={l} style={{background:'#fff',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
+                        <div key={l} style={{background:'var(--card)',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
                           <div style={{fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
                           <div style={{fontSize:9,color:'var(--t2)',marginTop:3,textTransform:'uppercase',fontWeight:600}}>{l}</div>
                         </div>
@@ -14363,7 +14363,7 @@ function TeamsView({ user }) {
     return (
       <div className="anim">
         <div className="ph"><div className="ph-title">My Team</div><div className="ph-sub">{myTeam.name}{myTeam.type?' · '+myTeam.type:''}</div></div>
-        <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:14,padding:20}}>
+        <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:14,padding:20}}>
           <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>{myTeam.name}</div>
           {myTeam.description&&<div style={{fontSize:13,color:'var(--t2)',marginBottom:12}}>{myTeam.description}</div>}
           <div style={{fontSize:12,color:'var(--t2)',marginBottom:myMembers.length?16:0}}>👥 {myMembers.length} member{myMembers.length!==1?'s':''}</div>
@@ -14457,7 +14457,7 @@ function TeamsView({ user }) {
       {selectedTeam ? (
         <div className="anim">
           <button className="back-btn" onClick={()=>setSelectedTeam(null)}><IC n="x" s={14}/> Back to Teams</button>
-          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:20,marginBottom:14}}>
+          <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:20,marginBottom:14}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,marginBottom:12}}>
               <div>
                 <div style={{fontSize:18,fontWeight:800}}>{selectedTeam.name}</div>
@@ -14578,7 +14578,7 @@ function TeamsView({ user }) {
       ) : (
         <div>
           {teams.length===0 ? (
-            <div className="empty" style={{background:'#fff',borderRadius:16,border:'1px solid var(--border)',padding:40}}>
+            <div className="empty" style={{background:'var(--card)',borderRadius:16,border:'1px solid var(--border)',padding:40}}>
               <div className="empty-icon">👥</div>
               <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>{isCA?'No teams yet':'No teams set up'}</div>
               <div className="empty-text">{isCA?'Create your first team to organise your staff.':'Your Client Admin will set up teams for this organisation.'}</div>
@@ -14597,7 +14597,7 @@ function TeamsView({ user }) {
                     </div>
                     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:10}}>
                       {byType[type].map(team=>(
-                        <div key={team.id} onClick={()=>openTeam(team)} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,cursor:'pointer',transition:'all .15s',borderLeft:'4px solid '+TYPE_COLORS[ti%TYPE_COLORS.length]}}
+                        <div key={team.id} onClick={()=>openTeam(team)} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:16,cursor:'pointer',transition:'all .15s',borderLeft:'4px solid '+TYPE_COLORS[ti%TYPE_COLORS.length]}}
                           onMouseOver={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'}
                           onMouseOut={e=>e.currentTarget.style.boxShadow='none'}>
                           <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{team.name}</div>
@@ -15056,7 +15056,7 @@ function SuperAdminAccountView({ user, setUser, darkMode, toggleDarkMode }) {
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <span style={{fontSize:11,fontWeight:600,color:darkMode?'var(--brand)':'var(--t2)'}}>{darkMode?'On':'Off'}</span>
             <button style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:darkMode?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggleDarkMode}>
-              <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:darkMode?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+              <div style={{width:16,height:16,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:darkMode?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
             </button>
           </div>
         </div>
@@ -20751,7 +20751,7 @@ function SupportView({ user, tickets=[], setTickets }) {
               {filtered.length===0
                 ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">No {filter==='all'?'active':filter} tickets</div></div>
                 : filtered.map((t,i)=>(
-                  <div key={i} onClick={()=>setSelected(t)} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(STATUS_COLORS[t.status]||'var(--border)')}}>
+                  <div key={i} onClick={()=>setSelected(t)} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:14,marginBottom:8,cursor:'pointer',borderLeft:'4px solid '+(STATUS_COLORS[t.status]||'var(--border)')}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
                       <div style={{flex:1}}>
                         <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
@@ -22213,7 +22213,7 @@ export default function App() {
                           localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false);setProfileMsg('GPS tracking disabled')
                         }
                       }}>
-                        <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:gpsEnabled===false?3:21,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                        <div style={{width:16,height:16,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:gpsEnabled===false?3:21,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
                       </button>
                     </div>
                   </div>
@@ -22228,7 +22228,7 @@ export default function App() {
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
                       <span style={{fontSize:11,fontWeight:600,color:darkMode?'var(--brand)':'var(--t2)'}}>{darkMode?'On':'Off'}</span>
                       <button style={{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',background:darkMode?'var(--brand)':'var(--border)',position:'relative',transition:'background .2s',flexShrink:0}} onClick={toggleDarkMode}>
-                        <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,transition:'left .2s',left:darkMode?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+                        <div style={{width:16,height:16,borderRadius:'50%',background:'var(--card)',position:'absolute',top:3,transition:'left .2s',left:darkMode?21:3,boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
                       </button>
                     </div>
                   </div>
