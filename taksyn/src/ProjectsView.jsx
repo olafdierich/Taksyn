@@ -4,6 +4,7 @@ import StructurePanel from './ProjectStructure.jsx'
 import TaskForm from './TaskForm.jsx'
 import DependencyEditor from './DependencyEditor.jsx'
 import MilestonePanel from './MilestonePanel.jsx'
+import ReportPanel from './ReportPanel.jsx'
 
 /*
   ProjectsView — the projects module UI.
@@ -220,7 +221,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
           canEdit={isCA} user={user} orgName={user?.org}
           onChanged={() => setReload(n => n + 1)} />
       : <ProjectView detail={detail} onBack={() => { setOpenId(null); setOpenSection(null) }}
-          onSection={setOpenSection} canEdit={isCA}
+          onSection={setOpenSection} canEdit={isCA} user={user} orgName={user?.org}
           onChanged={() => setReload(n => n + 1)} />
   }
 
@@ -302,7 +303,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
 }
 
 /* ===================================================================== */
-function ProjectView({ detail, onBack, onSection, canEdit, onChanged }) {
+function ProjectView({ detail, onBack, onSection, canEdit, onChanged, user, orgName }) {
   const { project, sections, tasks, ms } = detail
   const [recalcBusy, setRecalcBusy] = useState(false)
   const [signBusy, setSignBusy] = useState(false)
@@ -450,6 +451,9 @@ function ProjectView({ detail, onBack, onSection, canEdit, onChanged }) {
 
       <MilestonePanel project={project} sections={sections} milestones={ms}
                       canEdit={canEdit} onChanged={onChanged} />
+
+      <ReportPanel project={project} orgName={orgName} user={user}
+                   canEdit={canEdit} onChanged={onChanged} />
 
       {project.status === 'closed' && project.signoff_note &&
         <div style={{ ...card, borderColor: C.green }}>
