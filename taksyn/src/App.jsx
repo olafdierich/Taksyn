@@ -125,7 +125,24 @@ function DictateButton({ setValue, lang, inline }) {
               boxShadow:'0 1px 2px rgba(0,0,0,.06)',
               background:listening?'var(--red)':'#EEF0F3',
               color:listening?'#fff':'#374151'}}
-    >{listening?'⏹':'🎤'}</button>
+    >{listening ? (
+      // Stop. Filled, not stroked: at this size an outlined square reads
+      // as an empty box, and stop should look solid.
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <rect x="6" y="6" width="12" height="12" rx="2.5" />
+      </svg>
+    ) : (
+      // Microphone. currentColor, so it follows the button's existing
+      // colour switch without the style block changing.
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"
+           strokeLinejoin="round" aria-hidden="true">
+        <rect x="9" y="2.5" width="6" height="11" rx="3" />
+        <path d="M5.5 11.5v.8a6.5 6.5 0 0 0 13 0v-.8" />
+        <path d="M12 18.8V21.5" />
+        <path d="M8.4 21.5h7.2" />
+      </svg>
+    )}</button>
   )
 }
 
@@ -9032,9 +9049,9 @@ const COMPANY_COMPLETENESS_FIELDS = [
 
 const NAV = {
   super_admin:  [['dashboard','Dashboard','home'],['orgs','Organisations','users'],['users','Users','users'],['support','Support Tickets','alert'],['subscriptions','Subscriptions','tier'],['audit','Audit Log','audit'],['sa_templates','Templates','grid'],['platform_settings','Platform Settings','settings'],['my_account','My Account','settings']],
-  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['review','Review','clipboard'],['users','Workforce','user'],['teams','Teams','users'],['leave','Team Leave','clock'],['projects','Projects 🔜','tasks'],['incident_hub','Incidents & Risk','alert'],['issue_reports','Complaints & Feedback','clipboard'],['reports','Reports','chart'],['performance','Performance','chart'],['sla','Response Time','clock'],['audit','Audit Log','audit'],['company_settings','Company Settings','settings'],['tiers','Plans','tier'],['help','Help & Support','alert'],['roles_departments','Roles & Positions','shield'],['contacts','Contacts','users']],
-  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents & Risk','alert']],
-  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['projects','Projects 🔜','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents & Risk','alert']],
+  client_admin: [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['review','Review','clipboard'],['users','Workforce','user'],['teams','Teams','users'],['leave','Team Leave','clock'],['projects','Projects','tasks'],['incident_hub','Incidents & Risk','alert'],['issue_reports','Complaints & Feedback','clipboard'],['reports','Reports','chart'],['performance','Performance','chart'],['sla','Response Time','clock'],['audit','Audit Log','audit'],['company_settings','Company Settings','settings'],['tiers','Plans','tier'],['help','Help & Support','alert'],['roles_departments','Roles & Positions','shield'],['contacts','Contacts','users']],
+  manager:      [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['reports','Reports','chart'],['review','Review','clipboard'],['projects','Projects','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents & Risk','alert']],
+  supervisor:   [['dashboard','Dashboard','home'],['tasks','Tasks','tasks'],['projects','Projects','tasks'],['users','Workforce','user'],['teams','My Teams','users'],['leave','Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag'],['incident_hub','Incidents & Risk','alert']],
   worker:       [['dashboard','Today','home'],['report_incident','Report Incident','alert'],['tasks','My Tasks','tasks'],['leave','My Leave','clock'],['issue_reports','Log a Complaint / Feedback','flag']],
 }
 
@@ -13433,165 +13450,6 @@ function SuperAdminTaskStats({ tasks, setTasks, loadTasks }) {
 // PRJ-VIEW-V1: superseded by src/ProjectsView.jsx. Kept, unreferenced,
 // so reverting is a one-line change at the mount below. Delete once the
 // new view has been used in anger.
-function ProjectsViewLegacy({ user }) {
-  const [projects, setProjects] = useState([])
-  const [showCreate, setShowCreate] = useState(false)
-  const [newProject, setNewProject] = useState({name:'',description:'',status:'active'})
-  const [saving, setSaving] = useState(false)
-
-  // PRJ-WIRE-V1: projects.org stores the org ID (ORG...), while user.org
-  // holds the NAME. Filtering on the name matched nothing and the page
-  // showed "0 active projects" whatever was in the table. resolveOrgId
-  // is the existing helper (~2891) and cross-checks against the caller's
-  // own memberships, so it cannot resolve to an org they are not in.
-  const [prjOrgId, setPrjOrgId] = useState('')
-  useEffect(()=>{
-    let dead = false
-    if(!isConfigured()){ return }
-    resolveOrgId(user).then(oid=>{
-      if(dead) return
-      setPrjOrgId(oid||'')
-      if(!oid){ setProjects([]); return }
-      supabase.from('projects').select('*').eq('org',oid).order('created_at',{ascending:false})
-        .then(({data})=>{ if(!dead && data) setProjects(data) })
-        .catch(()=>{})
-    })
-    return ()=>{ dead = true }
-  },[user.org, user.id])
-
-  const createProject = async () => {
-    if(!newProject.name.trim()||saving) return
-    setSaving(true)
-    // PRJ-WIRE-V1: create_project allocates the PRJ-YYYY-NNNN ref, sets
-    // owner_id and created_by_id as uuids, and enforces the org check.
-    // The old path hand-built a row with a text epoch id, created_by as a
-    // display NAME (LIVE has three profiles called Olaf Rusoke-Dierich, so
-    // a name identifies nobody) and no ref at all. ref is NOT NULL, so
-    // that insert now fails outright.
-    let entry = null
-    if(isConfigured()) {
-      const oid = prjOrgId || await resolveOrgId(user)
-      if(!oid){ alert('Could not work out which organisation to create this in.'); setSaving(false); return }
-      const { data, error } = await supabase.rpc('create_project', {
-        p_org: oid,
-        p_name: newProject.name.trim(),
-        p_description: newProject.description.trim() || null
-      })
-      if(error) { alert('Error: '+error.message); setSaving(false); return }
-      entry = Array.isArray(data) ? data[0] : data
-      if(!entry) { alert('The project was not created.'); setSaving(false); return }
-    } else {
-      entry = { id:'local-'+Date.now(), ref:'PRJ-LOCAL', name:newProject.name.trim(),
-                description:newProject.description.trim(), status:'active' }
-    }
-    setProjects(prev=>[entry,...prev])
-    setShowCreate(false)
-    setNewProject({name:'',description:'',status:'active'})
-    setSaving(false)
-  }
-
-  const toggleProject = async (p) => {
-    // PRJ-WIRE-V1: the vocabulary is active / awaiting_signoff / closed /
-    // cancelled, enforced by projects_status_check. 'inactive' is refused.
-    const newStatus = p.status==='active'?'cancelled':'active'
-    if(isConfigured()) await supabase.from('projects').update({status:newStatus}).eq('id',p.id)
-    setProjects(prev=>prev.map(x=>x.id===p.id?{...x,status:newStatus}:x))
-  }
-
-  const deleteProject = async (id) => {
-    // PRJ-WIRE-V1: archive, not delete. There is deliberately no DELETE
-    // policy on projects (deleting one would orphan its schedule events
-    // and take its sections with it), so .delete() failed silently and
-    // the row stayed while the screen said otherwise.
-    if(!confirm('Archive this project?')) return
-    if(isConfigured()) {
-      const {error} = await supabase.from('projects')
-        .update({status:'cancelled'}).eq('id',id).select()
-      if(error){ alert('Could not archive: '+error.message); return }
-    }
-    setProjects(prev=>prev.filter(p=>p.id!==id))
-  }
-
-  const isCA = ['client_admin','super_admin'].includes(user.role)
-
-  return (
-    <div className="anim">
-      <div className="ph">
-        <div className="ph-top">
-          <div>
-            <div className="ph-title">Projects <span style={{fontSize:12,background:'rgba(245,158,11,.12)',color:'#F59E0B',padding:'2px 8px',borderRadius:10,fontWeight:600,marginLeft:6}}>🔜 Coming Soon</span></div>
-            <div className="ph-sub">{user.org} · {projects.filter(p=>p.status==='active').length} active projects</div>
-          </div>
-          {isCA&&<button className="btn btn-primary" onClick={()=>setShowCreate(true)}><IC n="plus" s={13}/> New Project</button>}
-        </div>
-      </div>
-
-      <div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.2)',borderRadius:10,padding:12,marginBottom:16,fontSize:12,color:'#92400E',display:'flex',gap:8,alignItems:'flex-start'}}>
-        <span style={{fontSize:16,flexShrink:0}}>🚀</span>
-        <div>
-          <strong>Full Project Management is coming soon.</strong> For now, you can create projects and assign them to tasks. Future updates will add milestones, Gantt charts, project-level reporting and multi-team coordination.
-        </div>
-      </div>
-
-      {showCreate&&(
-        <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
-          <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-hdr"><div className="modal-title">New Project</div><button className="modal-close" onClick={()=>setShowCreate(false)}>×</button></div>
-            <div className="modal-body">
-              <div className="form-field"><label className="form-label">Project Name <span style={{color:'var(--red)'}}>*</span></label><input className="form-input" value={newProject.name} onChange={e=>setNewProject({...newProject,name:e.target.value})} placeholder="e.g. Q3 Facility Upgrade"/></div>
-              <div className="form-field"><label className="form-label">Description</label><textarea className="comment-box" value={newProject.description} onChange={e=>setNewProject({...newProject,description:e.target.value})} placeholder="Brief description of this project..."/></div>
-              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                <button className="btn btn-secondary" onClick={()=>setShowCreate(false)}>Cancel</button>
-                <button className="btn btn-primary" disabled={!newProject.name.trim()||saving} onClick={createProject}>{saving?'Creating...':'Create Project'}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {projects.length===0 ? (
-        <div className="empty" style={{background:'#fff',borderRadius:16,border:'1px solid var(--border)',padding:40}}>
-          <div className="empty-icon">📁</div>
-          <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>{isCA?'No projects yet':'No projects set up'}</div>
-          <div className="empty-text">{isCA?'Create your first project to start organising tasks.':'Your Client Admin will set up projects for this organisation.'}</div>
-        </div>
-      ) : (
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {projects.map(p=>(
-            <div key={p.id} style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:16,borderLeft:'4px solid '+(p.status==='active'?'var(--brand)':'var(--border)')}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}>
-                <div style={{flex:1}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                    <span style={{fontSize:15,fontWeight:700}}>{p.name}</span>
-                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:600,background:p.status==='active'?'rgba(0,168,126,.12)':'var(--s3)',color:p.status==='active'?'var(--brand)':'var(--t2)'}}>{p.status?.toUpperCase()}</span>
-                  </div>
-                  {p.description&&<div style={{fontSize:12,color:'var(--t2)',marginBottom:4}}>{p.description}</div>}
-                  <div style={{fontSize:11,color:'var(--t3)'}}>Created by {p.created_by} · {new Date(p.created_at).toLocaleDateString('en-AU')}</div>
-                </div>
-                {isCA&&(
-                  <div style={{display:'flex',gap:6,flexShrink:0}}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>toggleProject(p)}>{p.status==='active'?'Deactivate':'Activate'}</button>
-                    <button className="btn btn-danger btn-sm" onClick={()=>deleteProject(p.id)}>🗑</button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="section" style={{marginTop:16}}>
-        <div className="section-title">Coming in Full Release</div>
-        {['Milestones & deadlines','Task grouping by project','Project progress tracking','Gantt chart view','Project-level reports','Budget tracking','Multi-team coordination'].map((f,i)=>(
-          <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:'var(--t2)',padding:'5px 0',borderBottom:'1px solid var(--border)'}}>
-            <span style={{color:'var(--t3)'}}>◦</span>{f}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, orgMembers: _orgMembersProp=null, orgSLA=DEFAULT_SLA }) {
   const [period, setPeriod] = useState('monthly')
   const [selectedRole, setSelectedRole] = useState('all')
