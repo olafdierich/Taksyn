@@ -7365,8 +7365,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     const rows = workerRows.map(w => {
       const compPct = pct(w.done,w.total)
       const onTimePct = pct(w.onTime,w.done)
-      const avg = w.avgMins.length ? Math.round(w.avgMins.reduce((a,b)=>a+b,0)/w.avgMins.length) : 0
-      const avgStr = avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
+      const avgStr = fmtAvg(w.avgMins)  /* PATCH-FMTAVG-REPOINT-V2 */
       return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
     }).join('')
     const teamHtml = teamRows.map(tm=>'<tr><td>'+tm.name+'</td><td>'+tm.total+'</td><td>'+tm.done+'</td><td>'+pct(tm.done,tm.total)+'%</td></tr>').join('')
@@ -7725,7 +7724,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                 {workerRows.length===0 && <tr><td colSpan={7} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No worker data for this period</td></tr>}
                 {workerRows.map((w,i)=>{
                   const cp=pct(w.done,w.total)
-                  const avg=w.avgMins.length?Math.round(w.avgMins.reduce((a,b)=>a+b,0)/w.avgMins.length):0
+                  const avgStr=fmtAvg(w.avgMins)  /* PATCH-FMTAVG-REPOINT-V2 */
                   return (
                     <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
                       <td style={{padding:'8px 10px',fontWeight:600}}>{w.name}</td>
@@ -7733,7 +7732,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                       <td style={{padding:'8px 10px'}}>{w.total}</td>
                       <td style={{padding:'8px 10px'}}>{w.done}</td>
                       <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
-                      <td style={{padding:'8px 10px',color:'var(--t2)'}}>{avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'}</td>
+                      <td style={{padding:'8px 10px',color:'var(--t2)'}}>{avgStr}</td>
                       <td style={{padding:'8px 10px'}}>{w.reviewedInTime}</td>
                     </tr>
                   )
