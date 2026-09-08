@@ -3,6 +3,7 @@ import { supabase } from './supabase.js'
 import StructurePanel from './ProjectStructure.jsx'
 import TaskForm from './TaskForm.jsx'
 import DependencyEditor from './DependencyEditor.jsx'
+import MilestonePanel from './MilestonePanel.jsx'
 
 /*
   ProjectsView — the projects module UI.
@@ -304,6 +305,34 @@ export default function ProjectsView({ user, resolveOrgId }) {
 function ProjectView({ detail, onBack, onSection, canEdit, onChanged }) {
   const { project, sections, tasks, ms } = detail
   const [recalcBusy, setRecalcBusy] = useState(false)
+  const [signBusy, setSignBusy] = useState(false)
+
+  // Only offered when it can actually succeed. sign_off_project refuses
+  // while work is open, gates are unmet, or a locked date is at risk —
+  // but a button that is usually refused teaches people to ignore what
+  // it says, so it appears when the conditions are met and not before.
+  const openTasks = tasks.filter(t => !isDone(t)).length
+  const openGates = ms.filter(m => m.status === 'open').length
+  const canSignOff = project.status === 'active'
+    && tasks.length > 0 && openTasks === 0 && openGates === 0
+
+  const signOff = async () => {
+    if (signBusy) return
+    const note = prompt(
+      `Sign off ${project.ref} — ${project.name}?\n\n`
+      + 'This closes the project and records that you, as client admin, state it '
+      + 'is complete. Add a note for whoever reads this later.', '')
+    if (note === null) return
+    setSignBusy(true)
+    try {
+      const { error } = await supabase.rpc('sign_off_project', {
+        p_project_id: project.id, p_note: note.trim() || null
+      })
+      if (error) throw error
+      onChanged()
+    } catch (e) { alert(e.message || String(e)) }
+    finally { setSignBusy(false) }
+  }
 
   // Dry run, show, then apply on confirmation. Dates moving is a
   // consequential act with an audit trail behind it — it should be
@@ -391,12 +420,21 @@ function ProjectView({ detail, onBack, onSection, canEdit, onChanged }) {
           {project.target_end_date && ` · target ${fmt(D(project.target_end_date))}`}
         </span>
         {canEdit &&
-          <button style={{ background: 'transparent', color: C.ink2,
-                   border: `1px solid ${C.line2}`, borderRadius: 8,
-                   padding: '5px 11px', fontSize: 12, cursor: 'pointer' }}
-                  disabled={recalcBusy} onClick={recalculate}>
-            {recalcBusy ? 'Checking…' : 'Recalculate dates'}
-          </button>}
+          <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button style={{ background: 'transparent', color: C.ink2,
+                     border: `1px solid ${C.line2}`, borderRadius: 8,
+                     padding: '5px 11px', fontSize: 12, cursor: 'pointer' }}
+                    disabled={recalcBusy} onClick={recalculate}>
+              {recalcBusy ? 'Checking…' : 'Recalculate dates'}
+            </button>
+            {canSignOff &&
+              <button style={{ background: C.green, color: '#fff', border: 0,
+                       borderRadius: 8, padding: '6px 13px', fontSize: 12,
+                       cursor: 'pointer' }}
+                      disabled={signBusy} onClick={signOff}>
+                {signBusy ? 'Signing off…' : 'Sign off project'}
+              </button>}
+          </span>}
       </div>
 
       <div style={card}>
@@ -410,28 +448,19 @@ function ProjectView({ detail, onBack, onSection, canEdit, onChanged }) {
         </div>
       </div>
 
-      {ms.length > 0 &&
-        <div style={card}>
-          <div style={{ fontSize: 13, marginBottom: 4 }}>Milestones</div>
-          {ms.map(m => {
-            const state = m.status === 'met' ? 'Met'
-              : m.at_risk ? `At risk — open work runs to ${fmt(D(m.latest_open_due))}`
-              : m.blockers_open ? `${m.blockers_open} open blocker${m.blockers_open > 1 ? 's' : ''}`
-              : m.ready_to_meet ? 'Ready to be met'
-              : `${m.tasks_open} task${m.tasks_open !== 1 ? 's' : ''} open`
-            const col = m.at_risk ? TONE.bad : m.blockers_open ? C.amberDeep
-              : m.status === 'met' ? C.green : C.ink2
-            return (
-              <div key={m.milestone_id} style={{ display: 'flex', justifyContent: 'space-between',
-                     gap: 10, padding: '7px 0', borderBottom: `1px solid ${C.line}` }}>
-                <span style={{ fontSize: 13 }}>
-                  {m.date_locked && '🔒 '}{m.name}
-                  <span style={{ color: C.ink2 }}> · {fmt(D(m.due_date))}</span>
-                </span>
-                <span style={{ fontSize: 12, color: col, textAlign: 'right' }}>{state}</span>
-              </div>
-            )
-          })}
+      <MilestonePanel project={project} sections={sections} milestones={ms}
+                      canEdit={canEdit} onChanged={onChanged} />
+
+      {project.status === 'closed' && project.signoff_note &&
+        <div style={{ ...card, borderColor: C.green }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 4 }}>
+            Signed off
+          </div>
+          <div style={{ fontSize: 12, color: C.ink2 }}>{project.signoff_note}</div>
+          {project.closed_at &&
+            <div style={{ fontSize: 11, color: C.ink3, marginTop: 4 }}>
+              {new Date(project.closed_at).toLocaleString()}
+            </div>}
         </div>}
 
       <StructurePanel projectId={project.id} sections={sections} tasks={tasks}
@@ -447,7 +476,26 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
   const [editingDeps, setEditingDeps] = useState(null)
   const [addingStage, setAddingStage] = useState(false)
   const [stageName, setStageName] = useState('')
-  const [heldIdx, setHeldIdx] = useState(null)   // stage picked up, awaiting a destination
+  // Pointer-event drag, same shape as the compliance report stat cards
+  // in App.jsx (~7504). Pointer events cover mouse, touch and stylus;
+  // it is the older HTML5 drag API that is mouse-only.
+  const [dragId, setDragId] = useState(null)
+  const [overId, setOverId] = useState(null)
+  const [menuFor, setMenuFor] = useState(null)
+
+  // Close on any click that is not inside a menu, and on Escape. A menu
+  // left open after the page moves on is worse than no menu.
+  useEffect(() => {
+    if (!menuFor) return
+    const away = e => { if (!e.target.closest || !e.target.closest('[data-stage-menu]')) setMenuFor(null) }
+    const esc = e => { if (e.key === 'Escape') setMenuFor(null) }
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [menuFor])
   const [renaming, setRenaming] = useState(null)
   const [renameTo, setRenameTo] = useState('')
   const [busy, setBusy] = useState(false)
@@ -490,10 +538,11 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
 
   // Drag: renumber the whole section 1..n, because a drag can move an
   // item several places and swapping does not express that.
-  const dropAt = async (target) => {
-    const from = heldIdx
-    setHeldIdx(null)
-    if (from === null || from === target || busy) return
+  const dropOn = async (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId || busy) return
+    const from = pkgs.findIndex(p => p.id === fromId)
+    const target = pkgs.findIndex(p => p.id === toId)
+    if (from < 0 || target < 0) return
     setBusy(true)
     try {
       const next = pkgs.slice()
@@ -547,37 +596,78 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
   // screen, so the handle did nothing on a phone. This behaves the same
   // on both, needs no long-press timing, and is easier to correct than
   // a drag on a small screen.
-  const stageStyle = (i) => ({
+  const stageStyle = (pk) => ({
     ...card,
-    outline: heldIdx === i ? '2px solid #3B82F6' : 'none',
-    background: heldIdx !== null && heldIdx !== i ? '#F8FAFC' : card.background
+    opacity: dragId === pk.id ? .5 : 1,
+    outline: (overId === pk.id && dragId && dragId !== pk.id) ? '2px solid #3B82F6' : 'none',
+    // touchAction none on the handle only, so the card itself still
+    // scrolls normally on a phone.
+    userSelect: dragId ? 'none' : 'auto'
   })
 
   const StageControls = ({ i, pk }) => {
     if (!canEdit) return null
-    if (heldIdx !== null && heldIdx !== i) {
-      return (
-        <button style={{ ...miniGhost, borderColor: '#3B82F6', color: '#3B82F6' }}
-                disabled={busy} onClick={() => dropAt(i)}>Move here</button>
-      )
-    }
+    const open = menuFor === pk.id
+    const item = (label, onClick, opts = {}) => (
+      <button key={label}
+        style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none',
+                 border: 0, padding: '8px 12px', fontSize: 13, cursor: 'pointer',
+                 fontFamily: 'inherit', whiteSpace: 'nowrap',
+                 color: opts.danger ? C.red : C.ink,
+                 opacity: opts.disabled ? .4 : 1 }}
+        disabled={opts.disabled || busy}
+        onClick={() => { setMenuFor(null); onClick() }}>{label}</button>
+    )
     return (
-      <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-        {heldIdx === i
-          ? <button style={{ ...miniGhost, borderColor: '#3B82F6', color: '#3B82F6' }}
-                    onClick={() => setHeldIdx(null)}>Cancel move</button>
-          : <button style={miniGhost} disabled={busy}
-                    onClick={() => setHeldIdx(i)}>Move</button>}
-        <button style={miniBtn} disabled={busy || i === 0} onClick={() => moveStage(i, -1)}>↑</button>
-        <button style={miniBtn} disabled={busy || i === pkgs.length - 1}
-                onClick={() => moveStage(i, 1)}>↓</button>
-        <button style={miniGhost} disabled={busy}
-                onClick={() => { setRenaming(pk.id); setRenameTo(pk.name) }}>Rename</button>
-        <button style={{ ...miniGhost, color: C.red, borderColor: '#FCA5A5' }}
-                disabled={busy} onClick={() => deleteStage(pk)}>Delete</button>
+      <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <DragHandle id={pk.id} />
+        <span data-stage-menu style={{ position: 'relative' }}>
+          <button style={{ ...miniBtn, padding: '3px 10px', fontSize: 15, lineHeight: 1 }}
+                  title="More" aria-haspopup="menu" aria-expanded={open}
+                  onClick={() => setMenuFor(open ? null : pk.id)}>⋯</button>
+          {open &&
+            <span role="menu" style={{ position: 'absolute', right: 0, top: '110%', zIndex: 40,
+                     background: '#fff', border: `1px solid ${C.line}`, borderRadius: 10,
+                     boxShadow: '0 6px 20px rgba(26,32,51,.12)', padding: '4px 0',
+                     minWidth: 168 }}>
+              {item('Move up', () => moveStage(i, -1), { disabled: i === 0 })}
+              {item('Move down', () => moveStage(i, 1), { disabled: i === pkgs.length - 1 })}
+              <span style={{ display: 'block', height: 1, background: C.line, margin: '4px 0' }} />
+              {item('Rename', () => { setRenaming(pk.id); setRenameTo(pk.name) })}
+              {item((deps[pk.id] || []).length
+                      ? `Dependencies (${deps[pk.id].length})` : 'Dependencies…',
+                    () => setEditingDeps(editingDeps === pk.id ? null : pk.id))}
+              <span style={{ display: 'block', height: 1, background: C.line, margin: '4px 0' }} />
+              {item('Delete stage', () => deleteStage(pk), { danger: true })}
+            </span>}
+        </span>
       </span>
     )
   }
+
+  // Handlers live on the container, exactly as the stat cards do: a
+  // pointerdown that did not land on a handle is ignored, and
+  // elementFromPoint tells us which card the pointer is currently over.
+  const dragBox = canEdit ? {
+    onPointerDown: e => {
+      const h = e.target.closest && e.target.closest('[data-stage-handle]')
+      if (!h) return
+      setDragId(h.getAttribute('data-stage-handle')); setOverId(null)
+    },
+    onPointerMove: e => {
+      if (!dragId) return
+      e.preventDefault()
+      const t = document.elementFromPoint(e.clientX, e.clientY)
+      const el = t && t.closest ? t.closest('[data-stage-card]') : null
+      setOverId(el ? el.getAttribute('data-stage-card') : null)
+    },
+    onPointerUp: () => {
+      const from = dragId, to = overId
+      setDragId(null); setOverId(null)
+      dropOn(from, to)
+    },
+    onPointerCancel: () => { setDragId(null); setOverId(null) }
+  } : {}
 
   // Shown in place of the stage name while renaming.
   const StageName = ({ pk, extra }) => renaming === pk.id ? (
@@ -691,11 +781,6 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
             + Add stage
           </button>}
       </div>
-      {heldIdx !== null &&
-        <div style={{ fontSize: 12, color: '#3B82F6', background: '#EFF6FF',
-               borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
-          Moving "{pkgs[heldIdx]?.name}" — tap "Move here" on the stage it should sit above.
-        </div>}
       {addingStage &&
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           <input style={{ flex: 1, padding: '8px 9px', border: `1px solid ${C.line2}`,
@@ -726,6 +811,9 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
         </span>
       </div>
 
+      <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, margin: '6px 0 8px' }}>
+        Timeline
+      </div>
       <div style={card}>
         <div style={{ display: 'grid', gridTemplateColumns: '116px minmax(0,1fr)', gap: 8,
                borderBottom: `1px solid ${C.line}`, paddingBottom: 5 }}>
@@ -792,27 +880,29 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
         </div>
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8,
+             margin: '22px 0 8px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>Stages</span>
+        {canEdit &&
+          <span style={{ fontSize: 11, color: C.ink3 }}>
+            drag the handle to reorder
+          </span>}
+      </div>
+      <div {...dragBox}>
       {packages.map(({ pk, all, byTeam, attachments }, idx) => {
         // An empty stage still gets a card, otherwise there is nowhere
         // to add its first task and a new stage is unreachable.
         if (!all.length) {
           return (
-            <div key={pk.id} style={stageStyle(idx)}>
+            <div key={pk.id} data-stage-card={pk.id} style={stageStyle(pk)}>
               <div style={{ display: 'flex', justifyContent: 'space-between',
                      alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <StageName pk={pk} extra={
                   <span style={{ fontSize: 11, color: C.ink3 }}> · no tasks yet</span>} />
                 <StageControls i={idx} pk={pk} />
-                {canEdit &&
-                  <span style={{ display: 'flex', gap: 6 }}>
-                    <button style={miniGhost}
-                            onClick={() => setEditingDeps(editingDeps === pk.id ? null : pk.id)}>
-                      Waits on{(deps[pk.id] || []).length ? ` (${deps[pk.id].length})` : ''}
-                    </button>
-                    {addingTo !== pk.id &&
-                      <button style={miniGhost}
-                              onClick={() => setAddingTo(pk.id)}>+ Add task</button>}
-                  </span>}
+                {canEdit && addingTo !== pk.id &&
+                  <button style={miniGhost}
+                          onClick={() => setAddingTo(pk.id)}>+ Add task</button>}
               </div>
               {editingDeps === pk.id &&
                 <DependencyEditor project={project} stage={pk} sections={sections}
@@ -827,21 +917,14 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
           )
         }
         return (
-          <div key={pk.id} style={stageStyle(idx)}>
+          <div key={pk.id} data-stage-card={pk.id} style={stageStyle(pk)}>
             <div style={{ display: 'flex', justifyContent: 'space-between',
                    alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
               <StageName pk={pk} />
               <StageControls i={idx} pk={pk} />
-              {canEdit &&
-                <span style={{ display: 'flex', gap: 6 }}>
-                  <button style={miniGhost}
-                          onClick={() => setEditingDeps(editingDeps === pk.id ? null : pk.id)}>
-                    Waits on{(deps[pk.id] || []).length ? ` (${deps[pk.id].length})` : ''}
-                  </button>
-                  {addingTo !== pk.id &&
-                    <button style={miniGhost}
-                            onClick={() => setAddingTo(pk.id)}>+ Add task</button>}
-                </span>}
+              {canEdit && addingTo !== pk.id &&
+                <button style={miniGhost}
+                        onClick={() => setAddingTo(pk.id)}>+ Add task</button>}
             </div>
             {editingDeps === pk.id &&
               <DependencyEditor project={project} stage={pk} sections={sections}
@@ -877,6 +960,7 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -943,6 +1027,33 @@ function Note({ tone, children }) {
     : { color: C.amberDeep, background: '#FEF3C7' }
   return <div style={{ ...s, fontSize: 12, borderRadius: 8, padding: '8px 10px', marginTop: 9 }}>{children}</div>
 }
+// Drawn inline rather than imported: no image to ship, no library, no
+// licensing question, and it stays sharp at any size. A hand with
+// movement arrows reads as "pick this up and move it" to someone who
+// has never seen a six-dot handle.
+function DragHandle({ id }) {
+  return (
+    <span data-stage-handle={id} title="Drag to reorder"
+          style={{ cursor: 'grab', touchAction: 'none', display: 'inline-flex',
+                   alignItems: 'center', justifyContent: 'center',
+                   width: 30, height: 26, borderRadius: 7,
+                   border: `1px solid ${C.line2}`, color: C.ink2 }}>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"
+           strokeLinejoin="round" style={{ pointerEvents: 'none' }}>
+        {/* hand */}
+        <path d="M9 11V5.6a1.6 1.6 0 0 1 3.2 0V11" />
+        <path d="M12.2 11V7.4a1.6 1.6 0 0 1 3.2 0V11" />
+        <path d="M15.4 11.4v-2a1.6 1.6 0 0 1 3.2 0V15a5.4 5.4 0 0 1-5.4 5.4h-1.1
+                 a4 4 0 0 1-2.9-1.3L5.5 15" />
+        <path d="M9 11v3.2L7.4 12.6a1.5 1.5 0 0 0-2.2 2.1" />
+        {/* movement arrows */}
+        <path d="M3.2 6.4h3.4M4.6 4.9 3.1 6.4l1.5 1.5" />
+      </svg>
+    </span>
+  )
+}
+
 function Pill({ children }) {
   return <span style={{ marginLeft: 6, fontSize: 11, padding: '2px 8px', borderRadius: 20, background: C.soft, color: C.ink2 }}>{children}</span>
 }
