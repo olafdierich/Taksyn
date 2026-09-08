@@ -7677,6 +7677,13 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                 </tr>
               </thead>
               <tbody>
+                {/* PATCH-AVERAGE-ROWS-SCREEN-FIX-V1 */}
+                <tr style={{background:'#EEF2FF',borderBottom:'1px solid var(--border)'}}>
+                  <td style={{padding:'8px 10px',fontWeight:700}}>Average · {teamRows.length} teams</td>
+                  <td style={{padding:'8px 10px',fontWeight:700}}>{_avgCount(teamRows,t=>t.total)}</td>
+                  <td style={{padding:'8px 10px',fontWeight:700}}>{_avgCount(teamRows,t=>t.done)}</td>
+                  <td style={{padding:'8px 10px',fontWeight:700}}>{_pooled(teamRows,t=>t.done,t=>t.total)}%</td>
+                </tr>
                 {teamRows.map((tm,i)=>{ const cp=pct(tm.done,tm.total); return (
                   <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
                     <td style={{padding:'8px 10px',fontWeight:600}}>{tm.name}</td>
@@ -7704,6 +7711,25 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                 </tr>
               </thead>
               <tbody>
+                {(()=>{ /* PATCH-AVERAGE-ROWS-SCREEN-V1 */
+                  const _rv = a => a.approved + a.sentBack
+                  const _turns = approverRows.filter(a=>a.turn.length)
+                  const _avgH = _turns.length
+                    ? _turns.reduce((s,a)=>s+a.turn.reduce((x,y)=>x+y,0)/a.turn.length,0)/_turns.length
+                    : null
+                  const _c = {padding:'8px 10px',fontWeight:700}
+                  return (
+                    <tr style={{background:'#EEF2FF',borderBottom:'1px solid var(--border)'}}>
+                      <td style={_c}>Average · {approverRows.length} approvers</td>
+                      <td style={_c}>{_avgCount(approverRows,_rv)}</td>
+                      <td style={_c}>{_avgCount(approverRows,a=>a.approved)}</td>
+                      <td style={_c}>{_avgCount(approverRows,a=>a.sentBack)}</td>
+                      <td style={_c}>{_pooled(approverRows,a=>a.sentBack,_rv)}%</td>
+                      <td style={_c}>{_avgH==null?'—':_avgH<24?Math.round(_avgH)+'h':(_avgH/24).toFixed(1)+'d'}</td>
+                      <td style={_c}>{_avgCount(approverRows,a=>a.pending)}</td>
+                    </tr>
+                  )
+                })()}
                 {approverRows.map((a,i)=>{
                   const reviewed=a.approved+a.sentBack
                   const sbPct=pct(a.sentBack,reviewed)
