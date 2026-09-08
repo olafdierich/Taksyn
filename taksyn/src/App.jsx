@@ -788,13 +788,48 @@ const fmtAvg = mins => {
   return avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
 }
 
+// PATCH-HOIST-HEADER-FOOTER-V1
+// Report chrome as functions rather than constants, so any view can build
+// a report by passing its own context. ctx: { user, orgLogo, pl }.
+// Kept module scope alongside baseStyle and openReport.
+const _reportOrgName = (user) => user.role==='super_admin' ? 'Taksyn' : (user.org||'My Organisation')
+
+const reportHeader = (title, ctx) => {
+  const { user, orgLogo, pl } = ctx
+  const orgName = _reportOrgName(user)
+  const logoImg = user.role==='super_admin'
+    ? '<img src="https://taksyn.vercel.app/logo.jpeg" height="64" style="object-fit:contain;border-radius:6px"/>'
+    : orgLogo
+      ? '<img src="'+orgLogo+'" height="64" style="object-fit:contain;border-radius:6px"/>'
+      : ''
+  return '<div class="hdr"><div>'+logoImg+'</div><div class="ri"><strong>'+title+'</strong><strong>'+orgName+'</strong><br/>Period: '+pl+'<br/>Generated: '+new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})+'</div></div>'
+}
+
+// The footer is the ORG's document furniture, not the platform's. It
+// carries copyright, provenance and a confidentiality notice, because
+// these reports name individuals and their failure rates and are handed
+// to auditors. Date AND time: two reports run the same day on different
+// data would otherwise be indistinguishable.
+const reportFooter = (title, ctx) => {
+  const { user, pl } = ctx
+  const orgName = _reportOrgName(user)
+  const now = new Date()
+  const dateStr = now.toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})
+  const timeStr = now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'})
+  const who = user.name || user.email || 'unknown user'
+  return '<div class="ft" style="display:block;line-height:1.7">'
+    + '<div>&copy; '+now.getFullYear()+' '+orgName+' &middot; '+title+' &middot; Period: '+pl+'</div>'
+    + '<div>Generated '+dateStr+', '+timeStr+' by '+who+'</div>'
+    + '<div style="margin-top:4px">Confidential &mdash; contains individual performance information. Handle in line with your organisation&rsquo;s privacy obligations.</div>'
+    + '</div>'
+}
+
 // PATCH-HOIST-STYLE-FOOTER-V1
 // Shared report chrome, module scope so any view can build a report.
 // Styling and footer are identical across Compliance, Staff Performance
 // and Organisation Overview, and must stay that way — a report that
 // looks different depending on which screen produced it is a defect.
 const baseStyle = `*{box-sizing:border-box}body{font-family:Helvetica Neue,sans-serif;padding:40px;color:#1a2033;font-size:13px}.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:16px;border-bottom:2px solid #000000}.lt{font-size:24px;font-weight:800;color:#2D3180}.ri{text-align:right;font-size:11px;color:#5a6478}.ri strong{display:block;font-size:14px;color:#1a2033;margin-bottom:2px}.sg{display:grid;gap:12px;margin-bottom:24px}.st{background:#f4f6f9;border-radius:8px;padding:14px;text-align:center}.sv{font-size:22px;font-weight:800;color:#5BC8C0;line-height:1}.sv.r{color:#EF4444}.sv.g{color:#10B981}.sv.a{color:#F59E0B}.sl{font-size:10px;color:#5a6478;margin-top:5px;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;padding:7px 8px;background:#f4f6f9;font-size:9px;text-transform:uppercase;color:#5a6478;border-bottom:1px solid #e8ebf0}td{padding:7px 8px;border-bottom:1px solid #f0f2f5}.ft{margin-top:28px;padding-top:14px;border-top:1px solid #e8ebf0;font-size:10px;color:#9aa3b2;display:flex;justify-content:space-between}.sec{margin-bottom:24px}.sec-title{font-size:13px;font-weight:700;color:#2D3180;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e8ebf0}`
-const reportFooter = `<div class="ft"><span>Taksyn — Task Compliance & Accountability Platform</span><span>taksyn.vercel.app</span></div>`
 
 // PATCH-HOIST-OPENREPORT-V1
 // Opens a generated report in a new tab. Module scope so every view that
@@ -7356,25 +7391,16 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   })
 
 
-  const reportHeader = (title) => {
-    const orgName = user.role==='super_admin' ? 'Taksyn' : (user.org||'My Organisation')
-    const logoImg = user.role==='super_admin'
-      ? '<img src="https://taksyn.vercel.app/logo.jpeg" height="64" style="object-fit:contain;border-radius:6px"/>'
-      : orgLogo
-        ? '<img src="'+orgLogo+'" height="64" style="object-fit:contain;border-radius:6px"/>'
-        : ''
-    return '<div class="hdr"><div>'+logoImg+'</div><div class="ri"><strong>'+title+'</strong><strong>'+orgName+'</strong><br/>Period: '+pl+'<br/>Generated: '+new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})+'</div></div>'
-  }
 
 
   const exportCompliancePDF = () => {
     const rows = filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(', ')||'—'; return '<tr><td>'+t.id+'</td><td><strong>'+t.title+'</strong></td><td style="color:'+(t.status==='approved'?'#10B981':t.status==='rejected'?'#EF4444':'#1a2033')+'">'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.compliance?'✓ Yes':'—')+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.started_at?fmtTime(t.started_at):'—')+'</td><td>'+(t.completed_at?fmtTime(t.completed_at):'—')+'</td><td>'+(fmtDur(t.started_at,t.completed_at))+'</td><td>'+(t.gps_start||t.gps_end?'Yes':'No')+'</td><td>'+(parseSafe(t.evidence).length>0?'Yes':'No')+'</td><td style="font-size:10px">'+clTs+'</td><td>'+(assigneeFull(t)||t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—')+'</td></tr>' }).join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>${baseStyle}.sg{grid-template-columns:repeat(5,1fr)}</style></head><body>${reportHeader('Compliance Report')}<div class="sg">${statOrder.map(s=>{
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Compliance Report</title><style>${baseStyle}.sg{grid-template-columns:repeat(5,1fr)}</style></head><body>${reportHeader('Compliance Report', {user, orgLogo, pl})}<div class="sg">${statOrder.map(s=>{
         if(s.c==='x') return '<div class="st" style="background:transparent;border:1px dashed #e8ebf0"></div>'
         const colorMap={g:'#10B981',r:'#EF4444',a:'#F59E0B',p:'#8B5CF6',b:'#3B82F6'}
         const col=colorMap[s.c]||'#5BC8C0'
         return '<div class="st"><div class="sv" style="color:'+col+'">'+s.v()+'</div><div class="sl">'+s.l+'</div></div>'
-      }).join('')}</div><table><thead><tr><th>ID</th><th>Task</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Time In</th><th>Time Out</th><th>Duration</th><th>GPS</th><th>Photos</th><th>Checklist Timestamps</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+      }).join('')}</div><table><thead><tr><th>ID</th><th>Task</th><th>Status</th><th>Compliance</th><th>Due Date</th><th>Time In</th><th>Time Out</th><th>Duration</th><th>GPS</th><th>Photos</th><th>Checklist Timestamps</th><th>Assigned To</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter('Compliance Report', {user, orgLogo, pl})}</body></html>`
     openReport(html)
   }
 
@@ -7419,13 +7445,13 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       : null
     const _appAvgHtml = approverRows.length ? '<tr style="'+_avgRowStyle+'"><td>Average · '+approverRows.length+' approvers</td><td>'+_avgCount(approverRows,_appReviewed)+'</td><td>'+_avgCount(approverRows,a=>a.approved)+'</td><td>'+_avgCount(approverRows,a=>a.sentBack)+'</td><td>'+_pooled(approverRows,a=>a.sentBack,_appReviewed)+'%</td><td>'+(_appAvgH==null?'—':_appAvgH<24?Math.round(_appAvgH)+'h':(_appAvgH/24).toFixed(1)+'d')+'</td><td>'+_avgCount(approverRows,a=>a.pending)+'</td></tr>' : ''
     const approverSec = (isClientAdmin && approverRows.length) ? '<div class="sec"><div class="sec-title">🔍 Approver Review Performance</div><table><thead><tr><th>Approver</th><th>Reviewed</th><th>Approved</th><th>Sent Back</th><th>Send-Back %</th><th>Avg Turnaround</th><th>Pending</th></tr></thead><tbody>'+_appAvgHtml+approverHtml+'</tbody></table></div>' : ''
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Staff Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Staff Performance Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Staff</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks · all tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed · all tasks</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${_compliancePct()}</div><div class="sl">Compliance · ${compT.length} flagged tasks only</div></div></div>${teamRows.length?'<div class="sec"><div class="sec-title">Team Performance</div><table><thead><tr><th>Team</th><th>Tasks</th><th>Done</th><th>Rate</th></tr></thead><tbody>'+teamHtml+'</tbody></table></div>':''}${approverSec}<table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Staff Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Staff Performance Report', {user, orgLogo, pl})}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Staff</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks · all tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed · all tasks</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${_compliancePct()}</div><div class="sl">Compliance · ${compT.length} flagged tasks only</div></div></div>${teamRows.length?'<div class="sec"><div class="sec-title">Team Performance</div><table><thead><tr><th>Team</th><th>Tasks</th><th>Done</th><th>Rate</th></tr></thead><tbody>'+teamHtml+'</tbody></table></div>':''}${approverSec}<table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter('Staff Performance Report', {user, orgLogo, pl})}</body></html>`
     openReport(html)
   }
 
   const exportOrgPDF = () => {
     const roleRows = workerRoles.map(r => '<tr><td><strong>'+ROLE_LABELS[r]+'</strong></td><td>'+byRole[r].tasks+'</td><td>'+byRole[r].done+'</td><td style="color:'+(pct(byRole[r].done,byRole[r].tasks)>=80?'#10B981':pct(byRole[r].done,byRole[r].tasks)>=50?'#F59E0B':'#EF4444')+'">'+pct(byRole[r].done,byRole[r].tasks)+'%</td><td style="color:'+(byRole[r].compRate>=80?'#10B981':byRole[r].compRate>=50?'#F59E0B':'#EF4444')+'">'+byRole[r].compRate+'%</td></tr>').join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report')}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed · all tasks</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${_compliancePct()}</div><div class="sl">Compliance · ${compT.length} flagged tasks only</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${filteredPt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(assigneeFull(t)||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Organisation Overview</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Organisation Overview Report', {user, orgLogo, pl})}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Active Workers</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Tasks Completed · all tasks</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${_compliancePct()}</div><div class="sl">Compliance · ${compT.length} flagged tasks only</div></div></div><div class="sec"><div class="sec-title">Compliance Rate by Role</div><table><thead><tr><th>Role</th><th>Tasks Assigned</th><th>Completed</th><th>Completion Rate</th><th>Compliance Rate</th></tr></thead><tbody>${roleRows}</tbody></table></div><div class="sec"><div class="sec-title">All Tasks Summary</div><table><thead><tr><th>ID</th><th>Title</th><th>Assigned To</th><th>Role</th><th>Status</th><th>Due</th><th>Compliance</th></tr></thead><tbody>${filteredPt.map(t=>'<tr><td>'+t.id+'</td><td>'+t.title+'</td><td>'+(assigneeFull(t)||'—')+'</td><td>'+(ROLE_LABELS[t.assigned_role]||'—')+'</td><td>'+t.status.replace('_',' ').toUpperCase()+'</td><td>'+(t.due_date||'—')+'</td><td>'+(t.compliance?'✓':'—')+'</td></tr>').join('')}</tbody></table></div>${reportFooter('Organisation Overview Report', {user, orgLogo, pl})}</body></html>`
     openReport(html)
   }
 
