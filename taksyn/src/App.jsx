@@ -121,10 +121,12 @@ function DictateButton({ setValue, lang, inline }) {
       style={{position:inline?'static':'absolute',right:8,bottom:8,width:34,height:34,borderRadius:'50%',
               cursor:'pointer',fontSize:15,lineHeight:1,display:'flex',
               alignItems:'center',justifyContent:'center',
-              border:listening?'none':'1px solid rgba(0,0,0,.10)',
-              boxShadow:'0 1px 2px rgba(0,0,0,.06)',
-              background:listening?'var(--red)':'#EEF0F3',
-              color:listening?'#fff':'#374151'}}
+              border:listening?'none':'1px solid transparent',
+              boxShadow:'none',
+              background:listening?'var(--red)':'transparent',
+              color:listening?'#fff':'var(--t2)',
+              transition:'background .12s, border-color .12s, color .12s'}}
+      className={listening?'':'mic-rest'}
     >{listening ? (
       // Stop. Filled, not stroked: at this size an outlined square reads
       // as an empty box, and stop should look solid.
@@ -278,8 +280,10 @@ function MicChip({ setValue, targetId }) {
     if (setValue) setValue(fn)
   }
   return (
-    <div style={{display:'flex',justifyContent:'flex-end',marginTop:-2,marginBottom:8}}>
-      <DictateButton setValue={apply} inline/>
+    <div style={{display:'flex',justifyContent:'flex-end',
+           marginTop:-42,marginRight:6,marginBottom:6,
+           position:'relative',zIndex:2,pointerEvents:'none'}}>
+      <span style={{pointerEvents:'auto'}}><DictateButton setValue={apply} inline/></span>
     </div>
   )
 }
@@ -1520,6 +1524,9 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .sb-user-card{display:flex;align-items:center;gap:8px;padding:8px;border-radius:var(--rs);background:var(--s3);overflow:hidden}
 .sb-user-info{overflow:hidden;transition:opacity .2s,width .2s}
 .sidebar.collapsed .sb-user-info{opacity:0;width:0}
+.mic-rest:hover{background:var(--s4)!important;border-color:var(--border)!important;color:var(--text)!important}
+.mic-rest:active{background:var(--s4)!important;border-color:var(--border2)!important}
+.mic-rest:focus-visible{background:var(--s4)!important;border-color:var(--border2)!important;outline:none}
 .sb-logout{width:100%;margin-top:6px;padding:7px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .content{flex:1;overflow-y:auto;padding:20px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 @media(max-width:768px){.content{padding:14px}}
