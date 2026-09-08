@@ -1218,8 +1218,8 @@ function ReviewerAttachEvidence({ task, user, update }) {
       {/* 📎 Choose file — an existing image OR a PDF document (e.g. a received lab report). */}
       <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{display:'none'}} onChange={onPick}/>
       <div style={{display:'flex',gap:6}}>
-        <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>cameraRef.current&&cameraRef.current.click()}>{busy?'Uploading…':'📷 Take photo'}</button>
-        <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>fileRef.current&&fileRef.current.click()}>{busy?'Uploading…':'📎 Choose file'}</button>
+        <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>cameraRef.current&&cameraRef.current.click()}>{busy?'Uploading…':<><IC n="camera" s={13}/> Take photo</>}</button>
+        <button className="btn btn-secondary btn-sm" disabled={busy} onClick={()=>fileRef.current&&fileRef.current.click()}>{busy?'Uploading…':<><IC n="paperclip" s={13}/> Choose file</>}</button>
       </div>
       {msg && <div style={{marginTop:6,fontSize:11,color:msg.startsWith('Error')?'var(--red)':'var(--green)'}}>{msg}</div>}
     </div>
@@ -1249,7 +1249,7 @@ function AttachDocButton({ onAttach }) {
   }
   return (
     <>
-      <button className="cl-action-btn" style={{color:'#6B7280',borderColor:'rgba(107,114,128,.3)'}} disabled={busy} onClick={()=>inpRef.current&&inpRef.current.click()}>{busy?'Attaching…':'📎 Attach document'}</button>
+      <button className="cl-action-btn" style={{color:'#6B7280',borderColor:'rgba(107,114,128,.3)'}} disabled={busy} onClick={()=>inpRef.current&&inpRef.current.click()}>{busy?'Attaching…':<><IC n="paperclip" s={12}/> Attach document</>}</button>
       <input ref={inpRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pages,.numbers,.key,.odt,.ods,.odp" style={{display:'none'}} onChange={pick}/>
     </>
   )
@@ -1371,7 +1371,7 @@ function EvidenceCameraButton({ taskId, idx, label, onCapture }) {
   useEffect(() => () => stop(), [])
   return (
     <>
-      <button className="cl-action-btn" style={{color:'#3B82F6',borderColor:'rgba(59,130,246,.3)'}} onClick={openCam}>📷 Add Photo</button>
+      <button className="cl-action-btn" style={{color:'#3B82F6',borderColor:'rgba(59,130,246,.3)'}} onClick={openCam}><IC n="camera" s={12}/> Add Photo</button>
       {open && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:9999,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:16}}>
           {err ? (
@@ -1811,6 +1811,7 @@ const IC = ({ n, s=16 }) => {
     chat:'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
     download:'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4',
     lock:'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
+    mail:'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
   }
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d={paths[n]||paths.check} /></svg>
 }
@@ -4856,9 +4857,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     <div className="cl-build-item" style={{marginBottom:0}}>
                     <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
                     <button type="button" className="cl-flag-btn" title="Mandatory" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.08)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}><strong>*</strong></button>
-                    <button type="button" className="cl-flag-btn" title="Require photo" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
-                    <button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x)})}>🕐</button>
-                    <button type="button" className="cl-flag-btn" title="Add instruction for the worker" style={{border:'1px solid #10B981',background:(s.instruction&&s.instruction.trim())?'#10B981':'rgba(16,185,129,.08)',color:(s.instruction&&s.instruction.trim())?'#fff':'#10B981'}} onClick={()=>setClInstrOpenEdit(clInstrOpenEdit===(s.id||i)?null:(s.id||i))}>💬</button>
+                    <button type="button" className="cl-flag-btn" title="Require photo" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}><IC n="camera" s={12}/></button>
+                    <button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x)})}><IC n="clock" s={12}/></button>
+                    <button type="button" className="cl-flag-btn" title="Add instruction for the worker" style={{border:'1px solid #10B981',background:(s.instruction&&s.instruction.trim())?'#10B981':'rgba(16,185,129,.08)',color:(s.instruction&&s.instruction.trim())?'#fff':'#10B981'}} onClick={()=>setClInstrOpenEdit(clInstrOpenEdit===(s.id||i)?null:(s.id||i))}><IC n="chat" s={12}/></button>
                     <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>{ const itemId=s.id||String(i); const comps=(clCompletions[sel.id]||{})[itemId]||[]; if(comps.length){ alert("This item has already been completed by a worker and can't be removed. You can edit its text or instruction instead."); return } setEditTask({...editTask,subtasks:(editTask.subtasks||[]).filter((_,j)=>j!==i)}) }}>×</button>
                     </div>
                     {clInstrOpenEdit===(s.id||i)&&(
@@ -5101,9 +5102,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     <div className="cl-build-item" style={{marginBottom:0}}>
                     <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.text} onChange={e=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,text:e.target.value}:x)})}/>
                     <button type="button" className="cl-flag-btn cl-flag-btn-req" title="Mandatory — blocks submit" style={{border:'1px solid '+(s.mandatory?'var(--red)':'var(--border)'),background:s.mandatory?'rgba(239,68,68,.12)':'none',color:s.mandatory?'var(--red)':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,mandatory:!x.mandatory}:x)})}>{s.mandatory?'★':'*'}</button>
-                    <button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}>📷</button>
-                    <button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x)})}>🕐</button>
-                    <button type="button" className="cl-flag-btn" title="Add instruction for the worker" style={{border:'1px solid #10B981',background:(s.instruction&&s.instruction.trim())?'#10B981':'rgba(16,185,129,.08)',color:(s.instruction&&s.instruction.trim())?'#fff':'#10B981'}} onClick={()=>setClInstrOpen(clInstrOpen===(s.id||i)?null:(s.id||i))}>💬</button>
+                    <button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x)})}><IC n="camera" s={12}/></button>
+                    <button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x)})}><IC n="clock" s={12}/></button>
+                    <button type="button" className="cl-flag-btn" title="Add instruction for the worker" style={{border:'1px solid #10B981',background:(s.instruction&&s.instruction.trim())?'#10B981':'rgba(16,185,129,.08)',color:(s.instruction&&s.instruction.trim())?'#fff':'#10B981'}} onClick={()=>setClInstrOpen(clInstrOpen===(s.id||i)?null:(s.id||i))}><IC n="chat" s={12}/></button>
                     <button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>{ const removed=(newTask.subtasks||[])[i]; setNewTask({...newTask,subtasks:(newTask.subtasks||[]).filter((_,j)=>j!==i)}); setPendingDelete({idx:i,item:removed}) }}>✕</button>
                     </div>
                     {clInstrOpen===(s.id||i)&&(
@@ -5358,8 +5359,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               {user.role!=='worker'&&<div className={"timing-chip "+(sel.started_at?'active':'')}>⏱ In: {fmtDateTime(sel.started_at)}</div>}
               {user.role!=='worker'&&<div className={"timing-chip "+(sel.completed_at?'active':'')}>⏹ Out: {fmtDateTime(sel.completed_at)}</div>}
               {user.role!=='worker'&&fmtDuration(sel.started_at,sel.completed_at)&&<div className="timing-chip active">⏱ {fmtDuration(sel.started_at,sel.completed_at)}</div>}
-              {sel.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_start)}>📍 Start</span>}
-              {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}>📍 End</span>}
+              {sel.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_start)}><IC n="pin" s={11}/> Start</span>}
+              {sel.gps_end&&<span className="gps-chip" style={{background:'rgba(16,185,129,.08)',borderColor:'rgba(16,185,129,.2)',color:'var(--green)'}} onClick={()=>window.open('https://maps.google.com/?q='+sel.gps_end)}><IC n="pin" s={11}/> End</span>}
             </div>
           )}
           {(sel.created_by===user.name||user.role==='client_admin'||user.role==='super_admin')&&currentWorkerTimes.length>0&&(
@@ -5372,8 +5373,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     <span style={{color:'var(--green)'}}>In: {fmtDateTime(w.started_at)}</span>
                     <span style={{color:'#F59E0B'}}>Out: {fmtDateTime(w.completed_at)}</span>
                     {fmtDuration(w.started_at,w.completed_at)&&<span style={{color:'var(--t1)',fontWeight:600}}>⏱ {fmtDuration(w.started_at,w.completed_at)}</span>}
-                    {w.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+w.gps_start)}>📍 In</span>}
-                    {w.gps_end&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+w.gps_end)}>📍 Out</span>}
+                    {w.gps_start&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+w.gps_start)}><IC n="pin" s={11}/> In</span>}
+                    {w.gps_end&&<span className="gps-chip" onClick={()=>window.open('https://maps.google.com/?q='+w.gps_end)}><IC n="pin" s={11}/> Out</span>}
                   </div>
                 ))}
               </div>
@@ -5437,7 +5438,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
                           <span className="cl-text">{s.text||'(untitled)'}</span>
                           {s.mandatory&&<span className="cl-mandatory" title="Mandatory">*</span>}
-                          {s.requirePhoto&&<span style={{fontSize:10,color:'#3B82F6',fontWeight:600}} title="Photo required">📷</span>}
+                          {s.requirePhoto&&<span style={{fontSize:10,color:'#3B82F6',fontWeight:600}} title="Photo required"><IC n="camera" s={11}/></span>}
                           {s.requireTimestamp&&todayCount>0&&todayRows[todayRows.length-1]&&(
                             <span style={{fontSize:10,color:'#F59E0B',fontWeight:600}} title="Completion timestamp">🕐 {fmtDateTime(todayRows[todayRows.length-1].completed_at)}</span>
                           )}
@@ -5485,7 +5486,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                         ):(
                           <div className="cl-actions">
                             {canAct&&<button className="cl-action-btn" style={{color:'#10B981',borderColor:'rgba(16,185,129,.3)',fontWeight:600}} onClick={()=>{ setClMarkOpen({taskId:sel.id,idx,itemId,label:s.text}); setClMarkNote('') }}>✓ Mark done</button>}
-                            <button className="cl-action-btn" onClick={()=>{setClNoteOpen({taskId:sel.id,idx});setClNoteText(s.note||'')}}>{s.note?'✏️ Edit Note':'+ Note'}</button>
+                            <button className="cl-action-btn" onClick={()=>{setClNoteOpen({taskId:sel.id,idx});setClNoteText(s.note||'')}}>{s.note?<><IC n="pencil" s={11}/> Edit Note</>:'+ Note'}</button>
                             {/* STALE-PHOTO-V3: cap counts CURRENT-cycle photos. Counting stale
                                 ones would hide the camera and block compliance outright. */}
                             {s.requirePhoto&&(((s.photos||[]).filter(ph=>photoInCurrentCycle(sel,ph,orgTz)).length)+((s.photo&&photoInCurrentCycle(sel,s.photo,orgTz))?1:0)+(s.attachments||[]).length+(s.attachment?1:0)<5)&&(
@@ -5537,7 +5538,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                       <EvidenceThumb entry={p} className="ev-thumb" imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>
                       {canDeleteEvidence(p)&&(
                         <button title="Delete evidence (you added it, within 24h) — reason required" onClick={()=>deleteEvidenceItem(sel,p)}
-                          style={{position:'absolute',top:2,right:2,width:18,height:18,padding:0,lineHeight:'16px',borderRadius:4,border:'none',background:'rgba(239,68,68,.92)',color:'#fff',fontSize:10,cursor:'pointer'}}>🗑</button>
+                          style={{position:'absolute',top:2,right:2,width:18,height:18,padding:0,lineHeight:'16px',borderRadius:4,border:'none',background:'rgba(239,68,68,.92)',color:'#fff',fontSize:10,cursor:'pointer'}}><IC n="trash" s={14}/></button>
                       )}
                       {cap&&<div style={{fontSize:9,color:'var(--t2)',textAlign:'center',marginTop:2,maxWidth:64,lineHeight:1.3}}>{cap}</div>}
                     </div>
@@ -5599,8 +5600,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     </div>
                     {isOwn&&!isEditing&&(
                       <div style={{display:'flex',gap:4}}>
-                        <button style={{fontSize:10,padding:'2px 7px',borderRadius:4,border:'1px solid var(--border)',background:'none',cursor:'pointer',color:'var(--t2)'}} onClick={()=>setEditingComment({taskId:sel.id,commentId,text})}>✏️</button>
-                        {isToday&&<button style={{fontSize:10,padding:'2px 7px',borderRadius:4,border:'1px solid rgba(239,68,68,.3)',background:'none',cursor:'pointer',color:'var(--red)'}} onClick={()=>update(sel.id,{comments:parseSafe(sel.comments,[]).filter((_,j)=>j!==i)})}>🗑</button>}
+                        <button style={{fontSize:10,padding:'2px 7px',borderRadius:4,border:'1px solid var(--border)',background:'none',cursor:'pointer',color:'var(--t2)'}} onClick={()=>setEditingComment({taskId:sel.id,commentId,text})}><IC n="pencil" s={11}/></button>
+                        {isToday&&<button style={{fontSize:10,padding:'2px 7px',borderRadius:4,border:'1px solid rgba(239,68,68,.3)',background:'none',cursor:'pointer',color:'var(--red)'}} onClick={()=>update(sel.id,{comments:parseSafe(sel.comments,[]).filter((_,j)=>j!==i)})}><IC n="trash" s={14}/></button>}
                       </div>
                     )}
                   </div>
@@ -5674,7 +5675,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             </div>
           </div>
           <div className="btn-row">
-            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>✏️ Edit</button>}
+            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}><IC n="pencil" s={13}/> Edit</button>}
             {canReviewTask(sel)&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
@@ -5683,7 +5684,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
             {canApprove&&sel.escalation&&<button className="btn btn-secondary" onClick={()=>update(sel.id,{escalation:false,status:'in_progress'})}>Resolve</button>}
             {canDeleteTask(sel)&&(
               <div style={{marginLeft:'auto'}}>
-                {!showDeleteConfirm?<button className="btn btn-danger btn-sm" onClick={()=>setShowDeleteConfirm(true)}>🗑 Delete</button>:(
+                {!showDeleteConfirm?<button className="btn btn-danger btn-sm" onClick={()=>setShowDeleteConfirm(true)}><IC n="trash" s={13}/> Delete</button>:(
                   <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.25)',borderRadius:8,padding:12,minWidth:200}}>
                     <div style={{fontSize:12,fontWeight:700,color:'var(--red)',marginBottom:10}}>Delete this task?</div>
                     {[['this','This task only'],['future','This and future']].map(([v,l])=>(
@@ -7400,7 +7401,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
             {reportOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <button className="btn btn-primary btn-sm" onClick={handleExport}>📄 Generate PDF</button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"','"'+assigneeFull(t)+'"'].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}>📥 CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{ const csv='ID,Title,Status,Priority,Compliance,Due Date,Time In,Time Out,Duration,GPS Recorded,Photos Uploaded,Checklist Timestamps,Assigned To\n'+filteredPt.map(t=>{ const clTs=getClTimestamps(t).join(' | '); return [t.id,'"'+t.title+'"',t.status,t.priority,t.compliance?'Yes':'No',t.due_date,t.started_at?fmtTime(t.started_at):'',t.completed_at?fmtTime(t.completed_at):'',fmtDur(t.started_at,t.completed_at)||'—',(t.gps_start||t.gps_end)?'Yes':'No',parseSafe(t.evidence).length>0?'Yes':'No','"'+clTs+'"','"'+assigneeFull(t)+'"'].join(',') }).join('\n'); const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='taksyn-report.csv';a.click() }}><IC n="download" s={13}/> CSV</button>
         </div>
       </div>
 
@@ -8771,8 +8772,8 @@ function UsersView({ user, setAuditLog }) {
               <div className="form-field">
                 <label className="form-label">Send Via</label>
                 <div style={{display:'flex',gap:8}}>
-                  <button className={"btn btn-sm "+(inviteMethod==='email'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('email')}>📧 Email</button>
-                  <button className={"btn btn-sm "+(inviteMethod==='whatsapp'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('whatsapp')}>💬 WhatsApp</button>
+                  <button className={"btn btn-sm "+(inviteMethod==='email'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('email')}><IC n="mail" s={13}/> Email</button>
+                  <button className={"btn btn-sm "+(inviteMethod==='whatsapp'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('whatsapp')}><IC n="chat" s={13}/> WhatsApp</button>
                 </div>
               </div>
               {duplicateInvite ? (
@@ -8791,7 +8792,9 @@ function UsersView({ user, setAuditLog }) {
               ) : (
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                   <button className="btn btn-secondary" onClick={()=>{ setShowInvite(false); resetInviteForm() }}>Cancel</button>
-                  <button className="btn btn-primary" onClick={sendInvite} disabled={inviteSending}>{inviteSending?'Sending...':inviteMethod==='whatsapp'?'💬 Send via WhatsApp':'📧 Send Invite'}</button>
+                  <button className="btn btn-primary" onClick={sendInvite} disabled={inviteSending}>{inviteSending?'Sending...':inviteMethod==='whatsapp'
+      ?<><IC n="chat" s={13}/> Send via WhatsApp</>
+      :<><IC n="mail" s={13}/> Send Invite</>}</button>
                 </div>
               )}
             </div>
@@ -8841,7 +8844,7 @@ function UsersView({ user, setAuditLog }) {
                     </div>
                     <RolePill role={assignment.role||u.role}/>
                     {['client_admin','super_admin','manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>reactivateUser(u.id)}>↩ Reactivate</button>}
-                    {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}>🗑 Delete</button>}
+                    {['client_admin','super_admin','manager'].includes(user.role)&&<button className="btn btn-danger btn-sm" onClick={()=>deleteUser(u.id)}><IC n="trash" s={13}/> Delete</button>}
                   </div>
                 )
               })
@@ -8901,7 +8904,7 @@ function UsersView({ user, setAuditLog }) {
                     setEditingOrgId(orgId)
                     setEditForm({name:u.name, first_name:u.first_name||u.name?.split(' ')[0]||'', last_name:u.last_name||u.name?.split(' ').slice(1).join(' ')||'', role:a.role||u.role, industry:a.industry||u.industry||'', position:a.position||u.position||u.orgPosition||'', phone:u.phone||'', notes:u.notes||'', email:u.email||'', date_of_birth:u.date_of_birth||''})
                     setEditPositions([]); setEditRoster([]);(async()=>{ try { const {data:apData,error:apErr} = await supabase.from('profiles').select('additional_positions,roster,regularly_rostered,industry,position').eq('id',u.id).single(); if(apErr||!apData) return; let ap = []; try { ap = JSON.parse(apData.additional_positions || '[]') } catch(e) { ap = [] }; setEditPositions(Array.isArray(ap) ? ap.map(p=>({industry:p.industry||'',role:p.role||'worker',position:p.position||p.title||''})) : []); let rs=[]; try { rs=Array.isArray(apData.roster)?apData.roster:(JSON.parse(apData.roster||'[]')) } catch(e){rs=[]}; setEditRoster(rs); setEditForm(prev=>({...prev,regularly_rostered:!!apData.regularly_rostered,industry:prev.industry||a.industry||apData.industry||'',position:prev.position||a.position||apData.position||''})) } catch(e) {} })()
-                  }}>✏️ Edit</button>}
+                  }}><IC n="pencil" s={13}/> Edit</button>}
                   {user.role==='client_admin'&&<button className="btn btn-danger btn-sm" onClick={()=>deactivateUser(u.id)}>Deactivate</button>}
                   {['manager','supervisor'].includes(user.role)&&<button className="btn btn-secondary btn-sm" onClick={()=>{ setRosterOnlyUser(u); setRosterOnlyData([]); setRosterOnlyRegRostered(false); (async()=>{ try { const {data,error}=await supabase.from('profiles').select('roster,regularly_rostered').eq('id',u.id).single(); if(error||!data) return; let rs=[]; try{rs=Array.isArray(data.roster)?data.roster:(JSON.parse(data.roster||'[]'))}catch(e){rs=[]}; setRosterOnlyData(rs); setRosterOnlyRegRostered(!!data.regularly_rostered) } catch(e){} })() }}>📅 Edit Roster</button>}
                 </div>
@@ -9938,7 +9941,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                         {m.industry&&<div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>🏭 {m.industry}</div>}
                       </div>
                       <RolePill role={m.role}/>
-                      <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();openEditMember(m)}}>✏️ Edit</button>
+                      <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();openEditMember(m)}}><IC n="pencil" s={13}/> Edit</button>
                       <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();removeMemberFromOrg(m)}}>Remove</button>
                     </div>
                   ))}
@@ -9995,7 +9998,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
                 </div>
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
                   <button className="btn btn-secondary" onClick={()=>{setViewingMember(null);setShowMemberOrgChange(false);setMemberOrgSearch('')}}>Close</button>
-                  <button className="btn btn-primary" onClick={()=>openEditMember(viewingMember)}>✏️ Edit Profile</button>
+                  <button className="btn btn-primary" onClick={()=>openEditMember(viewingMember)}><IC n="pencil" s={13}/> Edit Profile</button>
                 </div>
               </div>
             </div>
@@ -10010,7 +10013,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
           return (
           <div className="modal-overlay" onClick={closeEdit}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
-              <div className="modal-hdr"><div className="modal-title">✏️ Edit Member</div><button className="modal-close" onClick={closeEdit}>×</button></div>
+              <div className="modal-hdr"><div className="modal-title">Edit Member</div><button className="modal-close" onClick={closeEdit}>×</button></div>
               <div className="modal-body">
                 <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--s3)',borderRadius:8,marginBottom:14}}>
                   <Avatar name={editingMember.name||'?'} role={editingMember.role} size={36} avatarUrl={editingMember.avatar_url}/>
@@ -10364,7 +10367,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
         <div className="tabs" style={{marginBottom:14}}>
           <button className={'tab '+(inviteTab==='invite'?'active':'')} onClick={()=>setInviteTab('invite')}>✉️ Invite New User</button>
           <button className={'tab '+(inviteTab==='existing'?'active':'')} onClick={()=>setInviteTab('existing')}>👤 Add Existing User</button>
-          <button className="tab" disabled title="Coming soon" style={{opacity:.5,cursor:'not-allowed'}}>📋 Bulk Upload</button>
+          <button className="tab" disabled title="Coming soon" style={{opacity:.5,cursor:'not-allowed'}}><IC n="clipboard" s={13}/> Bulk Upload</button>
         </div>
 
         {inviteTab==='invite' && (
@@ -10397,12 +10400,14 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
               <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:6}}>Send Via</div>
               <div style={{display:'flex',gap:8,marginBottom:10}}>
-                <button className={"btn btn-sm "+(inviteMethod==='email'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('email')}>📧 Email</button>
-                <button className={"btn btn-sm "+(inviteMethod==='whatsapp'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('whatsapp')}>💬 WhatsApp</button>
+                <button className={"btn btn-sm "+(inviteMethod==='email'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('email')}><IC n="mail" s={13}/> Email</button>
+                <button className={"btn btn-sm "+(inviteMethod==='whatsapp'?'btn-primary':'btn-secondary')} onClick={()=>setInviteMethod('whatsapp')}><IC n="chat" s={13}/> WhatsApp</button>
               </div>
               <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
                 <button className="btn btn-ghost" onClick={()=>{ setShowInvite(null); setInviteFirstName(''); setInviteLastName(''); setInvitePhone(''); setInviteMethod('email'); setInviteOrgPositions([{industry:'',role:'',position:''}]); setInviteEmailExistsMsg('') }}>Cancel</button>
-                <button className="btn btn-primary" onClick={sendInviteToOrg} disabled={loading}>{loading?'Sending...':inviteMethod==='whatsapp'?'💬 Send via WhatsApp':'📧 Send Invite'}</button>
+                <button className="btn btn-primary" onClick={sendInviteToOrg} disabled={loading}>{loading?'Sending...':inviteMethod==='whatsapp'
+      ?<><IC n="chat" s={13}/> Send via WhatsApp</>
+      :<><IC n="mail" s={13}/> Send Invite</>}</button>
               </div>
             </div>
           </div>
@@ -11111,7 +11116,7 @@ function RolesPositionsView({ user }) {
                     ) : (
                       <div style={{display:'flex',alignItems:'center',gap:4,padding:'4px 2px',borderRadius:7,background:selectedIndustry===ind.name?'var(--brand-lt)':'transparent'}}>
                         <button onClick={()=>setSelectedIndustry(ind.name)} style={{flex:1,textAlign:'left',padding:'3px 6px',borderRadius:6,border:'none',background:'transparent',color:selectedIndustry===ind.name?'var(--brand)':'var(--text)',fontSize:12,fontWeight:selectedIndustry===ind.name?600:400,cursor:'pointer',fontFamily:'inherit'}}>{ind.name}</button>
-                        {isSuper&&<button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--t2)',padding:'2px 3px',lineHeight:1}} onClick={()=>{setEditIndId(ind.id);setEditIndName(ind.name)}} title="Edit">✏</button>}
+                        {isSuper&&<button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--t2)',padding:'2px 3px',lineHeight:1}} onClick={()=>{setEditIndId(ind.id);setEditIndName(ind.name)}} title="Edit"><IC n="pencil" s={11}/></button>}
                         {isSuper&&<button style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'var(--red)',padding:'2px 3px',lineHeight:1}} onClick={()=>deleteOrgIndustry(ind.id,ind.name)} title="Delete">✕</button>}
                       </div>
                     )}
@@ -12476,7 +12481,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                 </div>
                 <div style={{display:'flex',gap:6,flexShrink:0}}>
                   <button className="btn btn-secondary btn-sm" onClick={()=>startEditTpl(t)}>Edit</button>
-                  <button className="btn btn-danger btn-sm" onClick={()=>deleteTemplate(t.id)}>🗑</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>deleteTemplate(t.id)}><IC n="trash" s={14}/></button>
                 </div>
               </div>
             </div>))}</div>}
@@ -12551,7 +12556,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
             {tplItems.map((s,i)=>(
               <div key={i} className="cl-build-item" style={{flexWrap:'wrap'}}>
                 <input className="form-input" style={{flex:1,fontSize:12}} placeholder={"Item "+(i+1)} value={s.label} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,label:e.target.value}:x))}/>
-                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button><button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x))}>📷</button><button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x))}>🕐</button>
+                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button><button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x))}>📷</button><button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x))}><IC n="clock" s={12}/></button>
                 {tplItems.length>1&&<button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setTplItems(p=>p.filter((_,j)=>j!==i))}>×</button>}<textarea className="comment-box" style={{flexBasis:'100%',width:'100%',marginTop:6,minHeight:44,fontSize:12,border:'1px solid #10B981',background:'rgba(16,185,129,.05)'}} placeholder="💬 Instruction for the worker (optional)" value={s.instruction||''} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,instruction:e.target.value}:x))}/>
               </div>
             ))}
@@ -12985,7 +12990,7 @@ function TemplatesView({ user }) {
               {canEdit&&(
                 <div style={{display:'flex',gap:6,flexShrink:0}}>
                   <button className="btn btn-secondary btn-sm" onClick={()=>startEditTpl(t)}>Edit</button>
-                  <button className="btn btn-danger btn-sm" onClick={()=>deleteTemplate(t.id)}>🗑</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>deleteTemplate(t.id)}><IC n="trash" s={14}/></button>
                 </div>
               )}
             </div>
@@ -13060,7 +13065,7 @@ function TemplatesView({ user }) {
             {tplItems.map((s,i)=>(
               <div key={i} className="cl-build-item" style={{flexWrap:'wrap'}}>
                 <input className="form-input" style={{flex:1,fontSize:12}} placeholder={'Item '+(i+1)} value={s.label} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,label:e.target.value}:x))}/>
-                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button><button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x))}>📷</button><button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x))}>🕐</button>
+                <button type="button" className="cl-flag-btn" title="Required — worker must complete" style={{border:'1px solid '+(s.required?'var(--red)':'var(--border)'),background:s.required?'rgba(239,68,68,.08)':'none',color:s.required?'var(--red)':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,required:!x.required}:x))}><strong>*</strong></button><button type="button" className="cl-flag-btn" title="Require photo evidence" style={{border:'1px solid '+(s.requirePhoto?'#3B82F6':'var(--border)'),background:s.requirePhoto?'rgba(59,130,246,.08)':'none',color:s.requirePhoto?'#3B82F6':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requirePhoto:!x.requirePhoto}:x))}>📷</button><button type="button" className="cl-flag-btn" title="Auto-timestamp on completion" style={{border:'1px solid '+(s.requireTimestamp?'#F59E0B':'var(--border)'),background:s.requireTimestamp?'rgba(245,158,11,.12)':'none',color:s.requireTimestamp?'#F59E0B':'var(--t2)'}} onClick={()=>setTplItems(p=>p.map((x,j)=>j===i?{...x,requireTimestamp:!x.requireTimestamp}:x))}><IC n="clock" s={12}/></button>
                 {tplItems.length>1&&<button type="button" className="cl-flag-btn" style={{border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.04)',color:'var(--red)'}} onClick={()=>setTplItems(p=>p.filter((_,j)=>j!==i))}>×</button>}<textarea className="comment-box" style={{flexBasis:'100%',width:'100%',marginTop:6,minHeight:44,fontSize:12,border:'1px solid #10B981',background:'rgba(16,185,129,.05)'}} placeholder="💬 Instruction for the worker (optional)" value={s.instruction||''} onChange={e=>setTplItems(p=>p.map((x,j)=>j===i?{...x,instruction:e.target.value}:x))}/>
               </div>
             ))}
@@ -14460,14 +14465,14 @@ function TeamsView({ user }) {
                 {selectedTeam.description&&<div style={{fontSize:12,color:'var(--t2)',marginTop:4,fontStyle:'italic'}}>{selectedTeam.description}</div>}
                 <div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>Created by {selectedTeam.created_by} · {new Date(selectedTeam.created_at).toLocaleDateString('en-AU')}</div>
               </div>
-              {isCA&&<button className="btn btn-danger btn-sm" onClick={()=>deleteTeam(selectedTeam.id)}>🗑 Delete Team</button>}
+              {isCA&&<button className="btn btn-danger btn-sm" onClick={()=>deleteTeam(selectedTeam.id)}><IC n="trash" s={13}/> Delete Team</button>}
             </div>
 
             <div style={{borderTop:'1px solid var(--border)',paddingTop:14}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
                 <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>Members ({(selectedTeam.members||[]).length})</div>
                 <div style={{display:'flex',gap:6}}>
-                  {(isCA||user.role==='manager')&&<button className="btn btn-secondary btn-sm" onClick={()=>setShowInviteLink(!showInviteLink)}>💬 Invite Link</button>}
+                  {(isCA||user.role==='manager')&&<button className="btn btn-secondary btn-sm" onClick={()=>setShowInviteLink(!showInviteLink)}><IC n="chat" s={13}/> Invite Link</button>}
                   {(isCA||user.role==='manager'||user.role==='supervisor')&&<button className="btn btn-primary btn-sm" onClick={openAddMember}><IC n="plus" s={12}/> Add Member</button>}
                 </div>
               </div>
@@ -14498,8 +14503,8 @@ function TeamsView({ user }) {
                     Link will pre-fill: <strong>{selectedTeam.name}</strong> · <strong>{ROLE_LABELS[inviteLinkRole]}</strong>{teamOrgIndustry&&<> · <strong>{teamOrgIndustry}</strong></>}{inviteLinkPosition&&<> · <strong>{inviteLinkPosition}</strong></>}
                   </div>
                   <div style={{display:'flex',gap:8}}>
-                    <button className="btn btn-primary btn-sm" onClick={()=>shareInviteLink(selectedTeam)}>💬 Send via WhatsApp</button>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>copyInviteLink(selectedTeam)}>📋 Copy Link</button>
+                    <button className="btn btn-primary btn-sm" onClick={()=>shareInviteLink(selectedTeam)}><IC n="chat" s={13}/> Send via WhatsApp</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>copyInviteLink(selectedTeam)}><IC n="copy" s={13}/> Copy Link</button>
                     <button className="btn btn-secondary btn-sm" onClick={()=>setShowInviteLink(false)}>Cancel</button>
                   </div>
                 </div>
@@ -14603,7 +14608,7 @@ function TeamsView({ user }) {
                           </div>
                           {isCA&&(
                             <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)',display:'flex',justifyContent:'flex-end'}}>
-                              <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteTeam(team.id)}}>🗑</button>
+                              <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteTeam(team.id)}}><IC n="trash" s={14}/></button>
                             </div>
                           )}
                         </div>
@@ -16000,7 +16005,7 @@ function HelpView({ user }) {
                 <img src={screenshot} alt="screenshot" style={{height:60,borderRadius:6,border:'1px solid var(--border)'}}/>
                 <button className="btn btn-secondary btn-sm" onClick={()=>setScreenshot(null)}>✕ Remove</button>
               </div>
-            : <button className="btn btn-secondary" onClick={()=>document.getElementById('support-img').click()}>📷 Attach Screenshot</button>
+            : <button className="btn btn-secondary" onClick={()=>document.getElementById('support-img').click()}><IC n="camera" s={14}/> Attach Screenshot</button>
           }
           <input id="support-img" type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>setScreenshot(ev.target.result); r.readAsDataURL(f); e.target.value='' }}/>
         </div>
@@ -17918,7 +17923,7 @@ function ReportIssueView({ user, embedded }) {
                 <img src={photo} alt="issue" style={{maxWidth:240,maxHeight:160,borderRadius:8,border:'1px solid var(--border)',display:'block'}}/>
                 <button onClick={()=>setPhoto(null)} style={{position:'absolute',top:4,right:4,background:'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',color:'#fff',width:22,height:22,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'inherit'}}>×</button>
               </div>
-            : <button className="btn btn-secondary" style={{fontSize:13}} onClick={()=>document.getElementById('issue-photo-inp').click()}>📷 Attach Photo</button>
+            : <button className="btn btn-secondary" style={{fontSize:13}} onClick={()=>document.getElementById('issue-photo-inp').click()}><IC n="camera" s={13}/> Attach Photo</button>
           }
           <input id="issue-photo-inp" type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>setPhoto(ev.target.result); r.readAsDataURL(f); e.target.value='' }}/>
         </div>
@@ -18652,7 +18657,7 @@ function IncidentRegisterView({ user, setPage }) {
         </label>
         <div style={{flex:1}}/>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportPDF}>📄 Incident Register List PDF</button>
-        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportCSV}>📥 CSV</button>
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={exportCSV}><IC n="download" s={13}/> CSV</button>
         <button className="btn btn-secondary btn-sm" style={{marginTop:12}} onClick={async ()=>{
           // IND: the org's services, primary FIRST, so the report can draw a
           // section per service. Fetched here rather than held in state --
