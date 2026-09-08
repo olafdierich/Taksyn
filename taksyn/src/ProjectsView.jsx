@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase.js'
+import StructurePanel from './ProjectStructure.jsx'
+import TaskForm from './TaskForm.jsx'
+import DependencyEditor from './DependencyEditor.jsx'
 
 /*
   ProjectsView — the projects module UI.
@@ -100,6 +103,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
   const [openId, setOpenId] = useState(null)
   const [openSection, setOpenSection] = useState(null)
   const [detail, setDetail] = useState(null)
+  const [reload, setReload] = useState(0)
   const [showCreate, setShowCreate] = useState(false)
   const [draft, setDraft] = useState({ name: '', description: '' })
   const [saving, setSaving] = useState(false)
@@ -161,7 +165,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
             supabase.from('project_milestone_state').select('*')
               .eq('project_id', openId).order('due_date'),
             supabase.from('task_dependencies')
-              .select('predecessor_section_id,successor_section_id,gap_days')
+              .select('id,predecessor_section_id,successor_section_id,gap_days,match_by_team')
               .eq('project_id', openId),
             supabase.from('project_schedule_events')
               .select('task_id,kind,old_due_date,new_due_date,delta_days,caused_by_section_id,note,created_at')
@@ -170,13 +174,16 @@ export default function ProjectsView({ user, resolveOrgId }) {
         const deps = {}
         ;(dp || []).forEach(d =>
           (deps[d.successor_section_id] = deps[d.successor_section_id] || []).push(d.predecessor_section_id))
+        // The editor needs the rows themselves — id, gap_days,
+        // match_by_team — not just the predecessor map the captions use.
+        const links = dp || []
         const moved = {}
         ;(ev || []).forEach(e => { if (e.task_id && !moved[e.task_id]) moved[e.task_id] = e })
-        if (!dead) setDetail({ project: p, sections: secs || [], tasks: tasks || [], ms: ms || [], deps, moved })
+        if (!dead) setDetail({ project: p, sections: secs || [], tasks: tasks || [], ms: ms || [], deps, links, moved })
       } catch (e) { if (!dead) setErr(e.message || String(e)) }
     })()
     return () => { dead = true }
-  }, [openId])
+  }, [openId, reload])
 
   const create = async () => {
     if (!draft.name.trim() || saving) return
@@ -208,9 +215,12 @@ export default function ProjectsView({ user, resolveOrgId }) {
 
   if (openId && detail) {
     return openSection
-      ? <SectionView detail={detail} sectionId={openSection} onBack={() => setOpenSection(null)} />
+      ? <SectionView detail={detail} sectionId={openSection} onBack={() => setOpenSection(null)}
+          canEdit={isCA} user={user} orgName={user?.org}
+          onChanged={() => setReload(n => n + 1)} />
       : <ProjectView detail={detail} onBack={() => { setOpenId(null); setOpenSection(null) }}
-          onSection={setOpenSection} />
+          onSection={setOpenSection} canEdit={isCA}
+          onChanged={() => setReload(n => n + 1)} />
   }
 
   const active = projects.filter(p => !['closed', 'cancelled'].includes(p.status))
@@ -291,8 +301,59 @@ export default function ProjectsView({ user, resolveOrgId }) {
 }
 
 /* ===================================================================== */
-function ProjectView({ detail, onBack, onSection }) {
+function ProjectView({ detail, onBack, onSection, canEdit, onChanged }) {
   const { project, sections, tasks, ms } = detail
+  const [recalcBusy, setRecalcBusy] = useState(false)
+
+  // Dry run, show, then apply on confirmation. Dates moving is a
+  // consequential act with an audit trail behind it — it should be
+  // something someone chose, not something that happened while they were
+  // reading a page. This is the only place the UI applies it.
+  const recalculate = async () => {
+    if (recalcBusy) return
+    setRecalcBusy(true)
+    try {
+      const { data, error } = await supabase.rpc('recompute_project_dates', {
+        p_project_id: project.id, p_dry_run: true
+      })
+      if (error) throw error
+      const rows = data || []
+
+      const cycle = rows.find(r => r.kind === 'cycle')
+      if (cycle) { alert(cycle.note); return }
+
+      const shifts = rows.filter(r => r.kind === 'shift')
+      const blocked = rows.filter(r => r.kind === 'blocked')
+      if (!shifts.length && !blocked.length) {
+        alert('Nothing needs to move. Every stage already starts after the work it waits on.')
+        return
+      }
+
+      const nameOf = id => tasks.find(t => t.id === id)?.title || id
+      let msg = ''
+      if (shifts.length) {
+        msg += shifts.length + ' task date(s) will move:\n'
+          + shifts.slice(0, 8).map(r =>
+              '  \u2022 ' + nameOf(r.task_id) + ': ' + r.old_due_date
+              + ' \u2192 ' + r.new_due_date + ' (+' + r.delta_days + 'd)'
+            ).join('\n')
+          + (shifts.length > 8 ? '\n  \u2026and ' + (shifts.length - 8) + ' more' : '')
+      }
+      if (blocked.length) {
+        msg += '\n\n' + blocked.length + ' locked date(s) will NOT move:\n'
+          + blocked.map(r => '  \u2022 ' + nameOf(r.task_id)).join('\n')
+          + '\n\nThose are now at risk.'
+      }
+      if (!confirm(msg + '\n\nApply?')) return
+
+      const { error: applyErr } = await supabase.rpc('recompute_project_dates', {
+        p_project_id: project.id, p_dry_run: false
+      })
+      if (applyErr) throw applyErr
+      onChanged()
+    } catch (e) { alert(e.message || String(e)) }
+    finally { setRecalcBusy(false) }
+  }
   const tops = sections.filter(s => !s.parent_id)
   const done = tasks.filter(isDone).length
   const today = today0()
@@ -323,9 +384,19 @@ function ProjectView({ detail, onBack, onSection }) {
     <div style={{ padding: '0 4px' }}>
       <div style={crumb} onClick={onBack}>‹ Projects</div>
       <div style={{ fontSize: 18, fontWeight: 600 }}>{project.name}</div>
-      <div style={{ fontSize: 12, color: C.ink2, marginBottom: 12 }}>
-        {project.ref} · {project.status}
-        {project.target_end_date && ` · target ${fmt(D(project.target_end_date))}`}
+      <div style={{ display: 'flex', justifyContent: 'space-between',
+             alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: C.ink2 }}>
+          {project.ref} · {project.status}
+          {project.target_end_date && ` · target ${fmt(D(project.target_end_date))}`}
+        </span>
+        {canEdit &&
+          <button style={{ background: 'transparent', color: C.ink2,
+                   border: `1px solid ${C.line2}`, borderRadius: 8,
+                   padding: '5px 11px', fontSize: 12, cursor: 'pointer' }}
+                  disabled={recalcBusy} onClick={recalculate}>
+            {recalcBusy ? 'Checking…' : 'Recalculate dates'}
+          </button>}
       </div>
 
       <div style={card}>
@@ -362,18 +433,167 @@ function ProjectView({ detail, onBack, onSection }) {
             )
           })}
         </div>}
+
+      <StructurePanel projectId={project.id} sections={sections} tasks={tasks}
+                      canEdit={canEdit} onChanged={onChanged} />
     </div>
   )
 }
 
 /* ===================================================================== */
-function SectionView({ detail, sectionId, onBack }) {
-  const { sections, tasks, project, deps = {}, moved = {} } = detail
+function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChanged }) {
+  const [addingTo, setAddingTo] = useState(null)
+  const [editingTask, setEditingTask] = useState(null)
+  const [editingDeps, setEditingDeps] = useState(null)
+  const [addingStage, setAddingStage] = useState(false)
+  const [stageName, setStageName] = useState('')
+  const [heldIdx, setHeldIdx] = useState(null)   // stage picked up, awaiting a destination
+  const [renaming, setRenaming] = useState(null)
+  const [renameTo, setRenameTo] = useState('')
+  const [busy, setBusy] = useState(false)
+  const { sections, tasks, project, deps = {}, links = [], moved = {}, ms = [] } = detail
   const sec = sections.find(s => s.id === sectionId)
   const pkgs = sections.filter(s => s.parent_id === sectionId).sort((a, b) => a.sort_order - b.sort_order)
   const pkgIds = pkgs.map(p => p.id)
   const mine = tasks.filter(t => pkgIds.includes(t.section_id))
   const today = today0()
+
+  const addStage = async () => {
+    const name = stageName.trim()
+    if (!name || busy) return
+    setBusy(true)
+    try {
+      const next = pkgs.length ? Math.max(...pkgs.map(p => p.sort_order)) + 1 : 1
+      const { error } = await supabase.from('project_sections')
+        .insert({ project_id: project.id, parent_id: sectionId, name, sort_order: next })
+        .select()
+      if (error) throw error
+      setAddingStage(false); setStageName(''); onChanged()
+    } catch (e) { alert(e.message || String(e)) }
+    finally { setBusy(false) }
+  }
+
+  // Arrows: swap with the neighbour. Two writes, and a concurrent edit
+  // elsewhere in the project cannot be clobbered.
+  const moveStage = async (i, dir) => {
+    const j = i + dir
+    if (j < 0 || j >= pkgs.length || busy) return
+    setBusy(true)
+    try {
+      const a = pkgs[i], b = pkgs[j]
+      await supabase.from('project_sections').update({ sort_order: b.sort_order }).eq('id', a.id).select()
+      await supabase.from('project_sections').update({ sort_order: a.sort_order }).eq('id', b.id).select()
+      onChanged()
+    } catch (e) { alert(e.message || String(e)) }
+    finally { setBusy(false) }
+  }
+
+  // Drag: renumber the whole section 1..n, because a drag can move an
+  // item several places and swapping does not express that.
+  const dropAt = async (target) => {
+    const from = heldIdx
+    setHeldIdx(null)
+    if (from === null || from === target || busy) return
+    setBusy(true)
+    try {
+      const next = pkgs.slice()
+      const [moved] = next.splice(from, 1)
+      next.splice(target, 0, moved)
+      for (let i = 0; i < next.length; i++) {
+        if (next[i].sort_order !== i + 1) {
+          const { error } = await supabase.from('project_sections')
+            .update({ sort_order: i + 1 }).eq('id', next[i].id).select()
+          if (error) throw error
+        }
+      }
+      onChanged()
+    } catch (e) { alert(e.message || String(e)) }
+    finally { setBusy(false) }
+  }
+
+  const renameStage = async (pk) => {
+    const name = renameTo.trim()
+    if (!name || busy) return
+    setBusy(true)
+    try {
+      const { error } = await supabase.from('project_sections')
+        .update({ name }).eq('id', pk.id).select()
+      if (error) throw error
+      setRenaming(null); setRenameTo(''); onChanged()
+    } catch (e) { alert(e.message || String(e)) }
+    finally { setBusy(false) }
+  }
+
+  const deleteStage = async (pk) => {
+    const n = mine.filter(t => t.section_id === pk.id).length
+    if (n > 0) {
+      alert(`"${pk.name}" still holds ${n} task(s). Move or remove them first — `
+        + 'deleting this would strip them out of the structure while leaving them '
+        + 'on the project, so they would disappear from every screen but still '
+        + 'count in the total.')
+      return
+    }
+    if (!confirm(`Delete the stage "${pk.name}"?`)) return
+    setBusy(true)
+    try {
+      const { error } = await supabase.from('project_sections').delete().eq('id', pk.id)
+      if (error) throw error
+      onChanged()
+    } catch (e) { alert(e.message || String(e)) }
+    finally { setBusy(false) }
+  }
+
+  // Tap to pick up, tap to place. HTML5 drag fires nothing on a touch
+  // screen, so the handle did nothing on a phone. This behaves the same
+  // on both, needs no long-press timing, and is easier to correct than
+  // a drag on a small screen.
+  const stageStyle = (i) => ({
+    ...card,
+    outline: heldIdx === i ? '2px solid #3B82F6' : 'none',
+    background: heldIdx !== null && heldIdx !== i ? '#F8FAFC' : card.background
+  })
+
+  const StageControls = ({ i, pk }) => {
+    if (!canEdit) return null
+    if (heldIdx !== null && heldIdx !== i) {
+      return (
+        <button style={{ ...miniGhost, borderColor: '#3B82F6', color: '#3B82F6' }}
+                disabled={busy} onClick={() => dropAt(i)}>Move here</button>
+      )
+    }
+    return (
+      <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        {heldIdx === i
+          ? <button style={{ ...miniGhost, borderColor: '#3B82F6', color: '#3B82F6' }}
+                    onClick={() => setHeldIdx(null)}>Cancel move</button>
+          : <button style={miniGhost} disabled={busy}
+                    onClick={() => setHeldIdx(i)}>Move</button>}
+        <button style={miniBtn} disabled={busy || i === 0} onClick={() => moveStage(i, -1)}>↑</button>
+        <button style={miniBtn} disabled={busy || i === pkgs.length - 1}
+                onClick={() => moveStage(i, 1)}>↓</button>
+        <button style={miniGhost} disabled={busy}
+                onClick={() => { setRenaming(pk.id); setRenameTo(pk.name) }}>Rename</button>
+        <button style={{ ...miniGhost, color: C.red, borderColor: '#FCA5A5' }}
+                disabled={busy} onClick={() => deleteStage(pk)}>Delete</button>
+      </span>
+    )
+  }
+
+  // Shown in place of the stage name while renaming.
+  const StageName = ({ pk, extra }) => renaming === pk.id ? (
+    <span style={{ display: 'flex', gap: 6, flex: 1 }}>
+      <input style={{ flex: 1, padding: '5px 8px', border: `1px solid ${C.line2}`,
+               borderRadius: 6, fontSize: 13, fontFamily: 'inherit' }}
+             value={renameTo} autoFocus
+             onChange={e => setRenameTo(e.target.value)}
+             onKeyDown={e => { if (e.key === 'Enter') renameStage(pk)
+                               if (e.key === 'Escape') setRenaming(null) }} />
+      <button style={miniGhost} disabled={busy} onClick={() => renameStage(pk)}>Save</button>
+      <button style={miniGhost} onClick={() => setRenaming(null)}>Cancel</button>
+    </span>
+  ) : (
+    <span style={{ fontSize: 13, flex: 1 }}>{pk.name}{extra}</span>
+  )
 
   const dates = mine.map(t => D(t.due_date)).filter(Boolean)
   if (!dates.length) dates.push(today)
@@ -396,7 +616,7 @@ function SectionView({ detail, sectionId, onBack }) {
     }
   }
 
-  // One stable team order for the WHOLE section. Every package renders
+  // One stable team order for the WHOLE section. Every stage renders
   // the same teams in the same order, so a team keeps its row down the
   // screen and a bar further right than the row above it reads as a
   // delay without needing a caption.
@@ -410,7 +630,7 @@ function SectionView({ detail, sectionId, onBack }) {
   teamOrder.sort((a, b) => (teamNames[a] || '').localeCompare(teamNames[b] || ''))
 
   // Computed once and shared by the bars and the register, so the two
-  // can never disagree about what is in a package.
+  // can never disagree about what is in a stage.
   const packages = pkgs.map(pk => {
     const all = mine.filter(t => t.section_id === pk.id)
     // Attachments are excluded from the geometry: unplanned work hanging
@@ -423,8 +643,8 @@ function SectionView({ detail, sectionId, onBack }) {
     planned.forEach(t => (byTeam[t.team_id || '_'] = byTeam[t.team_id || '_'] || []).push(t))
 
     // One row per team, in the section's stable order. A team with no
-    // work in this package still gets its row, so the rows line up
-    // across packages — that alignment is what makes a delay visible.
+    // work in this stage still gets its row, so the rows line up
+    // across stages — that alignment is what makes a delay visible.
     const bars = teamOrder.map(k => {
       const ts = byTeam[k]
       if (!ts || !ts.length) return { key: k, name: teamNames[k], ts: [], empty: true }
@@ -437,20 +657,58 @@ function SectionView({ detail, sectionId, onBack }) {
                width: Math.max(pos(b) - left, 4), style: barStyle(k, ts) }
     })
 
-    const preds = (deps[pk.id] || []).map(id => sections.find(x => x.id === id)?.name).filter(Boolean)
+    const predIds = deps[pk.id] || []
+    const preds = predIds.map(id => sections.find(x => x.id === id)?.name).filter(Boolean)
+
+    // sort_order is display; dependencies are the real sequence. They can
+    // disagree — reordering a stage does not touch its links — and when
+    // they do, the picture contradicts the plan. Say so rather than let
+    // it read as a bug.
+    const myPos = pkgs.findIndex(x => x.id === pk.id)
+    const outOfOrder = predIds
+      .map(id => ({ id, pos: pkgs.findIndex(x => x.id === id) }))
+      .filter(p => p.pos > myPos)
+      .map(p => sections.find(x => x.id === p.id)?.name)
+      .filter(Boolean)
     const slip = all.map(t => moved[t.id]).filter(e => e && e.kind === 'shift')
       .reduce((m, e) => Math.max(m, e.delta_days || 0), 0)
 
-    return { pk, all, attachments, byTeam, bars, preds, slip }
+    return { pk, all, attachments, byTeam, bars, preds, slip, outOfOrder }
   })
 
   return (
     <div style={{ padding: '0 4px' }}>
       <div style={crumb} onClick={onBack}>‹ {project.name}</div>
       <div style={{ fontSize: 18, fontWeight: 600 }}>{sec?.name}</div>
-      <div style={{ fontSize: 12, color: C.ink2, marginBottom: 8 }}>
-        {mine.filter(isDone).length} of {mine.length} approved
+      <div style={{ display: 'flex', justifyContent: 'space-between',
+             alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <span style={{ fontSize: 12, color: C.ink2 }}>
+          {mine.filter(isDone).length} of {mine.length} approved ·{' '}
+          {pkgs.length} stage{pkgs.length !== 1 ? 's' : ''}
+        </span>
+        {canEdit && !addingStage &&
+          <button style={miniGhost} onClick={() => { setAddingStage(true); setStageName('') }}>
+            + Add stage
+          </button>}
       </div>
+      {heldIdx !== null &&
+        <div style={{ fontSize: 12, color: '#3B82F6', background: '#EFF6FF',
+               borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
+          Moving "{pkgs[heldIdx]?.name}" — tap "Move here" on the stage it should sit above.
+        </div>}
+      {addingStage &&
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          <input style={{ flex: 1, padding: '8px 9px', border: `1px solid ${C.line2}`,
+                   borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }}
+                 placeholder="Stage name, e.g. Safety checks" value={stageName} autoFocus
+                 onChange={e => setStageName(e.target.value)}
+                 onKeyDown={e => { if (e.key === 'Enter') addStage()
+                                   if (e.key === 'Escape') setAddingStage(false) }} />
+          <button style={{ background: C.ink, color: '#fff', border: 0, borderRadius: 8,
+                   padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}
+                  disabled={busy || !stageName.trim()} onClick={addStage}>Add</button>
+          <button style={miniGhost} onClick={() => setAddingStage(false)}>Cancel</button>
+        </div>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12, fontSize: 11, color: C.ink3 }}>
         {teamOrder.map(k => (
           <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -484,7 +742,7 @@ function SectionView({ detail, sectionId, onBack }) {
             <div style={{ position: 'absolute', left: `${pos(today)}%`, top: 0, bottom: 0,
                    width: 1, background: C.ink3 }} />
           </div>
-          {packages.map(({ pk, all, attachments, bars, preds, slip }) => {
+          {packages.map(({ pk, all, attachments, bars, preds, slip, outOfOrder }) => {
             if (!all.length) return null
             const openAtt = attachments.filter(t => !isDone(t)).length
             return (
@@ -496,6 +754,10 @@ function SectionView({ detail, sectionId, onBack }) {
                       <span style={{ fontSize: 11, color: C.ink3 }}> · after {preds.join(' and ')}</span>}
                     {slip > 0 &&
                       <span style={{ fontSize: 11, color: C.amberDeep }}> · pushed {slip} days</span>}
+                    {outOfOrder && outOfOrder.length > 0 &&
+                      <span style={{ fontSize: 11, color: C.red }}>
+                        {' '}· listed above {outOfOrder.join(' and ')}, which it waits on
+                      </span>}
                   </span>
                   <span style={{ fontSize: 12, color: C.ink2, whiteSpace: 'nowrap' }}>
                     {all.filter(isDone).length}/{all.length}
@@ -530,19 +792,88 @@ function SectionView({ detail, sectionId, onBack }) {
         </div>
       </div>
 
-      {packages.map(({ pk, all, byTeam, attachments }) => {
-        if (!all.length) return null
+      {packages.map(({ pk, all, byTeam, attachments }, idx) => {
+        // An empty stage still gets a card, otherwise there is nowhere
+        // to add its first task and a new stage is unreachable.
+        if (!all.length) {
+          return (
+            <div key={pk.id} style={stageStyle(idx)}>
+              <div style={{ display: 'flex', justifyContent: 'space-between',
+                     alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <StageName pk={pk} extra={
+                  <span style={{ fontSize: 11, color: C.ink3 }}> · no tasks yet</span>} />
+                <StageControls i={idx} pk={pk} />
+                {canEdit &&
+                  <span style={{ display: 'flex', gap: 6 }}>
+                    <button style={miniGhost}
+                            onClick={() => setEditingDeps(editingDeps === pk.id ? null : pk.id)}>
+                      Waits on{(deps[pk.id] || []).length ? ` (${deps[pk.id].length})` : ''}
+                    </button>
+                    {addingTo !== pk.id &&
+                      <button style={miniGhost}
+                              onClick={() => setAddingTo(pk.id)}>+ Add task</button>}
+                  </span>}
+              </div>
+              {editingDeps === pk.id &&
+                <DependencyEditor project={project} stage={pk} sections={sections}
+                  links={links} onChanged={onChanged}
+                  onClose={() => setEditingDeps(null)} />}
+              {addingTo === pk.id &&
+                <TaskForm project={project} stage={pk} stages={sections} orgName={orgName}
+                  user={user} milestones={ms}
+                  onCancel={() => setAddingTo(null)}
+                  onDone={() => { setAddingTo(null); onChanged() }} />}
+            </div>
+          )
+        }
         return (
-          <div key={pk.id} style={card}>
-            <div style={{ fontSize: 13, marginBottom: 8 }}>{pk.name}</div>
+          <div key={pk.id} style={stageStyle(idx)}>
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+                   alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+              <StageName pk={pk} />
+              <StageControls i={idx} pk={pk} />
+              {canEdit &&
+                <span style={{ display: 'flex', gap: 6 }}>
+                  <button style={miniGhost}
+                          onClick={() => setEditingDeps(editingDeps === pk.id ? null : pk.id)}>
+                    Waits on{(deps[pk.id] || []).length ? ` (${deps[pk.id].length})` : ''}
+                  </button>
+                  {addingTo !== pk.id &&
+                    <button style={miniGhost}
+                            onClick={() => setAddingTo(pk.id)}>+ Add task</button>}
+                </span>}
+            </div>
+            {editingDeps === pk.id &&
+              <DependencyEditor project={project} stage={pk} sections={sections}
+                links={links} onChanged={onChanged}
+                onClose={() => setEditingDeps(null)} />}
+            {addingTo === pk.id &&
+              <TaskForm project={project} stage={pk} stages={sections} orgName={orgName}
+                user={user} milestones={ms}
+                onCancel={() => setAddingTo(null)}
+                onDone={() => { setAddingTo(null); onChanged() }} />}
             {Object.keys(byTeam).map(k => (
               <TeamBlock key={k} name={byTeam[k][0].team_name || 'Unassigned'}
                          colour={teamColour(k).solid}
-                         tasks={byTeam[k]} moved={moved} sections={sections} />
+                         tasks={byTeam[k]} moved={moved} sections={sections}
+                         canEdit={canEdit} editingId={editingTask} stage={pk}
+                         onEdit={id => setEditingTask(id)}
+                         renderForm={t => (
+                           <TaskForm project={project} stage={pk} stages={sections}
+                             orgName={orgName} user={user} milestones={ms} task={t}
+                             onCancel={() => setEditingTask(null)}
+                             onDone={() => { setEditingTask(null); onChanged() }} />)} />
             ))}
             {attachments.length > 0 &&
               <TeamBlock name="Attached — blocks a milestone" tasks={attachments}
-                         moved={moved} sections={sections} flag />}
+                         moved={moved} sections={sections} flag
+                         canEdit={canEdit} editingId={editingTask} stage={pk}
+                         onEdit={id => setEditingTask(id)}
+                         renderForm={t => (
+                           <TaskForm project={project} stage={pk} stages={sections}
+                             orgName={orgName} user={user} milestones={ms} task={t}
+                             onCancel={() => setEditingTask(null)}
+                             onDone={() => { setEditingTask(null); onChanged() }} />)} />}
           </div>
         )
       })}
@@ -550,7 +881,8 @@ function SectionView({ detail, sectionId, onBack }) {
   )
 }
 
-function TeamBlock({ name, tasks, moved, sections, flag, colour }) {
+function TeamBlock({ name, tasks, moved, sections, flag, colour,
+                     canEdit, editingId, onEdit, renderForm }) {
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 12, color: flag ? C.amberDeep : C.ink3, marginBottom: 4,
@@ -569,7 +901,9 @@ function TeamBlock({ name, tasks, moved, sections, flag, colour }) {
         const cause = ev && ev.caused_by_section_id
           ? sections.find(s => s.id === ev.caused_by_section_id)?.name : null
         return (
-          <div key={t.id} style={{ padding: '8px 0', borderBottom: `1px solid ${C.line}` }}>
+          <div key={t.id} style={{ padding: '8px 0', borderBottom: `1px solid ${C.line}`,
+                 cursor: canEdit ? 'pointer' : 'default' }}
+               onClick={() => canEdit && onEdit(editingId === t.id ? null : t.id)}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <span style={{ fontSize: 13 }}>{t.due_date_locked && '🔒 '}{t.title}</span>
               <span style={{ fontSize: 12, color: TONE[st.tone], whiteSpace: 'nowrap' }}>{st.label}</span>
@@ -587,6 +921,8 @@ function TeamBlock({ name, tasks, moved, sections, flag, colour }) {
               <div style={{ fontSize: 11, color: TONE.bad, marginTop: 3 }}>{ev.note}</div>}
             {t.due_date_locked && t.due_date_lock_reason &&
               <div style={{ fontSize: 11, color: C.ink3, marginTop: 3 }}>{t.due_date_lock_reason}</div>}
+            {canEdit && editingId === t.id && renderForm &&
+              <div onClick={e => e.stopPropagation()}>{renderForm(t)}</div>}
           </div>
         )
       })}
@@ -611,6 +947,10 @@ function Pill({ children }) {
   return <span style={{ marginLeft: 6, fontSize: 11, padding: '2px 8px', borderRadius: 20, background: C.soft, color: C.ink2 }}>{children}</span>
 }
 
+const miniBtn = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
+  borderRadius: 6, padding: '1px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1.3 }
+const miniGhost = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
+  borderRadius: 8, padding: '4px 10px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }
 const crumb = { fontSize: 12, color: C.ink2, cursor: 'pointer', marginBottom: 6 }
 const btnGhost = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
   borderRadius: 8, padding: '5px 11px', fontSize: 12, cursor: 'pointer' }
