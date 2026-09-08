@@ -60,9 +60,9 @@ export default function MilestonePanel({ project, sections, milestones, canEdit,
 
   const validate = () => {
     if (!f.name.trim()) return 'A milestone needs a name.'
-    if (!f.dueDate) return 'A milestone needs a date — that is what makes it a gate.'
+    if (!f.dueDate) return 'A milestone needs a date — without one it cannot gate anything.'
     if (f.locked && f.lockReason.trim().length < 10) {
-      return 'A locked gate needs a reason of at least 10 characters. It is what an '
+      return 'A locked milestone needs a reason of at least 10 characters. It is what an '
         + 'inspector reads when the date did not move.'
     }
     return null
@@ -99,7 +99,7 @@ export default function MilestonePanel({ project, sections, milestones, canEdit,
   const meet = async (m) => {
     const note = prompt(
       `Mark "${m.name}" as met?\n\n`
-      + 'This records that you state this gate is complete, with your name and the '
+      + 'This records that you state this milestone is complete, with your name and the '
       + 'time against it. Add a note if it helps whoever reads this later.', '')
     if (note === null) return
     setBusy(true)
@@ -121,7 +121,7 @@ export default function MilestonePanel({ project, sections, milestones, canEdit,
   const remove = async (m) => {
     if (m.status === 'met') {
       alert('A met milestone cannot be deleted. It records that someone stated this '
-        + 'gate was complete, with their name and the time on it.')
+        + 'milestone was complete, with their name and the time on it.')
       return
     }
     if (!confirm(`Delete the milestone "${m.name}"?`)) return
@@ -170,7 +170,7 @@ export default function MilestonePanel({ project, sections, milestones, canEdit,
       <label style={{ ...chk, marginTop: 10 }}>
         <input type="checkbox" checked={f.locked}
                onChange={e => setF({ ...f, locked: e.target.checked })} />
-        <span>This gate cannot be rescheduled</span>
+        <span>This milestone cannot be rescheduled</span>
       </label>
       <div style={{ fontSize: 11, color: C.ink3, marginLeft: 22, marginTop: -2 }}>
         For statutory dates. Milestones never move automatically; this stops one
@@ -206,8 +206,8 @@ export default function MilestonePanel({ project, sections, milestones, canEdit,
 
       {milestones.length === 0 && !adding &&
         <div style={{ fontSize: 12, color: C.ink3, padding: '6px 0' }}>
-          No gates yet. A milestone is a dated point where someone states a stage is
-          finished — the project cannot be signed off until every one is met.
+          No milestones yet. A milestone is a dated point where someone states a stage
+          is finished — the project cannot be signed off until every one is met.
         </div>}
 
       {milestones.map(m => {

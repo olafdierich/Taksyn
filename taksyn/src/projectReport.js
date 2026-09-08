@@ -173,7 +173,18 @@ const RATE_FLOOR = 5
 
 export async function openProjectReport(o) {
   const { projectId, orgName = '', periodFrom = null, periodTo = null,
-          user = null, saved = null } = o
+          user = null, saved = null, replayHtml = null } = o
+
+  // A filed report reopens from what was stored, not from today's data.
+  // Nothing is recomputed here, so nothing can differ from the document
+  // that was filed.
+  if (replayHtml) {
+    const rw = window.open('', '_blank')
+    if (!rw) throw new Error('The report window was blocked. Allow pop-ups for this site and try again.')
+    rw.document.write(replayHtml)
+    rw.document.close()
+    return null
+  }
 
   const to = periodTo || new Date().toISOString().slice(0, 10)
   const from = periodFrom || null
@@ -240,13 +251,22 @@ export async function openProjectReport(o) {
   const teamTally = {}
   T.forEach(t => {
     const k = t.team_name || 'Unassigned'
-    const e = teamTally[k] || (teamTally[k] = { total: 0, done: 0, late: 0, open: 0, id: t.team_id })
+    const e = teamTally[k] || (teamTally[k] =
+      { total: 0, done: 0, late: 0, lateDays: 0, worst: 0, overdue: 0, open: 0, id: t.team_id })
     e.total++
     if (isDone(t)) {
       e.done++
-      if (t.completed_at && D(t.due_date) &&
-          new Date(t.completed_at) > new Date(D(t.due_date).getTime() + 864e5)) e.late++
-    } else e.open++
+      // A day's grace: finishing on the due date is on time, and a
+      // timestamp a few hours past midnight is not a missed deadline.
+      if (t.completed_at && D(t.due_date)) {
+        const over = Math.floor(
+          (new Date(t.completed_at) - new Date(D(t.due_date).getTime() + 864e5)) / 864e5)
+        if (over > 0) { e.late++; e.lateDays += over; e.worst = Math.max(e.worst, over) }
+      }
+    } else {
+      e.open++
+      if (D(t.due_date) && D(t.due_date) < today) e.overdue++
+    }
   })
   const teams = Object.entries(teamTally).sort((a, b) => b[1].total - a[1].total)
 
@@ -302,7 +322,7 @@ export async function openProjectReport(o) {
         <div class="stat-l">Tasks approved</div></div>
       <div class="stat ${statClass(false, M.filter(m => m.status === 'open').length)}">
         <div class="stat-n">${snapshot.milestones_met}/${M.length}</div>
-        <div class="stat-l">Gates met</div></div>
+        <div class="stat-l">Milestones met</div></div>
       <div class="stat ${statClass(overdue.length, false)}">
         <div class="stat-n">${overdue.length}</div>
         <div class="stat-l">Overdue</div></div>
@@ -332,8 +352,8 @@ export async function openProjectReport(o) {
   const openGates = M.filter(m => m.status === 'open').length
   if (M.length) {
     lines.push(openGates
-      ? `${openGates} of ${M.length} gate${M.length > 1 ? 's remain' : ' remains'} open, so the project cannot yet be signed off.`
-      : 'Every gate has been met.')
+      ? `${openGates} of ${M.length} milestone${M.length > 1 ? 's remain' : ' remains'} open, so the project cannot yet be signed off.`
+      : 'Every milestone has been met.')
   }
   P(`<p class="summary">${esc(lines.join(' '))}</p>`)
 
@@ -460,7 +480,7 @@ export async function openProjectReport(o) {
   if (!M.length) {
     P('<p class="empty">No milestones have been set for this project.</p>')
   } else {
-    P('<table><thead><tr><th>Gate</th><th>Date</th><th class="n">Tasks</th><th>State</th></tr></thead><tbody>')
+    P('<table><thead><tr><th>Milestone</th><th>Date</th><th class="n">Tasks</th><th>State</th></tr></thead><tbody>')
     M.forEach(m => {
       const state = m.status === 'met'
         ? `<span class="pill p-ok">Met</span>${m.met_at
@@ -515,17 +535,31 @@ export async function openProjectReport(o) {
      mean is the writer's conclusion below.</p>`)
 
   P('<h4>By team</h4>')
-  P('<table><thead><tr><th>Team</th><th class="n">Total</th><th class="n">Approved</th><th class="n">Open</th><th class="n">Finished on time</th></tr></thead><tbody>')
+  P('<table><thead><tr><th>Team</th><th class="n">Total</th><th class="n">Approved</th>'
+    + '<th class="n">Open</th><th class="n">Overdue now</th><th class="n">On time</th>'
+    + '<th class="n">Late</th><th class="n">Average days late</th></tr></thead><tbody>')
   teams.forEach(([name, e]) => {
     const rate = e.done >= RATE_FLOOR ? `${pct(e.done - e.late, e.done)}%`
       : e.done ? `${e.done - e.late} of ${e.done}` : '—'
+    const avg = e.late ? Math.round(e.lateDays / e.late) : 0
     P(`<tr>
         <td><span style="display:inline-block;width:9px;height:9px;border-radius:2px;
           background:${teamColour(e.id).solid};margin-right:7px"></span>${esc(name)}</td>
-        <td class="n mono">${e.total}</td><td class="n mono">${e.done}</td>
-        <td class="n mono">${e.open}</td><td class="n mono">${rate}</td></tr>`)
+        <td class="n mono">${e.total}</td>
+        <td class="n mono">${e.done}</td>
+        <td class="n mono">${e.open}</td>
+        <td class="n mono" ${e.overdue ? 'style="color:#A32D2D"' : ''}>${e.overdue || '—'}</td>
+        <td class="n mono">${rate}</td>
+        <td class="n mono" ${e.late ? 'style="color:#854F0B"' : ''}>${e.late || '—'}</td>
+        <td class="n mono" ${e.late ? 'style="color:#854F0B"' : ''}>${
+          e.late ? avg + (e.worst > avg ? ` (worst ${e.worst})` : '') : '—'}</td>
+      </tr>`)
   })
   P('</tbody></table>')
+  P(`<p class="wide note">"Late" counts work that was finished after its due date;
+     the average is over those tasks only, so one badly overdue item does not hide
+     behind a column of on-time ones. "Overdue now" is open work already past its
+     date — it has not been finished late yet, but it will be.</p>`)
   if (teams.some(([, e]) => e.done > 0 && e.done < RATE_FLOOR)) {
     P(`<p class="wide note">Where a team has completed fewer than ${RATE_FLOOR} tasks,
        the count is shown instead of a rate. A percentage over three tasks reads as
@@ -556,13 +590,13 @@ export async function openProjectReport(o) {
       new Date(saved.created_at || Date.now()).toLocaleDateString('en-GB')}.</p>`)
   } else {
     P(`<div class="blank">
-        <b style="font-family:'Bricolage Grotesque',system-ui,sans-serif;color:#4A5568">
-          To be completed by the project owner</b>
+        <b style="font-family:'Bricolage Grotesque',system-ui,sans-serif;color:#A32D2D">
+          &#9888; Not yet written — required before this report is filed</b>
         <p style="margin:8px 0 0;color:#8A94A6;max-width:none">
           The figures above are counted from the record. The assessment — what went
           well, what did not, and how to structure what comes next — is a judgement,
           and belongs to a person with their name against it. Write it in the report
-          panel before filing.
+          panel on the project page.
         </p>
       </div>`)
   }
@@ -582,13 +616,17 @@ export async function openProjectReport(o) {
      </div>`)
   P('</div>')
 
-  const w = window.open('', '_blank')
-  if (!w) throw new Error('The report window was blocked. Allow pop-ups for this site and try again.')
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  const doc = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>${esc(project.ref)} — ${esc(project.name)}</title>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
-    <style>${CSS}</style></head><body>${H.join('')}</body></html>`)
+    <style>${CSS}</style></head><body>${H.join('')}</body></html>`
+
+  const w = window.open('', '_blank')
+  if (!w) throw new Error('The report window was blocked. Allow pop-ups for this site and try again.')
+  w.document.write(doc)
   w.document.close()
 
-  return snapshot
+  // The caller stores html alongside snapshot, so the filed figures are
+  // exactly the ones the document showed rather than a second count.
+  return { snapshot, html: doc }
 }

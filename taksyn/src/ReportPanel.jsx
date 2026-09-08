@@ -44,12 +44,40 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
   const [from, setFrom] = useState('')
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10))
   const [w, setW] = useState({ conclusion: '', strengths: '', weaknesses: '', next_steps: '' })
+  const [draftAt, setDraftAt] = useState(null)
+  const [dirty, setDirty] = useState(false)
+
+  const setField = (k, v) => { setW(p => ({ ...p, [k]: v })); setDirty(true) }
+  const anyWritten = !!(w.conclusion.trim() || w.strengths.trim()
+                     || w.weaknesses.trim() || w.next_steps.trim())
+
+  // Reopening the panel finds your own words where you left them.
+  useEffect(() => {
+    if (!open) return
+    let dead = false
+    supabase.from('project_report_drafts')
+      .select('conclusion,strengths,weaknesses,next_steps,updated_at')
+      .eq('project_id', project.id).maybeSingle()
+      .then(({ data }) => {
+        if (dead || !data) return
+        setW({
+          conclusion: data.conclusion || '', strengths: data.strengths || '',
+          weaknesses: data.weaknesses || '', next_steps: data.next_steps || ''
+        })
+        setDraftAt(data.updated_at)
+        setDirty(false)
+      })
+    return () => { dead = true }
+  }, [open, project.id])
 
   useEffect(() => {
     if (!open) return
     let dead = false
+    // rendered_bytes rather than rendered_html: the list only needs to
+    // know whether a stored copy exists. Pulling ten documents to draw
+    // ten rows would be several hundred kilobytes for nothing.
     supabase.from('project_reports')
-      .select('id,period_label,period_from,period_to,conclusion,strengths,weaknesses,next_steps,created_at,created_by_name')
+      .select('id,period_label,period_from,period_to,conclusion,strengths,weaknesses,next_steps,created_at,created_by_name,rendered_bytes')
       .eq('project_id', project.id).order('created_at', { ascending: false }).limit(10)
       .then(({ data }) => { if (!dead) setPast(data || []) })
     return () => { dead = true }
@@ -74,6 +102,30 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
     return f ? `${fmtDate(f)} to ${fmtDate(t)}` : `Up to ${fmtDate(t)}`
   }
 
+  const saveDraft = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const uid = (await supabase.auth.getSession()).data?.session?.user?.id
+      if (!uid) throw new Error('Not signed in.')
+      const { f, t } = resolved()
+      // One draft per person per project, so onConflict is the pair.
+      const { error } = await supabase.from('project_report_drafts').upsert({
+        org: project.org, project_id: project.id, author_id: uid,
+        period_from: f, period_to: t, period_label: label(),
+        conclusion: w.conclusion.trim() || null,
+        strengths: w.strengths.trim() || null,
+        weaknesses: w.weaknesses.trim() || null,
+        next_steps: w.next_steps.trim() || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'project_id,author_id' }).select()
+      if (error) throw error
+      setDraftAt(new Date().toISOString())
+      setDirty(false)
+    } catch (e) { alert(e.message || String(e)) }
+    finally { setBusy(false) }
+  }
+
   const preview = async () => {
     if (busy) return
     setBusy(true)
@@ -84,7 +136,7 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
         periodFrom: f, periodTo: t,
         // Unsaved text still renders, so the writer can see how it reads
         // before committing to it.
-        saved: (w.conclusion || w.strengths || w.weaknesses || w.next_steps)
+        saved: anyWritten
           ? { ...w, created_by_name: user?.name, created_at: new Date().toISOString() }
           : null
       })
@@ -109,11 +161,13 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
       // Render first: the snapshot comes back from the renderer, so the
       // stored figures are exactly the ones the document showed rather
       // than a second count that could differ.
-      const snapshot = await openProjectReport({
+      const rendered = await openProjectReport({
         projectId: project.id, orgName, user,
         periodFrom: f, periodTo: t,
         saved: { ...w, created_by_name: user?.name, created_at: new Date().toISOString() }
       })
+      const snapshot = rendered?.snapshot || {}
+      const html = rendered?.html || null
 
       const { data, error } = await supabase.from('project_reports').insert({
         org: project.org,
@@ -126,6 +180,10 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
         weaknesses: w.weaknesses.trim() || null,
         next_steps: w.next_steps.trim() || null,
         snapshot,
+        // The document itself, so this report reproduces exactly rather
+        // than being rebuilt from data that will have moved on.
+        rendered_html: html,
+        rendered_bytes: html ? html.length : null,
         created_by_id: (await supabase.auth.getSession()).data?.session?.user?.id,
         created_by_name: user?.name || null
       }).select()
@@ -133,7 +191,13 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
       if (!data || !data.length) {
         throw new Error('The report was rendered but not saved. This is usually a permissions problem.')
       }
+      const uid = (await supabase.auth.getSession()).data?.session?.user?.id
+      if (uid) {
+        await supabase.from('project_report_drafts').delete()
+          .eq('project_id', project.id).eq('author_id', uid)
+      }
       setW({ conclusion: '', strengths: '', weaknesses: '', next_steps: '' })
+      setDraftAt(null); setDirty(false)
       setPast(p => [data[0], ...p])
       if (onChanged) onChanged()
     } catch (e) { alert(e.message || String(e)) }
@@ -143,10 +207,44 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
   const reopen = async (r) => {
     setBusy(true)
     try {
+      if (r.rendered_bytes) {
+        // Fetched only when opening: the document, exactly as filed.
+        const { data, error } = await supabase.from('project_reports')
+          .select('rendered_html').eq('id', r.id).single()
+        if (error) throw error
+        if (data?.rendered_html) {
+          await openProjectReport({ projectId: project.id, replayHtml: data.rendered_html })
+          return
+        }
+      }
+      // Filed before block 13. Rebuilt from today's data, which will not
+      // match what was filed — said plainly rather than silently.
+      if (!confirm('This report was filed before documents were kept, so there is no '
+        + 'stored copy.\n\nIt can be rebuilt, but from TODAY\'s figures — the '
+        + 'conclusion will be the one that was written, the numbers will not be. '
+        + 'Continue?')) return
       await openProjectReport({
         projectId: project.id, orgName, user,
         periodFrom: r.period_from, periodTo: r.period_to, saved: r
       })
+    } catch (e) { alert(e.message || String(e)) }
+    finally { setBusy(false) }
+  }
+
+  const discardDraft = async () => {
+    if (busy) return
+    if (!confirm('Discard this draft?\n\nThe text is deleted. Filed reports are '
+      + 'not affected.')) return
+    setBusy(true)
+    try {
+      const uid = (await supabase.auth.getSession()).data?.session?.user?.id
+      if (uid) {
+        const { error } = await supabase.from('project_report_drafts').delete()
+          .eq('project_id', project.id).eq('author_id', uid)
+        if (error) throw error
+      }
+      setW({ conclusion: '', strengths: '', weaknesses: '', next_steps: '' })
+      setDraftAt(null); setDirty(false)
     } catch (e) { alert(e.message || String(e)) }
     finally { setBusy(false) }
   }
@@ -192,40 +290,69 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
           <div style={{ fontSize: 11, color: C.ink3, marginTop: 6 }}>{label()}</div>
 
           {canEdit && <>
-            <label style={lbl}>Assessment</label>
+            {!anyWritten &&
+              <div style={{ background: '#FEF3C7', border: '1px solid #FBD89B',
+                     borderRadius: 10, padding: '11px 13px', margin: '14px 0 4px',
+                     display: 'flex', gap: 10 }}>
+                <span style={{ fontSize: 15, lineHeight: 1.2 }}>&#9888;</span>
+                <span style={{ fontSize: 12, color: '#854F0B', lineHeight: 1.5 }}>
+                  <b>Your assessment is needed.</b> The figures are counted from the
+                  record, but what they mean is a judgement — and it is filed with your
+                  name against it. A report without one says nothing.
+                </span>
+              </div>}
+
+            <label style={lbl}>Assessment *</label>
             <textarea style={{ ...inp, minHeight: 74 }} value={w.conclusion}
               placeholder="Where does this project stand, and what does that mean?"
-              onChange={e => setW({ ...w, conclusion: e.target.value })} />
+              onChange={e => setField('conclusion', e.target.value)} />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div>
                 <label style={lbl}>What went well</label>
                 <textarea style={{ ...inp, minHeight: 62 }} value={w.strengths}
-                  onChange={e => setW({ ...w, strengths: e.target.value })} />
+                  onChange={e => setField('strengths', e.target.value)} />
               </div>
               <div>
                 <label style={lbl}>What did not</label>
                 <textarea style={{ ...inp, minHeight: 62 }} value={w.weaknesses}
-                  onChange={e => setW({ ...w, weaknesses: e.target.value })} />
+                  onChange={e => setField('weaknesses', e.target.value)} />
               </div>
             </div>
 
             <label style={lbl}>How to structure what comes next</label>
             <textarea style={{ ...inp, minHeight: 62 }} value={w.next_steps}
-              onChange={e => setW({ ...w, next_steps: e.target.value })} />
+              onChange={e => setField('next_steps', e.target.value)} />
           </>}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap',
+                 alignItems: 'center' }}>
             <button style={btnGhost} disabled={busy} onClick={preview}>
               {busy ? 'Working…' : 'Preview'}
             </button>
             {canEdit &&
+              <button style={{ ...btnGhost,
+                       borderColor: dirty ? C.blue : C.line2,
+                       color: dirty ? C.blue : C.ink2 }}
+                      disabled={busy || !anyWritten} onClick={saveDraft}>
+                {dirty ? 'Save draft *' : 'Save draft'}
+              </button>}
+            {canEdit &&
               <button style={{ ...btn, opacity: busy ? .5 : 1 }} disabled={busy}
                       onClick={saveAndOpen}>File this report</button>}
+            {canEdit && (draftAt || anyWritten) &&
+              <button style={{ ...btnGhost, color: C.red, borderColor: '#FCA5A5' }}
+                      disabled={busy} onClick={discardDraft}>Discard draft</button>}
+            {draftAt && !dirty &&
+              <span style={{ fontSize: 11, color: C.ink3 }}>
+                Draft saved {new Date(draftAt).toLocaleString('en-GB',
+                  { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </span>}
           </div>
           <div style={{ fontSize: 11, color: C.ink3, marginTop: 6 }}>
-            Preview writes nothing. Filing keeps the report permanently — it cannot
-            be edited or removed afterwards.
+            Preview writes nothing. A draft is private to you and can be changed as
+            often as you like. Filing keeps the report permanently — it cannot be
+            edited or removed afterwards, and a correction is a new report.
           </div>
 
           {past.length > 0 &&
@@ -239,9 +366,13 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
                     {r.period_label}
                     <span style={{ color: C.ink3 }}> · {r.created_by_name || '—'}
                       {' · '}{new Date(r.created_at).toLocaleDateString('en-GB')}</span>
+                    {!r.rendered_bytes &&
+                      <span style={{ color: '#854F0B', fontSize: 11 }}> · no stored copy</span>}
                   </span>
                   <button style={btnGhost} disabled={busy}
-                          onClick={() => reopen(r)}>Open</button>
+                          onClick={() => reopen(r)}>
+                    {r.rendered_bytes ? 'Open' : 'Rebuild'}
+                  </button>
                 </div>
               ))}
             </div>}

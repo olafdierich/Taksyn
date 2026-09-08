@@ -244,7 +244,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
         </div>
         <Bar pct={c.n ? Math.round(c.d / c.n * 100) : 0} />
         {risk > 0
-          ? <Note tone="bad">{risk} milestone{risk > 1 ? 's' : ''} at risk — work has been pushed past a gate that did not move.</Note>
+          ? <Note tone="bad">{risk} milestone{risk > 1 ? 's' : ''} at risk — work has been pushed past a milestone that did not move.</Note>
           : blk > 0
           ? <Note tone="warn">{blk} open blocker{blk > 1 ? 's' : ''} holding a milestone.</Note>
           : null}
