@@ -2010,7 +2010,7 @@ function TermsOfUseView({ onBack, isModal }) {
     <div style={{background:'var(--card)',borderRadius:isModal?16:0,maxWidth:isModal?660:'100%',width:'100%',padding:isModal?'32px 40px':'24px 20px',boxSizing:'border-box',minHeight:isModal?'auto':'100vh',fontFamily:'"DM Sans",Arial,sans-serif',margin:isModal?'0 auto':'0'}}>
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:24}}>
         <button onClick={onBack} style={{background:'none',border:'1px solid #ddd',borderRadius:8,padding:'6px 16px',cursor:'pointer',fontSize:13,color:'#555',flexShrink:0}}>← Back</button>
-        <img src="/logo.jpeg" alt="Taksyn" style={{height:30,objectFit:'contain'}}/>
+        <img src="/logo.png" alt="Taksyn" style={{height:30,objectFit:'contain'}}/>
       </div>
       <div style={{marginBottom:4}}>
         <div style={{fontSize:22,fontWeight:800,color:'#1A2033',marginBottom:4}}>Terms of Use</div>
@@ -2597,7 +2597,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       <div className="auth-bg">
         <style>{CSS}</style>
         <div className="auth-card" style={{maxWidth:480,textAlign:'center'}}>
-          <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:44,objectFit:'contain'}} /></div>
+          <div className="auth-logo"><img src="/logo.png" alt="Taksyn" style={{height:44,objectFit:'contain'}} /></div>
           <div style={{marginBottom:18}}>
             <div style={{fontSize:13,color:'var(--t2)',marginBottom:4}}>You've been invited to join</div>
             <div style={{fontSize:22,fontWeight:800,color:'var(--text)',lineHeight:1.2}}>{orgName||<span style={{color:'var(--t3)',fontStyle:'italic',fontWeight:400,fontSize:16}}>your organisation</span>}</div>
@@ -2623,7 +2623,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
           </div>
         )}
         <div className="auth-card" style={{maxWidth:480}}>
-          <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:44,objectFit:'contain'}} /></div>
+          <div className="auth-logo"><img src="/logo.png" alt="Taksyn" style={{height:44,objectFit:'contain'}} /></div>
           <div style={{textAlign:'center',marginBottom:20}}>
             <div style={{fontSize:13,color:'var(--t2)',marginBottom:4}}>You've been invited to join</div>
             <div style={{fontSize:22,fontWeight:800,color:'var(--text)',lineHeight:1.2}}>{inviteParams.orgName||<span style={{color:'var(--t3)',fontStyle:'italic',fontWeight:400,fontSize:16}}>Loading…</span>}</div>
@@ -2716,7 +2716,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       <div className="auth-bg">
         <style>{CSS}</style>
         <div className="auth-card">
-          <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
+          <div className="auth-logo"><img src="/logo.png" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
           <div className="auth-title">Set Your Password</div>
           <div className="auth-sub">Welcome to Taksyn! Please set a password to activate your account.</div>
           {error&&<div className="auth-error">{error}</div>}
@@ -2771,7 +2771,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
       <div className="auth-bg">
         <style>{CSS}</style>
         <div className="auth-card">
-          <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
+          <div className="auth-logo"><img src="/logo.png" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
           <div className="auth-title">Select Organisation</div>
           <div className="auth-sub">You are a member of multiple organisations. Choose which one to sign in to.</div>
           <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16,maxHeight:'50vh',overflowY:'auto',paddingRight:4}}>
@@ -2807,7 +2807,7 @@ function AuthView({ onAuth, deactivatedMsg, onClearDeactivated }) {
         </div>
       )}
       <div className="auth-card">
-        <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
+        <div className="auth-logo"><img src="/logo.png" alt="Taksyn" style={{height:48,objectFit:'contain'}} /></div>
         <div className="auth-title">{mode==='login'?'Sign in to your account':mode==='register'?'Create your account':'Reset your password'}</div>
         <div className="auth-sub">Task compliance & accountability platform</div>
         {inviteSignInPrompt&&mode==='login'&&(
@@ -9095,7 +9095,7 @@ function PasswordSetupView({ onDone }) {
     <div className="auth-bg">
       <style>{CSS}</style>
       <div className="auth-card">
-        <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}}/></div>
+        <div className="auth-logo"><img src="/logo.png" alt="Taksyn" style={{height:48,objectFit:'contain'}}/></div>
         <div className="auth-title">Set Your Password</div>
         <div className="auth-sub">Welcome to Taksyn! Please set a password to activate your account.</div>
         {error&&<div className="auth-error">{error}</div>}
@@ -9146,7 +9146,7 @@ function PasswordResetView({ onDone }) {
     <div className="auth-bg">
       <style>{CSS}</style>
       <div className="auth-card">
-        <div className="auth-logo"><img src="/logo.jpeg" alt="Taksyn" style={{height:48,objectFit:'contain'}}/></div>
+        <div className="auth-logo"><img src="/logo.png" alt="Taksyn" style={{height:48,objectFit:'contain'}}/></div>
         <div className="auth-title">Reset Your Password</div>
         <div className="auth-sub">{success ? 'Password updated successfully. Redirecting to sign in…' : 'Enter your new password below.'}</div>
         {!success && <>
@@ -21747,7 +21747,7 @@ export default function App() {
 
         <div className="topbar">
           <button className="tb-menu-btn" onClick={()=>{ if(window.innerWidth<=768) setSidebarOpen(!sidebarOpen); else setSidebarCollapsed(!sidebarCollapsed) }}><IC n="menu" s={18}/></button>
-          <img src="/logo.jpeg" alt="Taksyn" className="tb-logo" onClick={()=>navigate('dashboard')}/>
+          <img src="/logo.png" alt="Taksyn" className="tb-logo" onClick={()=>navigate('dashboard')}/>
           <div className="tb-sep"/><span className="tb-org">{user.role==='super_admin'?'Platform Admin':user.org||'My Organisation'}</span>
           <div className="tb-space"/>
           {user.role!=='super_admin'&&<div className="tb-search"><IC n="search" s={12}/><input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/></div>}
