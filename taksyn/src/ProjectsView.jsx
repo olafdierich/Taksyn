@@ -830,7 +830,8 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
         <div style={{ minWidth: 720 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '150px minmax(0,1fr)', gap: 8,
                borderBottom: `1px solid ${C.line}`, paddingBottom: 5 }}>
-          <span />
+          <span style={{ position: 'sticky', left: 0, zIndex: 3,
+                   background: 'var(--card)' }} />
           <span style={{ display: 'flex', justifyContent: 'space-between',
                    fontSize: 11, color: C.ink3 }}>
             <span>{fmt(lo)}</span><span>{fmt(hi)}</span>
@@ -851,7 +852,9 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                 {/* Width of the name column, so nothing in the first
                     column runs past where the dates start. Wraps here
                     rather than stretching across the scrolling canvas. */}
-                <div style={{ width: 150, marginBottom: 4 }}>
+                <div style={{ width: 150, marginBottom: 4,
+                       position: 'sticky', left: 0, zIndex: 3,
+                       background: 'var(--card)' }}>
                   {/* One fact per line. As a single run with dot separators
                       this wrapped wherever the 150px ran out rather than
                       where the meaning broke — "after" stranded at the end
@@ -883,7 +886,10 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                          alignItems: 'center', gap: 8, height: 26 }}>
                     <span style={{ fontSize: 11, color: C.ink3, overflow: 'hidden',
                              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                             display: 'flex', alignItems: 'center', gap: 6 }}>
+                             display: 'flex', alignItems: 'center', gap: 6,
+                             position: 'sticky', left: 0, zIndex: 3,
+                             background: 'var(--card)', paddingRight: 8,
+                             boxShadow: `1px 0 0 ${C.line}` }}>
                       <i style={{ width: 9, height: 9, borderRadius: 4, flex: 'none',
                              background: teamColour(bar.key).solid }} />
                       {bar.name}
