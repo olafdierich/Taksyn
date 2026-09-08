@@ -819,7 +819,16 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
         Timeline
       </div>
       <div style={card}>
-        <div style={{ display: 'grid', gridTemplateColumns: '116px minmax(0,1fr)', gap: 8,
+        {/* Horizontal scroll below 720px. The chart keeps its geometry and
+            the viewport moves, rather than the bars compressing into a
+            strip. Everything inside scrolls together — splitting the names
+            into a pinned pane risks a bar under the wrong label. */}
+        <div style={{ overflowX: 'auto', overflowY: 'hidden',
+               WebkitOverflowScrolling: 'touch',
+               overscrollBehaviorX: 'contain',
+               margin: '0 -14px', padding: '0 14px' }}>
+        <div style={{ minWidth: 720 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '150px minmax(0,1fr)', gap: 8,
                borderBottom: `1px solid ${C.line}`, paddingBottom: 5 }}>
           <span />
           <span style={{ display: 'flex', justifyContent: 'space-between',
@@ -829,7 +838,7 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
         </div>
         <div style={{ position: 'relative', paddingTop: 6 }}>
           {/* Sits inside the track, not across the name column. */}
-          <div style={{ position: 'absolute', left: 'calc(116px + 8px)', right: 0,
+          <div style={{ position: 'absolute', left: 'calc(150px + 8px)', right: 0,
                  top: 0, bottom: 6, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', left: `${pos(today)}%`, top: 0, bottom: 0,
                    width: 1, background: C.ink3 }} />
@@ -839,28 +848,38 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
             const openAtt = attachments.filter(t => !isDone(t)).length
             return (
               <div key={pk.id} style={{ padding: '10px 0 4px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: 13 }}>
-                    {pk.name}
-                    {preds.length > 0 &&
-                      <span style={{ fontSize: 11, color: C.ink3 }}> · after {preds.join(' and ')}</span>}
-                    {slip > 0 &&
-                      <span style={{ fontSize: 11, color: C.amberDeep }}> · pushed {slip} days</span>}
-                    {outOfOrder && outOfOrder.length > 0 &&
-                      <span style={{ fontSize: 11, color: C.red }}>
-                        {' '}· listed above {outOfOrder.join(' and ')}, which it waits on
-                      </span>}
-                  </span>
-                  <span style={{ fontSize: 12, color: C.ink2, whiteSpace: 'nowrap' }}>
-                    {all.filter(isDone).length}/{all.length}
-                    {openAtt > 0 && <span style={{ color: C.amberDeep }}> ⚑{openAtt}</span>}
-                  </span>
+                {/* Width of the name column, so nothing in the first
+                    column runs past where the dates start. Wraps here
+                    rather than stretching across the scrolling canvas. */}
+                <div style={{ width: 150, marginBottom: 4 }}>
+                  {/* One fact per line. As a single run with dot separators
+                      this wrapped wherever the 150px ran out rather than
+                      where the meaning broke — "after" stranded at the end
+                      of a line, "days" orphaned on its own. A line break
+                      says what the dot said, and reads better narrow. */}
+                  <div style={{ fontSize: 13, lineHeight: 1.35 }}>{pk.name}</div>
+                  {preds.length > 0 &&
+                    <div style={{ fontSize: 11, color: C.ink3, lineHeight: 1.35 }}>
+                      after {preds.join(' and ')}
+                    </div>}
+                  {slip > 0 &&
+                    <div style={{ fontSize: 11, color: C.amberDeep, lineHeight: 1.35 }}>
+                      pushed {slip} days
+                    </div>}
+                  {outOfOrder && outOfOrder.length > 0 &&
+                    <div style={{ fontSize: 11, color: C.red, lineHeight: 1.35 }}>
+                      listed above {outOfOrder.join(' and ')}, which it waits on
+                    </div>}
+                  <div style={{ fontSize: 12, color: C.ink2, marginTop: 2 }}>
+                    {all.filter(isDone).length}/{all.length} done
+                    {openAtt > 0 && <span style={{ color: C.amberDeep }}> · ⚑{openAtt}</span>}
+                  </div>
                 </div>
                 {/* Fixed name column, then the track. Nothing floats, so
                     nothing can collide. */}
                 {bars.map(bar => (
                   <div key={bar.key} style={{ display: 'grid',
-                         gridTemplateColumns: '116px minmax(0,1fr)',
+                         gridTemplateColumns: '150px minmax(0,1fr)',
                          alignItems: 'center', gap: 8, height: 26 }}>
                     <span style={{ fontSize: 11, color: C.ink3, overflow: 'hidden',
                              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -881,6 +900,13 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
               </div>
             )
           })}
+        </div>
+        </div>
+        </div>
+        {/* Only where there is something to scroll; above 760px the
+            minimum never engages and this line would be untrue. */}
+        <div style={{ fontSize: 11, color: C.ink3, marginTop: 8 }} className="tl-swipe-hint">
+          Swipe the chart sideways to see the whole period
         </div>
       </div>
 

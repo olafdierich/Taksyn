@@ -1791,6 +1791,12 @@ html.dark .guide-section,html.dark .guide-section-hdr,html.dark .guide-chapter{b
 html.dark .celebration-card{background:#1A2035}
 html.dark .auth-bg{background:linear-gradient(135deg,#0D1117,#161B26)}
 html.dark .auth-card{background:#1A2035}
+.tl-swipe-hint{display:none}
+@media(max-width:760px){.tl-swipe-hint{display:block}}
+@media(max-width:640px){
+  :root{--border2:rgba(0,0,0,.09)}
+  html.dark{--border2:rgba(255,255,255,.08)}
+}
 html.dark .auth-input{background:#1E2330;border-color:rgba(255,255,255,.07);color:#E2E8F0}
 `
 
