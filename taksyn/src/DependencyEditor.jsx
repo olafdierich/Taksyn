@@ -35,9 +35,9 @@ import { supabase } from './supabase.js'
 
 const C = {
   green: '#10B981', amber: '#F59E0B', red: '#EF4444', blue: '#3B82F6',
-  line: '#E2E8F0', line2: '#CBD5E1',
-  ink: '#1A2033', ink2: '#6B7280', ink3: '#9CA3AF',
-  card: '#FFFFFF', soft: '#F4F6F9'
+  line: 'var(--border)', line2: 'var(--border2)',
+  ink: 'var(--text)', ink2: 'var(--t2)', ink3: 'var(--t3)',
+  card: 'var(--card)', soft: 'var(--s3)'
 }
 
 export default function DependencyEditor({ project, stage, sections, links, onChanged, onClose }) {
@@ -228,8 +228,8 @@ export default function DependencyEditor({ project, stage, sections, links, onCh
 }
 
 const inp = { padding: '6px 8px', border: `1px solid ${C.line2}`, borderRadius: 7,
-  fontSize: 12, fontFamily: 'inherit', background: '#fff' }
-const btn = { background: C.ink, color: '#fff', border: 0, borderRadius: 8,
+  fontSize: 12, fontFamily: 'inherit', background: 'var(--s4)' }
+const btn = { background: 'var(--brand)', color: '#fff', border: 0, borderRadius: 8,
   padding: '7px 13px', fontSize: 12, cursor: 'pointer' }
 const btnGhost = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
   borderRadius: 8, padding: '4px 10px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }

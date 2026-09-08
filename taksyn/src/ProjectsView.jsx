@@ -62,9 +62,9 @@ const C = {
   brand: '#00A87E',   // the Taksyn logo green
   navy:  '#1A2033',   // the Taksyn dark
   amberDeep: '#B45309', // amber text on light backgrounds (13 uses)
-  line:  '#E2E8F0', line2: '#CBD5E1',
-  ink:   '#1A2033', ink2: '#6B7280', ink3: '#9CA3AF',
-  card:  '#FFFFFF', soft: '#F4F6F9'
+  line:  'var(--border)', line2: 'var(--border2)',
+  ink:   'var(--text)', ink2: 'var(--t2)', ink3: 'var(--t3)',
+  card:  'var(--card)', soft: 'var(--s3)'
 }
 const TONE = { ok: C.green, go: C.blue, wait: '#8B5CF6', bad: '#DC2626', idle: C.ink2 }
 
@@ -93,7 +93,7 @@ function teamColour(id) {
   return TEAM_COLOURS[h % TEAM_COLOURS.length]
 }
 
-const card = { background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, marginBottom: 10 }
+const card = { background: C.card, border: `1px solid ${C.line2}`, borderRadius: 12, padding: 14, marginBottom: 10 }
 
 export default function ProjectsView({ user, resolveOrgId }) {
   const [orgId, setOrgId] = useState('')
@@ -631,7 +631,7 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                   onClick={() => setMenuFor(open ? null : pk.id)}>⋯</button>
           {open &&
             <span role="menu" style={{ position: 'absolute', right: 0, top: '110%', zIndex: 40,
-                     background: '#fff', border: `1px solid ${C.line}`, borderRadius: 10,
+                     background: 'var(--s4)', border: `1px solid ${C.line}`, borderRadius: 10,
                      boxShadow: '0 6px 20px rgba(26,32,51,.12)', padding: '4px 0',
                      minWidth: 168 }}>
               {item('Move up', () => moveStage(i, -1), { disabled: i === 0 })}
@@ -793,7 +793,7 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                  onChange={e => setStageName(e.target.value)}
                  onKeyDown={e => { if (e.key === 'Enter') addStage()
                                    if (e.key === 'Escape') setAddingStage(false) }} />
-          <button style={{ background: C.ink, color: '#fff', border: 0, borderRadius: 8,
+          <button style={{ background: 'var(--brand)', color: '#fff', border: 0, borderRadius: 8,
                    padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}
                   disabled={busy || !stageName.trim()} onClick={addStage}>Add</button>
           <button style={miniGhost} onClick={() => setAddingStage(false)}>Cancel</button>
@@ -1074,4 +1074,4 @@ const inp = { width: '100%', padding: '9px 10px', border: `1px solid ${C.line2}`
   fontSize: 14, fontFamily: 'inherit' }
 const modalWrap = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', display: 'flex',
   alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }
-const modalBox = { background: '#fff', borderRadius: 14, padding: 18, width: '100%', maxWidth: 460 }
+const modalBox = { background: 'var(--s4)', borderRadius: 14, padding: 18, width: '100%', maxWidth: 460 }

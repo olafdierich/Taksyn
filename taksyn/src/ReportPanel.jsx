@@ -27,9 +27,9 @@ import { openProjectReport } from './projectReport.js'
 
 const C = {
   green: '#10B981', amber: '#F59E0B', red: '#EF4444', blue: '#3B82F6',
-  line: '#E2E8F0', line2: '#CBD5E1',
-  ink: '#1A2033', ink2: '#6B7280', ink3: '#9CA3AF',
-  card: '#FFFFFF', soft: '#F4F6F9'
+  line: 'var(--border)', line2: 'var(--border2)',
+  ink: 'var(--text)', ink2: 'var(--t2)', ink3: 'var(--t3)',
+  card: 'var(--card)', soft: 'var(--s3)'
 }
 
 const fmtDate = s => s
@@ -250,7 +250,7 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
   }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12,
+    <div style={{ background: C.card, border: `1px solid ${C.line2}`, borderRadius: 12,
            padding: 14, marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
              cursor: 'pointer' }} onClick={() => setOpen(v => !v)}>
@@ -383,11 +383,11 @@ export default function ReportPanel({ project, orgName, user, canEdit, onChanged
 
 const lbl = { display: 'block', fontSize: 11, color: C.ink2, margin: '10px 0 3px' }
 const inp = { width: '100%', padding: '8px 9px', border: `1px solid ${C.line2}`,
-  borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' }
+  borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: 'var(--s4)' }
 const chip = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
   borderRadius: 20, padding: '4px 11px', fontSize: 12, cursor: 'pointer' }
-const chipOn = { background: C.ink, color: '#fff', borderColor: C.ink }
-const btn = { background: C.ink, color: '#fff', border: 0, borderRadius: 8,
+const chipOn = { background: 'var(--brand)', color: '#fff', borderColor: C.ink }
+const btn = { background: 'var(--brand)', color: '#fff', border: 0, borderRadius: 8,
   padding: '8px 14px', fontSize: 13, cursor: 'pointer' }
 const btnGhost = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
   borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer' }

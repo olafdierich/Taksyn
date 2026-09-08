@@ -31,9 +31,9 @@ import { supabase } from './supabase.js'
 
 const C = {
   green: '#10B981', amber: '#F59E0B', red: '#EF4444', blue: '#3B82F6',
-  line: '#E2E8F0', line2: '#CBD5E1',
-  ink: '#1A2033', ink2: '#6B7280', ink3: '#9CA3AF',
-  card: '#FFFFFF', soft: '#F4F6F9'
+  line: 'var(--border)', line2: 'var(--border2)',
+  ink: 'var(--text)', ink2: 'var(--t2)', ink3: 'var(--t3)',
+  card: 'var(--card)', soft: 'var(--s3)'
 }
 
 const D = s => (s ? new Date(s + 'T00:00:00') : null)
@@ -192,7 +192,7 @@ export default function MilestonePanel({ project, sections, milestones, canEdit,
   )
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12,
+    <div style={{ background: C.card, border: `1px solid ${C.line2}`, borderRadius: 12,
            padding: 14, marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between',
              alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -257,10 +257,10 @@ export default function MilestonePanel({ project, sections, milestones, canEdit,
 
 const lbl = { display: 'block', fontSize: 11, color: C.ink2, margin: '9px 0 3px' }
 const inp = { width: '100%', padding: '8px 9px', border: `1px solid ${C.line2}`,
-  borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' }
+  borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: 'var(--s4)' }
 const row2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }
 const chk = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.ink }
-const btn = { background: C.ink, color: '#fff', border: 0, borderRadius: 8,
+const btn = { background: 'var(--brand)', color: '#fff', border: 0, borderRadius: 8,
   padding: '8px 14px', fontSize: 13, cursor: 'pointer' }
 const btnGhost = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
   borderRadius: 8, padding: '5px 11px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }

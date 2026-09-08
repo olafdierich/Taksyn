@@ -30,9 +30,9 @@ import { supabase } from './supabase.js'
 
 const C = {
   green: '#10B981', amber: '#F59E0B', red: '#EF4444', blue: '#3B82F6',
-  line: '#E2E8F0', line2: '#CBD5E1',
-  ink: '#1A2033', ink2: '#6B7280', ink3: '#9CA3AF',
-  card: '#FFFFFF', soft: '#F4F6F9'
+  line: 'var(--border)', line2: 'var(--border2)',
+  ink: 'var(--text)', ink2: 'var(--t2)', ink3: 'var(--t3)',
+  card: 'var(--card)', soft: 'var(--s3)'
 }
 
 export default function StructurePanel({ projectId, sections, tasks, canEdit, onChanged }) {
@@ -153,7 +153,7 @@ export default function StructurePanel({ projectId, sections, tasks, canEdit, on
   }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12,
+    <div style={{ background: C.card, border: `1px solid ${C.line2}`, borderRadius: 12,
            padding: 14, marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
              cursor: 'pointer' }} onClick={() => setOpen(v => !v)}>
@@ -214,7 +214,7 @@ export default function StructurePanel({ projectId, sections, tasks, canEdit, on
 
 const inp = { padding: '7px 9px', border: `1px solid ${C.line2}`, borderRadius: 8,
   fontSize: 13, fontFamily: 'inherit' }
-const btn = { background: C.ink, color: '#fff', border: 0, borderRadius: 8,
+const btn = { background: 'var(--brand)', color: '#fff', border: 0, borderRadius: 8,
   padding: '7px 12px', fontSize: 12, cursor: 'pointer' }
 const btnGhost = { background: 'transparent', color: C.ink2, border: `1px solid ${C.line2}`,
   borderRadius: 8, padding: '4px 9px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }
