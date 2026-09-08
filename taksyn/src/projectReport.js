@@ -427,20 +427,28 @@ export async function openProjectReport(o) {
   P('<h2>Stage by stage</h2>')
   if (!stages.length) P('<p class="empty">No stages have been created for this project.</p>')
 
+  // Sections and stages with no tasks are left out. On screen an empty
+  // stage needs its card so there is somewhere to press "+ Add task";
+  // a printed report has no buttons, so it is only furniture. Counted
+  // below rather than silently dropped.
+  let emptyStages = 0
+  let emptySections = 0
+
   tops.forEach(top => {
     const kids = stages.filter(s => s.parent_id === top.id)
     if (!kids.length) return
+
+    const filled = kids.filter(stage => T.some(t => t.section_id === stage.id))
+    emptyStages += kids.length - filled.length
+    if (!filled.length) { emptySections++; return }
+
     P(`<h3>${esc(top.name)}</h3>`)
     P('<table><thead><tr><th>Stage</th><th>Team</th><th>Task</th><th>Due</th><th>State</th></tr></thead><tbody>')
-    kids.forEach(stage => {
+    filled.forEach(stage => {
       const rows = T.filter(t => t.section_id === stage.id)
         .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
       const preds = (deps || []).filter(d => d.successor_section_id === stage.id)
         .map(d => nameOf(d.predecessor_section_id))
-      if (!rows.length) {
-        P(`<tr><td>${esc(stage.name)}</td><td colspan="4" class="empty">No tasks</td></tr>`)
-        return
-      }
       rows.forEach((t, i) => {
         const ev = moved[t.id]
         const late = !isDone(t) && D(t.due_date) && D(t.due_date) < today
@@ -474,6 +482,16 @@ export async function openProjectReport(o) {
     })
     P('</tbody></table>')
   })
+
+  if (emptyStages || emptySections) {
+    const bits = []
+    if (emptySections) bits.push(`${emptySections} section${emptySections > 1 ? 's' : ''}`)
+    if (emptyStages) bits.push(`${emptyStages} stage${emptyStages > 1 ? 's' : ''}`)
+    P(`<p class="wide note">${bits.join(' and ')} ${
+      (emptySections + emptyStages) > 1 ? 'hold' : 'holds'} no tasks and ${
+      (emptySections + emptyStages) > 1 ? 'are' : 'is'} not shown. They exist in the
+      plan but have nothing scheduled against them yet.</p>`)
+  }
 
   // ---- Milestones -----------------------------------------------------
   P('<h2>Milestones</h2>')
