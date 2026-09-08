@@ -190,11 +190,18 @@ export async function openProjectReport(o) {
   const from = periodFrom || null
   const periodLabel = from ? `${fmt(D(from))} to ${fmt(D(to))}` : `Up to ${fmt(D(to))}`
 
-  const [{ data: project }, { data: sections }, { data: tasks },
+  // The project first, on its own. Everything else needs its org, and
+  // nothing can be rendered without it — so a missing project fails here
+  // rather than after six queries have been dispatched.
+  const { data: project, error: projErr } =
+    await supabase.from('projects').select('*').eq('id', projectId).single()
+  if (projErr) throw projErr
+  if (!project) throw new Error('Project not found.')
+
+  const [{ data: sections }, { data: tasks },
          { data: ms }, { data: deps }, { data: events }, { data: reports },
          { data: org }] =
     await Promise.all([
-      supabase.from('projects').select('*').eq('id', projectId).single(),
       supabase.from('project_sections').select('id,parent_id,name,sort_order')
         .eq('project_id', projectId).order('sort_order'),
       supabase.from('tasks')
@@ -216,11 +223,8 @@ export async function openProjectReport(o) {
       // rest of a letterhead where an organisation has filled them in.
       supabase.from('organisations')
         .select('name,logo,website,address_city,address_state')
-        .eq('id', (await supabase.from('projects').select('org')
-          .eq('id', projectId).single()).data?.org || '').maybeSingle()
+        .eq('id', project.org).maybeSingle()
     ])
-
-  if (!project) throw new Error('Project not found.')
 
   const T = tasks || [], S = sections || [], M = ms || [], E = events || []
   const nameOf = id => S.find(s => s.id === id)?.name || '—'
