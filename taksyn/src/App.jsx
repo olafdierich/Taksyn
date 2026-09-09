@@ -279,11 +279,15 @@ function MicChip({ setValue, targetId }) {
     }
     if (setValue) setValue(fn)
   }
+  // [PATCH:micchip-anchor-v1] Zero-height wrapper, button bottom-pinned 8px
+  // above the textarea's bottom edge. right:22 clears the native resize grip;
+  // the 34px disc at marginRight:6 sat on top of it. Button is 34x34 in both
+  // states -- the resting mic only LOOKS smaller because it is transparent
+  // with a 17px glyph. pointerEvents none/auto is load-bearing: without it
+  // this strip eats clicks on the textarea beneath.
   return (
-    <div style={{display:'flex',justifyContent:'flex-end',
-           marginTop:-42,marginRight:6,marginBottom:6,
-           position:'relative',zIndex:2,pointerEvents:'none'}}>
-      <span style={{pointerEvents:'auto'}}><DictateButton setValue={apply} inline/></span>
+    <div style={{position:'relative',height:0,zIndex:2,pointerEvents:'none'}}>
+      <span style={{position:'absolute',right:22,bottom:8,pointerEvents:'auto'}}><DictateButton setValue={apply} inline/></span>
     </div>
   )
 }
