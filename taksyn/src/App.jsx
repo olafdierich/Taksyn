@@ -18905,8 +18905,29 @@ function IncidentRegisterView({ user, setPage }) {
             ])
             acts = a || []; finds = f || []
           } catch(e) { acts = []; finds = [] }
+          // IRN-REPORT-V1: complaints, feedback and requests for the report.
+          // NOTE THE ORG COLUMN: the fetches above use orgId, but
+          // issue_reports.org holds the org NAME (the admin queue filters on
+          // user.org). Passing orgId here returns zero rows silently and
+          // prints an empty section that reads like good news.
+          //
+          // issue_report_notes does not exist on LIVE yet. A failure leaves
+          // issueNotes empty, which skips the note-quality box rather than
+          // reporting a false zero.
+          let issuesRows = [], issueNoteRows = []
+          try {
+            const { data: ir } = await supabase.from('issue_reports')
+              .select('id,type,status,created_at,is_anonymous').eq('org', user.org)
+            issuesRows = ir || []
+            if (issuesRows.length) {
+              const { data: inotes } = await supabase.from('issue_report_notes')
+                .select('issue_id,body,status_to').in('issue_id', issuesRows.map(r=>r.id))
+              issueNoteRows = inotes || []
+            }
+          } catch(e) { issuesRows = []; issueNoteRows = [] }
           openBoardReport({
             orgName: user.org, incidents, months: tMonths, inMonth: tInMonth,
+            issues: issuesRows, issueNotes: issueNoteRows,
             categoryLabels, periodLabel: tPeriodLabel, excludedCount: tExcluded,
             repeatPeople: tRepeatPeople, isLate: incIsLate,
             severityLabels: Object.fromEntries(Object.entries(INC_SEVERITY_CFG).map(([k,v])=>[k,v.label])),
