@@ -1936,15 +1936,9 @@ html.dark .auth-card{background:#1A2035}
 @media(max-width:640px){
   :root{--border2:rgba(0,0,0,.09)}
   html.dark{--border2:rgba(255,255,255,.08)}
-  /* Desktop padding reads as a wide rim on a phone: the same absolute
-     value is a larger share of a 390px card. Desktop unchanged.
-     Before: .section 16/12, .stat-card 14, .task-card 14/8 */
-  .section{padding:15px;margin-bottom:11px}
-  .stat-card{padding:14px}
-  .task-card{padding:14px;margin-bottom:9px}
-  /* The date block cancels the card's padding to sit flush. The two
-     must match, or a white rim appears around it. */
-  .tc-date{margin:-14px 0 -14px -14px}
+  /* Padding is the same as desktop now that it has been restored, so
+     only the border thins here. If the desktop padding is ever widened
+     again, .tc-date's negative margin must move with it. */
 }
 html.dark .auth-input{background:#1E2330;border-color:rgba(255,255,255,.07);color:#E2E8F0}
 `
