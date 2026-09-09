@@ -1686,20 +1686,20 @@ html,body{height:100%;background:#F4F6F9;color:#1A2033;font-family:'DM Sans',san
 .ph-sub{font-size:12px;color:var(--t2);margin-top:3px}
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
 @media(max-width:900px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
-.stat-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:18px}
+.stat-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px}
 .sc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .sc-label{font-size:10px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .sc-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px}
 .sc-val{font-size:22px;font-weight:800;letter-spacing:-1px;line-height:1}
 .sc-sub{font-size:11px;color:var(--t2);margin-top:2px}
-.section{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:14px}
+.section{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px}
 .section-title{font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:640px){.two-col{grid-template-columns:1fr}}
 .filter-bar{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
 .fb{padding:4px 10px;border-radius:var(--rs);border:1px solid var(--border);background:transparent;color:var(--t2);font-size:11px;font-weight:500;cursor:pointer;font-family:inherit}
 .fb.active{background:var(--brand-lt);border-color:var(--brand);color:var(--brand)}
-.task-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:12px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
+.task-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:8px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
 .task-card.task-done{background:rgba(16,185,129,.05);border-color:rgba(16,185,129,.3)}
 .tc-row{display:flex;align-items:stretch;gap:12px}
 .tc-date{flex:0 0 58px;margin:-14px 0 -14px -14px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 0}
@@ -1936,6 +1936,15 @@ html.dark .auth-card{background:#1A2035}
 @media(max-width:640px){
   :root{--border2:rgba(0,0,0,.09)}
   html.dark{--border2:rgba(255,255,255,.08)}
+  /* Desktop padding reads as a wide rim on a phone: the same absolute
+     value is a larger share of a 390px card. Desktop unchanged.
+     Before: .section 16/12, .stat-card 14, .task-card 14/8 */
+  .section{padding:15px;margin-bottom:11px}
+  .stat-card{padding:14px}
+  .task-card{padding:14px;margin-bottom:9px}
+  /* The date block cancels the card's padding to sit flush. The two
+     must match, or a white rim appears around it. */
+  .tc-date{margin:-14px 0 -14px -14px}
 }
 html.dark .auth-input{background:#1E2330;border-color:rgba(255,255,255,.07);color:#E2E8F0}
 `
