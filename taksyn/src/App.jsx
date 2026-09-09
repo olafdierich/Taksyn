@@ -20759,12 +20759,39 @@ function IssueReportsAdminView({ user }) {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [showForm, setShowForm] = useState(false)
+  // IRN-NOTES-V1: admin-only note timeline per issue.
+  // notes is keyed by issue_id. noteOpen holds the id of the ONE card whose
+  // box is expanded -- only one at a time, so the queue stays scannable.
+  const [notes, setNotes] = useState({})
+  const [noteOpen, setNoteOpen] = useState(null)
+  const [noteText, setNoteText] = useState('')
+  const [noteNoneRequired, setNoteNoneRequired] = useState(false)
+  const [noteBusy, setNoteBusy] = useState(false)
+  const [noteError, setNoteError] = useState('')
 
   const load = async () => {
     if(!isConfigured()) { setLoading(false); return }
     const { data } = await supabase.from('issue_reports').select('*').eq('org',user.org).order('created_at',{ascending:false})
     if(data) {
       setIssues(data)
+      // IRN-NOTES-V1: fetch notes for the whole page in one query rather than
+      // lazily per card, so the note COUNT is on screen without a click.
+      // RLS (irn_select_client_admin) restricts this to client_admin of the
+      // owning org -- a non-admin gets an empty set, not an error.
+      if(data.length) {
+        supabase.from('issue_report_notes').select('*')
+          .in('issue_id', data.map(i=>i.id))
+          .order('created_at',{ascending:true})
+          .then(({data:nd})=>{
+            if(!nd) return
+            const by = {}
+            nd.forEach(n=>{ (by[n.issue_id] = by[n.issue_id] || []).push(n) })
+            setNotes(by)
+          })
+          .catch(()=>{})
+      } else {
+        setNotes({})
+      }
       const ids = [...new Set(data.map(i=>i.reported_by).filter(Boolean))]
       if(ids.length) {
         supabase.from('profiles').select('id,name').in('id',ids)
@@ -20777,12 +20804,33 @@ function IssueReportsAdminView({ user }) {
 
   useEffect(()=>{ load() },[])
 
-  const updateStatus = async (id, status) => {
-    const patch = status==='resolved'
-      ? { status, resolved_by: user.name, resolved_at: new Date().toISOString() }
-      : { status, resolved_by: null, resolved_at: null }
-    setIssues(prev=>prev.map(i=>i.id===id?{...i,...patch}:i))
-    if(isConfigured()) await supabase.from('issue_reports').update(patch).eq('id',id)
+  // IRN-NOTES-V1: single write path. Replaces a raw .update() that wrote
+  // user.name (a string) into resolved_by (a uuid), had its error discarded,
+  // and nulled resolved_by/resolved_at on any move off resolved.
+  //
+  // NO OPTIMISTIC LOCAL UPDATE. The previous code flipped the screen before
+  // the call and never read the result, so a rejected write still LOOKED like
+  // it worked -- the filter count read "Resolved (1)" against zero resolved
+  // rows in the database. The card now changes only after the RPC returns.
+  const updateStatus = async (id, status, note='', noneRequired=false) => {
+    setNoteError('')
+    if(!isConfigured()) { setNoteError('Not connected.'); return }
+    setNoteBusy(true)
+    const { error } = await supabase.rpc('issue_report_transition', {
+      p_issue_id: id,
+      p_to_status: status,
+      p_note: (note && note.trim()) ? note.trim() : null,
+      p_no_note_required: !!noneRequired
+    })
+    setNoteBusy(false)
+    if(error) {
+      // 22023 = the RPC's own refusals (no note on resolve, bad status).
+      // 42501 = RLS or no identity. Anything else shows verbatim.
+      setNoteError(error.message || 'Could not save. Nothing was changed.')
+      return
+    }
+    setNoteOpen(null); setNoteText(''); setNoteNoneRequired(false)
+    await load()
   }
 
   const periodIssues = (()=>{
@@ -20870,17 +20918,63 @@ function IssueReportsAdminView({ user }) {
                           <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
                             {issue.is_anonymous ? <span style={{color:'var(--t2)',fontWeight:600}}>🔒 Anonymous</span> : <span>👤 {reporterNames[issue.reported_by]||'Team member'}</span>}
                             <span>📅 {new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</span>
-                            {issue.status==='resolved'&&issue.resolved_by&&<span>✓ Resolved by {issue.resolved_by}</span>}
+                            {/* IRN-NOTES-V1B: "Resolved by {issue.resolved_by}" removed here.
+                                resolved_by is a uuid, so it printed a raw id. The note
+                                timeline below states the same fact with the actor's name,
+                                the date, the transition and the reason. The column is
+                                untouched and still available to the Trend Analysis Report. */}
                           </div>
                         </div>
                         <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:sc.bg,color:sc.color,flexShrink:0}}>{sc.label}</span>
                       </div>
-                      {issue.status!=='resolved'&&(
-                        <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
-                          {issue.status==='open'&&<button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>updateStatus(issue.id,'in_progress')}>Mark In Progress</button>}
-                          <button className="btn btn-primary btn-sm" style={{fontSize:11}} onClick={()=>updateStatus(issue.id,'resolved')}>Mark Resolved</button>
-                        </div>
-                      )}
+                      {/* IRN-NOTES-V1: note timeline + note box + tickbox. */}
+                      {(()=>{
+                        const ns = notes[issue.id] || []
+                        const boxOpen = noteOpen === issue.id
+                        const openBox = ()=>{ setNoteOpen(issue.id); setNoteText(''); setNoteNoneRequired(false); setNoteError('') }
+                        const closeBox = ()=>{ setNoteOpen(null); setNoteText(''); setNoteNoneRequired(false); setNoteError('') }
+                        return (
+                          <div style={{marginTop:8}}>
+                            {ns.length>0&&(
+                              <div style={{borderTop:'1px solid var(--border)',paddingTop:8,marginBottom:8}}>
+                                {ns.map(n=>(
+                                  <div key={n.id} style={{fontSize:11,color:'var(--t2)',marginBottom:7}}>
+                                    <div style={{fontWeight:700,color:'var(--text)'}}>
+                                      {/* IRN-NOTES-V1B: literal character, NOT an escape. In JSX text
+                                          an escape renders verbatim; it only resolves inside quotes. */}
+                                      {n.author_name} · {new Date(n.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}
+                                      {n.status_to?' \u00b7 '+n.status_from+' \u2192 '+n.status_to:''}
+                                    </div>
+                                    <div style={{whiteSpace:'pre-wrap'}}>{n.body}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {issue.status!=='resolved'&&!boxOpen&&(
+                              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                                <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={openBox}>{ns.length?'Notes ('+ns.length+')':'Add note'}</button>
+                                {issue.status==='open'&&<button className="btn btn-secondary btn-sm" style={{fontSize:11}} disabled={noteBusy} onClick={()=>updateStatus(issue.id,'in_progress')}>Mark In Progress</button>}
+                                <button className="btn btn-primary btn-sm" style={{fontSize:11}} onClick={openBox}>Mark Resolved</button>
+                              </div>
+                            )}
+                            {issue.status!=='resolved'&&boxOpen&&(
+                              <div style={{borderTop:'1px solid var(--border)',paddingTop:8}}>
+                                <textarea className="form-input" rows={3} placeholder="What was done about this?" value={noteText} onChange={e=>{setNoteText(e.target.value);setNoteError('')}} style={{fontSize:12,width:'100%',fontFamily:'inherit',resize:'vertical'}}/>
+                                <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--t3)',marginTop:6,cursor:'pointer'}}>
+                                  <input type="checkbox" checked={noteNoneRequired} onChange={e=>{setNoteNoneRequired(e.target.checked);setNoteError('')}}/>
+                                  No note required
+                                </label>
+                                {noteError&&<div style={{fontSize:11,color:'#DC2626',fontWeight:700,marginTop:7}}>{noteError}</div>}
+                                <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+                                  <button className="btn btn-secondary btn-sm" style={{fontSize:11}} disabled={noteBusy||!noteText.trim()} onClick={()=>updateStatus(issue.id,issue.status==='open'?'in_progress':'in_progress',noteText,false)}>{issue.status==='open'?'Save & Mark In Progress':'Save note'}</button>
+                                  <button className="btn btn-primary btn-sm" style={{fontSize:11}} disabled={noteBusy} onClick={()=>updateStatus(issue.id,'resolved',noteText,noteNoneRequired)}>Mark Resolved</button>
+                                  <button className="btn btn-secondary btn-sm" style={{fontSize:11}} disabled={noteBusy} onClick={closeBox}>Cancel</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                   )
                 })}
