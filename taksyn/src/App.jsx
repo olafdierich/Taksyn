@@ -788,6 +788,40 @@ const fmtAvg = mins => {
   return avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
 }
 
+// PATCH-HOIST-STAFFTABLE-V1
+// Average-row helpers, module scope so both the report and a per-member
+// export compute averages the same way. Counts divide by headcount;
+// rates are pooled (total done over total expected, NOT the mean of each
+// member's percentage); durations average only over rows carrying a value.
+const _avgCount = (arr, get) => arr.length ? Math.round(arr.reduce((s,x)=>s+(get(x)||0),0)/arr.length) : 0
+const _pooled   = (arr, num, den) => {
+  const d = arr.reduce((s,x)=>s+(den(x)||0),0)
+  return d ? Math.round(arr.reduce((s,x)=>s+(num(x)||0),0)*100/d) : 0
+}
+const _avgRowStyle = 'background:#EEF2FF;font-weight:700'
+
+// The staff performance table, with its average row on top. Module scope
+// because it is the ONE part of the report a per-member export also needs
+// — the stat grid, team table and approver block are org-level furniture
+// and stay in ReportsView.
+//
+// rows: worker rows. avgRows: the population the average row is computed
+// over — normally the same array, but a per-member export passes the full
+// org so a single person can be read against the org average.
+// avgLabel: names that population, because an average row whose
+// denominator is not stated cannot be reconciled by hand later.
+const buildStaffTable = (rows, avgRows, avgLabel) => {
+  const src = avgRows || rows
+  const withMins = src.filter(w=>w.avgMins && w.avgMins.length)
+  const avgHtml = src.length ? '<tr style="'+_avgRowStyle+'"><td>Average · '+(avgLabel||(src.length+' staff'))+'</td><td></td><td>'+_avgCount(src,w=>w.total)+'</td><td>'+_avgCount(src,w=>w.done)+'</td><td>'+_pooled(src,w=>w.done,w=>w.total)+'%</td><td>'+(withMins.length?fmtAvg([].concat.apply([],withMins.map(w=>w.avgMins))):'—')+'</td><td>'+_avgCount(src,w=>w.reviewedInTime)+'</td></tr>' : ''
+  const bodyHtml = rows.map(w => {
+    const compPct = pct(w.done,w.total)
+    const avgStr = fmtAvg(w.avgMins)
+    return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
+  }).join('')
+  return '<table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>'+avgHtml+bodyHtml+'</tbody></table>'
+}
+
 // PATCH-HOIST-HEADER-FOOTER-V1
 // Report chrome as functions rather than constants, so any view can build
 // a report by passing its own context. ctx: { user, orgLogo, pl }.
@@ -7404,15 +7438,6 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     openReport(html)
   }
 
-  /* PATCH-AVERAGE-ROWS-V2 */
-  // Average-row helpers. Counts divide by headcount; rates are pooled;
-  // durations average only over rows that actually carry a value.
-  const _avgCount = (arr, get) => arr.length ? Math.round(arr.reduce((s,x)=>s+(get(x)||0),0)/arr.length) : 0
-  const _pooled   = (arr, num, den) => {
-    const d = arr.reduce((s,x)=>s+(den(x)||0),0)
-    return d ? Math.round(arr.reduce((s,x)=>s+(num(x)||0),0)*100/d) : 0
-  }
-  const _avgRowStyle = 'background:#EEF2FF;font-weight:700'
 
   /* PATCH-COMPLIANCE-CAPTION-V2 */
   // An org with no compliance-flagged tasks has nothing to measure.
@@ -7421,14 +7446,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   const _compliancePct = () => compT.length ? pct(compDone, compT.length) + '%' : '—'
 
   const exportWorkerPDF = () => {
-    const _wAvgMins = workerRows.filter(w=>w.avgMins && w.avgMins.length)
-    const _wAvgHtml = workerRows.length ? '<tr style="'+_avgRowStyle+'"><td>Average · '+workerRows.length+' staff</td><td></td><td>'+_avgCount(workerRows,w=>w.total)+'</td><td>'+_avgCount(workerRows,w=>w.done)+'</td><td>'+_pooled(workerRows,w=>w.done,w=>w.total)+'%</td><td>'+(_wAvgMins.length?fmtAvg([].concat.apply([],_wAvgMins.map(w=>w.avgMins))):'—')+'</td><td>'+_avgCount(workerRows,w=>w.reviewedInTime)+'</td></tr>' : ''
-    const rows = _wAvgHtml + workerRows.map(w => {
-      const compPct = pct(w.done,w.total)
-      const onTimePct = pct(w.onTime,w.done)
-      const avgStr = fmtAvg(w.avgMins)  /* PATCH-FMTAVG-REPOINT-V2 */
-      return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
-    }).join('')
+    const staffTableHtml = buildStaffTable(workerRows)
     const teamAvgHtml = teamRows.length ? '<tr style="'+_avgRowStyle+'"><td>Average · '+teamRows.length+' teams</td><td>'+_avgCount(teamRows,t=>t.total)+'</td><td>'+_avgCount(teamRows,t=>t.done)+'</td><td>'+_pooled(teamRows,t=>t.done,t=>t.total)+'%</td></tr>' : ''
     const teamHtml = teamAvgHtml + teamRows.map(tm=>'<tr><td>'+tm.name+'</td><td>'+tm.total+'</td><td>'+tm.done+'</td><td>'+pct(tm.done,tm.total)+'%</td></tr>').join('')
     const approverHtml = approverRows.map(a=>{
@@ -7445,7 +7463,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       : null
     const _appAvgHtml = approverRows.length ? '<tr style="'+_avgRowStyle+'"><td>Average · '+approverRows.length+' approvers</td><td>'+_avgCount(approverRows,_appReviewed)+'</td><td>'+_avgCount(approverRows,a=>a.approved)+'</td><td>'+_avgCount(approverRows,a=>a.sentBack)+'</td><td>'+_pooled(approverRows,a=>a.sentBack,_appReviewed)+'%</td><td>'+(_appAvgH==null?'—':_appAvgH<24?Math.round(_appAvgH)+'h':(_appAvgH/24).toFixed(1)+'d')+'</td><td>'+_avgCount(approverRows,a=>a.pending)+'</td></tr>' : ''
     const approverSec = (isClientAdmin && approverRows.length) ? '<div class="sec"><div class="sec-title">🔍 Approver Review Performance</div><table><thead><tr><th>Approver</th><th>Reviewed</th><th>Approved</th><th>Sent Back</th><th>Send-Back %</th><th>Avg Turnaround</th><th>Pending</th></tr></thead><tbody>'+_appAvgHtml+approverHtml+'</tbody></table></div>' : ''
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Staff Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Staff Performance Report', {user, orgLogo, pl})}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Staff</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks · all tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed · all tasks</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${_compliancePct()}</div><div class="sl">Compliance · ${compT.length} flagged tasks only</div></div></div>${teamRows.length?'<div class="sec"><div class="sec-title">Team Performance</div><table><thead><tr><th>Team</th><th>Tasks</th><th>Done</th><th>Rate</th></tr></thead><tbody>'+teamHtml+'</tbody></table></div>':''}${approverSec}<table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>${rows}</tbody></table>${reportFooter('Staff Performance Report', {user, orgLogo, pl})}</body></html>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Taksyn Staff Performance</title><style>${baseStyle}.sg{grid-template-columns:repeat(4,1fr)}</style></head><body>${reportHeader('Staff Performance Report', {user, orgLogo, pl})}<div class="sg"><div class="st"><div class="sv">${uniqueWorkers.size}</div><div class="sl">Total Staff</div></div><div class="st"><div class="sv">${filteredPt.length}</div><div class="sl">Total Tasks · all tasks</div></div><div class="st"><div class="sv g">${done}</div><div class="sl">Completed · all tasks</div></div><div class="st"><div class="sv" style="color:#8B5CF6">${_compliancePct()}</div><div class="sl">Compliance · ${compT.length} flagged tasks only</div></div></div>${teamRows.length?'<div class="sec"><div class="sec-title">Team Performance</div><table><thead><tr><th>Team</th><th>Tasks</th><th>Done</th><th>Rate</th></tr></thead><tbody>'+teamHtml+'</tbody></table></div>':''}${approverSec}${staffTableHtml}${reportFooter('Staff Performance Report', {user, orgLogo, pl})}</body></html>`
     openReport(html)
   }
 
