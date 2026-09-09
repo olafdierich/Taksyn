@@ -788,6 +788,26 @@ const fmtAvg = mins => {
   return avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
 }
 
+// PATCH-USEORGLOGO-V1
+// The org's logo, for report headers. One definition rather than a copy
+// per component: this query was hand-rolled twice before, and the two
+// copies had already drifted (single() vs maybeSingle(), which differ for
+// an org with no row). A missing organisations row is an ordinary
+// absence, not an exception, so maybeSingle() is correct.
+// Returns null for super_admin, who uses the Taksyn logo instead.
+const useOrgLogo = (user) => {
+  const [logo, setLogo] = useState(null)
+  useEffect(()=>{
+    setLogo(null) // reset on org change, or a stale logo persists
+    if (isConfigured() && user.org && user.role!=='super_admin') {
+      supabase.from('organisations').select('logo').eq('name', user.org).maybeSingle()
+        .then(({data})=>{ if(data?.logo) setLogo(data.logo) })
+        .catch(()=>{})
+    }
+  },[user.org])
+  return logo
+}
+
 // PATCH-HOIST-STAFFTABLE-V1
 // Average-row helpers, module scope so both the report and a per-member
 // export compute averages the same way. Counts divide by headcount;
@@ -810,10 +830,19 @@ const _avgRowStyle = 'background:#EEF2FF;font-weight:700'
 // org so a single person can be read against the org average.
 // avgLabel: names that population, because an average row whose
 // denominator is not stated cannot be reconciled by hand later.
-const buildStaffTable = (rows, avgRows, avgLabel) => {
-  const src = avgRows || rows
+const _staffAvgRow = (src, label) => {
+  if (!src.length) return ''
   const withMins = src.filter(w=>w.avgMins && w.avgMins.length)
-  const avgHtml = src.length ? '<tr style="'+_avgRowStyle+'"><td>Average · '+(avgLabel||(src.length+' staff'))+'</td><td></td><td>'+_avgCount(src,w=>w.total)+'</td><td>'+_avgCount(src,w=>w.done)+'</td><td>'+_pooled(src,w=>w.done,w=>w.total)+'%</td><td>'+(withMins.length?fmtAvg([].concat.apply([],withMins.map(w=>w.avgMins))):'—')+'</td><td>'+_avgCount(src,w=>w.reviewedInTime)+'</td></tr>' : ''
+  return '<tr style="'+_avgRowStyle+'"><td>Average · '+(label||(src.length+' staff'))+'</td><td></td><td>'+_avgCount(src,w=>w.total)+'</td><td>'+_avgCount(src,w=>w.done)+'</td><td>'+_pooled(src,w=>w.done,w=>w.total)+'%</td><td>'+(withMins.length?fmtAvg([].concat.apply([],withMins.map(w=>w.avgMins))):'—')+'</td><td>'+_avgCount(src,w=>w.reviewedInTime)+'</td></tr>'
+}
+
+// avgSpecs: [{rows, label}, ...] — one average row per entry, in order.
+// Omitted entirely means "average over the rows shown", which is what the
+// main report wants. A per-member export passes two: the whole org, then
+// the filtered subset it was launched from.
+const buildStaffTable = (rows, avgSpecs) => {
+  const specs = avgSpecs && avgSpecs.length ? avgSpecs : [{rows: rows, label: null}]
+  const avgHtml = specs.map(s=>_staffAvgRow(s.rows, s.label)).join('')
   const bodyHtml = rows.map(w => {
     const compPct = pct(w.done,w.total)
     const avgStr = fmtAvg(w.avgMins)
@@ -7122,7 +7151,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   const occurrences = orgOccurrences || []
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
-  const [orgLogo, setOrgLogo] = useState(null)
+  const orgLogo = useOrgLogo(user)  // PATCH-USEORGLOGO-V1
   const [rptCompletions, setRptCompletions] = useState({}) // {taskId:{itemId:[rows]}}
   const DEFAULT_STAT_ORDER = [
     {id:'total',l:'Total Tasks',v:()=>total,c:'b'},
@@ -7190,14 +7219,6 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     ] : []),
   ]
 
-  useEffect(()=>{
-    setOrgLogo(null) // reset on org change
-    if(isConfigured() && user.org && user.role!=='super_admin') {
-      supabase.from('organisations').select('logo').eq('name', user.org).maybeSingle()
-        .then(({data})=>{ if(data?.logo) setOrgLogo(data.logo) })
-        .catch(()=>{})
-    }
-  },[user.org])
 
   const getRange = () => {
     const now = new Date(), end = new Date(now)
@@ -13750,6 +13771,39 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
 
   const memberTeams={}; teamMembers.forEach(m=>{ (memberTeams[m.user_id]=memberTeams[m.user_id]||[]).push(m.team_id) })
   const _nq = nameQuery.trim().toLowerCase()
+// PATCH-MEMBER-EXPORT-V1
+  // Per-member report. Reuses the SAME renderer as the main report —
+  // buildStaffTable, reportHeader, reportFooter, baseStyle, openReport are
+  // all module scope, so a second PDF builder is never created here.
+  //
+  // Two average rows, both labelled: the whole org (the benchmark worth
+  // having in a performance conversation) and, when a filter is active,
+  // the filtered subset the export was launched from. Showing both means
+  // the sheet never silently disagrees with what was on screen.
+  const orgLogo = useOrgLogo(user)  // PATCH-USEORGLOGO-V1
+  const _allPeople = Object.values(peopleMap)
+  const _periodLabel = period==='weekly' ? 'This week' : period==='monthly' ? 'This month' : 'This quarter'
+  const exportMemberPDF = (p) => {
+    const specs = [{rows: _allPeople, label: _allPeople.length+' staff · whole org'}]
+    // Only add the filtered row when it is actually a different population;
+    // two identical rows would be noise, not information.
+    if (people.length !== _allPeople.length) {
+      const bits = []
+      if (selectedRole!=='all') bits.push(ROLE_LABELS[selectedRole]||selectedRole)
+      if (selectedTeam!=='all') bits.push((teamMap[selectedTeam]||{}).name||'team')
+      if (_nq) bits.push('search')
+      specs.push({rows: people, label: people.length+' staff · '+(bits.join(' · ')||'filtered')})
+    }
+    const ctx = {user, orgLogo: orgLogo, pl: _periodLabel}
+    const title = 'Performance Report — '+(p.name||'Staff Member')
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+title+'</title><style>'+baseStyle+'</style></head><body>'
+      + reportHeader(title, ctx)
+      + buildStaffTable([p], specs)
+      + reportFooter(title, ctx)
+      + '</body></html>'
+    openReport(html)
+  }
+
   const people = Object.values(peopleMap)
     .filter(p=>selectedRole==='all'||p.role===selectedRole)
     .filter(p=>selectedTeam==='all'||(memberTeams[p.id]||[]).includes(selectedTeam))
@@ -13908,6 +13962,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                     <div style={{fontSize:22,fontWeight:800,color,lineHeight:1}}>{compRate}%</div>
                     <div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>completion</div>
                   </div>
+                  <button className="btn btn-secondary btn-sm" style={{flexShrink:0}} onClick={()=>exportMemberPDF(p)} title={'Export a report for '+(p.name||'this person')}>📄 Report</button>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(100px,1fr))',gap:8}}>
                   {[
@@ -15804,20 +15859,11 @@ function GettingStartedGuide({ user, setPage }) {
   const [openSubChapters, setOpenSubChapters] = useState({})
   const [openSteps, setOpenSteps] = useState({})
   const [printMode, setPrintMode] = useState(false)
-  const [orgLogo, setOrgLogo] = useState(null)
+  const orgLogo = useOrgLogo(user)  // PATCH-USEORGLOGO-V1
 
   const guide = GUIDE_CONTENT[activeRole] || GUIDE_CONTENT.worker
   const roleName = ROLE_LABELS[activeRole] || activeRole
 
-  useEffect(() => {
-    if (!isConfigured() || !user.org || user.role === 'super_admin') return
-    ;(async () => {
-      try {
-        const { data: orgData } = await supabase.from('organisations').select('logo').eq('name', user.org).single()
-        setOrgLogo(orgData?.logo || null)
-      } catch (e) {}
-    })()
-  }, [user.org])
 
   const toggleSubChapter = (id) => setOpenSubChapters(prev => ({...prev, [id]: !prev[id]}))
   const toggleStep = (key) => setOpenSteps(prev => ({...prev, [key]: !prev[key]}))
