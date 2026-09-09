@@ -19121,6 +19121,10 @@ function IncidentsAdminView({ user, setPage }) {
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('open')
   const [breachedOnly, setBreachedOnly] = useState(false)
+  // [PATCH:active-date-sort-v1] state. Belongs to THIS component (the one
+  // holding bySeverity and the Active Incidents list), not the register
+  // component which has an identical breachedOnly at ~18502.
+  const [incDateSort, setIncDateSort] = useState(false)
   const [sel, setSel] = useState(null)          // selected incident (full row)
   const [events, setEvents] = useState([])
   const [actions, setActions] = useState([])
@@ -19813,7 +19817,13 @@ function IncidentsAdminView({ user, setPage }) {
     if (breachedOnly && !breached(i)) return false
     return true
   })
-  const bySeverity = [5,4,3,2,1].map(s => ({ s, items: visible.filter(i=>i.severity===s) })).filter(g=>g.items.length)
+  // [PATCH:active-date-sort-v1] Date mode collapses the severity grouping into
+  // ONE group so the newest incident is top of the page, not top of its own
+  // severity block. s:null tells the renderer to skip the heading. Copy before
+  // sorting -- Array.sort mutates, and `visible` is derived from state.
+  const bySeverity = incDateSort
+    ? (visible.length ? [{ s:null, items:[...visible].sort((a,b)=> new Date(b.created_at)-new Date(a.created_at)) }] : [])
+    : [5,4,3,2,1].map(s => ({ s, items: visible.filter(i=>i.severity===s) })).filter(g=>g.items.length)
 
   const card = { background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:16, marginBottom:14 }
   const lbl = { display:'block', fontSize:12, fontWeight:700, color:'var(--t2)', marginBottom:6, textTransform:'uppercase', letterSpacing:.3 }
@@ -20673,18 +20683,29 @@ function IncidentsAdminView({ user, setPage }) {
         <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--t2)',marginLeft:6,cursor:'pointer'}}>
           <input type="checkbox" checked={breachedOnly} onChange={e=>setBreachedOnly(e.target.checked)}/> Breached only
         </label>
+        {/* [PATCH:active-date-sort-v1] Deliberately NOT styled as a filter pill:
+            it sorts, it does not narrow, and a fifth pill in that row would read
+            as another filter. Sits after a margin gap for the same reason. */}
+        <button type="button" onClick={()=>setIncDateSort(v=>!v)}
+          title={incDateSort?'Newest reported first. Click for severity order.':'Grouped by severity. Click to sort by date reported.'}
+          style={{marginLeft:'auto',padding:'6px 12px',borderRadius:8,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:700,
+            border:'1px solid '+(incDateSort?'var(--t2)':'var(--border)'),
+            background:incDateSort?'var(--t2)':'none',
+            color:incDateSort?'var(--card)':'var(--t2)'}}>
+          {incDateSort?'Date \u2193 newest':'Sort by date'}
+        </button>
       </div>
 
       {loading ? <div style={{color:'var(--t2)',fontSize:13}}>Loading…</div> :
         bySeverity.length===0 ? <div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No incidents</div></div> :
         bySeverity.map(({s,items})=>{
-          const sc = INC_SEVERITY_CFG[s]
+          const sc = INC_SEVERITY_CFG[s] || INC_SEVERITY_CFG[1]
           return (
-            <div key={s} style={{marginBottom:24}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+            <div key={s==null?'_date':s} style={{marginBottom:24}}>
+              {s!=null && <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                 <span style={{fontSize:13,fontWeight:700,color:sc.color}}>{s} · {sc.label}</span>
                 <span style={{fontSize:11,color:'var(--t2)'}}>({items.length})</span>
-              </div>
+              </div>}
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
                 {items.map(inc=>{
                   const st = INC_STATUS_CFG[inc.status]||INC_STATUS_CFG.reported
@@ -20702,6 +20723,14 @@ function IncidentsAdminView({ user, setPage }) {
                       </div>
                       <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
                         <span>📅 {fmtDay(inc.occurred_at)}</span>
+                        {/* [PATCH:active-date-sort-v1] Reported date shown BESIDE
+                            the occurrence date, not instead of it: the sort runs on
+                            created_at, and a list ordered by a date the row does not
+                            display reads as broken -- especially on backdated rows.
+                            occurred_at stays because it is the clinically meaningful
+                            one. Hidden when they fall on the same day. */}
+                        {inc.created_at && fmtDay(inc.created_at)!==fmtDay(inc.occurred_at) &&
+                          <span title="Date reported">✎ {fmtDay(inc.created_at)}</span>}
                         {inc.affected_type && <span>👤 {inc.affected_type}</span>}
                         <span>{inc.assigned_to ? '→ '+(names[inc.assigned_to]||inc.assigned_to_name||'assigned') : 'unassigned'}</span>
                       </div>
