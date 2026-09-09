@@ -16915,6 +16915,9 @@ function IncidentHubView({ user, setPage }) {
   const isCA = user.role==='client_admin'
   const canReview = ['client_admin','manager','supervisor'].includes(user.role)
   const [activeIncidents, setActiveIncidents] = useState([])
+  // [PATCH:inc-sort-v1] 'rank' = breached/overdue first (the default, set by
+  // the fetch effect). 'date' = newest reported first, overriding that rank.
+  const [incSort, setIncSort] = useState('rank')
   const [pendingPeople, setPendingPeople] = useState(0)
   useEffect(()=>{
     let cancelled = false
@@ -16952,6 +16955,13 @@ function IncidentHubView({ user, setPage }) {
     })()
     return ()=>{ cancelled = true }
   },[user, canReview])
+  // [PATCH:inc-sort-v1] Sorted at RENDER, not in the effect. The effect is
+  // keyed on [user, canReview], so a sort done there would never re-run when
+  // the toggle changes. Copy before sorting: Array.sort mutates, and mutating
+  // state in place does not re-render.
+  const incSortedActive = incSort === 'date'
+    ? [...activeIncidents].sort((a,b)=> new Date(b.created_at)-new Date(a.created_at))
+    : activeIncidents
   const openIncidentBar = (ref) => { try{ sessionStorage.setItem('taksyn-open-incident', ref) }catch(e){}; setPage('incidents') }
   const relAge = (d) => {
     if(!d) return ''
@@ -16995,9 +17005,19 @@ function IncidentHubView({ user, setPage }) {
       </div>
       {canReview && activeIncidents.length>0 && (
         <div style={{marginTop:22}}>
-          <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:.3,marginBottom:10}}>Active incidents ({activeIncidents.length})</div>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+            <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:.3}}>Active incidents ({activeIncidents.length})</div>
+            <button type="button" onClick={()=>setIncSort(v=>v==='date'?'rank':'date')}
+              title={incSort==='date'?'Newest reported first. Click for priority order.':'Overdue and breached first. Click to sort by date reported.'}
+              style={{marginLeft:'auto',fontSize:11,fontWeight:700,padding:'4px 10px',borderRadius:12,
+                cursor:'pointer',border:'1px solid var(--border)',
+                background:incSort==='date'?'var(--t2)':'transparent',
+                color:incSort==='date'?'var(--card)':'var(--t2)'}}>
+              {incSort==='date'?'Date \u2193 newest':'Priority'}
+            </button>
+          </div>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {activeIncidents.map(i=>{
+            {incSortedActive.map(i=>{
               const sev = INC_SEVERITY_CFG[i.severity] || INC_SEVERITY_CFG[1]
               const st  = INC_STATUS_CFG[i.status] || INC_STATUS_CFG.reported
               const pill = (color,bg)=>({fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:bg||(color+'22'),color,flexShrink:0,whiteSpace:'nowrap'})
@@ -17010,6 +17030,14 @@ function IncidentHubView({ user, setPage }) {
                   onMouseEnter={e=>e.currentTarget.style.boxShadow='0 3px 12px rgba(0,0,0,.09)'}
                   onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
                   <span style={{fontWeight:800,fontSize:13,flexShrink:0}}>{i.ref}</span>
+                  {/* [PATCH:inc-bar-category-v1] Plain text, not a pill: the row
+                      already carries severity, status and sometimes an overdue
+                      pill, and a sixth pill wraps to two lines on a phone. Reads
+                      from the module-level INC_CATEGORY_LABEL rather than adding
+                      a FOURTH component-local copy of the lookup (18194, 18495,
+                      19126 are the other three). Org-specific keys outside the
+                      fifteen fall back to the key itself -- visible, not blank. */}
+                  {i.category && <span style={{fontSize:12,color:'var(--t2)',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{INC_CATEGORY_LABEL[i.category]||i.category}</span>}
                   <span style={pill(sev.color,sev.bg)}>{i.severity} · {sev.label}</span>
                   <span style={pill(st.color)}>{st.label}</span>
                   {i._late && <span style={pill('#fff', i._breached?'#EF4444':'#EA580C')}>
