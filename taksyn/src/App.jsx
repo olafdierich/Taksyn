@@ -16946,7 +16946,9 @@ function ContactsView({ user, setPage }) {
 
 function IncidentHubView({ user, setPage }) {
   const isCA = user.role==='client_admin'
-  const canReview = ['client_admin','manager','supervisor'].includes(user.role)
+  // SUP-INC-V1: supervisors report incidents, they do not see them. canReview
+  // gates the Active tile AND the active list below the tiles.
+  const canReview = ['client_admin','manager'].includes(user.role)
   const [activeIncidents, setActiveIncidents] = useState([])
   // [PATCH:inc-sort-v1] 'rank' = breached/overdue first (the default, set by
   // the fetch effect). 'date' = newest reported first, overriding that rank.
@@ -22937,7 +22939,7 @@ export default function App() {
                 {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
                 {page==='incident_register' && user.role==='client_admin' && <IncidentRegisterView user={user} setPage={setPage}/>}
                 {page==='capa_register' && user.role==='client_admin' && <CapaRegisterView user={user} setPage={setPage}/>}
-                {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user} setPage={setPage}/>}
+                {/* SUP-INC-V1: Active Incidents is client_admin + manager only. Every route to it lands here. */}{page==='incidents' && ['client_admin','manager'].includes(user.role) && <IncidentsAdminView user={user} setPage={setPage}/>}{page==='incidents' && user.role==='supervisor' && <div className="ph"><div className="ph-title">Incidents</div><div className="ph-sub">Incident details are handled by managers and administrators. You can still report an incident from the Incidents &amp; Risk page.</div></div>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='incident_hub' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentHubView user={user} setPage={setPage}/>}
                 {page==='contacts' && user.role==='client_admin' && <ContactsView user={user} setPage={setPage}/>}
