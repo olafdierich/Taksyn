@@ -20786,6 +20786,8 @@ function IssueReportsAdminView({ user }) {
   const [fResolver, setFResolver] = useState('all')
   const [fPriority, setFPriority] = useState('all')
   const [fService, setFService] = useState('all')
+  // IRN-INPROG-V1: uuid -> industry name, for the service filter.
+  const [industryNames, setIndustryNames] = useState({})
   const [period, setPeriod] = useState('365')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -20823,11 +20825,28 @@ function IssueReportsAdminView({ user }) {
       } else {
         setNotes({})
       }
-      const ids = [...new Set(data.map(i=>i.reported_by).filter(Boolean))]
+      // IRN-INPROG-V1: in_progress_by is a uuid and needs the same name
+      // lookup as reported_by. Folded into the SAME query rather than a
+      // second round trip.
+      const ids = [...new Set([
+        ...data.map(i=>i.reported_by),
+        ...data.map(i=>i.in_progress_by)
+      ].filter(Boolean))]
       if(ids.length) {
         supabase.from('profiles').select('id,name').in('id',ids)
           .then(({data:p})=>{ if(p) setReporterNames(Object.fromEntries(p.map(r=>[r.id,r.name]))) })
           .catch(()=>{})
+      }
+      // IRN-INPROG-V1: industry names, fetched by the ids actually present on
+      // these rows. Not via org_industry_links -- that needs the org ID and
+      // this component only holds the org NAME.
+      const indIds = [...new Set(data.map(i=>i.industry_id).filter(Boolean))]
+      if(indIds.length) {
+        supabase.from('global_industries').select('id,name').in('id',indIds)
+          .then(({data:g})=>{ if(g) setIndustryNames(Object.fromEntries(g.map(r=>[r.id,r.name]))) })
+          .catch(()=>{})
+      } else {
+        setIndustryNames({})
       }
     }
     setLoading(false)
@@ -20973,7 +20992,7 @@ function IssueReportsAdminView({ user }) {
                 {services.length>1&&(
                   <select value={fService} onChange={e=>setFService(e.target.value)} style={fService!=='all'?selA:sel}>
                     <option value="all">Any service</option>
-                    {services.map(s=><option key={s} value={s}>{s}</option>)}
+                    {services.map(s=><option key={s} value={s}>{industryNames[s]||'Unnamed service'}</option>)}
                   </select>
                 )}
                 {anyOn&&<button className="btn btn-primary btn-sm" style={{fontSize:11}} onClick={clearAll}>Clear filters</button>}
@@ -21043,6 +21062,12 @@ function IssueReportsAdminView({ user }) {
                                 Under 24 hours reads "same day", not "0 days".
                                 Skipped entirely when resolved_at is missing rather
                                 than printing NaN. */}
+                            {/* IRN-INPROG-V1: who picked it up. Rendered only when the
+                                columns are populated -- rows moved before these
+                                existed have no honest value and show nothing. */}
+                            {issue.status==='in_progress'&&issue.in_progress_at&&(
+                              <span>Picked up by {reporterNames[issue.in_progress_by]||'a team member'} {new Date(issue.in_progress_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</span>
+                            )}
                             {issue.status==='resolved'&&issue.resolved_at&&(()=>{
                               const d = Math.floor((new Date(issue.resolved_at) - new Date(issue.created_at)) / 86400000)
                               const lbl = d < 1 ? 'same day' : (d === 1 ? '1 day' : d + ' days')
