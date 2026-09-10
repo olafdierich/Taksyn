@@ -4806,7 +4806,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginTop:14}}>
         <div onClick={()=>setShowRegister(v=>!v)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
           <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px'}}>
-            📋 Task Register · {_regActive ? _regShown.length+' of '+rows.length : rows.length}
+            📋 Task Register — tasks you oversee · {_regActive ? _regShown.length+' of '+rows.length : rows.length}
           </div>
           <span style={{fontSize:12,color:'var(--t2)'}}>{showRegister?'▾':'▸'}</span>
         </div>
