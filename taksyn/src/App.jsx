@@ -4638,6 +4638,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   const createTask = async () => {
     if (!newTask.title.trim() || creating) return
+    // SUP-LOW-V1: supervisors create Low priority only. Refused BEFORE any write.
+    // The message deliberately does not suggest lowering the priority.
+    if (user.role==='supervisor' && newTask.priority!=='low') { setCreateError('Supervisors can only create Low priority tasks. Please contact your manager to create this task.'); return }
     setCreating(true)
     setCreateError('')
     const taskData = {...newTask}
@@ -4723,7 +4726,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     t.assigned_user_id === user.id ||
     (Array.isArray(t.assigned_user_ids) && t.assigned_user_ids.includes(user.id))
   )
-  const canReviewTask = (t) => canApprove && !(isAssignedTo(t) && t.created_by !== user.name)
+  // SUP-LOW-V1: supervisors approve Low priority only. Missing priority = not Low (fails closed).
+  const canReviewTask = (t) => canApprove && !(isAssignedTo(t) && t.created_by !== user.name) && !(user.role==='supervisor' && t?.priority!=='low')
   // Delete is irreversible and the "This and future" scope destroys a whole recurrence,
   // so it is gated harder than review: the creator, or client_admin and above.
   //
