@@ -140,6 +140,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c =>
 export function openBoardReport(o) {
   const {
     orgName = '', incidents = [], months = [], inMonth,
+    // IRN-REPORT-V1: default to empty so an older caller, or a failed fetch,
+    // prints no complaints section rather than throwing.
+    issues = [], issueNotes = [],
     categoryLabels = {}, severityLabels = {}, periodLabel = '',
     excludedCount = 0, repeatPeople = 0, isLate = () => false,
     // Corrective actions and investigation findings for the whole org.
@@ -509,6 +512,109 @@ export function openBoardReport(o) {
     // Counted organisation-wide by the caller, so it belongs to the combined
     // pass alone. Repeating the same figure under each service would read as
     // a per-service count and would be wrong.
+    // IRN-REPORT-V1: complaints, feedback and requests.
+    // Combined pass only. issue_reports.industry_id exists but is populated
+    // on a small minority of rows, so a per-service split would resolve the
+    // rest into the primary and print a fiction. Same rule, and the same
+    // reason, as Repeat involvement below.
+    if (orgWide && Array.isArray(issues) && issues.length) {
+      const iOpen = issues.filter(i => i.status === 'open')
+      const iProg = issues.filter(i => i.status === 'in_progress')
+      const iRes  = issues.filter(i => i.status === 'resolved')
+      const byType = {}
+      issues.forEach(i => { const t = i.type || 'request'; byType[t] = (byType[t] || 0) + 1 })
+      const typeLabel = { complaint:'Complaints', feedback:'Feedback', request:'Requests' }
+      const dayMs = 86400000
+      const ageOf = i => Math.floor((Date.now() - new Date(i.created_at).getTime()) / dayMs)
+      const stale = iOpen.concat(iProg).filter(i => ageOf(i) > 30)
+      const anon = issues.filter(i => i.is_anonymous).length
+
+      H.push('<h2>Complaints, feedback and requests</h2>')
+
+      // IRN-REPORT-BAND-V1: stat band, same markup and same alarm convention
+      // as "Where the month sits". Both alarms are conditional -- a cell that
+      // is always red teaches the reader to ignore red.
+      const nComplaint = byType.complaint || 0
+      const bandNotes = (function () {
+        if (!Array.isArray(issueNotes)) return null
+        const ids = new Set(iRes.map(i => i.id))
+        const rn = issueNotes.filter(n => ids.has(n.issue_id) && n.status_to === 'resolved')
+        const none = rn.filter(n => n.body === 'Resolved with no note required').length
+        return { withNote: rn.length - none, none: none }
+      })()
+
+      H.push('<div class="stats">')
+      H.push('<div class="stat"><span class="stat-n">' + issues.length + '</span><span class="stat-l">Raised</span><span class="stat-s">this period</span></div>')
+      H.push('<div class="stat"><span class="stat-n">' + nComplaint + '</span><span class="stat-l">Complaints</span><span class="stat-s">of ' + issues.length + ' raised</span></div>')
+      H.push('<div class="stat' + (iOpen.length ? ' alarm' : '') + '"><span class="stat-n">' + iOpen.length + '</span><span class="stat-l">Not picked up</span><span class="stat-s">no one has started</span></div>')
+      H.push('<div class="stat"><span class="stat-n">' + iProg.length + '</span><span class="stat-l">In progress</span><span class="stat-s">being handled</span></div>')
+      H.push('<div class="stat"><span class="stat-n">' + iRes.length + '</span><span class="stat-l">Resolved</span><span class="stat-s">closed this period</span></div>')
+      if (bandNotes && iRes.length) {
+        H.push('<div class="stat' + (bandNotes.none > bandNotes.withNote ? ' alarm' : '') + '"><span class="stat-n">' + bandNotes.withNote + '</span><span class="stat-l">With a written reason</span><span class="stat-s">of ' + iRes.length + ' resolved</span></div>')
+      } else {
+        H.push('<div class="stat"><span class="stat-n">' + stale.length + '</span><span class="stat-l">Over 30 days</span><span class="stat-s">still unresolved</span></div>')
+      }
+      H.push('</div>')
+
+      H.push('<p><b>' + issues.length + '</b> raised in this period \u2014 '
+        + Object.keys(byType).sort().map(t => byType[t] + ' ' + (typeLabel[t] || t).toLowerCase()).join(', ')
+        + '. <b>' + iRes.length + '</b> resolved, <b>' + iProg.length
+        + '</b> in progress, <b>' + iOpen.length + '</b> not yet picked up.</p>')
+
+      // IRN-DURATION-V1: time to resolve. MEDIAN, not mean -- one complaint
+      // left for 200 days drags a mean to somewhere no real complaint sits.
+      // The basis ("of N resolved") is printed WITH the figure: at low volume
+      // a median is barely a statistic, and a reader who cannot see the basis
+      // will read it as a service level.
+      const durs = iRes
+        .filter(i => i.resolved_at)
+        .map(i => Math.floor((new Date(i.resolved_at) - new Date(i.created_at)) / 86400000))
+        .filter(n => n >= 0)
+        .sort((a, b) => a - b)
+      if (durs.length) {
+        const mid = Math.floor(durs.length / 2)
+        const median = durs.length % 2 ? durs[mid] : Math.floor((durs[mid - 1] + durs[mid]) / 2)
+        const dl = n => n < 1 ? 'same day' : (n === 1 ? '1 day' : n + ' days')
+        // IRN-DURBAND-V1: three-cell band, replacing the prose sentence that
+        // said the same thing. No alarm class on any cell -- there is no
+        // threshold the report could assert honestly, since 10 days is good
+        // for a facilities request and poor for a safeguarding complaint and
+        // nothing here can tell them apart.
+        H.push('<div class="stats">')
+        H.push('<div class="stat"><span class="stat-n">' + (median < 1 ? '<1' : median) + '</span><span class="stat-l">Median days to resolve</span><span class="stat-s">of ' + durs.length + ' resolved</span></div>')
+        H.push('<div class="stat"><span class="stat-n">' + (durs[0] < 1 ? '<1' : durs[0]) + '</span><span class="stat-l">Fastest</span><span class="stat-s">' + dl(durs[0]) + '</span></div>')
+        H.push('<div class="stat"><span class="stat-n">' + (durs[durs.length - 1] < 1 ? '<1' : durs[durs.length - 1]) + '</span><span class="stat-l">Slowest</span><span class="stat-s">' + dl(durs[durs.length - 1]) + '</span></div>')
+        H.push('</div>')
+        H.push('<p class="note">Counted in whole days from the date raised to the date resolved. Anything closed inside 24 hours counts as same day.</p>')
+      }
+
+      if (stale.length) {
+        H.push('<div class="flagbox"><h3>' + stale.length + ' still unresolved after 30 days</h3>')
+        H.push('<p>Counted from the date raised. A complaint left open is not a neutral state \u2014 the person who raised it has had no answer.</p></div>')
+      }
+
+      // Note quality. The RPC requires a note to resolve OR an explicit
+      // no-note-required tick, and the tick writes its own note row saying
+      // so. Both paths therefore produce a row; only the body differs. If
+      // notes were not fetched (they do not exist on LIVE yet) this whole
+      // block is skipped rather than reporting a false zero.
+      if (Array.isArray(issueNotes)) {
+        const resIds = new Set(iRes.map(i => i.id))
+        const resNotes = issueNotes.filter(n => resIds.has(n.issue_id) && n.status_to === 'resolved')
+        const noNote = resNotes.filter(n => n.body === 'Resolved with no note required').length
+        const withNote = resNotes.length - noNote
+        if (iRes.length) {
+          const cls = noNote > withNote ? 'flagbox' : 'goodbox'
+          H.push('<div class="' + cls + '"><h3>' + withNote + ' of ' + iRes.length + ' resolved with a written reason</h3>')
+          H.push('<p>' + noNote + ' were closed with no note required. That is a recorded decision, not a gap \u2014 but a period where most closures carry no reason leaves nothing to review.</p></div>')
+        }
+      }
+
+      H.push('<p class="note">Counted by <b>date raised</b>. Incidents elsewhere in this report are counted by date of occurrence; complaints carry no occurrence date, so the two sections measure different things. '
+        + (anon ? '<b>' + anon + '</b> of these were submitted anonymously and are counted here but never identified. ' : '')
+        + 'Counted across the whole organisation, not split by service.</p>')
+    }
+
     if (orgWide) {
       H.push('<h2>Repeat involvement</h2>')
       H.push('<p>'+repeatPeople+' '+(repeatPeople===1?'person appears':'people appear')+' in more than one incident this period. Matching is on the register entry, not typed initials. Counted across the whole organisation.</p>')
@@ -554,8 +660,15 @@ export function openBoardReport(o) {
     // colours from printed pages by default, so without it this band prints
     // as grey text and the section divider disappears from the PDF -- which
     // is the copy that gets handed to a board or a regulator.
-    const bandBase = 'margin:56px 0 16px;padding:22px 26px;background:#151E2D;color:#FBFAF7;'
-      + 'border-left:8px solid #1F5E58;border-radius:4px;line-height:1.15;'
+    // IRN-DURATION-V2: teal ground, ink rule. Was ink ground with a teal rule,
+    // which read as near-black and belonging to another document. The rule is
+    // inverted rather than dropped so the left edge stays visible.
+    // print-color-adjust below is load-bearing: without it printed pages drop
+    // the background entirely and the band prints as grey text with no
+    // divider -- in the PDF that gets handed over, while the screen looks fine.
+    // IRN-BAND-V3: verdant sea. Was #1F5E58, which read as pine.
+    const bandBase = 'margin:56px 0 16px;padding:22px 26px;background:#1B7A5A;color:#FBFAF7;'
+      + 'border-left:8px solid #151E2D;border-radius:4px;line-height:1.15;'
       + '-webkit-print-color-adjust:exact;print-color-adjust:exact'
     const sectionBand = (eyebrow, label, extra) =>
       '<div style="'+bandBase+(extra||'')+'">'
