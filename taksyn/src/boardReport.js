@@ -589,7 +589,7 @@ export function openBoardReport(o) {
       }
 
       if (stale.length) {
-        H.push('<div class="flagbox"><h3>' + stale.length + ' still unresolved after 30 days</h3>')
+        H.push('<div class="flagbox"><h3>' + stale.length + (stale.length === 1 ? ' still unresolved after 30 days' : ' still unresolved after 30 days') + '</h3>')
         H.push('<p>Counted from the date raised. A complaint left open is not a neutral state \u2014 the person who raised it has had no answer.</p></div>')
       }
 
@@ -606,7 +606,8 @@ export function openBoardReport(o) {
         if (iRes.length) {
           const cls = noNote > withNote ? 'flagbox' : 'goodbox'
           H.push('<div class="' + cls + '"><h3>' + withNote + ' of ' + iRes.length + ' resolved with a written reason</h3>')
-          H.push('<p>' + noNote + ' were closed with no note required. That is a recorded decision, not a gap \u2014 but a period where most closures carry no reason leaves nothing to review.</p></div>')
+          // IRN-FILTERS-V1: "1 were closed" -- singularise.
+          H.push('<p>' + noNote + (noNote === 1 ? ' was' : ' were') + ' closed with no note required. That is a recorded decision, not a gap \u2014 but a period where most closures carry no reason leaves nothing to review.</p></div>')
         }
       }
 

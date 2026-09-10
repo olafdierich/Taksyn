@@ -20780,6 +20780,12 @@ function IssueReportsAdminView({ user }) {
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('open')
   const [filterType, setFilterType] = useState('all')
+  // IRN-FILTERS-V1: Resolved-tab filters. Client-side over loaded rows.
+  const [fSearch, setFSearch] = useState('')
+  const [fLodged, setFLodged] = useState('all')
+  const [fResolver, setFResolver] = useState('all')
+  const [fPriority, setFPriority] = useState('all')
+  const [fService, setFService] = useState('all')
   const [period, setPeriod] = useState('365')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -20868,7 +20874,32 @@ function IssueReportsAdminView({ user }) {
     const cutoff = new Date(Date.now() - days*86400000)
     return issues.filter(i=> new Date(i.created_at) >= cutoff)
   })()
-  const visible = periodIssues.filter(i=> (filterStatus==='all' ? true : i.status===filterStatus) && (filterType==='all' ? true : (i.type||'request')===filterType))
+  // IRN-FILTERS-V1: the five extra filters apply ONLY on the Resolved tab.
+  // Elsewhere they are inert, so switching tabs never hides rows via a
+  // control that is not on screen.
+  const _archiveMode = filterStatus==='resolved'
+  const _resolverOf = id => {
+    const ns = notes[id]||[]
+    const r = ns.filter(n=>n.status_to==='resolved')
+    return r.length ? r[r.length-1].author_name : ''
+  }
+  const visible = periodIssues.filter(i=> {
+    if(filterStatus!=='all' && i.status!==filterStatus) return false
+    if(filterType!=='all' && (i.type||'request')!==filterType) return false
+    if(!_archiveMode) return true
+    if(fSearch.trim()){
+      const q = fSearch.trim().toLowerCase()
+      if(!((i.title||'').toLowerCase().includes(q) || (i.description||'').toLowerCase().includes(q))) return false
+    }
+    if(fLodged!=='all'){
+      if(fLodged==='__anon'){ if(!i.is_anonymous) return false }
+      else if(i.is_anonymous || (reporterNames[i.reported_by]||'')!==fLodged) return false
+    }
+    if(fResolver!=='all' && _resolverOf(i.id)!==fResolver) return false
+    if(fPriority!=='all' && (i.priority||'medium')!==fPriority) return false
+    if(fService!=='all' && (i.industry_id||'')!==fService) return false
+    return true
+  })
   const byRecent = (a,b)=> new Date(b.created_at) - new Date(a.created_at)
   const grouped = {
     complaint: visible.filter(i=>(i.type||'request')==='complaint').sort(byRecent),
@@ -20901,6 +20932,69 @@ function IssueReportsAdminView({ user }) {
         ))}
       </div>
       <div style={{display:'flex',gap:8,marginBottom:period==='custom'?12:20,flexWrap:'wrap',alignItems:'center'}}>
+        {/* IRN-FILTERS-V1: archive filters, Resolved tab only. Option lists are
+            built from the rows present -- a filter offering a name that
+            returns nothing is worse than no filter. */}
+        {filterStatus==='resolved'&&(()=>{
+          const pool = periodIssues.filter(i=>i.status==='resolved')
+          const lodgers = [...new Set(pool.filter(i=>!i.is_anonymous).map(i=>reporterNames[i.reported_by]).filter(Boolean))].sort()
+          const resolvers = [...new Set(pool.map(i=>_resolverOf(i.id)).filter(Boolean))].sort()
+          const services = [...new Set(pool.map(i=>i.industry_id).filter(Boolean))]
+          // IRN-FILTERS-V2: sel = resting, selA = active. A control that is
+          // doing something must look different from one that is not --
+          // combining filters is useful, but only if you can see which are on.
+          const sel = {padding:'6px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--card)',color:'var(--t1)',fontSize:12,fontFamily:'inherit'}
+          const selA = {...sel,border:'2px solid var(--brand)',color:'var(--brand)',fontWeight:700}
+          const anyOn = !!(fSearch||fLodged!=='all'||fResolver!=='all'||fPriority!=='all'||fService!=='all')
+          const clearAll = ()=>{setFSearch('');setFLodged('all');setFResolver('all');setFPriority('all');setFService('all')}
+          return (
+            <div style={{marginBottom:12}}>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <input placeholder="Search title or description" value={fSearch} onChange={e=>setFSearch(e.target.value)} style={{...(fSearch?selA:sel),minWidth:220,flex:'1 1 220px'}}/>
+                <select value={fLodged} onChange={e=>setFLodged(e.target.value)} style={fLodged!=='all'?selA:sel}>
+                  <option value="all">Lodged by — anyone</option>
+                  {/* Anonymous is always offered. It was conditional on an
+                      anonymous row existing in the resolved pool, so it
+                      vanished before any had been resolved -- which read as a
+                      missing option rather than empty data. */}
+                  <option value="__anon">Anonymous</option>
+                  {lodgers.map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+                <select value={fResolver} onChange={e=>setFResolver(e.target.value)} style={fResolver!=='all'?selA:sel}>
+                  <option value="all">Resolved by — anyone</option>
+                  {resolvers.map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+                <select value={fPriority} onChange={e=>setFPriority(e.target.value)} style={fPriority!=='all'?selA:sel}>
+                  <option value="all">Any priority</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+                {services.length>1&&(
+                  <select value={fService} onChange={e=>setFService(e.target.value)} style={fService!=='all'?selA:sel}>
+                    <option value="all">Any service</option>
+                    {services.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                )}
+                {anyOn&&<button className="btn btn-primary btn-sm" style={{fontSize:11}} onClick={clearAll}>Clear filters</button>}
+              </div>
+              {anyOn&&(
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:7,fontWeight:600}}>
+                  {visible.length} of {pool.length} shown
+                </div>
+              )}
+              {anyOn&&visible.length===0&&(
+                <div style={{marginTop:10,padding:'14px 16px',border:'1px solid var(--border)',borderRadius:12,background:'var(--card)',fontSize:12,color:'var(--t2)'}}>
+                  {/* An empty archive and an archive filtered to nothing looked
+                      identical before this. The first is a fact about the
+                      organisation, the second about the controls. */}
+                  No resolved items match these filters.{' '}
+                  <button className="btn btn-secondary btn-sm" style={{fontSize:11,marginLeft:6}} onClick={clearAll}>Clear filters</button>
+                </div>
+              )}
+            </div>
+          )
+        })()}
         {[['365','Annually'],['90','Quarterly'],['30','Monthly'],['custom','Custom']].map(([v,l])=>(
           <button key={v} onClick={()=>setPeriod(v)} style={{padding:'6px 14px',borderRadius:20,border:`2px solid ${period===v?'var(--brand)':'var(--border)'}`,background:period===v?'var(--brand-lt)':'none',color:period===v?'var(--brand)':'var(--t2)',fontWeight:period===v?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all .15s'}}>
             {l}
