@@ -18917,7 +18917,11 @@ function IncidentRegisterView({ user, setPage }) {
           let issuesRows = [], issueNoteRows = []
           try {
             const { data: ir } = await supabase.from('issue_reports')
-              .select('id,type,status,created_at,is_anonymous').eq('org', user.org)
+              // IRN-DURATION-V2: resolved_at was MISSING here, so the report's
+              // median/fastest/slowest line computed from undefined, its own
+              // guard dropped every row, and the block silently rendered
+              // nothing. The guard hid the bug rather than surfacing it.
+              .select('id,type,status,created_at,resolved_at,is_anonymous').eq('org', user.org)
             issuesRows = ir || []
             if (issuesRows.length) {
               const { data: inotes } = await supabase.from('issue_report_notes')
@@ -20938,7 +20942,18 @@ function IssueReportsAdminView({ user }) {
                           {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{maxWidth:220,maxHeight:150,borderRadius:8,border:'1px solid var(--border)',display:'block',marginBottom:6}}/>}
                           <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
                             {issue.is_anonymous ? <span style={{color:'var(--t2)',fontWeight:600}}>🔒 Anonymous</span> : <span>👤 {reporterNames[issue.reported_by]||'Team member'}</span>}
-                            <span>📅 {new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</span>
+                            {/* IRN-DURATION-V2: words, not glyphs. */}
+                            <span>Created {new Date(issue.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</span>
+                            {/* IRN-DURATION-V1: resolved date and elapsed days.
+                                Whole days, floored -- 47 hours reads as "1 day".
+                                Under 24 hours reads "same day", not "0 days".
+                                Skipped entirely when resolved_at is missing rather
+                                than printing NaN. */}
+                            {issue.status==='resolved'&&issue.resolved_at&&(()=>{
+                              const d = Math.floor((new Date(issue.resolved_at) - new Date(issue.created_at)) / 86400000)
+                              const lbl = d < 1 ? 'same day' : (d === 1 ? '1 day' : d + ' days')
+                              return <span>Resolved {new Date(issue.resolved_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})} · {lbl}</span>
+                            })()}
                             {/* IRN-NOTES-V1B: "Resolved by {issue.resolved_by}" removed here.
                                 resolved_by is a uuid, so it printed a raw id. The note
                                 timeline below states the same fact with the actor's name,
