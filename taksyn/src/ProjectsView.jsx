@@ -1037,18 +1037,15 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
         const rowStyle = { padding: '9px 10px', borderBottom: '1px solid ' + C.line,
                            cursor: 'pointer', fontSize: 13, display: 'flex',
                            justifyContent: 'space-between', alignItems: 'center', gap: 8 }
-        const back = (label, onClick) => (
-          <div style={{ fontSize: 12, color: C.ink2, cursor: 'pointer', marginBottom: 8 }} onClick={onClick}>
-            {'\u2039'} {label}
-          </div>)
         return (
           <div style={modalWrap} onClick={() => setTplPick(null)}>
             <div style={modalBox} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>Add tasks to {tplPick.stage.name}</div>
               <div style={{ fontSize: 12, color: C.ink2, marginBottom: 10 }}>
+                {/* TPL-BACK-V1: the subtitle names where you are; Back is in the footer. */}
                 {tplPick.step === 'project' ? 'Choose the project these tasks come from.'
-                 : tplPick.step === 'stage' ? 'Choose the stage.'
-                 : 'Tick the tasks to add. You choose who does them, the approver and the date next.'}
+                 : tplPick.step === 'stage' ? 'Choose the stage in ' + tplPick.pickedProject + '.'
+                 : 'Tick the tasks to add, from ' + tplPick.pickedProject + ' / ' + tplPick.pickedStage + '.'}
               </div>
 
               {tplPick.loading && <div style={{ fontSize: 12, color: C.ink2 }}>Loading{'\u2026'}</div>}
@@ -1068,7 +1065,6 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                       </div>)))}
 
               {!tplPick.loading && tplPick.step === 'stage' && (<>
-                {back(tplPick.pickedProject, () => setTplPick({ ...tplPick, step: 'project', pickedProject: null }))}
                 {stages_.map(s => (
                   <div key={s} style={rowStyle}
                        onClick={() => setTplPick({ ...tplPick, step: 'templates', pickedStage: s })}>
@@ -1080,8 +1076,6 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
               </>)}
 
               {!tplPick.loading && tplPick.step === 'templates' && (<>
-                {back(tplPick.pickedProject + ' / ' + tplPick.pickedStage,
-                      () => setTplPick({ ...tplPick, step: 'stage', pickedStage: null }))}
                 <div style={{ maxHeight: 300, overflowY: 'auto' }}>
                   {inStage.map(t => (
                     <label key={t.id} style={{ ...rowStyle, justifyContent: 'flex-start' }}>
@@ -1098,6 +1092,12 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
               </>)}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                {/* TPL-BACK-V1 */}
+                {tplPick.step !== 'project' &&
+                  <button className="btn btn-secondary"
+                          onClick={() => setTplPick(tplPick.step === 'templates'
+                            ? { ...tplPick, step: 'stage', pickedStage: null }
+                            : { ...tplPick, step: 'project', pickedProject: null })}>{'\u2039'} Back</button>}
                 <button className="btn btn-secondary" onClick={() => setTplPick(null)}>Cancel</button>
                 <button className="btn btn-primary" disabled={!nSel} onClick={applyTemplates}
                         style={{ opacity: nSel ? 1 : .5 }}>
