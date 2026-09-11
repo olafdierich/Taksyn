@@ -4641,6 +4641,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     // SUP-LOW-V1: supervisors create Low priority only. Refused BEFORE any write.
     // The message deliberately does not suggest lowering the priority.
     if (user.role==='supervisor' && newTask.priority!=='low') { setCreateError('Supervisors can only create Low priority tasks. Please contact your manager to create this task.'); return }
+    // SUP-LOW-V3: above Low, the approver must be a manager or above -- otherwise the task
+    // stalls (supervisor cannot approve it, manager cannot see it). teamUsers is the list
+    // the approver dropdown is built from.
+    if (newTask.priority!=='low' && newTask.approver_id && (teamUsers||[]).find(u=>u.id===newTask.approver_id)?.role==='supervisor') { setCreateError('Tasks above Low priority need a manager or administrator as approver.'); return }
     setCreating(true)
     setCreateError('')
     const taskData = {...newTask}
@@ -4728,6 +4732,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
   )
   // SUP-LOW-V1: supervisors approve Low priority only. Missing priority = not Low (fails closed).
   const canReviewTask = (t) => canApprove && !(isAssignedTo(t) && t.created_by !== user.name) && !(user.role==='supervisor' && t?.priority!=='low')
+  // SUP-LOW-V2: opening the edit form (Edit, Reassign) follows the same Low-only
+  // rule for supervisors. Missing priority = not Low (fails closed).
+  const canEditTask = (t) => canApprove && !(user.role==='supervisor' && t?.priority!=='low')
   // Delete is irreversible and the "This and future" scope destroys a whole recurrence,
   // so it is gated harder than review: the creator, or client_admin and above.
   //
@@ -4986,7 +4993,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={editTask.category||''} onChange={e=>setEditTask({...editTask,category:e.target.value,department:''})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Department</label><select className="form-select" value={editTask.department||''} onChange={e=>setEditTask({...editTask,department:e.target.value})}><option value="">— Select —</option>{(DEPARTMENTS[editTask.category||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
-                <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={editTask.priority||''} onChange={e=>setEditTask({...editTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+                <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={editTask.priority||''} onChange={e=>setEditTask({...editTask,priority:e.target.value})}>{/* SUP-LOW-V2: supervisors are offered Low only */}{(user.role==='supervisor'?[['low','Low']]:[['critical','Critical'],['high','High'],['medium','Medium'],['low','Low']]).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>
               </div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={editTask.due_date||''} onChange={e=>setEditTask({...editTask,due_date:e.target.value})}/></div>
@@ -5864,18 +5871,18 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     <span style={isOrphaned?{color:'var(--t2)',textDecoration:'line-through'}:{}}>{_asgLabel}</span>
                     {isOrphaned&&<div style={{marginTop:4,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                       <span style={{fontSize:11,color:'var(--red)',fontWeight:600}}>⚠️ Assigned user is no longer active in this organisation</span>
-                      {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>Reassign</button>}
+                      {canEditTask(sel)&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>Reassign</button>}
                     </div>}
                   </div>
                 )
               })()}
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
-              {sel.approver_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Approver:</span> {sel.approver_name}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--brand)'}}>⏳ Awaiting your review</span>}</div>}
+              {sel.approver_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Approver:</span> {sel.approver_name}{/* SUP-LOW-V2: only say "your review" when this viewer can actually approve */}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&!canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--t2)'}}>Awaiting manager / admin review</span>}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--brand)'}}>⏳ Awaiting your review</span>}</div>}
               {sel.project&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Project:</span> <span style={{color:'#3B82F6',fontWeight:600}}>📁 {sel.project}</span></div>}
             </div>
           </div>
           <div className="btn-row">
-            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}><IC n="pencil" s={13}/> Edit</button>}
+            {canEditTask(sel)&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}><IC n="pencil" s={13}/> Edit</button>}
             {canReviewTask(sel)&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
@@ -6223,7 +6230,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 ))}
               </div>
               {(()=>{
-                const myReview = activeFiltered.filter(t=>t.status==='awaiting_review' && t.approver_id===user.id)
+                const myReview = activeFiltered.filter(t=>t.status==='awaiting_review' && t.approver_id===user.id && !(user.role==='supervisor' && t.priority!=='low')) /* SUP-LOW-V3 */
                 if(myReview.length===0) return null
                 return (
                   <div onClick={()=>setFilter('awaiting_review')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.35)',borderRadius:12,padding:'10px 14px',marginBottom:12}}>
@@ -6335,7 +6342,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
                     // ── SUPERVISOR VIEW ───────────────────────────────
                     if(user.role==='supervisor') {
-                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).sort(byDate) /* SUP-LOW-V3 */
                       const _mySelf = t => !!t.created_by_id && t.created_by_id===user.id && t.assigned_user_id===user.id
                       const _myAll = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review').sort(byDate)
                       const mySelfTasks = _myAll.filter(_mySelf)
@@ -6395,7 +6402,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
                     // ── MANAGER VIEW ──────────────────────────────────
                     if(user.role==='manager') {
-                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).sort(byDate) /* SUP-LOW-V3 */
                       const _mySelf = t => !!t.created_by_id && t.created_by_id===user.id && t.assigned_user_id===user.id
                       const _myAll = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review').sort(byDate)
                       const mySelfTasks = _myAll.filter(_mySelf)
@@ -6454,7 +6461,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     }
 
                     // ── CLIENT ADMIN VIEW ─────────────────────────────
-                    const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                    const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).sort(byDate) /* SUP-LOW-V3 */
                     const _caToday = orgToday(orgTz)
                     const _isOver = t => !!orgTz && isOverdueOneOff(t, _caToday)
                     const attention = activeFiltered.filter(t=>['overdue','escalated'].includes(t.status)||t.escalation||_isOver(t)).sort(byDate)
@@ -6702,6 +6709,8 @@ function OrgEscalationsView({ user, setAuditLog }) {
 function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
   const relevant = tasks.filter(t=>t.evidence?.length>0||t.status==='awaiting_review')
   const approve = async (id) => {
+    // SUP-LOW-V3: this approve does not go through canReviewTask. Refuse before any write.
+    { const _t = tasks.find(x=>x.id===id); if (user.role==='supervisor' && _t?.priority!=='low') { alert('Supervisors can only approve Low priority tasks.'); return } }
     const t = tasks.find(t=>t.id===id)
     setTasks(prev=>prev.map(t=>t.id===id?{...t,status:'approved',reviewed_at:new Date().toISOString()}:t))
     if(isConfigured()) { markRecentlyWritten(id); await supabase.from('tasks').update({status:'approved',reviewed_at:new Date().toISOString()}).eq('id',id); markRecentlyWritten(id) }
@@ -6741,7 +6750,7 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
             </div>
             {hasAccess(user.role,2)&&t.status==='awaiting_review'&&(
               <div style={{display:'flex',gap:7,marginTop:10}}>
-                <button className="btn btn-primary btn-sm" onClick={()=>approve(t.id)}>✅ Approve</button>
+                {!(user.role==='supervisor'&&t.priority!=='low')&&<button className="btn btn-primary btn-sm" onClick={()=>approve(t.id)}>✅ Approve</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>reject(t.id)}>✗ Reject</button>
               </div>
             )}
@@ -22238,7 +22247,7 @@ export default function App() {
   // NARROW-VISIBLE-TASKS-V1: review badge counts only tasks where the user is the
   // APPROVER. A review queue should reflect what you are responsible for approving.
   const myReviewCount = ['supervisor','manager','client_admin'].includes(user.role)
-    ? tasks.filter(t=>t.status==='awaiting_review'&&(t.approver_id===user.id||t.approver_name?.toLowerCase()===user.name?.toLowerCase())).length
+    ? tasks.filter(t=>t.status==='awaiting_review'&&(t.approver_id===user.id||t.approver_name?.toLowerCase()===user.name?.toLowerCase())&&!(user.role==='supervisor' && t.priority!=='low')).length /* SUP-LOW-V3 */
     : 0
   const _blobToday = new Date().toISOString().split('T')[0]
   // NARROW-VISIBLE-TASKS-V1: nav dot and task button colour reflect the user's own tasks.
