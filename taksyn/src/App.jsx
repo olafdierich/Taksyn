@@ -3581,9 +3581,13 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null, orgOccurrences=null, orgMembers=null }) {
+function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null, orgOccurrences=null, orgMembers=null }) {
   const [filter, setFilter] = useState('all')
   useEffect(()=>{ try{ const _f=sessionStorage.getItem('taksyn-task-filter'); if(_f){ setFilter(_f); sessionStorage.removeItem('taksyn-task-filter') } }catch(e){} },[])
+  // CA-HANDOFF-V1: a corrective action hands its incident over via sessionStorage.
+  // Read once, removed at once: a refresh starts clean and nothing was ever saved.
+  const [caDraft, setCaDraft] = useState(null)
+  useEffect(()=>{ try{ const _d=sessionStorage.getItem('taksyn-ca-draft'); if(_d){ sessionStorage.removeItem('taksyn-ca-draft'); const d=JSON.parse(_d); if(d&&d.incident_id&&d.ref){ setCaDraft(d); setNewTask(prev=>({...prev,title:'',category:'Corrective action',approver_id:user.id,approver_name:user.name,subtasks:[{id:'s'+Date.now(),text:'Complete corrective action and attach evidence',done:false,mandatory:false,requirePhoto:true,requireTimestamp:false,note:'',instruction:'',photo:null,history:[]}]})); setShowCreate(true) } } }catch(e){} },[])
   const [selectedOrg, setSelectedOrg] = useState('all')
   const [orgSearch, setOrgSearch] = useState('')
   const [showArchive, setShowArchive] = useState(false)
@@ -4637,6 +4641,10 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     }
   }
 
+  // CA-HANDOFF-V1: closing the form (Cancel, x, overlay) discards the draft. Only a
+  // true -> false transition counts, so the mount that OPENS the form cannot clear it.
+  const _caPrevShow = useRef(false)
+  useEffect(()=>{ if(_caPrevShow.current && !showCreate) setCaDraft(null); _caPrevShow.current = showCreate },[showCreate])
   const createTask = async () => {
     if (!newTask.title.trim() || creating) return
     // SUP-LOW-V1: supervisors create Low priority only. Refused BEFORE any write.
@@ -4655,6 +4663,8 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       const teamIds = [...new Set((tmRows||[]).map(r=>r.team_id).filter(Boolean))]
       if (teamIds.length === 1) { const tm = taskOrgTeams.find(t=>t.id===teamIds[0]); taskData.team_id = teamIds[0]; taskData.team_name = tm?.name || '' }
     }
+    // CA-HANDOFF-V1: incident ref appended to the title, never doubled.
+    if (caDraft) { const _b = String(taskData.title||'').trim(); const _sfx = ' - ' + caDraft.ref; taskData.title = _b.endsWith(_sfx) ? _b : _b + _sfx; taskData.category = 'Corrective action' }
     const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, created_by_id:user.id, requires_approval:(taskData.assigned_user_id===user.id?false:true), org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
@@ -4667,6 +4677,26 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       }
       const saved = { ...data, subtasks:parseSafe(data.subtasks), evidence:parseSafe(data.evidence), comments:parseSafe(data.comments,[]) }
       setTasks(prev=>[...prev,saved])
+      // CA-HANDOFF-V1: link the new task to its incident. Owner = the creator (accountable);
+      // a client admin can reassign later. Errors are RETURNED by supabase, so check them.
+      if (caDraft) {
+        const _sfx = ' - ' + caDraft.ref
+        const _desc = t.title.endsWith(_sfx) ? t.title.slice(0, -_sfx.length) : t.title
+        const { data: _act, error: _aErr } = await supabase.from('incident_actions').insert({
+          incident_id: caDraft.incident_id, org: caDraft.org_id, description: _desc, action_type: 'corrective',
+          task_id: t.id, owner_id: user.id, owner_name: user.name, due_date: t.due_date || null, status: 'open'
+        }).select('id').single()
+        if (_aErr) {
+          alert('The task was created, but it could not be linked to ' + caDraft.ref + ': ' + _aErr.message + '. Please tell your administrator.')
+        } else {
+          const { error: _evErr } = await supabase.from('incident_events').insert({
+            incident_id: caDraft.incident_id, org: caDraft.org_id, event_type: 'action_created',
+            by_id: user.id, by_name: user.name, by_role: user.role,
+            to_value: _desc.slice(0, 60), details: { task_id: t.id, action_id: _act?.id, owner: user.name, assignee: t.assigned_user_name || null }
+          })
+          if (_evErr) alert('The corrective action was created, but the audit entry could not be written: ' + _evErr.message + '. Please tell your administrator.')
+        }
+      }
       // Notify: if a subset was ticked, notify only those members; otherwise notify the whole team
       if (t.team_id) {
         const chosen = t.assigned_user_ids || []
@@ -4704,6 +4734,9 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     setTaskTeamMembers([])
     setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[],team_id:'',team_name:''})
     setCreating(false)
+
+    // CA-HANDOFF-V1: back to the incident it came from (existing open-by-ref pattern).
+    if (caDraft) { try { sessionStorage.setItem('taksyn-open-incident', caDraft.ref) } catch (e) {} setCaDraft(null); setPage('incidents') }
   }
 
   const canCreate = ['client_admin','manager','supervisor'].includes(user.role)
@@ -5145,7 +5178,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
       {showCreate&&(
         <div className="modal-overlay" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null); setTaskTeamMembers([]); setUserSearch(''); setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[],team_id:'',team_name:''}) }}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-hdr"><div className="modal-title">Create New Task</div><button className="modal-close" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null); setTaskTeamMembers([]); setUserSearch(''); setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[],team_id:'',team_name:''}) }}>×</button></div>
+            <div className="modal-hdr"><div className="modal-title">{caDraft?'Create corrective action task':'Create New Task'}{caDraft&&<div style={{fontSize:12,fontWeight:400,color:'var(--t2)',marginTop:2}}>For {caDraft.ref}. The incident number is added to the title automatically. The title is visible to the worker, so do not include incident detail.</div>}</div><button className="modal-close" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null); setTaskTeamMembers([]); setUserSearch(''); setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[],team_id:'',team_name:''}) }}>×</button></div>
             <div className="modal-body">
               <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/></div>
               <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={newTask.recurrence} onChange={e=>setNewTask({...newTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
@@ -16303,97 +16336,27 @@ const ROLES_ABOVE = {
 }
 
 // ============ INCIDENT REPORTING ============
-function CapaActionForm({ sel, orgId, user, busy, setBusy, capaStaff, isAdmin, onDone }) {
-  const [desc, setDesc] = useState('')
-  const [ownerId, setOwnerId] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const [evidence, setEvidence] = useState(true)
-  const [err, setErr] = useState('')
-
+function CapaActionForm({ sel, orgId, user, busy, isAdmin, setPage }) {
+  // CA-HANDOFF-V1: one click opens the full Create New Task form, pre-filled for this
+  // incident. Nothing is saved here -- the task AND the linked action are written on
+  // Submit in TasksView.createTask. Cancel there saves nothing.
   const sev = Number(sel?.severity) || 0
   const risk = Number(sel?.risk_rating) || 0
   const gated = sev >= 3 || risk >= 9
   const blocked = gated && !isAdmin
-
-  const create = async () => {
-    setErr('')
-    const d = desc.trim()
-    if (!d) { setErr('Enter a description.'); return }
-    if (!ownerId) { setErr('Choose who will do this action.'); return }
-    if (blocked) { setErr('High severity/risk — a client admin must assign this action.'); return }
-    setBusy(true)
-    try {
-      const { data: sess } = await supabase.auth.getSession()
-      const uid = sess?.session?.user?.id
-      const owner = capaStaff.find(m => m.user_id === ownerId)
-      const ownerName = owner?.name || ''
-      const now = new Date().toISOString()
-      const taskId = 'T' + Date.now()
-      const subtasks = [{ id: 's' + Date.now(), text: 'Complete corrective action and attach evidence', done: false, requirePhoto: !!evidence }]
-      const taskPayload = {
-        id: taskId, title: d, category: 'Corrective action', status: 'pending',
-        priority: 'high', compliance: !!evidence, recurrence: 'once',
-        assigned_role: owner?.role || 'worker',
-        assigned_user_id: ownerId, assigned_user_name: ownerName,
-        assigned_user_ids: [ownerId], assigned_user_names: [ownerName],
-        due_date: dueDate || null,
-        subtasks: JSON.stringify(subtasks), evidence: '[]', comments: '[]',
-        escalation: false, created_by: user.name, org: user.org, created_at: now
-      }
-      const { error: tErr } = await supabase.from('tasks').insert(taskPayload)
-      if (tErr) { setErr('Could not create task: ' + tErr.message); setBusy(false); return }
-      const { error: aErr } = await supabase.from('incident_actions').insert({
-        incident_id: sel.id, org: orgId, description: d, action_type: 'corrective',
-        task_id: taskId, owner_id: ownerId, owner_name: ownerName,
-        due_date: dueDate || null, status: 'open'
-      })
-      if (aErr) { setErr('Task created but link failed: ' + aErr.message); setBusy(false); return }
-      // audit insert must be checked -- the Supabase client RETURNS errors
-      // rather than throwing, so the catch below never sees them.
-      const { error: evErr } = await supabase.from('incident_events').insert({
-        incident_id: sel.id, org: orgId, event_type: 'action_created',
-        by_id: uid, by_name: user.name, by_role: user.role,
-        to_value: d.slice(0, 60), details: { task_id: taskId, owner: ownerName }
-      })
-      if (evErr) setErr('The action was created, but the audit entry could not be written: '
-        + evErr.message + '. Please tell your administrator.')
-      setDesc(''); setOwnerId(''); setDueDate(''); setEvidence(true)
-      if (onDone) await onDone()
-    } catch (e) {
-      setErr('Unexpected error: ' + (e?.message || e))
-    }
-    setBusy(false)
+  const start = () => {
+    if (blocked || !setPage || !sel) return
+    try { sessionStorage.setItem('taksyn-ca-draft', JSON.stringify({ incident_id: sel.id, org_id: orgId, ref: sel.ref || ('incident ' + sel.id) })) } catch (e) {}
+    setPage('tasks')
   }
-
   return (
     <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)'}}>
-      <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>Create a corrective action (becomes a task)</div>
-      <div style={{fontSize:11,color:'#DC2626',background:'rgba(220,38,38,.08)',padding:'6px 8px',borderRadius:8,marginBottom:8}}>
-        &#9888;&#65039; This title is visible to the assigned worker — do not include incident detail (category, people involved, or clinical information).
+      <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>Corrective action</div>
+      <div style={{fontSize:12,color:'var(--t2)',marginBottom:8}}>
+        Opens the task form. You choose who does it, the approver and the checklist. {sel?.ref ? sel.ref : 'The incident number'} is added to the task title automatically. Nothing is saved until you submit.
       </div>
-      <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="What needs to be done (worker-safe wording)…"
-        style={{width:'100%',minHeight:52,padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8}}/>
-      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
-        <select value={ownerId} onChange={e=>setOwnerId(e.target.value)} disabled={blocked}
-          style={{flex:'1 1 180px',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)'}}>
-          <option value="">— Assign to —</option>
-          {capaStaff.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({ROLE_LABELS[m.role]||m.role})</option>)}
-        </select>
-        <div style={{flex:'0 1 150px'}}>
-          <div style={{fontSize:11,color:'var(--t3)',marginBottom:2}}>Due date</div>
-          <input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)} title="Due date for this corrective action"
-            style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box'}}/>
-        </div>
-      </div>
-      <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,marginBottom:8,cursor:'pointer'}}>
-        <input type="checkbox" checked={evidence} onChange={e=>setEvidence(e.target.checked)}/>
-        Require photo evidence
-      </label>
-      {blocked && <div style={{fontSize:11,color:'#EA580C',marginBottom:8}}>High severity or high risk — a client admin must assign this action.</div>}
-      {err && <div style={{fontSize:11,color:'#DC2626',marginBottom:8}}>{err}</div>}
-      <button className="btn btn-primary btn-sm" disabled={busy||blocked} onClick={create}>
-        {busy?'Creating…':'Create corrective action'}
-      </button>
+      {blocked && <div style={{fontSize:11,color:'#EA580C',marginBottom:8}}>High severity or high risk — a client admin must raise this action.</div>}
+      <button className="btn btn-primary btn-sm" disabled={busy||blocked} onClick={start}>Create corrective action</button>
     </div>
   )
 }
@@ -20509,7 +20472,7 @@ function IncidentsAdminView({ user, setPage }) {
               </div>
             )
           })()}
-          <CapaActionForm sel={sel} orgId={orgId} user={user} busy={busy} setBusy={setBusy}
+          <CapaActionForm setPage={setPage} sel={sel} orgId={orgId} user={user} busy={busy} setBusy={setBusy}
             capaStaff={capaStaff} isAdmin={isAdmin}
             onDone={async ()=>{
               const { data: act } = await supabase.from('incident_actions').select('*').eq('incident_id',sel.id).order('created_at',{ascending:true})
