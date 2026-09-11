@@ -679,7 +679,8 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
   }
 
   const openTemplatePicker = async (pk) => {
-    setTplPick({ stage: pk, rows: [], fProject: project.name, fStage: pk.name, loading: true })
+    // TPL-PICKER-V2: open at the project level and let the user walk down.
+    setTplPick({ stage: pk, rows: [], step: 'project', pickedProject: null, pickedStage: null, sel: {}, loading: true })
     const { data, error } = await supabase.from('checklist_templates')
       .select('id,name,priority,items,template_group,template_stage')
       .eq('organisation_id', project.org || '').order('name')
@@ -687,21 +688,27 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
     setTplPick(p => p && { ...p, rows: data || [], loading: false })
   }
 
-  const useTemplate = (t) => {
+  // TPL-PICKER-V2: one template fills the form; the rest ride along and are
+  // written on submit with the same people and dates.
+  const _asPreset = (t) => ({
+    title: t.name || '',
+    priority: t.priority || 'medium',
+    subtasks: (t.items || []).map(it => ({
+      id: 's' + Date.now() + Math.random(),
+      text: it.label || it.text || '', done: false,
+      mandatory: !!(it.required || it.mandatory),
+      requirePhoto: !!it.requirePhoto, requireTimestamp: !!it.requireTimestamp,
+      instruction: it.instruction || '', note: '', photo: null, history: []
+    }))
+  })
+
+  const applyTemplates = () => {
     const stage = tplPick.stage
+    const chosen = tplPick.rows.filter(t => tplPick.sel[t.id])
+    if (!chosen.length) return
     setTplPick(null)
-    setPreset({
-      stageId: stage.id,
-      title: t.name || '',
-      priority: t.priority || 'medium',
-      subtasks: (t.items || []).map(it => ({
-        id: 's' + Date.now() + Math.random(),
-        text: it.label || it.text || '', done: false,
-        mandatory: !!(it.required || it.mandatory),
-        requirePhoto: !!it.requirePhoto, requireTimestamp: !!it.requireTimestamp,
-        instruction: it.instruction || '', note: '', photo: null, history: []
-      }))
-    })
+    const [first, ...rest] = chosen.map(_asPreset)
+    setPreset({ stageId: stage.id, ...first, extras: rest })
     setAddingTo(stage.id)
   }
 
@@ -1015,58 +1022,84 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
         </div>
       </div>
 
-      {/* STAGE-TPL-V1: template picker. This stage first, then this project, then the rest. */}
+      {/* TPL-PICKER-V2: project -> stage -> tick templates -> Apply. */}
       {tplPick && (() => {
-        const rows = tplPick.rows.filter(t =>
-          (tplPick.fProject === '__all' || (t.template_group || '') === tplPick.fProject) &&
-          (tplPick.fStage === '__all' || (t.template_stage || '') === tplPick.fStage))
-        const rank = t => (t.template_group === project.name && t.template_stage === tplPick.stage.name) ? 0
-                        : (t.template_group === project.name ? 1 : 2)
-        const sorted = [...rows].sort((a, b) => rank(a) - rank(b) || (a.name || '').localeCompare(b.name || ''))
-        const projects_ = [...new Set(tplPick.rows.map(t => t.template_group || '').filter(Boolean))].sort()
-        const stages_ = [...new Set(tplPick.rows
-          .filter(t => tplPick.fProject === '__all' || (t.template_group || '') === tplPick.fProject)
-          .map(t => t.template_stage || '').filter(Boolean))].sort()
+        const groupOf = t => t.template_group || 'Unfiled'
+        const stageOf = t => t.template_stage || 'Unfiled'
+        const projects_ = [...new Set(tplPick.rows.map(groupOf))].sort()
+        const inProject = tplPick.rows.filter(t => groupOf(t) === tplPick.pickedProject)
+        const stages_ = [...new Set(inProject.map(stageOf))].sort()
+        const inStage = inProject.filter(t => stageOf(t) === tplPick.pickedStage)
+        const nSel = Object.values(tplPick.sel).filter(Boolean).length
+        const rowStyle = { padding: '9px 10px', borderBottom: '1px solid ' + C.line,
+                           cursor: 'pointer', fontSize: 13, display: 'flex',
+                           justifyContent: 'space-between', alignItems: 'center', gap: 8 }
+        const back = (label, onClick) => (
+          <div style={{ fontSize: 12, color: C.ink2, cursor: 'pointer', marginBottom: 8 }} onClick={onClick}>
+            {'\u2039'} {label}
+          </div>)
         return (
           <div style={modalWrap} onClick={() => setTplPick(null)}>
             <div style={modalBox} onClick={e => e.stopPropagation()}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>Add a task to {tplPick.stage.name}</div>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Add tasks to {tplPick.stage.name}</div>
               <div style={{ fontSize: 12, color: C.ink2, marginBottom: 10 }}>
-                Pick a template. You choose who does it, the approver and the date next.
+                {tplPick.step === 'project' ? 'Choose the project these tasks come from.'
+                 : tplPick.step === 'stage' ? 'Choose the stage.'
+                 : 'Tick the tasks to add. You choose who does them, the approver and the date next.'}
               </div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                <select style={{ ...inp, flex: '1 1 150px', margin: 0 }} value={tplPick.fProject}
-                        onChange={e => setTplPick({ ...tplPick, fProject: e.target.value, fStage: '__all' })}>
-                  <option value="__all">All projects</option>
-                  {projects_.map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
-                <select style={{ ...inp, flex: '1 1 150px', margin: 0 }} value={tplPick.fStage}
-                        onChange={e => setTplPick({ ...tplPick, fStage: e.target.value })}>
-                  <option value="__all">All stages</option>
-                  {stages_.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-                {tplPick.loading && <div style={{ fontSize: 12, color: C.ink2 }}>Loading…</div>}
-                {!tplPick.loading && sorted.length === 0 &&
-                  <div style={{ fontSize: 12, color: C.ink2 }}>
-                    No templates match. Save a stage as a template first, or clear the filters.
-                  </div>}
-                {sorted.map(t => (
-                  <div key={t.id} onClick={() => useTemplate(t)}
-                       style={{ padding: '8px 10px', borderBottom: '1px solid ' + C.line,
-                                cursor: 'pointer', fontSize: 13 }}>
-                    <div style={{ fontWeight: 500 }}>{t.name}</div>
-                    <div style={{ fontSize: 11, color: C.ink2 }}>
-                      {(t.items || []).length} checklist item{(t.items || []).length === 1 ? '' : 's'}
-                      {t.template_group ? ' · ' + t.template_group : ''}
-                      {t.template_stage ? ' · ' + t.template_stage : ''}
+
+              {tplPick.loading && <div style={{ fontSize: 12, color: C.ink2 }}>Loading{'\u2026'}</div>}
+
+              {!tplPick.loading && tplPick.step === 'project' && (
+                projects_.length === 0
+                  ? <div style={{ fontSize: 12, color: C.ink2 }}>
+                      No templates yet. Use "Save stage as template" on a stage that has tasks.
                     </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                  : projects_.map(g => (
+                      <div key={g} style={rowStyle}
+                           onClick={() => setTplPick({ ...tplPick, step: 'stage', pickedProject: g })}>
+                        <span style={{ fontWeight: 500 }}>{g}</span>
+                        <span style={{ fontSize: 11, color: C.ink2 }}>
+                          {tplPick.rows.filter(t => groupOf(t) === g).length} {'\u203A'}
+                        </span>
+                      </div>)))}
+
+              {!tplPick.loading && tplPick.step === 'stage' && (<>
+                {back(tplPick.pickedProject, () => setTplPick({ ...tplPick, step: 'project', pickedProject: null }))}
+                {stages_.map(s => (
+                  <div key={s} style={rowStyle}
+                       onClick={() => setTplPick({ ...tplPick, step: 'templates', pickedStage: s })}>
+                    <span style={{ fontWeight: 500 }}>{s}</span>
+                    <span style={{ fontSize: 11, color: C.ink2 }}>
+                      {inProject.filter(t => stageOf(t) === s).length} {'\u203A'}
+                    </span>
+                  </div>))}
+              </>)}
+
+              {!tplPick.loading && tplPick.step === 'templates' && (<>
+                {back(tplPick.pickedProject + ' / ' + tplPick.pickedStage,
+                      () => setTplPick({ ...tplPick, step: 'stage', pickedStage: null }))}
+                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                  {inStage.map(t => (
+                    <label key={t.id} style={{ ...rowStyle, justifyContent: 'flex-start' }}>
+                      <input type="checkbox" checked={!!tplPick.sel[t.id]}
+                             onChange={e => setTplPick({ ...tplPick, sel: { ...tplPick.sel, [t.id]: e.target.checked } })} />
+                      <span>
+                        <span style={{ fontWeight: 500 }}>{t.name}</span>
+                        <span style={{ display: 'block', fontSize: 11, color: C.ink2 }}>
+                          {(t.items || []).length} checklist item{(t.items || []).length === 1 ? '' : 's'}
+                        </span>
+                      </span>
+                    </label>))}
+                </div>
+              </>)}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
                 <button className="btn btn-secondary" onClick={() => setTplPick(null)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!nSel} onClick={applyTemplates}
+                        style={{ opacity: nSel ? 1 : .5 }}>
+                  {nSel > 1 ? 'Add ' + nSel + ' tasks' : 'Add task'}
+                </button>
               </div>
             </div>
           </div>

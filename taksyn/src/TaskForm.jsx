@@ -160,6 +160,29 @@ export default function TaskForm({
     setBusy(true)
     try {
       const row = buildRow()
+      // TPL-PICKER-V2: extra templates become extra tasks, sharing everything
+      // chosen here. Written first so a failure stops before the main insert.
+      if (!editing && preset && (preset.extras || []).length) {
+        const extras = preset.extras.map((p, i) => ({
+          ...row,
+          id: 'T' + (Date.now() + i + 1),
+          title: (p.title || '').trim() || row.title,
+          ...(p.priority ? { priority: p.priority } : {}),
+          subtasks: JSON.stringify((p.subtasks || [])
+            .filter(it => String(it.text || '').trim())
+            .map(it => ({ id: it.id, text: String(it.text).trim(), done: false,
+                          mandatory: !!it.mandatory, requirePhoto: !!it.requirePhoto,
+                          requireTimestamp: !!it.requireTimestamp,
+                          instruction: it.instruction || '', note: '', photo: null, history: [] }))),
+          org: orgName, status: 'pending', recurrence: 'once',
+          project_id: project.id, created_by: user?.name || null
+        }))
+        const ex = await supabase.from('tasks').insert(extras).select()
+        if (ex.error) throw ex.error
+        if (!ex.data || ex.data.length !== extras.length) {
+          throw new Error('Only some tasks were written. This is usually a permissions problem.')
+        }
+      }
       let res
       if (editing) {
         // .select() so a silent RLS refusal is caught: PostgREST returns
@@ -218,6 +241,10 @@ export default function TaskForm({
       {!task && preset && preset.title &&
         <div style={{ fontSize: 11, color: C.ink2, marginTop: 4 }}>
           Filled from the template "{preset.title}". Edit anything you need to.
+        </div>}
+      {!task && preset && (preset.extras || []).length > 0 &&
+        <div style={{ fontSize: 11, color: C.ink2, marginTop: 2 }}>
+          {preset.extras.length + 1} tasks will be created, all with the stage, team, person, approver and date you set here.
         </div>}
       {/* PRIVACY-NOTE-V1: same amber warning as the main create form. */}
       <div style={{ fontSize: 11, color: '#F59E0B', marginTop: 4 }}>
@@ -362,7 +389,9 @@ export default function TaskForm({
           <button style={{ ...btn, opacity: (!f.title.trim() || !f.dueDate || busy) ? .5 : 1 }}
                   disabled={!f.title.trim() || !f.dueDate || busy}
                   onClick={submit}>
-            {busy ? 'Saving…' : editing ? 'Save changes' : 'Add task'}
+            {busy ? 'Saving…' : editing ? 'Save changes'
+              : (preset && (preset.extras || []).length
+                  ? 'Add ' + (preset.extras.length + 1) + ' tasks' : 'Add task')}
           </button>
         </span>
       </div>
