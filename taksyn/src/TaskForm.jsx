@@ -46,7 +46,6 @@ const C = {
 
 export default function TaskForm({
   project, stage, stages = [], orgName, user, milestones = [], task = null,
-  preset = null,   // STAGE-TPL-V2: title / priority / checklist from a chosen template
   onDone, onCancel
 }) {
   const editing = !!task
@@ -55,17 +54,15 @@ export default function TaskForm({
   const [busy, setBusy] = useState(false)
   // STAGE-CHECKLIST-V1: some rows store subtasks as a JSON string, others as an array.
   const [items, setItems] = useState(() => {
-    // STAGE-TPL-V2: a preset only ever fills a NEW task.
-    if (!task && preset && Array.isArray(preset.subtasks)) return preset.subtasks
     let s = task?.subtasks
     if (typeof s === 'string') { try { s = JSON.parse(s) } catch (e) { s = [] } }
     return Array.isArray(s) ? s : []
   })
-  const [clOpen, setClOpen] = useState(!task && !!(preset && (preset.subtasks || []).length))
+  const [clOpen, setClOpen] = useState(false)
   const [instrOpen, setInstrOpen] = useState(null)
   const setItem = (i, patch) => setItems(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
   const [f, setF] = useState({
-    title: task?.title || (!task && preset ? (preset.title || '') : ''),   // STAGE-TPL-V2
+    title: task?.title || '',
     stageId: task?.section_id || stage?.id || '',
     teamId: task?.team_id || '',
     assigneeId: (task?.assigned_user_ids?.[0]) || task?.assigned_user_id || '',
@@ -126,9 +123,6 @@ export default function TaskForm({
           history: it.history || []
         }))),
       title: f.title.trim(),
-      // STAGE-TPL-V2: carry the template's priority. TaskForm never set priority,
-      // so a High template used to produce a task at the column default.
-      ...(!task && preset && preset.priority ? { priority: preset.priority } : {}),
       due_date: f.dueDate,
       section_id: f.stageId || null,
       milestone_id: f.milestoneId || null,
@@ -215,10 +209,6 @@ export default function TaskForm({
       <label style={lbl}>What needs doing *</label>
       <input style={inp} value={f.title} autoFocus placeholder="e.g. Fire safety inspection"
              onChange={e => setF({ ...f, title: e.target.value })} />
-      {!task && preset && preset.title &&
-        <div style={{ fontSize: 11, color: C.ink2, marginTop: 4 }}>
-          Filled from the template "{preset.title}". Edit anything you need to.
-        </div>}
       {/* PRIVACY-NOTE-V1: same amber warning as the main create form. */}
       <div style={{ fontSize: 11, color: '#F59E0B', marginTop: 4 }}>
         {'\u26A0\uFE0F'} No names or personal details in the title or checklist items.
