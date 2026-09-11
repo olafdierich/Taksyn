@@ -664,6 +664,47 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
     userSelect: dragId ? 'none' : 'auto'
   })
 
+  // STAGE-TPL-V1: save a stage's tasks as templates, and add a task from one.
+  const [tplPick, setTplPick] = useState(null)   // { stage, rows, fProject, fStage, loading }
+  const [preset, setPreset] = useState(null)     // { stageId, title, priority, subtasks }
+
+  const saveStageAsTemplate = async (pk) => {
+    if (!confirm(`Save the tasks in "${pk.name}" as templates?\n\n`
+      + 'Titles, priorities and checklists are kept. People and dates are not.')) return
+    const { data, error } = await supabase.rpc('stage_tasks_to_templates', { p_stage: pk.id })
+    if (error) return alert('Could not save templates: ' + error.message)
+    const r = Array.isArray(data) ? data[0] : data
+    alert(`${r.created} new template${r.created === 1 ? '' : 's'}, ${r.reused} already there.\n\n`
+      + `Filed under ${r.project_name} - ${r.stage_name}.`)
+  }
+
+  const openTemplatePicker = async (pk) => {
+    setTplPick({ stage: pk, rows: [], fProject: project.name, fStage: pk.name, loading: true })
+    const { data, error } = await supabase.from('checklist_templates')
+      .select('id,name,priority,items,template_group,template_stage')
+      .eq('organisation_id', project.org || '').order('name')
+    if (error) { setTplPick(null); return alert('Could not load templates: ' + error.message) }
+    setTplPick(p => p && { ...p, rows: data || [], loading: false })
+  }
+
+  const useTemplate = (t) => {
+    const stage = tplPick.stage
+    setTplPick(null)
+    setPreset({
+      stageId: stage.id,
+      title: t.name || '',
+      priority: t.priority || 'medium',
+      subtasks: (t.items || []).map(it => ({
+        id: 's' + Date.now() + Math.random(),
+        text: it.label || it.text || '', done: false,
+        mandatory: !!(it.required || it.mandatory),
+        requirePhoto: !!it.requirePhoto, requireTimestamp: !!it.requireTimestamp,
+        instruction: it.instruction || '', note: '', photo: null, history: []
+      }))
+    })
+    setAddingTo(stage.id)
+  }
+
   const StageControls = ({ i, pk }) => {
     if (!canEdit) return null
     const open = menuFor === pk.id
@@ -693,6 +734,9 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
               {item('Move down', () => moveStage(i, 1), { disabled: i === pkgs.length - 1 })}
               <span style={{ display: 'block', height: 1, background: C.line, margin: '4px 0' }} />
               {item('Rename', () => { setRenaming(pk.id); setRenameTo(pk.name) })}
+              {/* STAGE-TPL-V1 */}
+              {item('Add task from template', () => openTemplatePicker(pk))}
+              {item('Save stage as template', () => saveStageAsTemplate(pk))}
               {item((deps[pk.id] || []).length
                       ? `Dependencies (${deps[pk.id].length})` : 'Dependencies…',
                     () => setEditingDeps(editingDeps === pk.id ? null : pk.id))}
@@ -971,6 +1015,64 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
         </div>
       </div>
 
+      {/* STAGE-TPL-V1: template picker. This stage first, then this project, then the rest. */}
+      {tplPick && (() => {
+        const rows = tplPick.rows.filter(t =>
+          (tplPick.fProject === '__all' || (t.template_group || '') === tplPick.fProject) &&
+          (tplPick.fStage === '__all' || (t.template_stage || '') === tplPick.fStage))
+        const rank = t => (t.template_group === project.name && t.template_stage === tplPick.stage.name) ? 0
+                        : (t.template_group === project.name ? 1 : 2)
+        const sorted = [...rows].sort((a, b) => rank(a) - rank(b) || (a.name || '').localeCompare(b.name || ''))
+        const projects_ = [...new Set(tplPick.rows.map(t => t.template_group || '').filter(Boolean))].sort()
+        const stages_ = [...new Set(tplPick.rows
+          .filter(t => tplPick.fProject === '__all' || (t.template_group || '') === tplPick.fProject)
+          .map(t => t.template_stage || '').filter(Boolean))].sort()
+        return (
+          <div style={modalWrap} onClick={() => setTplPick(null)}>
+            <div style={modalBox} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Add a task to {tplPick.stage.name}</div>
+              <div style={{ fontSize: 12, color: C.ink2, marginBottom: 10 }}>
+                Pick a template. You choose who does it, the approver and the date next.
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                <select style={{ ...inp, flex: '1 1 150px', margin: 0 }} value={tplPick.fProject}
+                        onChange={e => setTplPick({ ...tplPick, fProject: e.target.value, fStage: '__all' })}>
+                  <option value="__all">All projects</option>
+                  {projects_.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+                <select style={{ ...inp, flex: '1 1 150px', margin: 0 }} value={tplPick.fStage}
+                        onChange={e => setTplPick({ ...tplPick, fStage: e.target.value })}>
+                  <option value="__all">All stages</option>
+                  {stages_.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                {tplPick.loading && <div style={{ fontSize: 12, color: C.ink2 }}>Loading…</div>}
+                {!tplPick.loading && sorted.length === 0 &&
+                  <div style={{ fontSize: 12, color: C.ink2 }}>
+                    No templates match. Save a stage as a template first, or clear the filters.
+                  </div>}
+                {sorted.map(t => (
+                  <div key={t.id} onClick={() => useTemplate(t)}
+                       style={{ padding: '8px 10px', borderBottom: '1px solid ' + C.line,
+                                cursor: 'pointer', fontSize: 13 }}>
+                    <div style={{ fontWeight: 500 }}>{t.name}</div>
+                    <div style={{ fontSize: 11, color: C.ink2 }}>
+                      {(t.items || []).length} checklist item{(t.items || []).length === 1 ? '' : 's'}
+                      {t.template_group ? ' · ' + t.template_group : ''}
+                      {t.template_stage ? ' · ' + t.template_stage : ''}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                <button className="btn btn-secondary" onClick={() => setTplPick(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8,
              margin: '22px 0 8px', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>Stages</span>
@@ -1001,9 +1103,9 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                   onClose={() => setEditingDeps(null)} />}
               {addingTo === pk.id &&
                 <TaskForm project={project} stage={pk} stages={sections} orgName={orgName}
-                  user={user} milestones={ms}
-                  onCancel={() => setAddingTo(null)}
-                  onDone={() => { setAddingTo(null); onChanged() }} />}
+                  user={user} milestones={ms} preset={preset && preset.stageId === pk.id ? preset : null}
+                  onCancel={() => { setAddingTo(null); setPreset(null) }}
+                  onDone={() => { setAddingTo(null); setPreset(null); onChanged() }} />}
             </div>
           )
         }
@@ -1023,9 +1125,9 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                 onClose={() => setEditingDeps(null)} />}
             {addingTo === pk.id &&
               <TaskForm project={project} stage={pk} stages={sections} orgName={orgName}
-                user={user} milestones={ms}
-                onCancel={() => setAddingTo(null)}
-                onDone={() => { setAddingTo(null); onChanged() }} />}
+                user={user} milestones={ms} preset={preset && preset.stageId === pk.id ? preset : null}
+                onCancel={() => { setAddingTo(null); setPreset(null) }}
+                onDone={() => { setAddingTo(null); setPreset(null); onChanged() }} />}
             {Object.keys(byTeam).map(k => (
               <TeamBlock key={k} name={byTeam[k][0].team_name || 'Unassigned'}
                          colour={teamColour(k).solid}
