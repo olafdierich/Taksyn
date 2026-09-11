@@ -110,6 +110,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
   const [draft, setDraft] = useState({ name: '', description: '' })
   const [saving, setSaving] = useState(false)
   const [showArchive, setShowArchive] = useState(false)
+  const [dup, setDup] = useState(null)  // PRJ-ARCHIVE-V1: { src, name, start, busy }
 
   const isCA = ['client_admin', 'super_admin'].includes(user?.role)
 
@@ -122,7 +123,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
         setOrgId(oid || '')
         if (!oid) { setProjects([]); setLoading(false); return }
         const { data: ps, error } = await supabase.from('projects')
-          .select('id,ref,name,description,status,start_date,target_end_date')
+          .select('id,ref,name,description,status,start_date,target_end_date,archived_at')
           .eq('org', oid).order('created_at', { ascending: false })
         if (error) throw error
         if (dead) return
@@ -204,12 +205,41 @@ export default function ProjectsView({ user, resolveOrgId }) {
     finally { setSaving(false) }
   }
 
+  // PRJ-ARCHIVE-V1: archiving is a marker, NOT a status. It used to write 'cancelled',
+  // which recorded a finished project as cancelled. A 0-row update means RLS refused.
   const archive = async (p) => {
-    if (!confirm(`Archive ${p.name}?`)) return
-    const { error } = await supabase.from('projects')
-      .update({ status: 'cancelled' }).eq('id', p.id).select()
+    if (!confirm(`Archive ${p.name}? It moves to the Archive tab and can be restored.`)) return
+    const now = new Date().toISOString()
+    const { data, error } = await supabase.from('projects')
+      .update({ archived_at: now, archived_by_id: user?.id || null }).eq('id', p.id).select('id')
     if (error) return alert('Could not archive: ' + error.message)
-    setProjects(prev => prev.map(x => x.id === p.id ? { ...x, status: 'cancelled' } : x))
+    if (!data || !data.length) return alert('Could not archive: you do not have permission for this project.')
+    setProjects(prev => prev.map(x => x.id === p.id ? { ...x, archived_at: now } : x))
+  }
+
+  const restore = async (p) => {
+    const { data, error } = await supabase.from('projects')
+      .update({ archived_at: null, archived_by_id: null }).eq('id', p.id).select('id')
+    if (error) return alert('Could not restore: ' + error.message)
+    if (!data || !data.length) return alert('Could not restore: you do not have permission for this project.')
+    setProjects(prev => prev.map(x => x.id === p.id ? { ...x, archived_at: null } : x))
+  }
+
+  const duplicate = async () => {
+    if (!dup || dup.busy) return
+    const src = dup.src
+    setDup(d => ({ ...d, busy: true }))
+    // TPL-FINISH-V1: structure only. Templates come from "Save stage as template".
+    const { data, error } = await supabase.rpc('duplicate_project',
+      { p_source: src.id, p_name: dup.name.trim(), p_start_date: dup.start, p_with_templates: false })
+    if (error) { setDup(d => ({ ...d, busy: false })); return alert('Could not duplicate: ' + error.message) }
+    const r = Array.isArray(data) ? data[0] : data
+    const { data: row } = await supabase.from('projects')
+      .select('id,ref,name,description,status,start_date,target_end_date,archived_at').eq('id', r.id).single()
+    if (row) setProjects(prev => [row, ...prev])
+    setDup(null); setShowArchive(false)
+    alert(`${r.ref} created: ${r.sections} sections and stages, ${r.milestones} milestones, ${r.links} links.\n`
+        + 'No tasks were copied. Add them with a stage\'s ⋯ menu: "Add task from template".')
   }
 
   if (loading) return <div style={{ padding: 20, color: C.ink2 }}>Loading projects…</div>
@@ -225,8 +255,10 @@ export default function ProjectsView({ user, resolveOrgId }) {
           onChanged={() => setReload(n => n + 1)} />
   }
 
-  const active = projects.filter(p => !['closed', 'cancelled'].includes(p.status))
-  const archived = projects.filter(p => ['closed', 'cancelled'].includes(p.status))
+  // PRJ-ARCHIVE-V1: archived = marked archived, or signed off / cancelled.
+  const isArch = p => !!p.archived_at || ['closed', 'cancelled'].includes(p.status)
+  const active = projects.filter(p => !isArch(p))
+  const archived = projects.filter(isArch)
 
   const Card = p => {
     const c = counts[p.id] || { n: 0, d: 0 }
@@ -240,7 +272,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
           <span style={{ fontSize: 12, color: C.ink2 }}>{c.d}/{c.n} approved</span>
         </div>
         <div style={{ fontSize: 12, color: C.ink2, marginTop: 2 }}>
-          {p.ref}{p.status !== 'active' && <Pill>{p.status}</Pill>}
+          {p.ref}{p.status !== 'active' && <Pill>{p.status}</Pill>}{p.status === 'active' && p.archived_at && <Pill>archived</Pill>}
         </div>
         <Bar pct={c.n ? Math.round(c.d / c.n * 100) : 0} />
         {risk > 0
@@ -248,9 +280,13 @@ export default function ProjectsView({ user, resolveOrgId }) {
           : blk > 0
           ? <Note tone="warn">{blk} open blocker{blk > 1 ? 's' : ''} holding a milestone.</Note>
           : null}
-        {isCA && p.status === 'active' &&
-          <div style={{ marginTop: 10 }}>
-            <button style={btnGhost} onClick={e => { e.stopPropagation(); archive(p) }}>Archive</button>
+        {isCA &&
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {p.status === 'active' && !p.archived_at &&
+              <button style={btnGhost} onClick={e => { e.stopPropagation(); archive(p) }}>Archive</button>}
+            {p.status === 'active' && p.archived_at &&
+              <button style={btnGhost} onClick={e => { e.stopPropagation(); restore(p) }}>Restore</button>}
+            <button style={btnGhost} onClick={e => { e.stopPropagation(); setDup({ src: p, name: p.name + ' (copy)', start: new Date().toISOString().slice(0, 10), busy: false }) }}>Duplicate</button>
           </div>}
       </div>
     )
@@ -266,19 +302,39 @@ export default function ProjectsView({ user, resolveOrgId }) {
         {isCA && <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Project</button>}
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        {active.length === 0 &&
-          <div style={{ ...card, textAlign: 'center', color: C.ink2, padding: 28 }}>No active projects yet.</div>}
-        {active.map(Card)}
+      {/* PRJ-ARCHIVE-V1: Active / Archive tabs, always visible */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
+        {[['active', 'Active (' + active.length + ')'], ['archive', 'Archive (' + archived.length + ')']].map(([k, l]) => {
+          const on = (showArchive ? 'archive' : 'active') === k
+          return <button key={k} onClick={() => setShowArchive(k === 'archive')}
+                   style={{ ...btnGhost, fontWeight: on ? 600 : 400, borderColor: on ? 'var(--brand)' : undefined }}>{l}</button>
+        })}
+      </div>
+      <div style={{ marginTop: 10 }}>
+        {(showArchive ? archived : active).length === 0 &&
+          <div style={{ ...card, textAlign: 'center', color: C.ink2, padding: 28 }}>
+            {showArchive ? 'Nothing archived yet. Signed-off and archived projects appear here.' : 'No active projects yet.'}
+          </div>}
+        {(showArchive ? archived : active).map(Card)}
       </div>
 
-      {archived.length > 0 &&
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 12, color: C.ink2, cursor: 'pointer', marginBottom: 8 }}
-               onClick={() => setShowArchive(v => !v)}>
-            {showArchive ? '▾' : '▸'} Archive ({archived.length})
+      {dup &&
+        <div style={modalWrap} onClick={() => { if (!dup.busy) setDup(null) }}>
+          <div style={modalBox} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Duplicate {dup.src.ref}</div>
+            <div style={{ fontSize: 12, color: C.ink2, marginBottom: 12 }}>
+              Copies the sections, stages, milestones and links — nothing else. To bring the tasks across, use "Save stage as template" on the original, then "Add task from template" in the copy.
+            </div>
+            <label style={lbl}>New project name *</label>
+            <input style={inp} value={dup.name} autoFocus onChange={e => setDup({ ...dup, name: e.target.value })} />
+            <label style={lbl}>Start date *</label>
+            <input style={inp} type="date" value={dup.start} onChange={e => setDup({ ...dup, start: e.target.value })} />
+            <div style={{ fontSize: 11, color: C.ink2, marginTop: 4 }}>Milestones keep the same spacing from the start date.</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+              <button className="btn btn-secondary" disabled={dup.busy} onClick={() => setDup(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={dup.busy || !dup.name.trim() || !dup.start} onClick={duplicate}>{dup.busy ? 'Copying…' : 'Duplicate'}</button>
+            </div>
           </div>
-          {showArchive && archived.map(Card)}
         </div>}
 
       {showCreate &&
@@ -609,6 +665,57 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
     userSelect: dragId ? 'none' : 'auto'
   })
 
+  // STAGE-TPL-V1: save a stage's tasks as templates, and add a task from one.
+  const [tplPick, setTplPick] = useState(null)   // { stage, rows, fProject, fStage, loading }
+  const [preset, setPreset] = useState(null)     // { stageId, title, priority, subtasks }
+
+  const saveStageAsTemplate = async (pk) => {
+    if (!confirm(`Save the tasks in "${pk.name}" as templates?\n\n`
+      + 'Titles, priorities and checklists are kept. People and dates are not.')) return
+    const { data, error } = await supabase.rpc('stage_tasks_to_templates', { p_stage: pk.id })
+    if (error) return alert('Could not save templates: ' + error.message)
+    const r = Array.isArray(data) ? data[0] : data
+    alert(`${r.created} new template${r.created === 1 ? '' : 's'}, ${r.reused} already there.\n\n`
+      + `Filed under ${r.project_name} - ${r.stage_name}.`)
+  }
+
+  const openTemplatePicker = async (pk) => {
+    // TPL-PICKER-V2: open at the project level and let the user walk down.
+    setTplPick({ stage: pk, rows: [], step: 'project', pickedProject: null, pickedStage: null, sel: {}, loading: true })
+    const { data, error } = await supabase.from('checklist_templates')
+      .select('id,name,priority,items,template_group,template_stage')
+      .eq('organisation_id', project.org || '').order('name')
+    if (error) { setTplPick(null); return alert('Could not load templates: ' + error.message) }
+    setTplPick(p => p && { ...p, rows: data || [], loading: false })
+  }
+
+  // TPL-PICKER-V2: one template fills the form; the rest ride along and are
+  // written on submit with the same people and dates.
+  const _asPreset = (t) => ({
+    title: t.name || '',
+    priority: t.priority || 'medium',
+    subtasks: (t.items || []).map(it => ({
+      id: 's' + Date.now() + Math.random(),
+      text: it.label || it.text || '', done: false,
+      mandatory: !!(it.required || it.mandatory),
+      requirePhoto: !!it.requirePhoto, requireTimestamp: !!it.requireTimestamp,
+      instruction: it.instruction || '', note: '', photo: null, history: []
+    }))
+  })
+
+  const [lastPick, setLastPick] = useState(null)   // TPL-ROWS-V1: for Back
+
+  const applyTemplates = () => {
+    const stage = tplPick.stage
+    const chosen = tplPick.rows.filter(t => tplPick.sel[t.id])
+    if (!chosen.length) return
+    setLastPick(tplPick)
+    setTplPick(null)
+    const [first, ...rest] = chosen.map(_asPreset)
+    setPreset({ stageId: stage.id, ...first, extras: rest })
+    setAddingTo(stage.id)
+  }
+
   const StageControls = ({ i, pk }) => {
     if (!canEdit) return null
     const open = menuFor === pk.id
@@ -638,6 +745,9 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
               {item('Move down', () => moveStage(i, 1), { disabled: i === pkgs.length - 1 })}
               <span style={{ display: 'block', height: 1, background: C.line, margin: '4px 0' }} />
               {item('Rename', () => { setRenaming(pk.id); setRenameTo(pk.name) })}
+              {/* STAGE-TPL-V1 */}
+              {item('Add task from template', () => openTemplatePicker(pk))}
+              {item('Save stage as template', () => saveStageAsTemplate(pk))}
               {item((deps[pk.id] || []).length
                       ? `Dependencies (${deps[pk.id].length})` : 'Dependencies…',
                     () => setEditingDeps(editingDeps === pk.id ? null : pk.id))}
@@ -916,6 +1026,90 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
         </div>
       </div>
 
+      {/* TPL-PICKER-V2: project -> stage -> tick templates -> Apply. */}
+      {tplPick && (() => {
+        const groupOf = t => t.template_group || 'Unfiled'
+        const stageOf = t => t.template_stage || 'Unfiled'
+        const projects_ = [...new Set(tplPick.rows.map(groupOf))].sort()
+        const inProject = tplPick.rows.filter(t => groupOf(t) === tplPick.pickedProject)
+        const stages_ = [...new Set(inProject.map(stageOf))].sort()
+        const inStage = inProject.filter(t => stageOf(t) === tplPick.pickedStage)
+        const nSel = Object.values(tplPick.sel).filter(Boolean).length
+        const rowStyle = { padding: '9px 10px', borderBottom: '1px solid ' + C.line,
+                           cursor: 'pointer', fontSize: 13, display: 'flex',
+                           justifyContent: 'space-between', alignItems: 'center', gap: 8 }
+        return (
+          <div style={modalWrap} onClick={() => setTplPick(null)}>
+            <div style={modalBox} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Add tasks to {tplPick.stage.name}</div>
+              <div style={{ fontSize: 12, color: C.ink2, marginBottom: 10 }}>
+                {/* TPL-BACK-V1: the subtitle names where you are; Back is in the footer. */}
+                {tplPick.step === 'project' ? 'Choose the project these tasks come from.'
+                 : tplPick.step === 'stage' ? 'Choose the stage in ' + tplPick.pickedProject + '.'
+                 : 'Tick the tasks to add, from ' + tplPick.pickedProject + ' / ' + tplPick.pickedStage + '.'}
+              </div>
+
+              {tplPick.loading && <div style={{ fontSize: 12, color: C.ink2 }}>Loading{'\u2026'}</div>}
+
+              {!tplPick.loading && tplPick.step === 'project' && (
+                projects_.length === 0
+                  ? <div style={{ fontSize: 12, color: C.ink2 }}>
+                      No templates yet. Use "Save stage as template" on a stage that has tasks.
+                    </div>
+                  : projects_.map(g => (
+                      <div key={g} style={rowStyle}
+                           onClick={() => setTplPick({ ...tplPick, step: 'stage', pickedProject: g })}>
+                        <span style={{ fontWeight: 500 }}>{g}</span>
+                        <span style={{ fontSize: 11, color: C.ink2 }}>
+                          {tplPick.rows.filter(t => groupOf(t) === g).length} {'\u203A'}
+                        </span>
+                      </div>)))}
+
+              {!tplPick.loading && tplPick.step === 'stage' && (<>
+                {stages_.map(s => (
+                  <div key={s} style={rowStyle}
+                       onClick={() => setTplPick({ ...tplPick, step: 'templates', pickedStage: s })}>
+                    <span style={{ fontWeight: 500 }}>{s}</span>
+                    <span style={{ fontSize: 11, color: C.ink2 }}>
+                      {inProject.filter(t => stageOf(t) === s).length} {'\u203A'}
+                    </span>
+                  </div>))}
+              </>)}
+
+              {!tplPick.loading && tplPick.step === 'templates' && (<>
+                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                  {inStage.map(t => (
+                    <label key={t.id} style={{ ...rowStyle, justifyContent: 'flex-start' }}>
+                      <input type="checkbox" checked={!!tplPick.sel[t.id]}
+                             onChange={e => setTplPick({ ...tplPick, sel: { ...tplPick.sel, [t.id]: e.target.checked } })} />
+                      <span>
+                        <span style={{ fontWeight: 500 }}>{t.name}</span>
+                        <span style={{ display: 'block', fontSize: 11, color: C.ink2 }}>
+                          {(t.items || []).length} checklist item{(t.items || []).length === 1 ? '' : 's'}
+                        </span>
+                      </span>
+                    </label>))}
+                </div>
+              </>)}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                {/* TPL-BACK-V1 */}
+                {tplPick.step !== 'project' &&
+                  <button className="btn btn-secondary"
+                          onClick={() => setTplPick(tplPick.step === 'templates'
+                            ? { ...tplPick, step: 'stage', pickedStage: null }
+                            : { ...tplPick, step: 'project', pickedProject: null })}>{'\u2039'} Back</button>}
+                <button className="btn btn-secondary" onClick={() => setTplPick(null)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!nSel} onClick={applyTemplates}
+                        style={{ opacity: nSel ? 1 : .5 }}>
+                  {nSel > 1 ? 'Add ' + nSel + ' tasks' : 'Add task'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8,
              margin: '22px 0 8px', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>Stages</span>
@@ -946,9 +1140,10 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                   onClose={() => setEditingDeps(null)} />}
               {addingTo === pk.id &&
                 <TaskForm project={project} stage={pk} stages={sections} orgName={orgName}
-                  user={user} milestones={ms}
-                  onCancel={() => setAddingTo(null)}
-                  onDone={() => { setAddingTo(null); onChanged() }} />}
+                  user={user} milestones={ms} preset={preset && preset.stageId === pk.id ? preset : null}
+                  onBack={lastPick ? () => { setAddingTo(null); setPreset(null); setTplPick(lastPick) } : null}
+                  onCancel={() => { setAddingTo(null); setPreset(null) }}
+                  onDone={() => { setAddingTo(null); setPreset(null); onChanged() }} />}
             </div>
           )
         }
@@ -968,9 +1163,10 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
                 onClose={() => setEditingDeps(null)} />}
             {addingTo === pk.id &&
               <TaskForm project={project} stage={pk} stages={sections} orgName={orgName}
-                user={user} milestones={ms}
-                onCancel={() => setAddingTo(null)}
-                onDone={() => { setAddingTo(null); onChanged() }} />}
+                user={user} milestones={ms} preset={preset && preset.stageId === pk.id ? preset : null}
+                onBack={lastPick ? () => { setAddingTo(null); setPreset(null); setTplPick(lastPick) } : null}
+                onCancel={() => { setAddingTo(null); setPreset(null) }}
+                onDone={() => { setAddingTo(null); setPreset(null); onChanged() }} />}
             {Object.keys(byTeam).map(k => (
               <TeamBlock key={k} name={byTeam[k][0].team_name || 'Unassigned'}
                          colour={teamColour(k).solid}

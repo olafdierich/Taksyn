@@ -46,14 +46,34 @@ const C = {
 
 export default function TaskForm({
   project, stage, stages = [], orgName, user, milestones = [], task = null,
+  preset = null,   // STAGE-TPL-V2: title / priority / checklist from a chosen template
+  onBack = null,   // TPL-ROWS-V1: reopen the template picker
   onDone, onCancel
 }) {
   const editing = !!task
   const [teams, setTeams] = useState([])
   const [people, setPeople] = useState([])
   const [busy, setBusy] = useState(false)
+  // STAGE-CHECKLIST-V1: some rows store subtasks as a JSON string, others as an array.
+  const [items, setItems] = useState(() => {
+    // STAGE-TPL-V2: a preset only ever fills a NEW task.
+    if (!task && preset && Array.isArray(preset.subtasks)) return preset.subtasks
+    let s = task?.subtasks
+    if (typeof s === 'string') { try { s = JSON.parse(s) } catch (e) { s = [] } }
+    return Array.isArray(s) ? s : []
+  })
+  const [clOpen, setClOpen] = useState(!task && !!(preset && (preset.subtasks || []).length))
+  // TPL-ROWS-V1: one row per extra template. null date / assignee = use the shared one.
+  const [extraRows, setExtraRows] = useState(() =>
+    (!task && preset ? (preset.extras || []) : []).map(p => ({
+      title: p.title || '', priority: p.priority, subtasks: p.subtasks || [],
+      assigneeId: null, dueDate: null
+    })))
+  const setExtra = (i, patch) => setExtraRows(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
+  const [instrOpen, setInstrOpen] = useState(null)
+  const setItem = (i, patch) => setItems(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
   const [f, setF] = useState({
-    title: task?.title || '',
+    title: task?.title || (!task && preset ? (preset.title || '') : ''),   // STAGE-TPL-V2
     stageId: task?.section_id || stage?.id || '',
     teamId: task?.team_id || '',
     assigneeId: (task?.assigned_user_ids?.[0]) || task?.assigned_user_id || '',
@@ -98,7 +118,25 @@ export default function TaskForm({
     const approver = people.find(p => p.id === f.approverId)
 
     const row = {
+      // STAGE-CHECKLIST-V1: same item shape the rest of the app reads.
+      subtasks: JSON.stringify(items
+        .filter(it => String(it.text || '').trim())
+        .map(it => ({
+          id: it.id || ('s' + Date.now() + Math.random()),
+          text: String(it.text).trim(),
+          done: !!it.done,
+          mandatory: !!it.mandatory,
+          requirePhoto: !!it.requirePhoto,
+          requireTimestamp: !!it.requireTimestamp,
+          instruction: it.instruction || '',
+          note: it.note || '',
+          photo: it.photo || null,
+          history: it.history || []
+        }))),
       title: f.title.trim(),
+      // STAGE-TPL-V2: carry the template's priority. TaskForm never set priority,
+      // so a High template used to produce a task at the column default.
+      ...(!task && preset && preset.priority ? { priority: preset.priority } : {}),
       due_date: f.dueDate,
       section_id: f.stageId || null,
       milestone_id: f.milestoneId || null,
@@ -130,6 +168,38 @@ export default function TaskForm({
     setBusy(true)
     try {
       const row = buildRow()
+      // TPL-PICKER-V2: extra templates become extra tasks, sharing everything
+      // chosen here. Written first so a failure stops before the main insert.
+      if (!editing && extraRows.length) {
+        const extras = extraRows.map((p, i) => {
+          // TPL-ROWS-V1: per-row person and date, falling back to the shared ones.
+          const ra = p.assigneeId === null ? null : people.find(x => x.id === p.assigneeId)
+          const perRow = p.assigneeId === null ? {} : {
+            assigned_user_ids: ra ? [ra.id] : [], assigned_user_names: ra ? [ra.name] : [],
+            assigned_user_id: ra ? ra.id : null, assigned_user_name: ra ? ra.name : null
+          }
+          return {
+          ...row,
+          ...perRow,
+          due_date: p.dueDate || row.due_date,
+          id: 'T' + (Date.now() + i + 1),
+          title: (p.title || '').trim() || row.title,
+          ...(p.priority ? { priority: p.priority } : {}),
+          subtasks: JSON.stringify((p.subtasks || [])
+            .filter(it => String(it.text || '').trim())
+            .map(it => ({ id: it.id, text: String(it.text).trim(), done: false,
+                          mandatory: !!it.mandatory, requirePhoto: !!it.requirePhoto,
+                          requireTimestamp: !!it.requireTimestamp,
+                          instruction: it.instruction || '', note: '', photo: null, history: [] }))),
+          org: orgName, status: 'pending', recurrence: 'once',
+          project_id: project.id, created_by: user?.name || null
+        } })
+        const ex = await supabase.from('tasks').insert(extras).select()
+        if (ex.error) throw ex.error
+        if (!ex.data || ex.data.length !== extras.length) {
+          throw new Error('Only some tasks were written. This is usually a permissions problem.')
+        }
+      }
       let res
       if (editing) {
         // .select() so a silent RLS refusal is caught: PostgREST returns
@@ -185,6 +255,18 @@ export default function TaskForm({
       <label style={lbl}>What needs doing *</label>
       <input style={inp} value={f.title} autoFocus placeholder="e.g. Fire safety inspection"
              onChange={e => setF({ ...f, title: e.target.value })} />
+      {!task && preset && preset.title &&
+        <div style={{ fontSize: 11, color: C.ink2, marginTop: 4 }}>
+          Filled from the template "{preset.title}". Edit anything you need to.
+        </div>}
+      {extraRows.length > 0 &&
+        <div style={{ fontSize: 11, color: C.ink2, marginTop: 2 }}>
+          {extraRows.length + 1} tasks will be created. They share the stage, team, approver and milestone below; each can have its own person and date.
+        </div>}
+      {/* PRIVACY-NOTE-V1: same amber warning as the main create form. */}
+      <div style={{ fontSize: 11, color: '#F59E0B', marginTop: 4 }}>
+        {'\u26A0\uFE0F'} No names or personal details in the title or checklist items.
+      </div>
 
       <div style={row2}>
         <div>
@@ -272,6 +354,73 @@ export default function TaskForm({
           </div>
         </>}
 
+      {/* STAGE-CHECKLIST-V1: collapsed by default so the form stays short. */}
+      <div style={{ marginTop: 12, borderTop: '1px solid ' + C.line2, paddingTop: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: C.ink2, cursor: 'pointer' }} onClick={() => setClOpen(v => !v)}>
+            {clOpen ? '\u25BE' : '\u25B8'} Checklist{items.length ? ' (' + items.length + ')' : ''}
+          </span>
+          {clOpen &&
+            <button style={btnGhost} onClick={() => { setItems(prev => [...prev, { id: 's' + Date.now() + Math.random(), text: '', done: false, mandatory: false, requirePhoto: false, requireTimestamp: false, instruction: '', note: '', photo: null, history: [] }]); }}>+ Add item</button>}
+        </div>
+        {clOpen && items.length === 0 &&
+          <div style={{ fontSize: 11, color: C.ink3, marginTop: 6 }}>No checklist items — optional.</div>}
+        {clOpen && items.map((it, i) => {
+          const flag = (on, colour) => ({ ...btnGhost, padding: '3px 7px', fontSize: 12,
+            borderColor: on ? colour : undefined, color: on ? colour : C.ink2,
+            background: on ? colour + '14' : 'transparent' })
+          return (
+            <div key={it.id || i} style={{ marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input style={{ ...inp, flex: 1, margin: 0 }} placeholder={'Item ' + (i + 1)} value={it.text || ''}
+                       onChange={e => setItem(i, { text: e.target.value })} />
+                <button title="Mandatory — blocks submit" style={flag(it.mandatory, '#DC2626')}
+                        onClick={() => setItem(i, { mandatory: !it.mandatory })}>*</button>
+                <button title="Require photo evidence" style={flag(it.requirePhoto, '#3B82F6')}
+                        onClick={() => setItem(i, { requirePhoto: !it.requirePhoto })}>{'\u25A3'}</button>
+                <button title="Auto-timestamp on completion" style={flag(it.requireTimestamp, '#F59E0B')}
+                        onClick={() => setItem(i, { requireTimestamp: !it.requireTimestamp })}>{'\u25F4'}</button>
+                <button title="Instruction for the worker" style={flag(!!(it.instruction || '').trim(), '#10B981')}
+                        onClick={() => setInstrOpen(instrOpen === i ? null : i)}>{'\u2261'}</button>
+                <button title="Remove" style={{ ...btnGhost, padding: '3px 7px', fontSize: 12, color: C.red, borderColor: '#FCA5A5' }}
+                        onClick={() => { setItems(prev => prev.filter((_, j) => j !== i)); setInstrOpen(null) }}>{'\u2715'}</button>
+              </div>
+              {instrOpen === i &&
+                <textarea style={{ ...inp, marginTop: 4, minHeight: 52, border: '1px solid #10B981' }}
+                          placeholder="Instruction for the worker (optional)" value={it.instruction || ''}
+                          onChange={e => setItem(i, { instruction: e.target.value })} />}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* TPL-ROWS-V1: the other ticked templates, each adjustable. */}
+      {extraRows.length > 0 &&
+        <div style={{ marginTop: 12, borderTop: `1px solid ${C.line2}`, paddingTop: 10 }}>
+          <div style={{ fontSize: 12, color: C.ink2, marginBottom: 6 }}>
+            Also creating ({extraRows.length})
+          </div>
+          {extraRows.map((r, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <input style={inp} value={r.title} placeholder={'Task ' + (i + 2)}
+                     onChange={e => setExtra(i, { title: e.target.value })} />
+              <div style={{ ...row2, marginTop: 6 }}>
+                <select style={inp} value={r.assigneeId === null ? '__same' : r.assigneeId}
+                        onChange={e => setExtra(i, { assigneeId: e.target.value === '__same' ? null : e.target.value })}>
+                  <option value="__same">Same person as above</option>
+                  <option value="">Unassigned</option>
+                  {people.map(p => <option key={p.id} value={p.id}>{p.name} · {p.role}</option>)}
+                </select>
+                <input style={inp} type="date" value={r.dueDate || ''}
+                       placeholder="Same date as above"
+                       onChange={e => setExtra(i, { dueDate: e.target.value || null })} />
+              </div>
+              {!r.dueDate &&
+                <div style={{ fontSize: 11, color: C.ink2, marginTop: 3 }}>Uses the date above.</div>}
+            </div>
+          ))}
+        </div>}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
              gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         <span>
@@ -280,11 +429,15 @@ export default function TaskForm({
                     disabled={busy} onClick={detach}>Remove from project</button>}
         </span>
         <span style={{ display: 'flex', gap: 8 }}>
+          {/* TPL-ROWS-V1 */}
+          {!editing && preset && onBack &&
+            <button style={btnGhost} onClick={onBack}>{'\u2039'} Back</button>}
           <button style={btnGhost} onClick={onCancel}>Cancel</button>
           <button style={{ ...btn, opacity: (!f.title.trim() || !f.dueDate || busy) ? .5 : 1 }}
                   disabled={!f.title.trim() || !f.dueDate || busy}
                   onClick={submit}>
-            {busy ? 'Saving…' : editing ? 'Save changes' : 'Add task'}
+            {busy ? 'Saving…' : editing ? 'Save changes'
+              : (extraRows.length ? 'Add ' + (extraRows.length + 1) + ' tasks' : 'Add task')}
           </button>
         </span>
       </div>

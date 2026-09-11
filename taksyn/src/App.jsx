@@ -4645,6 +4645,46 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   // true -> false transition counts, so the mount that OPENS the form cannot clear it.
   const _caPrevShow = useRef(false)
   useEffect(()=>{ if(_caPrevShow.current && !showCreate) setCaDraft(null); _caPrevShow.current = showCreate },[showCreate])
+  // SAVE-AS-TPL-V1: keep this task's checklist for reuse. Writes the same row
+  // Company Settings writes. No project or stage -- it did not come from one.
+  const [savingTpl, setSavingTpl] = useState(false)
+  const [tplMsg, setTplMsg] = useState('')   // TPL-FINISH-V1: success is not an error
+  const saveTaskAsTemplate = async () => {
+    const nm = (newTask.title || '').trim()
+    const its = (newTask.subtasks || []).filter(s => String(s.text || '').trim())
+    if (!nm || !its.length || savingTpl) return
+    setSavingTpl(true)
+    setCreateError(''); setTplMsg('')
+    try {
+      const oid = await resolveOrgId(user)
+      if (!oid) { setCreateError('Could not work out which organisation to save the template under.'); setSavingTpl(false); return }
+      const { data: dup } = await supabase.from('checklist_templates')
+        .select('id').eq('organisation_id', oid).eq('name', nm).is('template_group', null).limit(1)
+      if (dup && dup.length) {
+        setCreateError('A template called "' + nm + '" already exists. Give this one a different title first.')
+        setSavingTpl(false); return
+      }
+      const entry = {
+        organisation_id: oid, name: nm, description: null,
+        priority: newTask.priority || 'medium',
+        positions: newTask.position ? [newTask.position] : [],
+        items: JSON.stringify(its.map(s => ({
+          label: String(s.text).trim(),
+          required: !!s.mandatory,
+          requirePhoto: !!s.requirePhoto,
+          requireTimestamp: !!s.requireTimestamp,
+          instruction: s.instruction || ''
+        }))),
+        team_id: newTask.team_id || null, team_name: newTask.team_name || null,
+        created_by: user.name, created_at: new Date().toISOString()
+      }
+      const { error } = await supabase.from('checklist_templates').insert(entry)
+      if (error) { setCreateError('Could not save the template: ' + error.message) }
+      else { setTplMsg('Saved "' + nm + '" as a template. It is in Company Settings > Templates.') }
+    } catch (e) { setCreateError('Could not save the template: ' + (e?.message || e)) }
+    setSavingTpl(false)
+  }
+
   const createTask = async () => {
     // CA-HANDOFF-V2: a blank title used to return silently -- no message, no save.
     if (creating) return
@@ -5182,7 +5222,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-hdr"><div className="modal-title">{caDraft?'Create corrective action task':'Create New Task'}{caDraft&&<div style={{fontSize:12,fontWeight:400,color:'var(--t2)',marginTop:2}}>For {caDraft.ref}. The incident number is added to the title automatically. The title is visible to the worker, so do not include incident detail.</div>}</div><button className="modal-close" onClick={()=>{ setShowCreate(false); setSelectedTplId(''); setChecklistMode('scratch'); setPendingDelete(null); setTaskTeamMembers([]); setUserSearch(''); setNewTask({title:'',category:'General',department:'',industry:'',position:'',priority:'medium',due_date:'',compliance:false,recurrence:'once',assigned_role:'worker',assigned_user_id:'',assigned_user_name:'',assigned_user_email:'',project:'',subtasks:[],team_id:'',team_name:''}) }}>×</button></div>
             <div className="modal-body">
-              <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/></div>
+              <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/>{/* PRIVACY-NOTE-V1: titles and checklists become templates others reuse. */}<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>{'\u26A0\uFE0F'} No names or personal details in the title or checklist items.</div></div>
               <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={newTask.recurrence} onChange={e=>setNewTask({...newTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={newTask.assigned_user_id===user.id?'__self':newTask.assigned_role} onChange={e=>{ if(e.target.value==='__self'){ setTaskTeamMembers([]); setNewTask(prev=>({...prev,assigned_role:user.role,position:'',team_id:'',team_name:'',assigned_user_id:user.id,assigned_user_name:user.name,assigned_user_email:user.email||'',assigned_user_ids:[user.id],assigned_user_names:[user.name],approver_id:prev.approver_id||user.id,approver_name:prev.approver_name||user.name})) } else { const wasSelf=newTask.assigned_user_id===user.id; setNewTask(prev=>({...prev,assigned_role:e.target.value,position:'',assigned_user_id:wasSelf?'':prev.assigned_user_id,assigned_user_name:wasSelf?'':prev.assigned_user_name,assigned_user_email:wasSelf?'':prev.assigned_user_email,assigned_user_ids:wasSelf?[]:prev.assigned_user_ids,assigned_user_names:wasSelf?[]:prev.assigned_user_names})) } }}><option value="__self">Myself ({user.name})</option>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
@@ -5309,8 +5349,8 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   const pos=newTask.position||''
                   const filtered=templates.filter(t=>!pos||!(t.positions||[]).length||(t.positions||[]).includes(pos))
                   const grps={}
-                  filtered.forEach(t=>{ const pp=t.positions||[]; if(!pp.length){if(!grps['General'])grps['General']=[];grps['General'].push(t)} else if(pos){if(!grps[pos])grps[pos]=[];grps[pos].push(t)} else{const g=pp[0];if(!grps[g])grps[g]=[];grps[g].push(t)} })
-                  const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) })
+                  filtered.forEach(t=>{ /* TPL-GROUP-V1: project templates get their own group */ if(t.template_group){ const g='Project: '+t.template_group; if(!grps[g])grps[g]=[]; grps[g].push(t); return } const pp=t.positions||[]; if(!pp.length){if(!grps['General'])grps['General']=[];grps['General'].push(t)} else if(pos){if(!grps[pos])grps[pos]=[];grps[pos].push(t)} else{const g=pp[0];if(!grps[g])grps[g]=[];grps[g].push(t)} })
+                  const _tplRank=k=>k.startsWith('Project: ')?2:(k==='General'?1:0); const keys=Object.keys(grps).sort((a,b)=>(_tplRank(a)-_tplRank(b))||a.localeCompare(b))
                   return (
                     <div style={{marginBottom:10}}>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
@@ -5357,6 +5397,15 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   </div>
                 ))}
                 {!(newTask.subtasks||[]).length&&!pendingDelete&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
+                {/* SAVE-AS-TPL-V1: only once there is something worth keeping. */}
+                {!!(newTask.title||'').trim() && (newTask.subtasks||[]).some(s=>String(s.text||'').trim()) &&
+                  <div style={{marginTop:8}}>
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={savingTpl}
+                            onClick={saveTaskAsTemplate}>{savingTpl?'Saving…':'Save as template'}</button>
+                    <span style={{fontSize:11,color:'var(--t3)',marginLeft:8}}>Keeps the title, priority and checklist for reuse.</span>
+                    {/* TPL-FINISH-V1: green, next to the button that caused it */}
+                    {tplMsg && <div style={{fontSize:12,color:'#059669',marginTop:6}}>{tplMsg}</div>}
+                  </div>}
               </div>
               {createError&&<div style={{color:'var(--red)',fontSize:12,marginBottom:6,padding:'6px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8}}>{createError}</div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
@@ -12691,7 +12740,8 @@ function CompanySettingsView({ user, onSettingsSaved }) {
           {tplList.length>0&&(
             <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10,fontSize:12}}>
               <span style={{color:'var(--t2)'}}>Group by:</span>
-              {['position','team'].map(g=>(
+              {/* TPL-GROUPBY-PROJECT-V1 */}
+              {['position','team','project'].map(g=>(
                 <button key={g} type="button" onClick={()=>setTplGroupBy(g)} style={{fontSize:12,cursor:'pointer',borderRadius:12,padding:'3px 12px',textTransform:'capitalize',border:tplGroupBy===g?'1px solid var(--brand)':'1px solid var(--border)',background:tplGroupBy===g?'var(--brand)':'var(--s3)',color:tplGroupBy===g?'#fff':'var(--t2)',fontWeight:tplGroupBy===g?600:400}}>{g}</button>
               ))}
             </div>
@@ -12699,7 +12749,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
           {tplList.length===0 ? (
             <div style={{fontSize:13,color:'var(--t2)'}}>No templates yet — create one below.</div>
           ) : (()=>{
-            const _g={}; if(tplGroupBy==='team'){ tmTeams.forEach(tm=>{ _g[tm.name]=[] }) } tplList.forEach(t=>{ let _k; if(tplGroupBy==='team'){ _k=[t.team_name||'— No team —'] } else { const _p=parseTplPositions(t.positions||t.position); _k=_p.length?_p:['— No position —'] } _k.forEach(k=>{ (_g[k]=_g[k]||[]).push(t) }) });
+            const _g={}; if(tplGroupBy==='team'){ tmTeams.forEach(tm=>{ _g[tm.name]=[] }) } tplList.forEach(t=>{ let _k; if(tplGroupBy==='team'){ _k=[t.team_name||'— No team —'] } /* TPL-GROUPBY-PROJECT-V1: project then stage */ else if(tplGroupBy==='project'){ _k=[t.template_group ? (t.template_group+' — '+(t.template_stage||'Unfiled')) : '— Not from a project —'] } else { const _p=parseTplPositions(t.positions||t.position); _k=_p.length?_p:['— No position —'] } _k.forEach(k=>{ (_g[k]=_g[k]||[]).push(t) }) });
             return Object.keys(_g).sort().map(pos=>{ const _open=openPos.has(pos); return (
               <div key={pos} style={{marginBottom:8}}>
                 <div onClick={()=>setOpenPos(prev=>{ const n=new Set(prev); n.has(pos)?n.delete(pos):n.add(pos); return n })} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 10px',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:8,fontWeight:700,fontSize:13}}>
