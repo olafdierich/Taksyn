@@ -5309,8 +5309,8 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   const pos=newTask.position||''
                   const filtered=templates.filter(t=>!pos||!(t.positions||[]).length||(t.positions||[]).includes(pos))
                   const grps={}
-                  filtered.forEach(t=>{ const pp=t.positions||[]; if(!pp.length){if(!grps['General'])grps['General']=[];grps['General'].push(t)} else if(pos){if(!grps[pos])grps[pos]=[];grps[pos].push(t)} else{const g=pp[0];if(!grps[g])grps[g]=[];grps[g].push(t)} })
-                  const keys=Object.keys(grps).sort((a,b)=>{ if(a==='General') return 1; if(b==='General') return -1; return a.localeCompare(b) })
+                  filtered.forEach(t=>{ /* TPL-GROUP-V1: project templates get their own group */ if(t.template_group){ const g='Project: '+t.template_group; if(!grps[g])grps[g]=[]; grps[g].push(t); return } const pp=t.positions||[]; if(!pp.length){if(!grps['General'])grps['General']=[];grps['General'].push(t)} else if(pos){if(!grps[pos])grps[pos]=[];grps[pos].push(t)} else{const g=pp[0];if(!grps[g])grps[g]=[];grps[g].push(t)} })
+                  const _tplRank=k=>k.startsWith('Project: ')?2:(k==='General'?1:0); const keys=Object.keys(grps).sort((a,b)=>(_tplRank(a)-_tplRank(b))||a.localeCompare(b))
                   return (
                     <div style={{marginBottom:10}}>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
