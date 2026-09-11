@@ -19992,7 +19992,7 @@ function IncidentsAdminView({ user, setPage }) {
                   }}
                   style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',marginTop:4}}>
                   <option value="">— unassigned —</option>
-                  {members.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}
+                  {/* SUP-INC-V2: owner must be able to open Active Incidents (client_admin, manager). A current owner outside that set is shown disabled so the select never displays the wrong person. */}{members.filter(m=>['client_admin','manager'].includes(m.role)).map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}{sel.assigned_to&&!members.some(m=>m.user_id===sel.assigned_to&&['client_admin','manager'].includes(m.role))&&<option value={sel.assigned_to} disabled>{(names[sel.assigned_to]||sel.assigned_to_name||'Current owner')+' (cannot view incidents - reassign)'}</option>}
                 </select>
               ) : (
                 <div style={{marginTop:4,fontSize:14,fontWeight:600}}>{names[sel.assigned_to]||sel.assigned_to_name||'— unassigned —'}</div>
