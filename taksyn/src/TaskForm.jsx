@@ -52,6 +52,15 @@ export default function TaskForm({
   const [teams, setTeams] = useState([])
   const [people, setPeople] = useState([])
   const [busy, setBusy] = useState(false)
+  // STAGE-CHECKLIST-V1: some rows store subtasks as a JSON string, others as an array.
+  const [items, setItems] = useState(() => {
+    let s = task?.subtasks
+    if (typeof s === 'string') { try { s = JSON.parse(s) } catch (e) { s = [] } }
+    return Array.isArray(s) ? s : []
+  })
+  const [clOpen, setClOpen] = useState(false)
+  const [instrOpen, setInstrOpen] = useState(null)
+  const setItem = (i, patch) => setItems(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
   const [f, setF] = useState({
     title: task?.title || '',
     stageId: task?.section_id || stage?.id || '',
@@ -98,6 +107,21 @@ export default function TaskForm({
     const approver = people.find(p => p.id === f.approverId)
 
     const row = {
+      // STAGE-CHECKLIST-V1: same item shape the rest of the app reads.
+      subtasks: JSON.stringify(items
+        .filter(it => String(it.text || '').trim())
+        .map(it => ({
+          id: it.id || ('s' + Date.now() + Math.random()),
+          text: String(it.text).trim(),
+          done: !!it.done,
+          mandatory: !!it.mandatory,
+          requirePhoto: !!it.requirePhoto,
+          requireTimestamp: !!it.requireTimestamp,
+          instruction: it.instruction || '',
+          note: it.note || '',
+          photo: it.photo || null,
+          history: it.history || []
+        }))),
       title: f.title.trim(),
       due_date: f.dueDate,
       section_id: f.stageId || null,
@@ -185,6 +209,10 @@ export default function TaskForm({
       <label style={lbl}>What needs doing *</label>
       <input style={inp} value={f.title} autoFocus placeholder="e.g. Fire safety inspection"
              onChange={e => setF({ ...f, title: e.target.value })} />
+      {/* STAGE-CHECKLIST-V1: these become templates others may reuse. */}
+      <div style={{ fontSize: 11, color: C.ink3, marginTop: 3 }}>
+        No names or personal details in the title or checklist items.
+      </div>
 
       <div style={row2}>
         <div>
@@ -271,6 +299,46 @@ export default function TaskForm({
             the timeline bars so it does not distort the plan.
           </div>
         </>}
+
+      {/* STAGE-CHECKLIST-V1: collapsed by default so the form stays short. */}
+      <div style={{ marginTop: 12, borderTop: '1px solid ' + C.line2, paddingTop: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: C.ink2, cursor: 'pointer' }} onClick={() => setClOpen(v => !v)}>
+            {clOpen ? '\u25BE' : '\u25B8'} Checklist{items.length ? ' (' + items.length + ')' : ''}
+          </span>
+          {clOpen &&
+            <button style={btnGhost} onClick={() => { setItems(prev => [...prev, { id: 's' + Date.now() + Math.random(), text: '', done: false, mandatory: false, requirePhoto: false, requireTimestamp: false, instruction: '', note: '', photo: null, history: [] }]); }}>+ Add item</button>}
+        </div>
+        {clOpen && items.length === 0 &&
+          <div style={{ fontSize: 11, color: C.ink3, marginTop: 6 }}>No checklist items — optional.</div>}
+        {clOpen && items.map((it, i) => {
+          const flag = (on, colour) => ({ ...btnGhost, padding: '3px 7px', fontSize: 12,
+            borderColor: on ? colour : undefined, color: on ? colour : C.ink2,
+            background: on ? colour + '14' : 'transparent' })
+          return (
+            <div key={it.id || i} style={{ marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input style={{ ...inp, flex: 1, margin: 0 }} placeholder={'Item ' + (i + 1)} value={it.text || ''}
+                       onChange={e => setItem(i, { text: e.target.value })} />
+                <button title="Mandatory — blocks submit" style={flag(it.mandatory, '#DC2626')}
+                        onClick={() => setItem(i, { mandatory: !it.mandatory })}>*</button>
+                <button title="Require photo evidence" style={flag(it.requirePhoto, '#3B82F6')}
+                        onClick={() => setItem(i, { requirePhoto: !it.requirePhoto })}>{'\u25A3'}</button>
+                <button title="Auto-timestamp on completion" style={flag(it.requireTimestamp, '#F59E0B')}
+                        onClick={() => setItem(i, { requireTimestamp: !it.requireTimestamp })}>{'\u25F4'}</button>
+                <button title="Instruction for the worker" style={flag(!!(it.instruction || '').trim(), '#10B981')}
+                        onClick={() => setInstrOpen(instrOpen === i ? null : i)}>{'\u2261'}</button>
+                <button title="Remove" style={{ ...btnGhost, padding: '3px 7px', fontSize: 12, color: C.red, borderColor: '#FCA5A5' }}
+                        onClick={() => { setItems(prev => prev.filter((_, j) => j !== i)); setInstrOpen(null) }}>{'\u2715'}</button>
+              </div>
+              {instrOpen === i &&
+                <textarea style={{ ...inp, marginTop: 4, minHeight: 52, border: '1px solid #10B981' }}
+                          placeholder="Instruction for the worker (optional)" value={it.instruction || ''}
+                          onChange={e => setItem(i, { instruction: e.target.value })} />}
+            </div>
+          )
+        })}
+      </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
              gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
