@@ -3140,6 +3140,16 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   const [breachedIncidents, setBreachedIncidents] = useState(0)
   const [overdueIncidents, setOverdueIncidents] = useState(0)
   const [myIncidents, setMyIncidents] = useState(0)
+  // SUP-SCOPE-CARD-V1: user_id -> org_members.role for the Tasks Created card.
+  // null until loaded; the card shows an em dash rather than a confident 0 / 0.
+  // org_members.role, NOT profiles.role (stale). orgId is the ID, not the name.
+  const [creatorRoles, setCreatorRoles] = useState(null)
+  useEffect(()=>{
+    if (!(isCA||isMgr) || !orgId || !isConfigured()) return
+    supabase.from('org_members').select('user_id,role').eq('org', orgId)
+      .then(({ data, error }) => { if (!error && data) setCreatorRoles(Object.fromEntries(data.map(m=>[m.user_id, m.role]))) })
+      .catch(()=>{})
+  }, [orgId])
 
   const fetchPendingInvites = (oid) => {
     if (!oid || !isConfigured()) return
@@ -3191,7 +3201,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         setBreachedIncidents(breached.length)
         setOverdueIncidents(lateOnly.length)
       }
-      if (isMgr||isSup) {
+      if (isMgr) { // SUP-SCOPE-CARD-V1: supervisors no longer see incidents
         // RLS scopes to assigned/investigator, so a plain count is "my incidents"
         const { count } = await supabase.from('incidents').select('id',{count:'exact',head:true}).eq('org', oid).neq('status','closed').is('excluded_at', null)
         if (count!=null) setMyIncidents(count)
@@ -3242,7 +3252,23 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   if (user.role==='super_admin') return <SuperAdminDashboard user={user} setPage={setPage} tickets={tickets}/>
   // Filter tasks by org
   const visibleAll = visibleTasks(tasks, user)
-  const visible = visibleAll
+  // SUP-SCOPE-CARD-V1: self-tasks (creator assigned it to themselves) never
+  // appear on the dashboard, for any role. They remain in the owner's task list.
+  const _isSelfTask = t => !!t.created_by_id && t.created_by_id===t.assigned_user_id
+  const visible = visibleAll.filter(t => !_isSelfTask(t))
+  // Tasks Created card: ALL org tasks, not `visible` -- see patch header.
+  const createdSplit = creatorRoles ? (() => {
+    let m = 0, s = 0
+    tasks.forEach(t => {
+      if (t.org?.toLowerCase() !== user.org?.toLowerCase()) return
+      if (!t.created_by_id || _isSelfTask(t)) return
+      if (!t.created_at || t.created_at.slice(0,10) < _occWindowFrom) return
+      const r = creatorRoles[t.created_by_id]
+      if (r === 'manager') m++
+      else if (r === 'supervisor') s++
+    })
+    return { m, s }
+  })() : null
   // F14-ORGDAY-DASH: `today` gates Active vs Scheduled via recurringDueNow (~3004)
   // and overdue via isOverdueOneOff. Derived in UTC it was wrong for the first three
   // hours of every day in a +03 org: the closing cycle still read as due and the
@@ -3261,7 +3287,8 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   const compT = visible.filter(t=>t.compliance)
   const compDone = compT.filter(t=>['completed','approved'].includes(t.status)).length
   const pending = visible.filter(t=>t.status==='pending').length
-  const review = visible.filter(t=>t.status==='awaiting_review').length
+  // SUP-LOW-V4: a supervisor's To Review excludes tasks they cannot approve (non-Low).
+  const review = visible.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).length
   const rejected = visible.filter(t=>t.status==='rejected').length
   const awards = computeAwards(tasks)
   return (
@@ -3271,14 +3298,18 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         <div className="ph-sub">{isWkr?'Hello '+user.name.split(' ')[0]+' — your tasks for today':user.org+(user.industry?' · 🏭 '+user.industry:'')+' · '+visible.length+' tasks'}</div>
       </div>
       <div className="stat-grid">
-        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋" onClick={()=>go('all')}/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Completion" val={occRate===null?'—':occRate+"%"} sub={occRate===null?'loading\u2026':occDone+" of "+occClosed+", 30 days"} color={occRate===null?'#6B7280':occRate>=80?'#10B981':occRate>=50?'#F59E0B':'#EF4444'} bg={occRate===null?'rgba(107,114,128,.1)':occRate>=80?'rgba(16,185,129,.1)':occRate>=50?'rgba(245,158,11,.1)':'rgba(239,68,68,.1)'} icon="✅" onClick={()=>setPage('reports')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Missed" val={missedCount===null?'—':missedCount} sub={missedCount===null?'loading…':'last 30 days'} color={missedCount===null?'#6B7280':missedCount>0?'#EF4444':'#10B981'} bg={missedCount===null?'rgba(107,114,128,.1)':missedCount>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="🔴" onClick={()=>setPage('reports')}/><Stat label="Late" val={lateCount===null?'—':lateCount} sub={lateCount===null?'loading…':'outside grace, 30 days'} color={lateCount===null?'#6B7280':lateCount>0?'#F59E0B':'#10B981'} bg={lateCount===null?'rgba(107,114,128,.1)':lateCount>0?'rgba(245,158,11,.1)':'rgba(16,185,129,.1)'} icon="🟡" onClick={()=>setPage('reports')}/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨" onClick={()=>setPage('users')}/>{isCA&&<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div>}<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">Open Incidents</span><div className="sc-icon" style={{background:openIncidents>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIncidents>0?'#EF4444':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:openIncidents>0?'#EF4444':'#6B7280'}}>{openIncidents}</div><div className="sc-sub">being handled</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incident_register')}><div className="sc-top"><span className="sc-label">Breached</span><div className="sc-icon" style={{background:breachedIncidents>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)',color:breachedIncidents>0?'#EF4444':'#10B981'}}>⏱</div></div><div className="sc-val" style={{color:breachedIncidents>0?'#EF4444':overdueIncidents>0?'#EA580C':'#10B981'}}>{breachedIncidents}<span style={{fontSize:'0.5em',fontWeight:500,color:'var(--t3)'}}> / {overdueIncidents}</span></div><div className="sc-sub">breached / overdue</div></div></>}
-        {isSup&&<><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={done} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Escalated" val={esc} sub={esc>0?'Active':'None'} color={esc>0?'#EF4444':'#6B7280'} bg="rgba(107,114,128,.1)" icon="⚠️" onClick={()=>go('escalated')}/><Stat label="Overdue" val={overdue} sub="Needs attention" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">My Incidents</span><div className="sc-icon" style={{background:myIncidents>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)',color:myIncidents>0?'#F59E0B':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:myIncidents>0?'#F59E0B':'#6B7280'}}>{myIncidents}</div><div className="sc-sub">assigned to me</div></div></>}
+        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋" onClick={()=>go('all')}/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Completion" val={occRate===null?'—':occRate+"%"} sub={occRate===null?'loading\u2026':occDone+" of "+occClosed+", 30 days"} color={occRate===null?'#6B7280':occRate>=80?'#10B981':occRate>=50?'#F59E0B':'#EF4444'} bg={occRate===null?'rgba(107,114,128,.1)':occRate>=80?'rgba(16,185,129,.1)':occRate>=50?'rgba(245,158,11,.1)':'rgba(239,68,68,.1)'} icon="✅" onClick={()=>setPage('reports')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Missed" val={missedCount===null?'—':missedCount} sub={missedCount===null?'loading…':'last 30 days'} color={missedCount===null?'#6B7280':missedCount>0?'#EF4444':'#10B981'} bg={missedCount===null?'rgba(107,114,128,.1)':missedCount>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="🔴" onClick={()=>setPage('reports')}/><Stat label="Late" val={lateCount===null?'—':lateCount} sub={lateCount===null?'loading…':'outside grace, 30 days'} color={lateCount===null?'#6B7280':lateCount>0?'#F59E0B':'#10B981'} bg={lateCount===null?'rgba(107,114,128,.1)':lateCount>0?'rgba(245,158,11,.1)':'rgba(16,185,129,.1)'} icon="🟡" onClick={()=>setPage('reports')}/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨" onClick={()=>setPage('users')}/>{/* SUP-SCOPE-CARD-V1: manager / supervisor created, rolling 30 days. No click-through: the task list is scoped per role and would not show these. */}<div className="stat-card"><div className="sc-top"><span className="sc-label">Tasks Created</span><div className="sc-icon" style={{background:'rgba(107,114,128,.1)',color:'#6B7280'}}>{'\u{1F465}'}</div></div><div className="sc-val" style={{color:'var(--text)'}}>{createdSplit ? createdSplit.m+' / '+createdSplit.s : '\u2014'}</div><div className="sc-sub">{createdSplit ? 'manager / supervisor, 30 days' : 'loading\u2026'}</div></div>{isCA&&<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div>}<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">Open Incidents</span><div className="sc-icon" style={{background:openIncidents>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIncidents>0?'#EF4444':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:openIncidents>0?'#EF4444':'#6B7280'}}>{openIncidents}</div><div className="sc-sub">being handled</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incident_register')}><div className="sc-top"><span className="sc-label">Breached</span><div className="sc-icon" style={{background:breachedIncidents>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)',color:breachedIncidents>0?'#EF4444':'#10B981'}}>⏱</div></div><div className="sc-val" style={{color:breachedIncidents>0?'#EF4444':overdueIncidents>0?'#EA580C':'#10B981'}}>{breachedIncidents}<span style={{fontSize:'0.5em',fontWeight:500,color:'var(--t3)'}}> / {overdueIncidents}</span></div><div className="sc-sub">breached / overdue</div></div></>}
+        {isSup&&<><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={done} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/>{/* SUP-DASH-V3: Escalated card removed for supervisors */}<Stat label="Overdue" val={overdue} sub="Needs attention" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/>{/* SUP-DASH-V1: My Incidents card removed -- supervisors report incidents, they do not see them */}</>}
         {isWkr&&<><Stat label="My Tasks" val={visible.filter(t=>!['awaiting_review','approved','completed'].includes(t.status)||isRecurring(t)).length} sub="remaining to do" icon="📋" onClick={()=>go('all')}/><Stat label="Submitted" val={visible.filter(t=>['awaiting_review','approved','completed'].includes(t.status)).length} sub="done or in review" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('awaiting_review')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Complete soon':'All good'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Rejected" val={rejected} sub={rejected>0?'Action needed':'All good'} color={rejected>0?'#EF4444':'#6B7280'} bg={rejected>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)'} icon="✗" onClick={()=>go('rejected')}/></>}
       </div>
-      {overdue>0&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Escalations</div><div className="esc-banner-sub">View escalation queue</div></div><button className="btn btn-danger btn-sm" onClick={()=>setPage('escalations')}>View</button></div>}
+      {/* SUP-DASH-V3: no escalation banner for supervisors */}{overdue>0&&!isSup&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Escalations</div><div className="esc-banner-sub">View escalation queue</div></div><button className="btn btn-danger btn-sm" onClick={()=>setPage('escalations')}>View</button></div>}
       {/* Smart Alerts */}
       {(()=>{
-        const smartAlerts = computeAlerts(tasks, user, leaveRecords, orgSLA, orgOccurrences)
+        // SUP-DASH-V1: supervisors do not see Action Required. It names people,
+        // repeat misses and escalations -- decision-making information that sits
+        // with managers and client admins. Returned before computeAlerts runs.
+        if(isSup) return null
+        const smartAlerts = computeAlerts(tasks.filter(t => !_isSelfTask(t)), user, leaveRecords, orgSLA, orgOccurrences)
         if(smartAlerts.length===0) return null
         return (
           <div className="section" style={{marginBottom:14,border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.03)'}}>
@@ -3297,13 +3328,13 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
       <div className="two-col">
         <div className="section">
           {(isCA||isMgr)&&<><div className="section-title">Compliance Score</div><div style={{display:'flex',alignItems:'center',gap:16}}><div className="score-ring"><div className="score-val">{pct(compDone,compT.length)}%</div><div className="score-lbl">Score</div></div><div><div style={{fontSize:13,marginBottom:3}}>{compDone}/{compT.length} compliance tasks done</div><div style={{fontSize:12,color:'var(--t2)'}}>{compT.filter(t=>isOverdueOneOff(t,today)).length} critical overdue</div></div></div></>}
-          {isSup&&<><div className="section-title">Pending Evidence</div>{visible.filter(t=>t.status==='awaiting_review').slice(0,3).map(t=><div key={t.id} className="notif-item amber" style={{cursor:'pointer'}} onClick={()=>setPage('evidence')}><div className="notif-title">📷 {t.title}</div><div className="notif-sub">Submitted · {t.due_date}</div></div>)}{review===0&&<div style={{fontSize:13,color:'var(--t2)'}}>No evidence pending ✅</div>}</>}
+          {isSup&&<><div className="section-title">Pending Evidence</div>{visible.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).slice(0,3).map(t=><div key={t.id} className="notif-item amber" style={{cursor:'pointer'}} onClick={()=>setPage('evidence')}><div className="notif-title">📷 {t.title}</div><div className="notif-sub">Submitted · {t.due_date}</div></div>)}{review===0&&<div style={{fontSize:13,color:'var(--t2)'}}>No evidence pending ✅</div>}</>}
           {isWkr&&<><div className="section-title">My Progress</div><div style={{display:'flex',alignItems:'center',gap:16}}><div className="score-ring"><div className="score-val">{rate}%</div><div className="score-lbl">Done</div></div><div><div style={{fontSize:13,marginBottom:3}}>{done} of {visible.length} tasks done</div><div style={{fontSize:12,color:'var(--t2)'}}>{overdue} overdue · {pending} pending</div></div></div></>}
         </div>
         <div className="section">
           <div className="section-title">Alerts</div>
           {visible.filter(t=>isOverdueOneOff(t,today)).slice(0,2).map(t=><div key={t.id} className="notif-item urgent"><div className="notif-title">⚠️ {t.title}</div><div className="notif-sub">Overdue since {t.due_date}</div></div>)}
-          {!isWkr&&visible.filter(t=>t.status==='awaiting_review').slice(0,1).map(t=><div key={t.id} className="notif-item amber"><div className="notif-title">🔍 {t.title}</div><div className="notif-sub">Awaiting review</div></div>)}
+          {!isWkr&&visible.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).slice(0,1).map(t=><div key={t.id} className="notif-item amber"><div className="notif-title">🔍 {t.title}</div><div className="notif-sub">Awaiting review</div></div>)}
           {overdue===0&&review===0&&esc===0&&<div style={{fontSize:13,color:'var(--t2)'}}>No alerts 🎉</div>}
         </div>
       </div>
@@ -4608,6 +4639,13 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
   const createTask = async () => {
     if (!newTask.title.trim() || creating) return
+    // SUP-LOW-V1: supervisors create Low priority only. Refused BEFORE any write.
+    // The message deliberately does not suggest lowering the priority.
+    if (user.role==='supervisor' && newTask.priority!=='low') { setCreateError('Supervisors can only create Low priority tasks. Please contact your manager to create this task.'); return }
+    // SUP-LOW-V3: above Low, the approver must be a manager or above -- otherwise the task
+    // stalls (supervisor cannot approve it, manager cannot see it). teamUsers is the list
+    // the approver dropdown is built from.
+    if (newTask.priority!=='low' && newTask.approver_id && (teamUsers||[]).find(u=>u.id===newTask.approver_id)?.role==='supervisor') { setCreateError('Tasks above Low priority need a manager or administrator as approver.'); return }
     setCreating(true)
     setCreateError('')
     const taskData = {...newTask}
@@ -4693,7 +4731,11 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
     t.assigned_user_id === user.id ||
     (Array.isArray(t.assigned_user_ids) && t.assigned_user_ids.includes(user.id))
   )
-  const canReviewTask = (t) => canApprove && !(isAssignedTo(t) && t.created_by !== user.name)
+  // SUP-LOW-V1: supervisors approve Low priority only. Missing priority = not Low (fails closed).
+  const canReviewTask = (t) => canApprove && !(isAssignedTo(t) && t.created_by !== user.name) && !(user.role==='supervisor' && t?.priority!=='low')
+  // SUP-LOW-V2: opening the edit form (Edit, Reassign) follows the same Low-only
+  // rule for supervisors. Missing priority = not Low (fails closed).
+  const canEditTask = (t) => canApprove && !(user.role==='supervisor' && t?.priority!=='low')
   // Delete is irreversible and the "This and future" scope destroys a whole recurrence,
   // so it is gated harder than review: the creator, or client_admin and above.
   //
@@ -4952,7 +4994,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={editTask.category||''} onChange={e=>setEditTask({...editTask,category:e.target.value,department:''})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Department</label><select className="form-select" value={editTask.department||''} onChange={e=>setEditTask({...editTask,department:e.target.value})}><option value="">— Select —</option>{(DEPARTMENTS[editTask.category||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
-                <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={editTask.priority||''} onChange={e=>setEditTask({...editTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+                <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={editTask.priority||''} onChange={e=>setEditTask({...editTask,priority:e.target.value})}>{/* SUP-LOW-V2: supervisors are offered Low only */}{(user.role==='supervisor'?[['low','Low']]:[['critical','Critical'],['high','High'],['medium','Medium'],['low','Low']]).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>
               </div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={editTask.due_date||''} onChange={e=>setEditTask({...editTask,due_date:e.target.value})}/></div>
@@ -5830,18 +5872,18 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     <span style={isOrphaned?{color:'var(--t2)',textDecoration:'line-through'}:{}}>{_asgLabel}</span>
                     {isOrphaned&&<div style={{marginTop:4,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                       <span style={{fontSize:11,color:'var(--red)',fontWeight:600}}>⚠️ Assigned user is no longer active in this organisation</span>
-                      {canApprove&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>Reassign</button>}
+                      {canEditTask(sel)&&<button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:'3px 8px'}} onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}>Reassign</button>}
                     </div>}
                   </div>
                 )
               })()}
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
-              {sel.approver_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Approver:</span> {sel.approver_name}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--brand)'}}>⏳ Awaiting your review</span>}</div>}
+              {sel.approver_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Approver:</span> {sel.approver_name}{/* SUP-LOW-V2: only say "your review" when this viewer can actually approve */}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&!canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--t2)'}}>Awaiting manager / admin review</span>}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--brand)'}}>⏳ Awaiting your review</span>}</div>}
               {sel.project&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Project:</span> <span style={{color:'#3B82F6',fontWeight:600}}>📁 {sel.project}</span></div>}
             </div>
           </div>
           <div className="btn-row">
-            {canApprove&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}><IC n="pencil" s={13}/> Edit</button>}
+            {canEditTask(sel)&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}><IC n="pencil" s={13}/> Edit</button>}
             {canReviewTask(sel)&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
@@ -6189,7 +6231,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                 ))}
               </div>
               {(()=>{
-                const myReview = activeFiltered.filter(t=>t.status==='awaiting_review' && t.approver_id===user.id)
+                const myReview = activeFiltered.filter(t=>t.status==='awaiting_review' && t.approver_id===user.id && !(user.role==='supervisor' && t.priority!=='low')) /* SUP-LOW-V3 */
                 if(myReview.length===0) return null
                 return (
                   <div onClick={()=>setFilter('awaiting_review')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.35)',borderRadius:12,padding:'10px 14px',marginBottom:12}}>
@@ -6301,7 +6343,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
                     // ── SUPERVISOR VIEW ───────────────────────────────
                     if(user.role==='supervisor') {
-                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).sort(byDate) /* SUP-LOW-V3 */
                       const _mySelf = t => !!t.created_by_id && t.created_by_id===user.id && t.assigned_user_id===user.id
                       const _myAll = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review').sort(byDate)
                       const mySelfTasks = _myAll.filter(_mySelf)
@@ -6361,7 +6403,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
 
                     // ── MANAGER VIEW ──────────────────────────────────
                     if(user.role==='manager') {
-                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                      const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).sort(byDate) /* SUP-LOW-V3 */
                       const _mySelf = t => !!t.created_by_id && t.created_by_id===user.id && t.assigned_user_id===user.id
                       const _myAll = activeFiltered.filter(t=>(t.assigned_user_id===user.id||t.assigned_user_ids?.includes(user.id)||(t.team_id&&userTeamIds.includes(t.team_id))||t.assigned_user_name?.toLowerCase()===user.name?.toLowerCase())&&t.status!=='awaiting_review').sort(byDate)
                       const mySelfTasks = _myAll.filter(_mySelf)
@@ -6420,7 +6462,7 @@ function TasksView({ tasks, setTasks, user, loadTasks, loadTaskById=async()=>nul
                     }
 
                     // ── CLIENT ADMIN VIEW ─────────────────────────────
-                    const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review').sort(byDate)
+                    const needsReview = activeFiltered.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).sort(byDate) /* SUP-LOW-V3 */
                     const _caToday = orgToday(orgTz)
                     const _isOver = t => !!orgTz && isOverdueOneOff(t, _caToday)
                     const attention = activeFiltered.filter(t=>['overdue','escalated'].includes(t.status)||t.escalation||_isOver(t)).sort(byDate)
@@ -6668,6 +6710,8 @@ function OrgEscalationsView({ user, setAuditLog }) {
 function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
   const relevant = tasks.filter(t=>t.evidence?.length>0||t.status==='awaiting_review')
   const approve = async (id) => {
+    // SUP-LOW-V3: this approve does not go through canReviewTask. Refuse before any write.
+    { const _t = tasks.find(x=>x.id===id); if (user.role==='supervisor' && _t?.priority!=='low') { alert('Supervisors can only approve Low priority tasks.'); return } }
     const t = tasks.find(t=>t.id===id)
     setTasks(prev=>prev.map(t=>t.id===id?{...t,status:'approved',reviewed_at:new Date().toISOString()}:t))
     if(isConfigured()) { markRecentlyWritten(id); await supabase.from('tasks').update({status:'approved',reviewed_at:new Date().toISOString()}).eq('id',id); markRecentlyWritten(id) }
@@ -6707,7 +6751,7 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
             </div>
             {hasAccess(user.role,2)&&t.status==='awaiting_review'&&(
               <div style={{display:'flex',gap:7,marginTop:10}}>
-                <button className="btn btn-primary btn-sm" onClick={()=>approve(t.id)}>✅ Approve</button>
+                {!(user.role==='supervisor'&&t.priority!=='low')&&<button className="btn btn-primary btn-sm" onClick={()=>approve(t.id)}>✅ Approve</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>reject(t.id)}>✗ Reject</button>
               </div>
             )}
@@ -16916,7 +16960,9 @@ function ContactsView({ user, setPage }) {
 
 function IncidentHubView({ user, setPage }) {
   const isCA = user.role==='client_admin'
-  const canReview = ['client_admin','manager','supervisor'].includes(user.role)
+  // SUP-INC-V1: supervisors report incidents, they do not see them. canReview
+  // gates the Active tile AND the active list below the tiles.
+  const canReview = ['client_admin','manager'].includes(user.role)
   const [activeIncidents, setActiveIncidents] = useState([])
   // [PATCH:inc-sort-v1] 'rank' = breached/overdue first (the default, set by
   // the fetch effect). 'date' = newest reported first, overriding that rank.
@@ -19946,7 +19992,7 @@ function IncidentsAdminView({ user, setPage }) {
                   }}
                   style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',marginTop:4}}>
                   <option value="">— unassigned —</option>
-                  {members.map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}
+                  {/* SUP-INC-V2: owner must be able to open Active Incidents (client_admin, manager). A current owner outside that set is shown disabled so the select never displays the wrong person. */}{members.filter(m=>['client_admin','manager'].includes(m.role)).map(m=><option key={m.user_id} value={m.user_id}>{m.name} ({m.role})</option>)}{sel.assigned_to&&!members.some(m=>m.user_id===sel.assigned_to&&['client_admin','manager'].includes(m.role))&&<option value={sel.assigned_to} disabled>{(names[sel.assigned_to]||sel.assigned_to_name||'Current owner')+' (cannot view incidents - reassign)'}</option>}
                 </select>
               ) : (
                 <div style={{marginTop:4,fontSize:14,fontWeight:600}}>{names[sel.assigned_to]||sel.assigned_to_name||'— unassigned —'}</div>
@@ -22202,7 +22248,7 @@ export default function App() {
   // NARROW-VISIBLE-TASKS-V1: review badge counts only tasks where the user is the
   // APPROVER. A review queue should reflect what you are responsible for approving.
   const myReviewCount = ['supervisor','manager','client_admin'].includes(user.role)
-    ? tasks.filter(t=>t.status==='awaiting_review'&&(t.approver_id===user.id||t.approver_name?.toLowerCase()===user.name?.toLowerCase())).length
+    ? tasks.filter(t=>t.status==='awaiting_review'&&(t.approver_id===user.id||t.approver_name?.toLowerCase()===user.name?.toLowerCase())&&!(user.role==='supervisor' && t.priority!=='low')).length /* SUP-LOW-V3 */
     : 0
   const _blobToday = new Date().toISOString().split('T')[0]
   // NARROW-VISIBLE-TASKS-V1: nav dot and task button colour reflect the user's own tasks.
@@ -22907,7 +22953,7 @@ export default function App() {
                 {page==='issue_reports' && ['worker','supervisor','manager'].includes(user.role) && <ReportIssueView user={user}/>}
                 {page==='incident_register' && user.role==='client_admin' && <IncidentRegisterView user={user} setPage={setPage}/>}
                 {page==='capa_register' && user.role==='client_admin' && <CapaRegisterView user={user} setPage={setPage}/>}
-                {page==='incidents' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentsAdminView user={user} setPage={setPage}/>}
+                {/* SUP-INC-V1: Active Incidents is client_admin + manager only. Every route to it lands here. */}{page==='incidents' && ['client_admin','manager'].includes(user.role) && <IncidentsAdminView user={user} setPage={setPage}/>}{page==='incidents' && user.role==='supervisor' && <div className="ph"><div className="ph-title">Incidents</div><div className="ph-sub">Incident details are handled by managers and administrators. You can still report an incident from the Incidents &amp; Risk page.</div></div>}
                 {page==='issue_reports' && user.role==='client_admin' && <IssueReportsAdminView user={user}/>}
                 {page==='incident_hub' && ['client_admin','manager','supervisor'].includes(user.role) && <IncidentHubView user={user} setPage={setPage}/>}
                 {page==='contacts' && user.role==='client_admin' && <ContactsView user={user} setPage={setPage}/>}
