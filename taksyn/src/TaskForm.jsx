@@ -47,6 +47,7 @@ const C = {
 export default function TaskForm({
   project, stage, stages = [], orgName, user, milestones = [], task = null,
   preset = null,   // STAGE-TPL-V2: title / priority / checklist from a chosen template
+  onBack = null,   // TPL-ROWS-V1: reopen the template picker
   onDone, onCancel
 }) {
   const editing = !!task
@@ -62,6 +63,13 @@ export default function TaskForm({
     return Array.isArray(s) ? s : []
   })
   const [clOpen, setClOpen] = useState(!task && !!(preset && (preset.subtasks || []).length))
+  // TPL-ROWS-V1: one row per extra template. null date / assignee = use the shared one.
+  const [extraRows, setExtraRows] = useState(() =>
+    (!task && preset ? (preset.extras || []) : []).map(p => ({
+      title: p.title || '', priority: p.priority, subtasks: p.subtasks || [],
+      assigneeId: null, dueDate: null
+    })))
+  const setExtra = (i, patch) => setExtraRows(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
   const [instrOpen, setInstrOpen] = useState(null)
   const setItem = (i, patch) => setItems(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
   const [f, setF] = useState({
@@ -162,9 +170,18 @@ export default function TaskForm({
       const row = buildRow()
       // TPL-PICKER-V2: extra templates become extra tasks, sharing everything
       // chosen here. Written first so a failure stops before the main insert.
-      if (!editing && preset && (preset.extras || []).length) {
-        const extras = preset.extras.map((p, i) => ({
+      if (!editing && extraRows.length) {
+        const extras = extraRows.map((p, i) => {
+          // TPL-ROWS-V1: per-row person and date, falling back to the shared ones.
+          const ra = p.assigneeId === null ? null : people.find(x => x.id === p.assigneeId)
+          const perRow = p.assigneeId === null ? {} : {
+            assigned_user_ids: ra ? [ra.id] : [], assigned_user_names: ra ? [ra.name] : [],
+            assigned_user_id: ra ? ra.id : null, assigned_user_name: ra ? ra.name : null
+          }
+          return {
           ...row,
+          ...perRow,
+          due_date: p.dueDate || row.due_date,
           id: 'T' + (Date.now() + i + 1),
           title: (p.title || '').trim() || row.title,
           ...(p.priority ? { priority: p.priority } : {}),
@@ -176,7 +193,7 @@ export default function TaskForm({
                           instruction: it.instruction || '', note: '', photo: null, history: [] }))),
           org: orgName, status: 'pending', recurrence: 'once',
           project_id: project.id, created_by: user?.name || null
-        }))
+        } })
         const ex = await supabase.from('tasks').insert(extras).select()
         if (ex.error) throw ex.error
         if (!ex.data || ex.data.length !== extras.length) {
@@ -242,9 +259,9 @@ export default function TaskForm({
         <div style={{ fontSize: 11, color: C.ink2, marginTop: 4 }}>
           Filled from the template "{preset.title}". Edit anything you need to.
         </div>}
-      {!task && preset && (preset.extras || []).length > 0 &&
+      {extraRows.length > 0 &&
         <div style={{ fontSize: 11, color: C.ink2, marginTop: 2 }}>
-          {preset.extras.length + 1} tasks will be created, all with the stage, team, person, approver and date you set here.
+          {extraRows.length + 1} tasks will be created. They share the stage, team, approver and milestone below; each can have its own person and date.
         </div>}
       {/* PRIVACY-NOTE-V1: same amber warning as the main create form. */}
       <div style={{ fontSize: 11, color: '#F59E0B', marginTop: 4 }}>
@@ -377,6 +394,33 @@ export default function TaskForm({
         })}
       </div>
 
+      {/* TPL-ROWS-V1: the other ticked templates, each adjustable. */}
+      {extraRows.length > 0 &&
+        <div style={{ marginTop: 12, borderTop: `1px solid ${C.line2}`, paddingTop: 10 }}>
+          <div style={{ fontSize: 12, color: C.ink2, marginBottom: 6 }}>
+            Also creating ({extraRows.length})
+          </div>
+          {extraRows.map((r, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <input style={inp} value={r.title} placeholder={'Task ' + (i + 2)}
+                     onChange={e => setExtra(i, { title: e.target.value })} />
+              <div style={{ ...row2, marginTop: 6 }}>
+                <select style={inp} value={r.assigneeId === null ? '__same' : r.assigneeId}
+                        onChange={e => setExtra(i, { assigneeId: e.target.value === '__same' ? null : e.target.value })}>
+                  <option value="__same">Same person as above</option>
+                  <option value="">Unassigned</option>
+                  {people.map(p => <option key={p.id} value={p.id}>{p.name} · {p.role}</option>)}
+                </select>
+                <input style={inp} type="date" value={r.dueDate || ''}
+                       placeholder="Same date as above"
+                       onChange={e => setExtra(i, { dueDate: e.target.value || null })} />
+              </div>
+              {!r.dueDate &&
+                <div style={{ fontSize: 11, color: C.ink2, marginTop: 3 }}>Uses the date above.</div>}
+            </div>
+          ))}
+        </div>}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
              gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         <span>
@@ -385,13 +429,15 @@ export default function TaskForm({
                     disabled={busy} onClick={detach}>Remove from project</button>}
         </span>
         <span style={{ display: 'flex', gap: 8 }}>
+          {/* TPL-ROWS-V1 */}
+          {!editing && preset && onBack &&
+            <button style={btnGhost} onClick={onBack}>{'\u2039'} Back</button>}
           <button style={btnGhost} onClick={onCancel}>Cancel</button>
           <button style={{ ...btn, opacity: (!f.title.trim() || !f.dueDate || busy) ? .5 : 1 }}
                   disabled={!f.title.trim() || !f.dueDate || busy}
                   onClick={submit}>
             {busy ? 'Saving…' : editing ? 'Save changes'
-              : (preset && (preset.extras || []).length
-                  ? 'Add ' + (preset.extras.length + 1) + ' tasks' : 'Add task')}
+              : (extraRows.length ? 'Add ' + (extraRows.length + 1) + ' tasks' : 'Add task')}
           </button>
         </span>
       </div>

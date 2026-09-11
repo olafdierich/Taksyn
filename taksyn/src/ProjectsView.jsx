@@ -702,10 +702,13 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
     }))
   })
 
+  const [lastPick, setLastPick] = useState(null)   // TPL-ROWS-V1: for Back
+
   const applyTemplates = () => {
     const stage = tplPick.stage
     const chosen = tplPick.rows.filter(t => tplPick.sel[t.id])
     if (!chosen.length) return
+    setLastPick(tplPick)
     setTplPick(null)
     const [first, ...rest] = chosen.map(_asPreset)
     setPreset({ stageId: stage.id, ...first, extras: rest })
@@ -1137,6 +1140,7 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
               {addingTo === pk.id &&
                 <TaskForm project={project} stage={pk} stages={sections} orgName={orgName}
                   user={user} milestones={ms} preset={preset && preset.stageId === pk.id ? preset : null}
+                  onBack={lastPick ? () => { setAddingTo(null); setPreset(null); setTplPick(lastPick) } : null}
                   onCancel={() => { setAddingTo(null); setPreset(null) }}
                   onDone={() => { setAddingTo(null); setPreset(null); onChanged() }} />}
             </div>
@@ -1159,6 +1163,7 @@ function SectionView({ detail, sectionId, onBack, canEdit, user, orgName, onChan
             {addingTo === pk.id &&
               <TaskForm project={project} stage={pk} stages={sections} orgName={orgName}
                 user={user} milestones={ms} preset={preset && preset.stageId === pk.id ? preset : null}
+                onBack={lastPick ? () => { setAddingTo(null); setPreset(null); setTplPick(lastPick) } : null}
                 onCancel={() => { setAddingTo(null); setPreset(null) }}
                 onDone={() => { setAddingTo(null); setPreset(null); onChanged() }} />}
             {Object.keys(byTeam).map(k => (
