@@ -4646,7 +4646,9 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   const _caPrevShow = useRef(false)
   useEffect(()=>{ if(_caPrevShow.current && !showCreate) setCaDraft(null); _caPrevShow.current = showCreate },[showCreate])
   const createTask = async () => {
-    if (!newTask.title.trim() || creating) return
+    // CA-HANDOFF-V2: a blank title used to return silently -- no message, no save.
+    if (creating) return
+    if (!newTask.title.trim()) { setCreateError('Enter a task title.'); return }
     // SUP-LOW-V1: supervisors create Low priority only. Refused BEFORE any write.
     // The message deliberately does not suggest lowering the priority.
     if (user.role==='supervisor' && newTask.priority!=='low') { setCreateError('Supervisors can only create Low priority tasks. Please contact your manager to create this task.'); return }
@@ -5351,6 +5353,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                     {clInstrOpen===(s.id||i)&&(
                       <textarea className="comment-box" style={{width:'100%',marginTop:6,minHeight:54,fontSize:12,border:'1px solid #10B981',background:'rgba(16,185,129,.05)'}} placeholder="Instruction for the worker (optional) — e.g. Only use Sparkle products" value={s.instruction||''} onChange={e=>setNewTask({...newTask,subtasks:(newTask.subtasks||[]).map((x,j)=>j===i?{...x,instruction:e.target.value}:x)})}/>
                     )}
+                    {/* CA-HANDOFF-V2: mic writes into state (controlled box); accepts a value or an updater */}{clInstrOpen===(s.id||i)&&<MicChip setValue={fn=>setNewTask(prev=>({...prev,subtasks:(prev.subtasks||[]).map((x,j)=>j===i?{...x,instruction:typeof fn==='function'?fn(x.instruction||''):fn}:x)}))}/>}
                   </div>
                 ))}
                 {!(newTask.subtasks||[]).length&&!pendingDelete&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
@@ -20358,8 +20361,10 @@ function IncidentsAdminView({ user, setPage }) {
                     Void — withdrawn
                   </span>
                 ) : (
-                  <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,color:'#fff',background:taskBg}}>
-                    {taskTxt}
+                  <span onClick={a.task_id&&t&&setPage?()=>{ try{ sessionStorage.setItem('taksyn-open-task', a.task_id) }catch(e){}; setPage('tasks') }:undefined}
+                    title={a.task_id&&t?'Open this task':undefined}
+                    style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,color:'#fff',background:taskBg,cursor:a.task_id&&t?'pointer':'default'}}>
+                    {/* CA-HANDOFF-V2: pill opens the linked task */}{taskTxt}{a.task_id&&t?' \u203A':''}
                   </span>
                 )}
               </div>
