@@ -110,6 +110,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
   const [draft, setDraft] = useState({ name: '', description: '' })
   const [saving, setSaving] = useState(false)
   const [showArchive, setShowArchive] = useState(false)
+  const [dup, setDup] = useState(null)  // PRJ-ARCHIVE-V1: { src, name, start, busy }
 
   const isCA = ['client_admin', 'super_admin'].includes(user?.role)
 
@@ -122,7 +123,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
         setOrgId(oid || '')
         if (!oid) { setProjects([]); setLoading(false); return }
         const { data: ps, error } = await supabase.from('projects')
-          .select('id,ref,name,description,status,start_date,target_end_date')
+          .select('id,ref,name,description,status,start_date,target_end_date,archived_at')
           .eq('org', oid).order('created_at', { ascending: false })
         if (error) throw error
         if (dead) return
@@ -204,12 +205,40 @@ export default function ProjectsView({ user, resolveOrgId }) {
     finally { setSaving(false) }
   }
 
+  // PRJ-ARCHIVE-V1: archiving is a marker, NOT a status. It used to write 'cancelled',
+  // which recorded a finished project as cancelled. A 0-row update means RLS refused.
   const archive = async (p) => {
-    if (!confirm(`Archive ${p.name}?`)) return
-    const { error } = await supabase.from('projects')
-      .update({ status: 'cancelled' }).eq('id', p.id).select()
+    if (!confirm(`Archive ${p.name}? It moves to the Archive tab and can be restored.`)) return
+    const now = new Date().toISOString()
+    const { data, error } = await supabase.from('projects')
+      .update({ archived_at: now, archived_by_id: user?.id || null }).eq('id', p.id).select('id')
     if (error) return alert('Could not archive: ' + error.message)
-    setProjects(prev => prev.map(x => x.id === p.id ? { ...x, status: 'cancelled' } : x))
+    if (!data || !data.length) return alert('Could not archive: you do not have permission for this project.')
+    setProjects(prev => prev.map(x => x.id === p.id ? { ...x, archived_at: now } : x))
+  }
+
+  const restore = async (p) => {
+    const { data, error } = await supabase.from('projects')
+      .update({ archived_at: null, archived_by_id: null }).eq('id', p.id).select('id')
+    if (error) return alert('Could not restore: ' + error.message)
+    if (!data || !data.length) return alert('Could not restore: you do not have permission for this project.')
+    setProjects(prev => prev.map(x => x.id === p.id ? { ...x, archived_at: null } : x))
+  }
+
+  const duplicate = async () => {
+    if (!dup || dup.busy) return
+    const src = dup.src
+    setDup(d => ({ ...d, busy: true }))
+    const { data, error } = await supabase.rpc('duplicate_project',
+      { p_source: src.id, p_name: dup.name.trim(), p_start_date: dup.start })
+    if (error) { setDup(d => ({ ...d, busy: false })); return alert('Could not duplicate: ' + error.message) }
+    const r = Array.isArray(data) ? data[0] : data
+    const { data: row } = await supabase.from('projects')
+      .select('id,ref,name,description,status,start_date,target_end_date,archived_at').eq('id', r.id).single()
+    if (row) setProjects(prev => [row, ...prev])
+    setDup(null); setShowArchive(false)
+    alert(`${r.ref} created: ${r.sections} sections and stages, ${r.milestones} milestones, ${r.links} links.\n`
+        + `Templates in "${src.name}": ${r.templates_created} new, ${r.templates_reused} reused. Add them with New Task → From Template.`)
   }
 
   if (loading) return <div style={{ padding: 20, color: C.ink2 }}>Loading projects…</div>
@@ -225,8 +254,10 @@ export default function ProjectsView({ user, resolveOrgId }) {
           onChanged={() => setReload(n => n + 1)} />
   }
 
-  const active = projects.filter(p => !['closed', 'cancelled'].includes(p.status))
-  const archived = projects.filter(p => ['closed', 'cancelled'].includes(p.status))
+  // PRJ-ARCHIVE-V1: archived = marked archived, or signed off / cancelled.
+  const isArch = p => !!p.archived_at || ['closed', 'cancelled'].includes(p.status)
+  const active = projects.filter(p => !isArch(p))
+  const archived = projects.filter(isArch)
 
   const Card = p => {
     const c = counts[p.id] || { n: 0, d: 0 }
@@ -240,7 +271,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
           <span style={{ fontSize: 12, color: C.ink2 }}>{c.d}/{c.n} approved</span>
         </div>
         <div style={{ fontSize: 12, color: C.ink2, marginTop: 2 }}>
-          {p.ref}{p.status !== 'active' && <Pill>{p.status}</Pill>}
+          {p.ref}{p.status !== 'active' && <Pill>{p.status}</Pill>}{p.status === 'active' && p.archived_at && <Pill>archived</Pill>}
         </div>
         <Bar pct={c.n ? Math.round(c.d / c.n * 100) : 0} />
         {risk > 0
@@ -248,9 +279,13 @@ export default function ProjectsView({ user, resolveOrgId }) {
           : blk > 0
           ? <Note tone="warn">{blk} open blocker{blk > 1 ? 's' : ''} holding a milestone.</Note>
           : null}
-        {isCA && p.status === 'active' &&
-          <div style={{ marginTop: 10 }}>
-            <button style={btnGhost} onClick={e => { e.stopPropagation(); archive(p) }}>Archive</button>
+        {isCA &&
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {p.status === 'active' && !p.archived_at &&
+              <button style={btnGhost} onClick={e => { e.stopPropagation(); archive(p) }}>Archive</button>}
+            {p.status === 'active' && p.archived_at &&
+              <button style={btnGhost} onClick={e => { e.stopPropagation(); restore(p) }}>Restore</button>}
+            <button style={btnGhost} onClick={e => { e.stopPropagation(); setDup({ src: p, name: p.name + ' (copy)', start: new Date().toISOString().slice(0, 10), busy: false }) }}>Duplicate</button>
           </div>}
       </div>
     )
@@ -266,19 +301,39 @@ export default function ProjectsView({ user, resolveOrgId }) {
         {isCA && <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Project</button>}
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        {active.length === 0 &&
-          <div style={{ ...card, textAlign: 'center', color: C.ink2, padding: 28 }}>No active projects yet.</div>}
-        {active.map(Card)}
+      {/* PRJ-ARCHIVE-V1: Active / Archive tabs, always visible */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
+        {[['active', 'Active (' + active.length + ')'], ['archive', 'Archive (' + archived.length + ')']].map(([k, l]) => {
+          const on = (showArchive ? 'archive' : 'active') === k
+          return <button key={k} onClick={() => setShowArchive(k === 'archive')}
+                   style={{ ...btnGhost, fontWeight: on ? 600 : 400, borderColor: on ? 'var(--brand)' : undefined }}>{l}</button>
+        })}
+      </div>
+      <div style={{ marginTop: 10 }}>
+        {(showArchive ? archived : active).length === 0 &&
+          <div style={{ ...card, textAlign: 'center', color: C.ink2, padding: 28 }}>
+            {showArchive ? 'Nothing archived yet. Signed-off and archived projects appear here.' : 'No active projects yet.'}
+          </div>}
+        {(showArchive ? archived : active).map(Card)}
       </div>
 
-      {archived.length > 0 &&
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 12, color: C.ink2, cursor: 'pointer', marginBottom: 8 }}
-               onClick={() => setShowArchive(v => !v)}>
-            {showArchive ? '▾' : '▸'} Archive ({archived.length})
+      {dup &&
+        <div style={modalWrap} onClick={() => { if (!dup.busy) setDup(null) }}>
+          <div style={modalBox} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Duplicate {dup.src.ref}</div>
+            <div style={{ fontSize: 12, color: C.ink2, marginBottom: 12 }}>
+              Copies the sections, stages, milestones and links. Its tasks are saved as templates in the group "{dup.src.name}" — add them with New Task → From Template. No tasks, people, dates or evidence are copied.
+            </div>
+            <label style={lbl}>New project name *</label>
+            <input style={inp} value={dup.name} autoFocus onChange={e => setDup({ ...dup, name: e.target.value })} />
+            <label style={lbl}>Start date *</label>
+            <input style={inp} type="date" value={dup.start} onChange={e => setDup({ ...dup, start: e.target.value })} />
+            <div style={{ fontSize: 11, color: C.ink2, marginTop: 4 }}>Milestones keep the same spacing from the start date.</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+              <button className="btn btn-secondary" disabled={dup.busy} onClick={() => setDup(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={dup.busy || !dup.name.trim() || !dup.start} onClick={duplicate}>{dup.busy ? 'Copying…' : 'Duplicate'}</button>
+            </div>
           </div>
-          {showArchive && archived.map(Card)}
         </div>}
 
       {showCreate &&
