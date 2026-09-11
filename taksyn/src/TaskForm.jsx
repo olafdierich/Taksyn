@@ -209,9 +209,9 @@ export default function TaskForm({
       <label style={lbl}>What needs doing *</label>
       <input style={inp} value={f.title} autoFocus placeholder="e.g. Fire safety inspection"
              onChange={e => setF({ ...f, title: e.target.value })} />
-      {/* STAGE-CHECKLIST-V1: these become templates others may reuse. */}
-      <div style={{ fontSize: 11, color: C.ink3, marginTop: 3 }}>
-        No names or personal details in the title or checklist items.
+      {/* PRIVACY-NOTE-V1: same amber warning as the main create form. */}
+      <div style={{ fontSize: 11, color: '#F59E0B', marginTop: 4 }}>
+        {'\u26A0\uFE0F'} No names or personal details in the title or checklist items.
       </div>
 
       <div style={row2}>
