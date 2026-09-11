@@ -4648,12 +4648,13 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   // SAVE-AS-TPL-V1: keep this task's checklist for reuse. Writes the same row
   // Company Settings writes. No project or stage -- it did not come from one.
   const [savingTpl, setSavingTpl] = useState(false)
+  const [tplMsg, setTplMsg] = useState('')   // TPL-FINISH-V1: success is not an error
   const saveTaskAsTemplate = async () => {
     const nm = (newTask.title || '').trim()
     const its = (newTask.subtasks || []).filter(s => String(s.text || '').trim())
     if (!nm || !its.length || savingTpl) return
     setSavingTpl(true)
-    setCreateError('')
+    setCreateError(''); setTplMsg('')
     try {
       const oid = await resolveOrgId(user)
       if (!oid) { setCreateError('Could not work out which organisation to save the template under.'); setSavingTpl(false); return }
@@ -4679,7 +4680,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
       }
       const { error } = await supabase.from('checklist_templates').insert(entry)
       if (error) { setCreateError('Could not save the template: ' + error.message) }
-      else { setCreateError('Saved "' + nm + '" as a template. It is in Company Settings > Templates.') }
+      else { setTplMsg('Saved "' + nm + '" as a template. It is in Company Settings > Templates.') }
     } catch (e) { setCreateError('Could not save the template: ' + (e?.message || e)) }
     setSavingTpl(false)
   }
@@ -5402,6 +5403,8 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                     <button type="button" className="btn btn-secondary btn-sm" disabled={savingTpl}
                             onClick={saveTaskAsTemplate}>{savingTpl?'Saving…':'Save as template'}</button>
                     <span style={{fontSize:11,color:'var(--t3)',marginLeft:8}}>Keeps the title, priority and checklist for reuse.</span>
+                    {/* TPL-FINISH-V1: green, next to the button that caused it */}
+                    {tplMsg && <div style={{fontSize:12,color:'#059669',marginTop:6}}>{tplMsg}</div>}
                   </div>}
               </div>
               {createError&&<div style={{color:'var(--red)',fontSize:12,marginBottom:6,padding:'6px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8}}>{createError}</div>}

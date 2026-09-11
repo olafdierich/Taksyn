@@ -229,8 +229,9 @@ export default function ProjectsView({ user, resolveOrgId }) {
     if (!dup || dup.busy) return
     const src = dup.src
     setDup(d => ({ ...d, busy: true }))
+    // TPL-FINISH-V1: structure only. Templates come from "Save stage as template".
     const { data, error } = await supabase.rpc('duplicate_project',
-      { p_source: src.id, p_name: dup.name.trim(), p_start_date: dup.start })
+      { p_source: src.id, p_name: dup.name.trim(), p_start_date: dup.start, p_with_templates: false })
     if (error) { setDup(d => ({ ...d, busy: false })); return alert('Could not duplicate: ' + error.message) }
     const r = Array.isArray(data) ? data[0] : data
     const { data: row } = await supabase.from('projects')
@@ -238,7 +239,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
     if (row) setProjects(prev => [row, ...prev])
     setDup(null); setShowArchive(false)
     alert(`${r.ref} created: ${r.sections} sections and stages, ${r.milestones} milestones, ${r.links} links.\n`
-        + `Templates in "${src.name}": ${r.templates_created} new, ${r.templates_reused} reused. Add them with New Task → From Template.`)
+        + 'No tasks were copied. Add them with a stage\'s ⋯ menu: "Add task from template".')
   }
 
   if (loading) return <div style={{ padding: 20, color: C.ink2 }}>Loading projects…</div>
@@ -322,7 +323,7 @@ export default function ProjectsView({ user, resolveOrgId }) {
           <div style={modalBox} onClick={e => e.stopPropagation()}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Duplicate {dup.src.ref}</div>
             <div style={{ fontSize: 12, color: C.ink2, marginBottom: 12 }}>
-              Copies the sections, stages, milestones and links. Its tasks are saved as templates in the group "{dup.src.name}" — add them with New Task → From Template. No tasks, people, dates or evidence are copied.
+              Copies the sections, stages, milestones and links — nothing else. To bring the tasks across, use "Save stage as template" on the original, then "Add task from template" in the copy.
             </div>
             <label style={lbl}>New project name *</label>
             <input style={inp} value={dup.name} autoFocus onChange={e => setDup({ ...dup, name: e.target.value })} />
