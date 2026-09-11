@@ -3287,7 +3287,8 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
   const compT = visible.filter(t=>t.compliance)
   const compDone = compT.filter(t=>['completed','approved'].includes(t.status)).length
   const pending = visible.filter(t=>t.status==='pending').length
-  const review = visible.filter(t=>t.status==='awaiting_review').length
+  // SUP-LOW-V4: a supervisor's To Review excludes tasks they cannot approve (non-Low).
+  const review = visible.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).length
   const rejected = visible.filter(t=>t.status==='rejected').length
   const awards = computeAwards(tasks)
   return (
@@ -3327,13 +3328,13 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
       <div className="two-col">
         <div className="section">
           {(isCA||isMgr)&&<><div className="section-title">Compliance Score</div><div style={{display:'flex',alignItems:'center',gap:16}}><div className="score-ring"><div className="score-val">{pct(compDone,compT.length)}%</div><div className="score-lbl">Score</div></div><div><div style={{fontSize:13,marginBottom:3}}>{compDone}/{compT.length} compliance tasks done</div><div style={{fontSize:12,color:'var(--t2)'}}>{compT.filter(t=>isOverdueOneOff(t,today)).length} critical overdue</div></div></div></>}
-          {isSup&&<><div className="section-title">Pending Evidence</div>{visible.filter(t=>t.status==='awaiting_review').slice(0,3).map(t=><div key={t.id} className="notif-item amber" style={{cursor:'pointer'}} onClick={()=>setPage('evidence')}><div className="notif-title">📷 {t.title}</div><div className="notif-sub">Submitted · {t.due_date}</div></div>)}{review===0&&<div style={{fontSize:13,color:'var(--t2)'}}>No evidence pending ✅</div>}</>}
+          {isSup&&<><div className="section-title">Pending Evidence</div>{visible.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).slice(0,3).map(t=><div key={t.id} className="notif-item amber" style={{cursor:'pointer'}} onClick={()=>setPage('evidence')}><div className="notif-title">📷 {t.title}</div><div className="notif-sub">Submitted · {t.due_date}</div></div>)}{review===0&&<div style={{fontSize:13,color:'var(--t2)'}}>No evidence pending ✅</div>}</>}
           {isWkr&&<><div className="section-title">My Progress</div><div style={{display:'flex',alignItems:'center',gap:16}}><div className="score-ring"><div className="score-val">{rate}%</div><div className="score-lbl">Done</div></div><div><div style={{fontSize:13,marginBottom:3}}>{done} of {visible.length} tasks done</div><div style={{fontSize:12,color:'var(--t2)'}}>{overdue} overdue · {pending} pending</div></div></div></>}
         </div>
         <div className="section">
           <div className="section-title">Alerts</div>
           {visible.filter(t=>isOverdueOneOff(t,today)).slice(0,2).map(t=><div key={t.id} className="notif-item urgent"><div className="notif-title">⚠️ {t.title}</div><div className="notif-sub">Overdue since {t.due_date}</div></div>)}
-          {!isWkr&&visible.filter(t=>t.status==='awaiting_review').slice(0,1).map(t=><div key={t.id} className="notif-item amber"><div className="notif-title">🔍 {t.title}</div><div className="notif-sub">Awaiting review</div></div>)}
+          {!isWkr&&visible.filter(t=>t.status==='awaiting_review' && !(user.role==='supervisor' && t.priority!=='low')).slice(0,1).map(t=><div key={t.id} className="notif-item amber"><div className="notif-title">🔍 {t.title}</div><div className="notif-sub">Awaiting review</div></div>)}
           {overdue===0&&review===0&&esc===0&&<div style={{fontSize:13,color:'var(--t2)'}}>No alerts 🎉</div>}
         </div>
       </div>
