@@ -12691,7 +12691,8 @@ function CompanySettingsView({ user, onSettingsSaved }) {
           {tplList.length>0&&(
             <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10,fontSize:12}}>
               <span style={{color:'var(--t2)'}}>Group by:</span>
-              {['position','team'].map(g=>(
+              {/* TPL-GROUPBY-PROJECT-V1 */}
+              {['position','team','project'].map(g=>(
                 <button key={g} type="button" onClick={()=>setTplGroupBy(g)} style={{fontSize:12,cursor:'pointer',borderRadius:12,padding:'3px 12px',textTransform:'capitalize',border:tplGroupBy===g?'1px solid var(--brand)':'1px solid var(--border)',background:tplGroupBy===g?'var(--brand)':'var(--s3)',color:tplGroupBy===g?'#fff':'var(--t2)',fontWeight:tplGroupBy===g?600:400}}>{g}</button>
               ))}
             </div>
@@ -12699,7 +12700,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
           {tplList.length===0 ? (
             <div style={{fontSize:13,color:'var(--t2)'}}>No templates yet — create one below.</div>
           ) : (()=>{
-            const _g={}; if(tplGroupBy==='team'){ tmTeams.forEach(tm=>{ _g[tm.name]=[] }) } tplList.forEach(t=>{ let _k; if(tplGroupBy==='team'){ _k=[t.team_name||'— No team —'] } else { const _p=parseTplPositions(t.positions||t.position); _k=_p.length?_p:['— No position —'] } _k.forEach(k=>{ (_g[k]=_g[k]||[]).push(t) }) });
+            const _g={}; if(tplGroupBy==='team'){ tmTeams.forEach(tm=>{ _g[tm.name]=[] }) } tplList.forEach(t=>{ let _k; if(tplGroupBy==='team'){ _k=[t.team_name||'— No team —'] } /* TPL-GROUPBY-PROJECT-V1: project then stage */ else if(tplGroupBy==='project'){ _k=[t.template_group ? (t.template_group+' — '+(t.template_stage||'Unfiled')) : '— Not from a project —'] } else { const _p=parseTplPositions(t.positions||t.position); _k=_p.length?_p:['— No position —'] } _k.forEach(k=>{ (_g[k]=_g[k]||[]).push(t) }) });
             return Object.keys(_g).sort().map(pos=>{ const _open=openPos.has(pos); return (
               <div key={pos} style={{marginBottom:8}}>
                 <div onClick={()=>setOpenPos(prev=>{ const n=new Set(prev); n.has(pos)?n.delete(pos):n.add(pos); return n })} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 10px',background:'var(--s2)',border:'1px solid var(--border)',borderRadius:8,fontWeight:700,fontSize:13}}>
