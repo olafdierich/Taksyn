@@ -4645,6 +4645,45 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   // true -> false transition counts, so the mount that OPENS the form cannot clear it.
   const _caPrevShow = useRef(false)
   useEffect(()=>{ if(_caPrevShow.current && !showCreate) setCaDraft(null); _caPrevShow.current = showCreate },[showCreate])
+  // SAVE-AS-TPL-V1: keep this task's checklist for reuse. Writes the same row
+  // Company Settings writes. No project or stage -- it did not come from one.
+  const [savingTpl, setSavingTpl] = useState(false)
+  const saveTaskAsTemplate = async () => {
+    const nm = (newTask.title || '').trim()
+    const its = (newTask.subtasks || []).filter(s => String(s.text || '').trim())
+    if (!nm || !its.length || savingTpl) return
+    setSavingTpl(true)
+    setCreateError('')
+    try {
+      const oid = await resolveOrgId(user)
+      if (!oid) { setCreateError('Could not work out which organisation to save the template under.'); setSavingTpl(false); return }
+      const { data: dup } = await supabase.from('checklist_templates')
+        .select('id').eq('organisation_id', oid).eq('name', nm).is('template_group', null).limit(1)
+      if (dup && dup.length) {
+        setCreateError('A template called "' + nm + '" already exists. Give this one a different title first.')
+        setSavingTpl(false); return
+      }
+      const entry = {
+        organisation_id: oid, name: nm, description: null,
+        priority: newTask.priority || 'medium',
+        positions: newTask.position ? [newTask.position] : [],
+        items: JSON.stringify(its.map(s => ({
+          label: String(s.text).trim(),
+          required: !!s.mandatory,
+          requirePhoto: !!s.requirePhoto,
+          requireTimestamp: !!s.requireTimestamp,
+          instruction: s.instruction || ''
+        }))),
+        team_id: newTask.team_id || null, team_name: newTask.team_name || null,
+        created_by: user.name, created_at: new Date().toISOString()
+      }
+      const { error } = await supabase.from('checklist_templates').insert(entry)
+      if (error) { setCreateError('Could not save the template: ' + error.message) }
+      else { setCreateError('Saved "' + nm + '" as a template. It is in Company Settings > Templates.') }
+    } catch (e) { setCreateError('Could not save the template: ' + (e?.message || e)) }
+    setSavingTpl(false)
+  }
+
   const createTask = async () => {
     // CA-HANDOFF-V2: a blank title used to return silently -- no message, no save.
     if (creating) return
@@ -5357,6 +5396,13 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   </div>
                 ))}
                 {!(newTask.subtasks||[]).length&&!pendingDelete&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items — optional</div>}
+                {/* SAVE-AS-TPL-V1: only once there is something worth keeping. */}
+                {!!(newTask.title||'').trim() && (newTask.subtasks||[]).some(s=>String(s.text||'').trim()) &&
+                  <div style={{marginTop:8}}>
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={savingTpl}
+                            onClick={saveTaskAsTemplate}>{savingTpl?'Saving…':'Save as template'}</button>
+                    <span style={{fontSize:11,color:'var(--t3)',marginLeft:8}}>Keeps the title, priority and checklist for reuse.</span>
+                  </div>}
               </div>
               {createError&&<div style={{color:'var(--red)',fontSize:12,marginBottom:6,padding:'6px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8}}>{createError}</div>}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
