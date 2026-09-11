@@ -17960,13 +17960,15 @@ function IncidentReportView({ user }) {
 
         <div style={card}>
           <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(the facts, in order — required)</span></span>
-          <textarea style={{...inp,minHeight:100,resize:'vertical',marginBottom:12}} value={facts}
+          <textarea style={{...inp,minHeight:100,resize:'vertical',marginBottom:0}} value={facts}
             onChange={e=>setFacts(e.target.value)} placeholder="Describe what happened, step by step…"/>
           <MicChip setValue={setFacts}/>
+          {/* REPORT-MIC-V1: the 12px gap moved here from the textarea, so MicChip's strip starts at the box edge like everywhere else */}<div style={{height:12}}/>
           <span style={lbl}>Immediate actions taken to make it safe <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
-          <textarea style={{...inp,minHeight:70,resize:'vertical',marginBottom:12}} value={immediateActions}
+          <textarea style={{...inp,minHeight:70,resize:'vertical',marginBottom:0}} value={immediateActions}
             onChange={e=>setImmediateActions(e.target.value)} placeholder="What was done right away?"/>
           <MicChip setValue={setImmediateActions}/>
+          <div style={{height:12}}/>
           <label style={{display:'flex',alignItems:'center',gap:8,fontSize:14,cursor:'pointer'}}>
             <input type="checkbox" checked={hazardPresent} onChange={e=>setHazardPresent(e.target.checked)}/>
             The hazard is still present / not yet made safe
@@ -20013,12 +20015,14 @@ function IncidentsAdminView({ user, setPage }) {
           </div>
           {editNarr ? (<>
             <textarea defaultValue={sel.facts||''} id="inc-edit-facts"
-              style={{width:'100%',minHeight:90,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8,fontSize:14}}/>
+              style={{width:'100%',minHeight:90,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:0,fontSize:14}}/>
             <MicChip targetId="inc-edit-facts"/>
+            {/* REPORT-MIC-V2: gap moved below the mic so MicChip starts at the box edge */}<div style={{height:8}}/>
             <span style={lbl}>Immediate actions taken</span>
             <textarea defaultValue={sel.immediate_actions||''} id="inc-edit-immediate"
-              style={{width:'100%',minHeight:70,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:8,fontSize:14}}/>
+              style={{width:'100%',minHeight:70,padding:'10px',borderRadius:8,border:'1px solid var(--border2)',background:'var(--card)',color:'var(--text)',boxSizing:'border-box',marginBottom:0,fontSize:14}}/>
             <MicChip targetId="inc-edit-immediate"/>
+            <div style={{height:8}}/>
             <div style={{fontSize:12,color:'var(--t3)',marginBottom:8}}>
               Corrections are recorded in the audit trail with what changed, who changed it and why.
             </div>
