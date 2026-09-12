@@ -14198,6 +14198,17 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+title+'</title><style>'+baseStyle+'</style></head><body>'
       + reportHeader(title, ctx)
       + buildStaffTable([p], specs)
+      + (()=>{  /* PERSON-PDF-ASSIGNED-V1 */
+          const s = setForOthersMap[p.id]
+          if (!s || !s.set) return ''
+          /* PERSON-PDF-MARGIN-V1: flush against the table above without this. */
+          return '<div class="sec" style="margin-top:22px"><div class="sec-title">Assigned to Others</div>'
+            + '<table><thead><tr><th>Tasks</th><th>On Time</th><th>Late</th><th>Missed</th></tr></thead>'
+            + '<tbody><tr><td>'+s.set+'</td><td>'+s.onTime+'</td><td>'+s.late+'</td><td>'+s.missed+'</td></tr></tbody></table>'
+            + '<div style="font-size:11px;color:#6B7280;margin-top:6px">Tasks this person assigned to someone else in this period. '
+            + 'Task count is whole tasks; the outcomes count each due date, so a recurring task contributes many. '
+            + 'Their own work is in the table above.</div></div>'
+        })()
       + reportFooter(title, ctx)
       + '</body></html>'
     openReport(html)
