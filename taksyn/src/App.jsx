@@ -7419,8 +7419,43 @@ function ReviewView({ user }) {
   )
 }
 
+// PATCH-MARKER-ACCOUNTABILITY-TRAIL-V1
+// The trail's single timeliness rule. See the patch script header: the older
+// copies in ReportsView and PerformanceView are NOT yet converged onto this,
+// and the gate is that their totals agree for the same period.
+//
+// occs is occByTask[taskId] - entries shaped {d,status,late,at,by,rec,ev}.
+// Window bounds are the same YYYY-MM-DD strings the report already uses.
+const trailCounts = (occs, rsStr, reStr) => {
+  const inWin = (occs || []).filter(o => o.d >= rsStr && o.d <= reStr)
+  const na = inWin.filter(o => o.status === OCC_NOT_APPLICABLE).length
+  const done = inWin.filter(o => o.status === 'completed').length
+  const onTime = inWin.filter(o => o.status === 'completed' && !o.late).length
+  const missed = inWin.filter(o => o.status === 'missed').length
+  return {
+    total: inWin.length,
+    expected: Math.max(0, inWin.length - na),
+    done: done,
+    onTime: onTime,
+    late: done - onTime,
+    missed: missed,
+    na: na,
+    rows: inWin.slice().sort((a, b) => (a.d < b.d ? -1 : 1))
+  }
+}
+
+// A one-off carries no occurrence rows on this tree, so the verdict comes
+// from the task row using the SAME comparison as the worker aggregation.
+const trailOneOff = (t) => {
+  if (t.status === 'missed') return 'Missed'
+  if (!t.completed_at) return 'Open'
+  if (!t.due_date) return 'Completed'
+  return new Date(t.completed_at) <= new Date(t.due_date) ? 'On time' : 'Late'
+}
+
 function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=null, orgSLA=DEFAULT_SLA }) {
   const [reportType, setReportType] = useState('compliance')
+  const [trailOpen, setTrailOpen] = useState({})  // PATCH-MARKER-ACCOUNTABILITY-TRAIL-V1
   const [period, setPeriod] = useState('weekly')
   const [teamsList, setTeamsList] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
@@ -8058,6 +8093,91 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                     <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
                   </tr>
                 )})}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {/* Accountability Trail - PATCH-MARKER-ACCOUNTABILITY-TRAIL-V1 */}
+      {reportType==='worker' && isClientAdmin && filteredPt.length>0 && (
+        <div className="section">
+          <div className="section-title">Accountability Trail &mdash; {pl}</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>
+            Who set the task, who it is for, who signs it off, and how it landed. Tap a row to see each occurrence.
+          </div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+              <thead>
+                <tr>
+                  {['Task','Created by','Assigned to','Approver','Timing','Extended'].map(h=>(
+                    <th key={h} style={{textAlign:'left',padding:8,borderBottom:'1px solid rgba(128,128,128,.25)',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPt.map(t=>{
+                  const _rec = isRecurring(t)
+                  const _c = _rec ? trailCounts(occByTask[t.id], _rsStr, _reStr) : null
+                  const _open = !!trailOpen[t.id]
+                  const _timing = _rec
+                    ? (_c.expected===0 ? '\u2014' : _c.onTime+'/'+_c.expected+' on time'
+                        + (_c.late?' \u00b7 '+_c.late+' late':'')
+                        + (_c.missed?' \u00b7 '+_c.missed+' missed':'')
+                        + (_c.na?' \u00b7 '+_c.na+' N/A':''))
+                    : trailOneOff(t)
+                  const _bad = _rec ? (_c.late>0||_c.missed>0) : (_timing==='Late'||_timing==='Missed')
+                  const _cell = {padding:8,borderBottom:'1px solid rgba(128,128,128,.15)',verticalAlign:'top'}
+                  return (
+                    <React.Fragment key={t.id}>
+                      <tr onClick={()=>setTrailOpen(p=>({...p,[t.id]:!p[t.id]}))} style={{cursor:'pointer'}}>
+                        <td style={_cell}>
+                          <span style={{color:'var(--t2)',marginRight:6}}>{_open?'\u25be':'\u25b8'}</span>
+                          <strong style={{fontWeight:600}}>{t.title}</strong>
+                        </td>
+                        <td style={_cell}>{t.created_by||'\u2014'}</td>
+                        <td style={_cell}>{assigneeFull(t)||t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'\u2014'}</td>
+                        <td style={_cell}>{t.approver_name||'\u2014'}</td>
+                        <td style={Object.assign({},_cell,{color:_bad?'#D97706':'var(--text)',whiteSpace:'nowrap'})}>{_timing}</td>
+                        <td style={_cell}>
+                          {t.extended_from
+                            ? <span title={'Extended from '+t.extended_from+(t.extended_by?' by '+t.extended_by:'')}
+                                    style={{fontSize:11,color:'#D97706',background:'rgba(217,119,6,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap'}}>
+                                from {t.extended_from}{t.extended_by?' \u00b7 '+t.extended_by:''}
+                              </span>
+                            : '\u2014'}
+                        </td>
+                      </tr>
+                      {_open && (
+                        <tr>
+                          <td colSpan={6} style={{padding:'4px 8px 12px 26px',borderBottom:'1px solid rgba(128,128,128,.15)'}}>
+                            {!_rec && <div style={{fontSize:12,color:'var(--t2)'}}>One-off task &mdash; due {t.due_date||'\u2014'}{t.completed_at?', completed '+fmtTime(t.completed_at):''}</div>}
+                            {_rec && _c.rows.length===0 && <div style={{fontSize:12,color:'var(--t2)'}}>No occurrences recorded in this period.</div>}
+                            {_rec && _c.rows.length>0 && (
+                              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                                <tbody>
+                                  {_c.rows.map(o=>{
+                                    const _lbl = o.status==='completed' ? (o.late?'Late':'On time')
+                                      : o.status==='missed' ? 'Missed'
+                                      : o.status===OCC_NOT_APPLICABLE ? 'N/A' : String(o.status||'\u2014')
+                                    const _col = _lbl==='On time' ? '#10B981' : _lbl==='Missed' ? '#EF4444' : _lbl==='Late' ? '#D97706' : 'var(--t2)'
+                                    return (
+                                      <tr key={o.d}>
+                                        <td style={{padding:'3px 8px 3px 0',whiteSpace:'nowrap',color:'var(--t2)'}}>{o.d}</td>
+                                        <td style={{padding:'3px 8px',whiteSpace:'nowrap',color:_col,fontWeight:600}}>{_lbl}</td>
+                                        <td style={{padding:'3px 8px',color:'var(--t2)'}}>{o.by||'\u2014'}</td>
+                                        <td style={{padding:'3px 0',color:'var(--t2)',whiteSpace:'nowrap'}}>{o.at?fmtTime(o.at):'\u2014'}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
