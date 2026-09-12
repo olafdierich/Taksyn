@@ -1191,9 +1191,18 @@ const fmtDateTime = (ts, placeholder='—') => {
   if (isNaN(d.getTime())) return placeholder
   return d.toLocaleString(undefined, { day:'numeric', month:'short', year:'numeric', hour:'numeric', minute:'2-digit' })
 }
-const fmtDuration = (start, end) => {
-  if (!start || !end) return null
-  const mins = Math.round((new Date(end) - new Date(start)) / 60000)
+// WORK-SEGMENTS-V1: fmtDuration split into a minutes formatter plus a thin
+// start/end wrapper. Worked time is a SUM OF INTERVALS across many pause/resume
+// segments, so it has no single start/end pair to pass. The guard and the three
+// branches below were MOVED here unchanged -- fmtDuration's six call sites are
+// byte-for-byte unaffected.
+//
+// Note fmtDur at ~7401 is a THIRD, near-duplicate formatter scoped inside a
+// component. It has no negative guard and no days branch, so it would still
+// render the -60048m of 2026-09-02 on the compliance report and CSV export.
+// Out of scope here; on the open list.
+const fmtMins = (mins) => {
+  if (mins === null || mins === undefined) return null
   // NEGATIVE-DURATION GUARD. task_worker_times has ONE row per (task_id,user_id) and NO
   // occurrence key, so a new Time In can be measured against a PREVIOUS cycle's Time Out.
   // Observed LIVE 2026-09-02: started_at 2 Sep vs completed_at 22 Jul rendered -60048m to
@@ -1204,7 +1213,12 @@ const fmtDuration = (start, end) => {
   if (mins < 1440) return Math.floor(mins/60) + 'h ' + (mins%60) + 'm'
   const _durDays = Math.floor(mins/1440)
   const _durHrs = Math.floor((mins%1440)/60)
-  return _durDays + 'd ' + _durHrs + 'h'
+  const _durMins = mins%60
+  return _durDays + 'd ' + _durHrs + 'h ' + _durMins + 'm'
+}
+const fmtDuration = (start, end) => {
+  if (!start || !end) return null
+  return fmtMins(Math.round((new Date(end) - new Date(start)) / 60000))
 }
 const clearAuthCache = () => {
   try { indexedDB.deleteDatabase('supabase') } catch(e) {}
@@ -1212,6 +1226,29 @@ const clearAuthCache = () => {
   sessionStorage.clear()
 }
 const SESSION_ROLE_TIMEOUTS = { worker:30, supervisor:60, manager:120, client_admin:240, super_admin:30 }
+// WORK-SEGMENTS-V1: how long an open work segment may go without a heartbeat
+// before it is closed retrospectively at its last_seen_at.
+//
+// NOT derived from SESSION_ROLE_TIMEOUTS above, deliberately. That is a session
+// timeout (worker 30 min) and ~22804 lets the user OVERRIDE it via sessionTimeout.
+// Tying the work clock to a user-adjustable value would let a worker lengthen
+// their own idle threshold and inflate their own recorded hours. A dead phone
+// should cost minutes, not half an hour.
+const SEGMENT_IDLE_MINUTES = 5
+// Sum of worked minutes across segments. Closed segments use ended_at; the one
+// open segment (at most one, enforced by task_work_segments_one_open) runs to now.
+// Each segment is clamped at zero: device clock skew can yield ended_at <
+// started_at, and a negative segment would QUIETLY REDUCE a total rather than
+// render visibly wrong. Same reasoning as the negative guard in fmtMins.
+const segmentWorkedMins = (segs, nowMs) => {
+  const _now = nowMs || Date.now()
+  return (segs||[]).reduce((acc,s)=>{
+    if(!s.started_at) return acc
+    const a = new Date(s.started_at).getTime()
+    const b = s.ended_at ? new Date(s.ended_at).getTime() : _now
+    return acc + Math.max(0, Math.round((b-a)/60000))
+  }, 0)
+}
 const TAKSYN_LAST_ACTIVITY_KEY = 'taksyn_last_activity'
 const parseSafe = (val, fallback=[]) => {
   if (Array.isArray(val)) return val
