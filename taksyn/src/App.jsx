@@ -4413,13 +4413,34 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
     const seg = openSegOf(workSegments)
     if(!seg) return
     const now = new Date().toISOString()
-    await supabase.from('task_work_segments').update({ended_at:now,end_reason:reason||'pause',last_seen_at:now}).eq('id',seg.id)
+    // WORK-SEGMENTS-V3: a pause that silently fails leaves the clock running and
+    // overstates the record. Report it.
+    try {
+      const { error } = await supabase.from('task_work_segments').update({ended_at:now,end_reason:reason||'pause',last_seen_at:now}).eq('id',seg.id)
+      if(error){ alert('Could not pause the work timer: ' + error.message); return }
+    } catch(e) { alert('Could not pause the work timer: ' + (e?.message || 'unknown error')); return }
     loadWorkSegments(tid)
   }
   // Opens a segment. NOT routed through workerTimeIn: that function nulls
   // completed_at and gps_end, and is only safe because it is unreachable while
   // myTime exists. On resume myTime DOES exist, so reusing it would wipe a real
   // clock-out. This writes to task_work_segments and touches nothing else.
+  // WORK-SEGMENTS-V3: the occurrence date for a segment.
+  //
+  // Patch 2 called currentOccurrenceDate(task, today) -- TWO args, the task object
+  // where a DATE STRING belongs. Its first statement is (dueDate||'').slice(0,10),
+  // which threw TypeError on every Resume press. The `|| ''` guard catches null and
+  // undefined only; an object passes straight through. A falsy-guard is not a type
+  // guard. Signature is (dueDate, recurrence, today) -- see the declaration ~657.
+  //
+  // A ONE-OFF has no cycles to walk: its occurrence date is today in the org day.
+  // The recurring branch mirrors the call at ~5515 exactly rather than inventing a
+  // seventh variant of the same expression.
+  const segOccurrenceDate = (t) => {
+    const _oToday = orgTz ? orgToday(orgTz) : new Date().toISOString().split('T')[0]
+    if(!t || !isRecurring(t)) return _oToday
+    return (orgTz ? (currentOccurrenceDate(t.due_date, t.recurrence, _oToday) || t.due_date) : t.due_date) || _oToday
+  }
   const workerResume = async (tid) => {
     const _rsTask = tasks.find(x=>x.id===tid)
     // Same window as Time In and Submit: you cannot resume into a cycle that has
@@ -4427,8 +4448,13 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
     if(_rsTask && orgTz && completionWindow(_rsTask, orgToday(orgTz))) return
     if(openSegOf(workSegments)) return
     const now = new Date().toISOString()
-    const occ = (orgTz && _rsTask) ? (currentOccurrenceDate(_rsTask, orgToday(orgTz)) || orgToday(orgTz)) : new Date().toISOString().split('T')[0]
-    await supabase.from('task_work_segments').insert({task_id:tid,user_id:user.id,org:user.org,occurrence_date:occ,started_at:now,last_seen_at:now})
+    // Every segment write reports its failure. Patch 2 had none, so a TypeError
+    // surfaced only in the console and the worker saw a dead button -- the same
+    // interaction that produced the orphan Time In rows on 2026-09-03.
+    try {
+      const { error } = await supabase.from('task_work_segments').insert({task_id:tid,user_id:user.id,org:user.org,occurrence_date:segOccurrenceDate(_rsTask),started_at:now,last_seen_at:now})
+      if(error){ alert('Could not start the work timer: ' + error.message); return }
+    } catch(e) { alert('Could not start the work timer: ' + (e?.message || 'unknown error')); return }
     loadWorkSegments(tid)
   }
   const workerTimeIn = (tid) => {
@@ -4471,6 +4497,18 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
       const patch={started_at:env.started_at||now,gps_start:env.gps_start||gps||null,completed_at:envEnd.completed_at||null,gps_end:envEnd.gps_end||null}
       if(t&&['pending','overdue','escalated','rejected'].includes(t.status)) patch.status='in_progress'
       update(tid,patch); loadWorkerTimes(tid)
+      // WORK-SEGMENTS-V3: clocking in starts the work clock. Without this the timer
+      // offered "Resume" the instant a worker timed in -- accurate (no segment
+      // existed) but a nonsense instruction.
+      //
+      // AFTER the upsert above and deliberately NOT blocking it: a failed segment
+      // write must never stop someone clocking in. It alerts, so the failure is
+      // visible, but attendance still lands.
+      try {
+        const { error:_segErr } = await supabase.from('task_work_segments').insert({task_id:tid,user_id:user.id,org:user.org,occurrence_date:segOccurrenceDate(t),started_at:now,last_seen_at:now})
+        if(_segErr) alert('Timed in, but the work timer did not start: ' + _segErr.message)
+      } catch(e) { alert('Timed in, but the work timer did not start: ' + (e?.message || 'unknown error')) }
+      loadWorkSegments(tid)
     }
     if(gpsEnabled===false||!navigator.geolocation){setRow();return}
     navigator.geolocation.getCurrentPosition(pos=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','true');setGpsEnabled(true)} setRow(pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)) },()=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false)} setRow() })
@@ -4483,6 +4521,14 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
       const we=(rows||[]).filter(r=>r.completed_at).sort((a,b)=>a.completed_at<b.completed_at?1:-1)
       const env=we[0]||{}
       update(tid,{completed_at:env.completed_at||now,gps_end:env.gps_end||gps||null}); loadWorkerTimes(tid)
+      // WORK-SEGMENTS-V3: clocking out ends the work clock. Reason 'time_out'
+      // distinguishes it from a deliberate pause. Uses .is('ended_at',null) rather
+      // than the id from state, so it closes whatever is actually open even if the
+      // component's copy is stale.
+      try {
+        await supabase.from('task_work_segments').update({ended_at:now,end_reason:'time_out',last_seen_at:now}).eq('task_id',tid).eq('user_id',user.id).is('ended_at',null)
+      } catch(e) { alert('Timed out, but the work timer may still be running: ' + (e?.message || 'unknown error')) }
+      loadWorkSegments(tid)
     }
     if(gpsEnabled===false||!navigator.geolocation){setRow();return}
     navigator.geolocation.getCurrentPosition(pos=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','true');setGpsEnabled(true)} setRow(pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)) },()=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false)} setRow() })
