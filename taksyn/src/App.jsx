@@ -14208,6 +14208,34 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     .filter(p=>selectedTeam==='all'||(memberTeams[p.id]||[]).includes(selectedTeam))
     .filter(p=>!_nq||(p.name||'').toLowerCase().includes(_nq))
     .sort((a,b)=>b.total-a.total)
+
+
+  // PATCH-MARKER-ACCOUNTABILITY-PERSON-V1
+  // Tasks this person SET FOR SOMEONE ELSE, keyed by created_by_id.
+  // Self-tasks are excluded: that work is already in the person's own tiles,
+  // and counting it here would inflate a figure meant to describe their
+  // effect on others.
+  //
+  // Occurrence counting goes through trailCounts (module level, patch 1) so
+  // this does not become a fourth copy of the timeliness rule.
+  const setForOthersMap = {}
+  pt.forEach(t => {
+    const cid = t.created_by_id
+    if (!cid || !peopleMap[cid]) return
+    if (t.assigned_user_id && String(t.assigned_user_id) === String(cid)) return
+    const s = setForOthersMap[cid] || (setForOthersMap[cid] = { set:0, onTime:0, late:0, missed:0 })
+    s.set++
+    if (isRecurring(t)) {
+      const c = trailCounts(occByTask[t.id], _rsStr, _reStr)
+      s.onTime += c.onTime; s.late += c.late; s.missed += c.missed
+      return
+    }
+    const v = trailOneOff(t)
+    if (v === 'On time') s.onTime++
+    else if (v === 'Late') s.late++
+    else if (v === 'Missed') s.missed++
+  })
+
   // APPROVER-INSET-V1: work this person was responsible for REVIEWING.
   // Keyed on approver_id, NOT the assignee - p.slaTotal/p.slaOnTime measure the
   // opposite direction (their own work reviewed by someone above them), which is
@@ -14380,6 +14408,26 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                     </div>
                   ))}
                 </div>
+                {/* PATCH-MARKER-ACCOUNTABILITY-PERSON-V1 */}
+                {setForOthersMap[p.id] && (()=>{ const s = setForOthersMap[p.id]; return (
+                  <div style={{marginTop:12,padding:'10px 12px',borderRadius:8,border:'1px solid rgba(128,128,128,.25)',background:'rgba(128,128,128,.04)'}}>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:.4,color:'var(--t2)',marginBottom:8}}>SET FOR OTHERS</div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:8}}>
+                      {[['Set',s.set,'var(--text)'],
+                        ['On time',s.onTime,'#10B981'],
+                        ['Late',s.late,'#D97706'],
+                        ['Missed',s.missed,'#EF4444']].map(([lbl,val,col])=>(
+                        <div key={lbl} style={{textAlign:'center',padding:'6px 4px'}}>
+                          <div style={{fontSize:18,fontWeight:700,color:col}}>{val}</div>
+                          <div style={{fontSize:10,color:'var(--t2)',letterSpacing:.3}}>{String(lbl).toUpperCase()}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>
+                      Tasks this person set for someone else in this period. Their own work is in the tiles above.
+                    </div>
+                  </div>
+                )})()}
                 {approverMap[p.id] && (()=>{ const a = approverMap[p.id]; const _ot = a.decided>0?pct(a.onTime,a.decided):null; const _sb = a.decided>0?pct(a.sentBack,a.decided):null; return (
                   <div style={{marginTop:12,border:'1px solid #C7D2FE',background:'rgba(99,102,241,.05)',borderRadius:12,padding:10}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
