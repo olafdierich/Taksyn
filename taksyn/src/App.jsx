@@ -1191,9 +1191,18 @@ const fmtDateTime = (ts, placeholder='—') => {
   if (isNaN(d.getTime())) return placeholder
   return d.toLocaleString(undefined, { day:'numeric', month:'short', year:'numeric', hour:'numeric', minute:'2-digit' })
 }
-const fmtDuration = (start, end) => {
-  if (!start || !end) return null
-  const mins = Math.round((new Date(end) - new Date(start)) / 60000)
+// WORK-SEGMENTS-V1: fmtDuration split into a minutes formatter plus a thin
+// start/end wrapper. Worked time is a SUM OF INTERVALS across many pause/resume
+// segments, so it has no single start/end pair to pass. The guard and the three
+// branches below were MOVED here unchanged -- fmtDuration's six call sites are
+// byte-for-byte unaffected.
+//
+// Note fmtDur at ~7401 is a THIRD, near-duplicate formatter scoped inside a
+// component. It has no negative guard and no days branch, so it would still
+// render the -60048m of 2026-09-02 on the compliance report and CSV export.
+// Out of scope here; on the open list.
+const fmtMins = (mins) => {
+  if (mins === null || mins === undefined) return null
   // NEGATIVE-DURATION GUARD. task_worker_times has ONE row per (task_id,user_id) and NO
   // occurrence key, so a new Time In can be measured against a PREVIOUS cycle's Time Out.
   // Observed LIVE 2026-09-02: started_at 2 Sep vs completed_at 22 Jul rendered -60048m to
@@ -1204,7 +1213,12 @@ const fmtDuration = (start, end) => {
   if (mins < 1440) return Math.floor(mins/60) + 'h ' + (mins%60) + 'm'
   const _durDays = Math.floor(mins/1440)
   const _durHrs = Math.floor((mins%1440)/60)
-  return _durDays + 'd ' + _durHrs + 'h'
+  const _durMins = mins%60
+  return _durDays + 'd ' + _durHrs + 'h ' + _durMins + 'm'
+}
+const fmtDuration = (start, end) => {
+  if (!start || !end) return null
+  return fmtMins(Math.round((new Date(end) - new Date(start)) / 60000))
 }
 const clearAuthCache = () => {
   try { indexedDB.deleteDatabase('supabase') } catch(e) {}
@@ -1212,6 +1226,29 @@ const clearAuthCache = () => {
   sessionStorage.clear()
 }
 const SESSION_ROLE_TIMEOUTS = { worker:30, supervisor:60, manager:120, client_admin:240, super_admin:30 }
+// WORK-SEGMENTS-V1: how long an open work segment may go without a heartbeat
+// before it is closed retrospectively at its last_seen_at.
+//
+// NOT derived from SESSION_ROLE_TIMEOUTS above, deliberately. That is a session
+// timeout (worker 30 min) and ~22804 lets the user OVERRIDE it via sessionTimeout.
+// Tying the work clock to a user-adjustable value would let a worker lengthen
+// their own idle threshold and inflate their own recorded hours. A dead phone
+// should cost minutes, not half an hour.
+const SEGMENT_IDLE_MINUTES = 5
+// Sum of worked minutes across segments. Closed segments use ended_at; the one
+// open segment (at most one, enforced by task_work_segments_one_open) runs to now.
+// Each segment is clamped at zero: device clock skew can yield ended_at <
+// started_at, and a negative segment would QUIETLY REDUCE a total rather than
+// render visibly wrong. Same reasoning as the negative guard in fmtMins.
+const segmentWorkedMins = (segs, nowMs) => {
+  const _now = nowMs || Date.now()
+  return (segs||[]).reduce((acc,s)=>{
+    if(!s.started_at) return acc
+    const a = new Date(s.started_at).getTime()
+    const b = s.ended_at ? new Date(s.ended_at).getTime() : _now
+    return acc + Math.max(0, Math.round((b-a)/60000))
+  }, 0)
+}
 const TAKSYN_LAST_ACTIVITY_KEY = 'taksyn_last_activity'
 const parseSafe = (val, fallback=[]) => {
   if (Array.isArray(val)) return val
@@ -3643,6 +3680,14 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   useEffect(()=>{ if(selected) loadTaskById(selected) }, [selected])
   const [comment, setComment] = useState('')
   const [workerTimes, setWorkerTimes] = useState([])
+  // WORK-SEGMENTS-V2: pause/resume intervals for the selected task. Separate table
+  // (task_work_segments) because task_worker_times holds ONE started_at/completed_at
+  // pair per (task_id,user_id) and cannot express multiple intervals. That table also
+  // has no cycle key; task_work_segments carries occurrence_date natively.
+  const [workSegments, setWorkSegments] = useState([])
+  // Ticks once a minute so an open segment's Worked figure advances on screen.
+  const [segNowMs, setSegNowMs] = useState(Date.now())
+  useEffect(()=>{ const h=setInterval(()=>setSegNowMs(Date.now()), 60000); return ()=>clearInterval(h) },[])
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
   const [interventionModal, setInterventionModal] = useState(null) // {action, label, changes, taskId}
   const [interventionReason, setInterventionReason] = useState('')
@@ -4243,6 +4288,9 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
 
   const loadWorkerTimes = (tid) => { if(!tid||!isConfigured()){ setWorkerTimes([]); return } supabase.from('task_worker_times').select('*').eq('task_id',tid).then(({data})=>{ setWorkerTimes(data||[]) }).catch(()=>{}) }
   useEffect(()=>{ loadWorkerTimes(selected) },[selected])
+  // WORK-SEGMENTS-V2: same shape as loadWorkerTimes -- loader plus an effect.
+  const loadWorkSegments = (tid) => { if(!tid||!isConfigured()){ setWorkSegments([]); return } supabase.from('task_work_segments').select('*').eq('task_id',tid).eq('user_id',user.id).then(({data})=>{ setWorkSegments(data||[]) }).catch(()=>{}) }
+  useEffect(()=>{ loadWorkSegments(selected) },[selected])
   // EXT-REQUEST-V1: same shape as loadWorkerTimes above -- loader plus an effect
   // keyed on `selected`. maybeSingle() because ter_one_open_per_task guarantees
   // at most one open row per task; .single() would throw on zero, which is the
@@ -4353,6 +4401,62 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
     if(error || !data || !data.length){ alert('Could not withdraw: ' + (error?.message || 'no row was updated')); return }
     setExtReq(null)
   }
+  // WORK-SEGMENTS-V2 -----------------------------------------------------------
+  // At most one open segment can exist per (task_id,user_id) -- enforced in the
+  // database by task_work_segments_one_open, a partial unique index where
+  // ended_at is null. Proven CHK-SEG-03 on sandbox 2026-09-12.
+  const openSegOf = (segs) => (segs||[]).find(s=>!s.ended_at) || null
+  // Closes the open segment. The reason is recorded so a later auto-close ('idle')
+  // can be told apart from a deliberate one -- an auditor should be able to see
+  // which pauses a person actually made.
+  const workerPause = async (tid, reason) => {
+    const seg = openSegOf(workSegments)
+    if(!seg) return
+    const now = new Date().toISOString()
+    // WORK-SEGMENTS-V3: a pause that silently fails leaves the clock running and
+    // overstates the record. Report it.
+    try {
+      const { error } = await supabase.from('task_work_segments').update({ended_at:now,end_reason:reason||'pause',last_seen_at:now}).eq('id',seg.id)
+      if(error){ alert('Could not pause the work timer: ' + error.message); return }
+    } catch(e) { alert('Could not pause the work timer: ' + (e?.message || 'unknown error')); return }
+    loadWorkSegments(tid)
+  }
+  // Opens a segment. NOT routed through workerTimeIn: that function nulls
+  // completed_at and gps_end, and is only safe because it is unreachable while
+  // myTime exists. On resume myTime DOES exist, so reusing it would wipe a real
+  // clock-out. This writes to task_work_segments and touches nothing else.
+  // WORK-SEGMENTS-V3: the occurrence date for a segment.
+  //
+  // Patch 2 called currentOccurrenceDate(task, today) -- TWO args, the task object
+  // where a DATE STRING belongs. Its first statement is (dueDate||'').slice(0,10),
+  // which threw TypeError on every Resume press. The `|| ''` guard catches null and
+  // undefined only; an object passes straight through. A falsy-guard is not a type
+  // guard. Signature is (dueDate, recurrence, today) -- see the declaration ~657.
+  //
+  // A ONE-OFF has no cycles to walk: its occurrence date is today in the org day.
+  // The recurring branch mirrors the call at ~5515 exactly rather than inventing a
+  // seventh variant of the same expression.
+  const segOccurrenceDate = (t) => {
+    const _oToday = orgTz ? orgToday(orgTz) : new Date().toISOString().split('T')[0]
+    if(!t || !isRecurring(t)) return _oToday
+    return (orgTz ? (currentOccurrenceDate(t.due_date, t.recurrence, _oToday) || t.due_date) : t.due_date) || _oToday
+  }
+  const workerResume = async (tid) => {
+    const _rsTask = tasks.find(x=>x.id===tid)
+    // Same window as Time In and Submit: you cannot resume into a cycle that has
+    // closed. orgTz unresolved -> no gate rather than a wrong one (~4018).
+    if(_rsTask && orgTz && completionWindow(_rsTask, orgToday(orgTz))) return
+    if(openSegOf(workSegments)) return
+    const now = new Date().toISOString()
+    // Every segment write reports its failure. Patch 2 had none, so a TypeError
+    // surfaced only in the console and the worker saw a dead button -- the same
+    // interaction that produced the orphan Time In rows on 2026-09-03.
+    try {
+      const { error } = await supabase.from('task_work_segments').insert({task_id:tid,user_id:user.id,org:user.org,occurrence_date:segOccurrenceDate(_rsTask),started_at:now,last_seen_at:now})
+      if(error){ alert('Could not start the work timer: ' + error.message); return }
+    } catch(e) { alert('Could not start the work timer: ' + (e?.message || 'unknown error')); return }
+    loadWorkSegments(tid)
+  }
   const workerTimeIn = (tid) => {
     // TIMEIN-WINDOW-GATE-V1: refuse BEFORE the upsert. Previously nothing gated this,
     // so on a not-yet-open cycle the write LANDED and was then hidden by
@@ -4393,6 +4497,18 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
       const patch={started_at:env.started_at||now,gps_start:env.gps_start||gps||null,completed_at:envEnd.completed_at||null,gps_end:envEnd.gps_end||null}
       if(t&&['pending','overdue','escalated','rejected'].includes(t.status)) patch.status='in_progress'
       update(tid,patch); loadWorkerTimes(tid)
+      // WORK-SEGMENTS-V3: clocking in starts the work clock. Without this the timer
+      // offered "Resume" the instant a worker timed in -- accurate (no segment
+      // existed) but a nonsense instruction.
+      //
+      // AFTER the upsert above and deliberately NOT blocking it: a failed segment
+      // write must never stop someone clocking in. It alerts, so the failure is
+      // visible, but attendance still lands.
+      try {
+        const { error:_segErr } = await supabase.from('task_work_segments').insert({task_id:tid,user_id:user.id,org:user.org,occurrence_date:segOccurrenceDate(t),started_at:now,last_seen_at:now})
+        if(_segErr) alert('Timed in, but the work timer did not start: ' + _segErr.message)
+      } catch(e) { alert('Timed in, but the work timer did not start: ' + (e?.message || 'unknown error')) }
+      loadWorkSegments(tid)
     }
     if(gpsEnabled===false||!navigator.geolocation){setRow();return}
     navigator.geolocation.getCurrentPosition(pos=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','true');setGpsEnabled(true)} setRow(pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)) },()=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false)} setRow() })
@@ -4405,6 +4521,14 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
       const we=(rows||[]).filter(r=>r.completed_at).sort((a,b)=>a.completed_at<b.completed_at?1:-1)
       const env=we[0]||{}
       update(tid,{completed_at:env.completed_at||now,gps_end:env.gps_end||gps||null}); loadWorkerTimes(tid)
+      // WORK-SEGMENTS-V3: clocking out ends the work clock. Reason 'time_out'
+      // distinguishes it from a deliberate pause. Uses .is('ended_at',null) rather
+      // than the id from state, so it closes whatever is actually open even if the
+      // component's copy is stale.
+      try {
+        await supabase.from('task_work_segments').update({ended_at:now,end_reason:'time_out',last_seen_at:now}).eq('task_id',tid).eq('user_id',user.id).is('ended_at',null)
+      } catch(e) { alert('Timed out, but the work timer may still be running: ' + (e?.message || 'unknown error')) }
+      loadWorkSegments(tid)
     }
     if(gpsEnabled===false||!navigator.geolocation){setRow();return}
     navigator.geolocation.getCurrentPosition(pos=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','true');setGpsEnabled(true)} setRow(pos.coords.latitude.toFixed(4)+','+pos.coords.longitude.toFixed(4)) },()=>{ if(gpsEnabled===null){localStorage.setItem('taksyn_gps_enabled','false');setGpsEnabled(false)} setRow() })
@@ -5455,8 +5579,19 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               </div>
               {fmtDuration(myTime?.started_at,myTime?.completed_at)&&(
                 <div style={{flex:1,minWidth:100,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px'}}>
-                  <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Duration</div>
+                  <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Elapsed</div>
                   <div style={{fontSize:15,fontWeight:800,color:'var(--t1)'}}>{fmtDuration(myTime?.started_at,myTime?.completed_at)}</div>
+                </div>
+              )}
+              {/* WORK-SEGMENTS-V2: WORKED is the sum of pause/resume intervals; ELAPSED
+                  beside it is first-in to last-out. They differ by the breaks taken, and
+                  showing both is the point -- one number alone hides which it is. Renders
+                  as soon as a segment exists, so a running clock is visible before Time
+                  Out. segNowMs advances the open segment each minute. */}
+              {workSegments.length>0&&fmtMins(segmentWorkedMins(workSegments,segNowMs))&&(
+                <div style={{flex:1,minWidth:100,background: openSegOf(workSegments)?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(openSegOf(workSegments)?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
+                  <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Worked</div>
+                  <div style={{fontSize:15,fontWeight:800,color:openSegOf(workSegments)?'var(--green)':'var(--t1)'}}>{fmtMins(segmentWorkedMins(workSegments,segNowMs))}</div>
                 </div>
               )}
             </div>
@@ -5557,6 +5692,13 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   const _tiWin = (orgTz && sel) ? completionWindow(sel, orgToday(orgTz)) : null
                   return <button className="btn btn-green" style={{flex:1,opacity:_tiWin?0.55:1}} disabled={!!_tiWin} onClick={()=>workerTimeIn(sel.id)}>{_tiWin?'⏳ Opens '+_tiWin.opensOn:'▶ Time In'}</button>
                 })()}
+                {/* WORK-SEGMENTS-V2: Pause and Resume are mutually exclusive on whether
+                    an open segment exists. Both only while clocked in and not yet out.
+                    NOTE: pausing does NOT lock the task in this scope -- photos, the
+                    checklist and Submit all remain available. Advisory only. */}
+                {myTime?.started_at&&!myTime?.completed_at&&(openSegOf(workSegments)
+                  ? <button className="btn btn-secondary" style={{flex:1}} onClick={()=>workerPause(sel.id,'pause')}>⏸ Pause</button>
+                  : <button className="btn btn-green" style={{flex:1}} onClick={()=>workerResume(sel.id)}>▶ Resume</button>)}
                 {myTime?.started_at&&!myTime?.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>workerTimeOut(sel.id)}>⏹ Time Out</button>}
               </div>
               {/* F70 - "Not applicable today". OUTSIDE the myTime conditional on purpose:
