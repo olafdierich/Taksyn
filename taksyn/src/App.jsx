@@ -14435,9 +14435,10 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                 {/* PATCH-MARKER-ACCOUNTABILITY-PERSON-V1 */}
                 {setForOthersMap[p.id] && (()=>{ const s = setForOthersMap[p.id]; return (
                   <div style={{marginTop:12,padding:'10px 12px',borderRadius:8,border:'1px solid rgba(128,128,128,.25)',background:'rgba(128,128,128,.04)'}}>
-                    <div style={{fontSize:11,fontWeight:700,letterSpacing:.4,color:'var(--t2)',marginBottom:8}}>SET FOR OTHERS</div>
+                    {/* SETFOROTHERS-RELABEL-V1 */}
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:.4,color:'var(--t2)',marginBottom:8}}>ASSIGNED TO OTHERS</div>
                     <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:8}}>
-                      {[['Set',s.set,'var(--text)'],
+                      {[['Assigned',s.set,'var(--text)'],
                         ['On time',s.onTime,'#10B981'],
                         ['Late',s.late,'#D97706'],
                         ['Missed',s.missed,'#EF4444']].map(([lbl,val,col])=>(
@@ -14448,7 +14449,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                       ))}
                     </div>
                     <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>
-                      Tasks this person set for someone else in this period. Their own work is in the tiles above.
+                      Tasks this person assigned to someone else in this period. Their own work is in the tiles above.
                     </div>
                   </div>
                 )})()}
