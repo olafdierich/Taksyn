@@ -14408,26 +14408,6 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                     </div>
                   ))}
                 </div>
-                {/* PATCH-MARKER-ACCOUNTABILITY-PERSON-V1 */}
-                {setForOthersMap[p.id] && (()=>{ const s = setForOthersMap[p.id]; return (
-                  <div style={{marginTop:12,padding:'10px 12px',borderRadius:8,border:'1px solid rgba(128,128,128,.25)',background:'rgba(128,128,128,.04)'}}>
-                    <div style={{fontSize:11,fontWeight:700,letterSpacing:.4,color:'var(--t2)',marginBottom:8}}>SET FOR OTHERS</div>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:8}}>
-                      {[['Set',s.set,'var(--text)'],
-                        ['On time',s.onTime,'#10B981'],
-                        ['Late',s.late,'#D97706'],
-                        ['Missed',s.missed,'#EF4444']].map(([lbl,val,col])=>(
-                        <div key={lbl} style={{textAlign:'center',padding:'6px 4px'}}>
-                          <div style={{fontSize:18,fontWeight:700,color:col}}>{val}</div>
-                          <div style={{fontSize:10,color:'var(--t2)',letterSpacing:.3}}>{String(lbl).toUpperCase()}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>
-                      Tasks this person set for someone else in this period. Their own work is in the tiles above.
-                    </div>
-                  </div>
-                )})()}
                 {approverMap[p.id] && (()=>{ const a = approverMap[p.id]; const _ot = a.decided>0?pct(a.onTime,a.decided):null; const _sb = a.decided>0?pct(a.sentBack,a.decided):null; return (
                   <div style={{marginTop:12,border:'1px solid #C7D2FE',background:'rgba(99,102,241,.05)',borderRadius:12,padding:10}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
@@ -14449,6 +14429,27 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                       ))}
                     </div>
                     <div style={{fontSize:10,color:'var(--t2)',marginTop:7}}>Send-back rate has no target. Read it beside response time: high speed with zero send-backs is a rubber stamp, not a good reviewer.</div>
+                  </div>
+                )})()}
+                {/* SETFOROTHERS-MOVED-BELOW-APPROVER-V1 */}
+                {/* PATCH-MARKER-ACCOUNTABILITY-PERSON-V1 */}
+                {setForOthersMap[p.id] && (()=>{ const s = setForOthersMap[p.id]; return (
+                  <div style={{marginTop:12,padding:'10px 12px',borderRadius:8,border:'1px solid rgba(128,128,128,.25)',background:'rgba(128,128,128,.04)'}}>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:.4,color:'var(--t2)',marginBottom:8}}>SET FOR OTHERS</div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:8}}>
+                      {[['Set',s.set,'var(--text)'],
+                        ['On time',s.onTime,'#10B981'],
+                        ['Late',s.late,'#D97706'],
+                        ['Missed',s.missed,'#EF4444']].map(([lbl,val,col])=>(
+                        <div key={lbl} style={{textAlign:'center',padding:'6px 4px'}}>
+                          <div style={{fontSize:18,fontWeight:700,color:col}}>{val}</div>
+                          <div style={{fontSize:10,color:'var(--t2)',letterSpacing:.3}}>{String(lbl).toUpperCase()}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>
+                      Tasks this person set for someone else in this period. Their own work is in the tiles above.
+                    </div>
                   </div>
                 )})()}
                 {/* Performance bar */}
