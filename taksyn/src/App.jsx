@@ -3680,6 +3680,14 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   useEffect(()=>{ if(selected) loadTaskById(selected) }, [selected])
   const [comment, setComment] = useState('')
   const [workerTimes, setWorkerTimes] = useState([])
+  // WORK-SEGMENTS-V2: pause/resume intervals for the selected task. Separate table
+  // (task_work_segments) because task_worker_times holds ONE started_at/completed_at
+  // pair per (task_id,user_id) and cannot express multiple intervals. That table also
+  // has no cycle key; task_work_segments carries occurrence_date natively.
+  const [workSegments, setWorkSegments] = useState([])
+  // Ticks once a minute so an open segment's Worked figure advances on screen.
+  const [segNowMs, setSegNowMs] = useState(Date.now())
+  useEffect(()=>{ const h=setInterval(()=>setSegNowMs(Date.now()), 60000); return ()=>clearInterval(h) },[])
   const [editingComment, setEditingComment] = useState(null) // {taskId, commentId, text}
   const [interventionModal, setInterventionModal] = useState(null) // {action, label, changes, taskId}
   const [interventionReason, setInterventionReason] = useState('')
@@ -4280,6 +4288,9 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
 
   const loadWorkerTimes = (tid) => { if(!tid||!isConfigured()){ setWorkerTimes([]); return } supabase.from('task_worker_times').select('*').eq('task_id',tid).then(({data})=>{ setWorkerTimes(data||[]) }).catch(()=>{}) }
   useEffect(()=>{ loadWorkerTimes(selected) },[selected])
+  // WORK-SEGMENTS-V2: same shape as loadWorkerTimes -- loader plus an effect.
+  const loadWorkSegments = (tid) => { if(!tid||!isConfigured()){ setWorkSegments([]); return } supabase.from('task_work_segments').select('*').eq('task_id',tid).eq('user_id',user.id).then(({data})=>{ setWorkSegments(data||[]) }).catch(()=>{}) }
+  useEffect(()=>{ loadWorkSegments(selected) },[selected])
   // EXT-REQUEST-V1: same shape as loadWorkerTimes above -- loader plus an effect
   // keyed on `selected`. maybeSingle() because ter_one_open_per_task guarantees
   // at most one open row per task; .single() would throw on zero, which is the
@@ -4389,6 +4400,36 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
     setExtBusy(false)
     if(error || !data || !data.length){ alert('Could not withdraw: ' + (error?.message || 'no row was updated')); return }
     setExtReq(null)
+  }
+  // WORK-SEGMENTS-V2 -----------------------------------------------------------
+  // At most one open segment can exist per (task_id,user_id) -- enforced in the
+  // database by task_work_segments_one_open, a partial unique index where
+  // ended_at is null. Proven CHK-SEG-03 on sandbox 2026-09-12.
+  const openSegOf = (segs) => (segs||[]).find(s=>!s.ended_at) || null
+  // Closes the open segment. The reason is recorded so a later auto-close ('idle')
+  // can be told apart from a deliberate one -- an auditor should be able to see
+  // which pauses a person actually made.
+  const workerPause = async (tid, reason) => {
+    const seg = openSegOf(workSegments)
+    if(!seg) return
+    const now = new Date().toISOString()
+    await supabase.from('task_work_segments').update({ended_at:now,end_reason:reason||'pause',last_seen_at:now}).eq('id',seg.id)
+    loadWorkSegments(tid)
+  }
+  // Opens a segment. NOT routed through workerTimeIn: that function nulls
+  // completed_at and gps_end, and is only safe because it is unreachable while
+  // myTime exists. On resume myTime DOES exist, so reusing it would wipe a real
+  // clock-out. This writes to task_work_segments and touches nothing else.
+  const workerResume = async (tid) => {
+    const _rsTask = tasks.find(x=>x.id===tid)
+    // Same window as Time In and Submit: you cannot resume into a cycle that has
+    // closed. orgTz unresolved -> no gate rather than a wrong one (~4018).
+    if(_rsTask && orgTz && completionWindow(_rsTask, orgToday(orgTz))) return
+    if(openSegOf(workSegments)) return
+    const now = new Date().toISOString()
+    const occ = (orgTz && _rsTask) ? (currentOccurrenceDate(_rsTask, orgToday(orgTz)) || orgToday(orgTz)) : new Date().toISOString().split('T')[0]
+    await supabase.from('task_work_segments').insert({task_id:tid,user_id:user.id,org:user.org,occurrence_date:occ,started_at:now,last_seen_at:now})
+    loadWorkSegments(tid)
   }
   const workerTimeIn = (tid) => {
     // TIMEIN-WINDOW-GATE-V1: refuse BEFORE the upsert. Previously nothing gated this,
@@ -5492,8 +5533,19 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               </div>
               {fmtDuration(myTime?.started_at,myTime?.completed_at)&&(
                 <div style={{flex:1,minWidth:100,background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px'}}>
-                  <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Duration</div>
+                  <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Elapsed</div>
                   <div style={{fontSize:15,fontWeight:800,color:'var(--t1)'}}>{fmtDuration(myTime?.started_at,myTime?.completed_at)}</div>
+                </div>
+              )}
+              {/* WORK-SEGMENTS-V2: WORKED is the sum of pause/resume intervals; ELAPSED
+                  beside it is first-in to last-out. They differ by the breaks taken, and
+                  showing both is the point -- one number alone hides which it is. Renders
+                  as soon as a segment exists, so a running clock is visible before Time
+                  Out. segNowMs advances the open segment each minute. */}
+              {workSegments.length>0&&fmtMins(segmentWorkedMins(workSegments,segNowMs))&&(
+                <div style={{flex:1,minWidth:100,background: openSegOf(workSegments)?'rgba(16,185,129,.1)':'var(--s3)',border:'1px solid '+(openSegOf(workSegments)?'rgba(16,185,129,.3)':'var(--border)'),borderRadius:8,padding:'10px 14px'}}>
+                  <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.8px',color:'var(--t2)',marginBottom:3}}>Worked</div>
+                  <div style={{fontSize:15,fontWeight:800,color:openSegOf(workSegments)?'var(--green)':'var(--t1)'}}>{fmtMins(segmentWorkedMins(workSegments,segNowMs))}</div>
                 </div>
               )}
             </div>
@@ -5594,6 +5646,13 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   const _tiWin = (orgTz && sel) ? completionWindow(sel, orgToday(orgTz)) : null
                   return <button className="btn btn-green" style={{flex:1,opacity:_tiWin?0.55:1}} disabled={!!_tiWin} onClick={()=>workerTimeIn(sel.id)}>{_tiWin?'⏳ Opens '+_tiWin.opensOn:'▶ Time In'}</button>
                 })()}
+                {/* WORK-SEGMENTS-V2: Pause and Resume are mutually exclusive on whether
+                    an open segment exists. Both only while clocked in and not yet out.
+                    NOTE: pausing does NOT lock the task in this scope -- photos, the
+                    checklist and Submit all remain available. Advisory only. */}
+                {myTime?.started_at&&!myTime?.completed_at&&(openSegOf(workSegments)
+                  ? <button className="btn btn-secondary" style={{flex:1}} onClick={()=>workerPause(sel.id,'pause')}>⏸ Pause</button>
+                  : <button className="btn btn-green" style={{flex:1}} onClick={()=>workerResume(sel.id)}>▶ Resume</button>)}
                 {myTime?.started_at&&!myTime?.completed_at&&<button className="btn btn-amber" style={{flex:1}} onClick={()=>workerTimeOut(sel.id)}>⏹ Time Out</button>}
               </div>
               {/* F70 - "Not applicable today". OUTSIDE the myTime conditional on purpose:
