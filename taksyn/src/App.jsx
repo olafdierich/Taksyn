@@ -8128,8 +8128,8 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                   const _bad = _rec ? (_c.late>0||_c.missed>0) : (_timing==='Late'||_timing==='Missed')
                   const _cell = {padding:8,borderBottom:'1px solid rgba(128,128,128,.15)',verticalAlign:'top'}
                   return (
-                    <React.Fragment key={t.id}>
-                      <tr onClick={()=>setTrailOpen(p=>({...p,[t.id]:!p[t.id]}))} style={{cursor:'pointer'}}>
+                    <>
+                      <tr key={t.id} onClick={()=>setTrailOpen(p=>({...p,[t.id]:!p[t.id]}))} style={{cursor:'pointer'}}>
                         <td style={_cell}>
                           <span style={{color:'var(--t2)',marginRight:6}}>{_open?'\u25be':'\u25b8'}</span>
                           <strong style={{fontWeight:600}}>{t.title}</strong>
@@ -8148,7 +8148,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                         </td>
                       </tr>
                       {_open && (
-                        <tr>
+                        <tr key={t.id+'-occ'}>
                           <td colSpan={6} style={{padding:'4px 8px 12px 26px',borderBottom:'1px solid rgba(128,128,128,.15)'}}>
                             {!_rec && <div style={{fontSize:12,color:'var(--t2)'}}>One-off task &mdash; due {t.due_date||'\u2014'}{t.completed_at?', completed '+fmtTime(t.completed_at):''}</div>}
                             {_rec && _c.rows.length===0 && <div style={{fontSize:12,color:'var(--t2)'}}>No occurrences recorded in this period.</div>}
@@ -8175,7 +8175,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                           </td>
                         </tr>
                       )}
-                    </React.Fragment>
+                    </>
                   )
                 })}
               </tbody>
