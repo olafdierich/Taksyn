@@ -51,8 +51,15 @@
 --
 -- SAFE TO RE-RUN. Columns and index use IF NOT EXISTS; functions are CREATE OR
 -- REPLACE; no data is touched.
--- Applied to SANDBOX and LIVE 12 Sep 2026, confirmed on both (PRJ-DB-10):
--- 4 columns, 1 index, 3 functions.
+-- Applied to SANDBOX and LIVE 12 Sep 2026, confirmed on both (PRJ-DB-10,
+-- MIG-11): 4 columns, 1 index, 3 functions -- one duplicate_project taking
+-- four arguments.
+--
+-- NO FINGERPRINTS ARE RECORDED FOR THESE THREE. The text here carries
+-- explanatory comments the databases do not, so md5(prosrc) differs by
+-- design. The behaviour is identical; a recorded fingerprint that cannot
+-- match would be worse than none. Verify with MIG-11 instead: three
+-- functions, one signature each.
 -- ===========================================================================
 
 alter table public.projects
@@ -131,6 +138,10 @@ begin
   end loop;
   return query select n_new, n_old, v_p.name, v_s.name;
 end $f$;
+
+-- Remove the superseded three-argument version before creating the new one, so a
+-- rebuilt database never holds both. Harmless if it was never there.
+drop function if exists public.duplicate_project(uuid, text, date);
 
 create or replace function public.duplicate_project(p_source uuid, p_name text, p_start_date date default current_date, p_with_templates boolean default true)
 returns table(id uuid, ref text, sections int, milestones int, links int, templates_created int, templates_reused int)
