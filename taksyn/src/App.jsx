@@ -5272,6 +5272,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                     {clInstrOpenEdit===(s.id||i)&&(
                       <textarea className="comment-box" style={{width:'100%',marginTop:6,minHeight:54,fontSize:12,border:'1px solid #10B981',background:'rgba(16,185,129,.05)'}} placeholder="Instruction for the worker (optional) — e.g. Only use Sparkle products" value={s.instruction||''} onChange={e=>setEditTask({...editTask,subtasks:(editTask.subtasks||[]).map((x,j)=>j===i?{...x,instruction:e.target.value}:x)})}/>
                     )}
+                    {/* EDIT-INSTR-MIC-V1: mic writes into state (controlled box); accepts a value or an updater, as the create form does */}{clInstrOpenEdit===(s.id||i)&&<MicChip setValue={fn=>setEditTask(prev=>({...prev,subtasks:(prev.subtasks||[]).map((x,j)=>j===i?{...x,instruction:typeof fn==='function'?fn(x.instruction||''):fn}:x)}))}/>}
                   </div>
                 ))}
                 {!(editTask.subtasks||[]).length&&<div style={{fontSize:11,color:'var(--t3)',marginTop:4}}>No checklist items</div>}
