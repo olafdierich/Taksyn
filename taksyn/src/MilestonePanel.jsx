@@ -235,9 +235,13 @@ export default function MilestonePanel({ project, sections, milestones, canEdit,
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 {m.status === 'open' &&
                   <button style={{ ...btnGhost,
-                           borderColor: m.ready_to_meet ? C.green : C.line2,
-                           color: m.ready_to_meet ? C.green : C.ink2 }}
-                          disabled={busy} onClick={() => meet(m)}>Mark met</button>}
+                           borderColor: m.ready_to_meet && Number(m.task_count) ? C.green : C.line2,
+                           color: m.ready_to_meet && Number(m.task_count) ? C.green : C.ink2,
+                           opacity: Number(m.task_count) ? 1 : .5 }}
+                          title={Number(m.task_count) ? undefined
+                            : 'Add at least one task to this milestone first. Marking it met is a record that the checkpoint was reached.'}
+                          disabled={busy || !Number(m.task_count)}
+                          onClick={() => meet(m)}>Mark met</button>}
                 <button style={btnGhost} disabled={busy}
                         onClick={() => openEdit(m)}>Edit</button>
                 {m.status !== 'met' &&
