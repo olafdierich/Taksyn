@@ -140,6 +140,9 @@ export default function MilestonePanel({ project, sections, milestones, canEdit,
       label: `At risk — open work runs to ${fmt(D(m.latest_open_due))}`, colour: '#DC2626' }
     if (m.blockers_open) return {
       label: `${m.blockers_open} open blocker${m.blockers_open > 1 ? 's' : ''}`, colour: '#B45309' }
+    // MS-NOTASKS-V1: ready_to_meet is "no OPEN tasks", and zero tasks satisfies it.
+    // Checked before ready_to_meet so an empty milestone cannot read as ready.
+    if (!Number(m.task_count)) return { label: 'No tasks yet', colour: C.ink2 }
     if (m.ready_to_meet) return { label: 'Ready to be met', colour: C.blue }
     return { label: `${m.tasks_open} task${m.tasks_open !== 1 ? 's' : ''} open`, colour: C.ink2 }
   }
