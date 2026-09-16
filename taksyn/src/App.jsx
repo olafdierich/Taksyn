@@ -8434,6 +8434,30 @@ function UsersView({ user, setAuditLog }) {
   const [showArchived, setShowArchived] = useState(false)
   const [archiveOrgAssignments, setArchiveOrgAssignments] = useState({})
   const [resendInviteMsg, setResendInviteMsg] = useState('')
+  // BRANCH-ASSIGN-V1: branch tick boxes in Edit Team Member.
+  // editBranchOrgId records which org the lists were loaded for; save refuses
+  // to write if that differs from the org being saved.
+  const [editBranchList, setEditBranchList] = useState([])
+  const [editBranchIds, setEditBranchIds] = useState(null)   // null = not loaded
+  const [editBranchOrig, setEditBranchOrig] = useState([])
+  const [editBranchOrgId, setEditBranchOrgId] = useState(null)
+  const [editBranchErr, setEditBranchErr] = useState('')
+  useEffect(() => {
+    setEditBranchList([]); setEditBranchIds(null); setEditBranchOrig([]); setEditBranchOrgId(null); setEditBranchErr('')
+    const bOrg = editingOrgId || workforceOrgId
+    if (!editingUser?.id || !bOrg || !isConfigured()) return
+    let alive = true
+    Promise.all([
+      supabase.from('org_branches').select('id,name,is_active').eq('org_id', bOrg).order('name'),
+      supabase.from('member_branches').select('branch_id').eq('org_id', bOrg).eq('user_id', editingUser.id)
+    ]).then(([b, m]) => {
+      if (!alive) return
+      if (b.error || m.error) { setEditBranchErr((b.error || m.error).message); return }
+      const ids = (m.data || []).map(r => r.branch_id)
+      setEditBranchList(b.data || []); setEditBranchIds(ids); setEditBranchOrig(ids); setEditBranchOrgId(bOrg)
+    }).catch(e => { if (alive) setEditBranchErr(e?.message || 'unknown error') })
+    return () => { alive = false }
+  }, [editingUser?.id, editingOrgId, workforceOrgId])
 
   const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
   const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
@@ -8788,6 +8812,45 @@ function UsersView({ user, setAuditLog }) {
           if (_roleSyncErr) console.warn('[m3 role sync] profiles.role not updated:', _roleSyncErr.message)
         }
       }
+    }
+    // BRANCH-ASSIGN-V1: apply branch ticks. Only when the lists were loaded
+    // for this same org. Checked by rows returned: RLS refusals are zero
+    // rows, not errors.
+    const _bChanged = !!editBranchIds && [...editBranchIds].sort().join() !== [...editBranchOrig].sort().join()
+    if (isConfigured() && _bChanged && editBranchOrgId && editBranchOrgId === orgId) {
+      let _bFail = ''
+      // BRANCH-ASSIGN-V2: work out what to add and remove from what the
+      // database holds NOW, not from what the modal loaded (which can be
+      // stale). Adding a branch the member already has is ignored rather than
+      // an error (double click). The outcome is then proven by reading back:
+      // RLS refusals on delete are silent.
+      const { data: _bCur, error: _bce } = await supabase.from('member_branches')
+        .select('branch_id').eq('org_id', orgId).eq('user_id', id)
+      if (_bce) _bFail = 'could not read current branches: ' + _bce.message
+      const _cur = (_bCur || []).map(r => r.branch_id)
+      const _add = _bFail ? [] : editBranchIds.filter(b => !_cur.includes(b))
+      const _del = _bFail ? [] : _cur.filter(b => !editBranchIds.includes(b))
+      if (_add.length) {
+        const { error: _bie } = await supabase.from('member_branches')
+          .upsert(_add.map(b => ({ org_id: orgId, user_id: id, branch_id: b })),
+                  { onConflict: 'user_id,branch_id', ignoreDuplicates: true })
+        if (_bie) _bFail = _bie.message
+      }
+      if (!_bFail && _del.length) {
+        const { error: _bde } = await supabase.from('member_branches')
+          .delete().eq('org_id', orgId).eq('user_id', id).in('branch_id', _del)
+        if (_bde) _bFail = _bde.message
+      }
+      if (!_bFail) {
+        const { data: _bNow, error: _bre } = await supabase.from('member_branches')
+          .select('branch_id').eq('org_id', orgId).eq('user_id', id)
+        if (_bre) _bFail = 'could not confirm the result: ' + _bre.message
+        else if ((_bNow || []).map(r => r.branch_id).sort().join() !== [...editBranchIds].sort().join())
+          _bFail = 'permission denied, or changed elsewhere at the same time'
+      }
+      if (_bFail) alert('Profile details were saved, but the branch changes could not be applied (' + _bFail + ').')
+    } else if (isConfigured() && _bChanged) {
+      alert('Profile details were saved, but the branch changes were not: the branch list was loaded for a different organisation. Please reopen this member and try again.')
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
     const addedPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
@@ -9175,6 +9238,28 @@ function UsersView({ user, setAuditLog }) {
               <div style={{marginBottom:12}}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>setEditPositions(prev=>[...prev,{industry:'',role:'worker',position:''}])}>+ Add Position</button>
               </div>
+              {/* BRANCH-ASSIGN-V1 */}
+              {(editBranchErr || editBranchList.length > 0) && (
+                <div className="form-field">
+                  <label className="form-label">Branches</label>
+                  {editBranchErr ? (
+                    <div style={{fontSize:12,color:'var(--red)'}}>Could not load branches: {editBranchErr}</div>
+                  ) : editBranchIds === null ? (
+                    <div style={{fontSize:12,color:'var(--t2)'}}>Loading branches...</div>
+                  ) : (
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'6px 16px'}}>
+                      {editBranchList.filter(b => b.is_active || editBranchOrig.includes(b.id)).map(b => (
+                        <label key={b.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:13,cursor:'pointer'}}>
+                          <input type="checkbox" checked={editBranchIds.includes(b.id)}
+                            onChange={e => { const on = e.target.checked; setEditBranchIds(prev => on ? [...(prev || []), b.id] : (prev || []).filter(x => x !== b.id)) }}/>
+                          <span>{b.name}{!b.is_active && <span style={{fontSize:11,color:'var(--t2)'}}> (deactivated)</span>}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>No ticks = works across all branches.</div>
+                </div>
+              )}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--s3)',borderRadius:8,marginBottom:10}}>
                 <div style={{flex:1,minWidth:0,marginRight:12}}>
                   <div style={{fontSize:13,fontWeight:600}}>Regularly Rostered</div>
@@ -11837,6 +11922,135 @@ function RolesPositionsView({ user }) {
   )
 }
 
+// BRANCHES-TAB-V1 ---------------------------------------------------------
+// Organisation branches / sites. Managed by client admin (and super admin).
+// Deactivate, never delete: records keep their branch, and the database
+// refuses to delete a branch that is in use. Who may write is enforced by
+// the br_insert / br_update policies; canEdit only hides the controls.
+function BranchesPanel({ orgId, canEdit }) {
+  const [rows, setRows] = useState(null)
+  const [newName, setNewName] = useState('')
+  const [editId, setEditId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    if (!isConfigured() || !orgId) { setRows(null); return }
+    let alive = true
+    supabase.from('org_branches').select('id,name,is_active,created_at')
+      .eq('org_id', orgId).order('name')
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.error('BRANCHES-TAB-V1 load', error)
+          setMsg('\u2717 Could not load branches: ' + error.message)
+          setRows([])
+          return
+        }
+        setRows(data || [])
+      })
+    return () => { alive = false }
+  }, [orgId, reload])
+
+  const friendly = (e) => (e && e.code === '23505')
+    ? 'A branch with that name already exists.'
+    : (e?.message || 'Unknown error')
+
+  const addBranch = async () => {
+    const name = newName.trim()
+    if (!name || !orgId) return
+    setBusy(true); setMsg('')
+    const { data, error } = await supabase.from('org_branches')
+      .insert({ org_id: orgId, name }).select('id')
+    if (error) setMsg('\u2717 ' + friendly(error))
+    else if (!data || data.length !== 1) setMsg('\u2717 Branch not saved. You may not have permission to add branches.')
+    else { setNewName(''); setMsg('\u2713 Branch added.'); setReload(n => n + 1) }
+    setBusy(false)
+  }
+
+  const updateBranch = async (id, patch, okText) => {
+    setBusy(true); setMsg('')
+    const { data, error } = await supabase.from('org_branches')
+      .update(patch).eq('id', id).eq('org_id', orgId).select('id')
+    if (error) setMsg('\u2717 ' + friendly(error))
+    else if (!data || data.length !== 1) setMsg('\u2717 Change not saved. You may not have permission to edit branches.')
+    else { setEditId(null); setEditName(''); setMsg('\u2713 ' + okText); setReload(n => n + 1) }
+    setBusy(false)
+  }
+
+  const saveRename = (b) => {
+    const name = editName.trim()
+    if (!name) { setMsg('\u2717 Branch name cannot be blank.'); return }
+    if (name === b.name) { setEditId(null); return }
+    updateBranch(b.id, { name }, 'Branch renamed.')
+  }
+
+  const deactivate = (b) => {
+    if (!window.confirm('Deactivate "' + b.name + '"?\n\nIt will no longer be offered for new staff, tasks or incidents. Existing records keep it. You can reactivate it later.')) return
+    updateBranch(b.id, { is_active: false }, 'Branch deactivated.')
+  }
+
+  const active = (rows || []).filter(b => b.is_active)
+  const inactive = (rows || []).filter(b => !b.is_active)
+
+  const row = (b) => (
+    <div key={b.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'1px solid var(--s3)',flexWrap:'wrap'}}>
+      {editId === b.id ? (
+        <>
+          <input className="form-input" style={{flex:'1 1 160px'}} value={editName} autoFocus
+            onChange={e => setEditName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveRename(b); if (e.key === 'Escape') setEditId(null) }}/>
+          <button className="btn btn-primary" disabled={busy} onClick={() => saveRename(b)}>Save</button>
+          <button className="btn btn-secondary" disabled={busy} onClick={() => setEditId(null)}>Cancel</button>
+        </>
+      ) : (
+        <>
+          <div style={{flex:'1 1 160px',fontSize:14,color:b.is_active ? 'var(--text)' : 'var(--t2)'}}>{b.name}</div>
+          {canEdit && b.is_active && <>
+            <button className="btn btn-secondary" disabled={busy} onClick={() => { setEditId(b.id); setEditName(b.name); setMsg('') }}>Rename</button>
+            <button className="btn btn-secondary" disabled={busy} onClick={() => deactivate(b)}>Deactivate</button>
+          </>}
+          {canEdit && !b.is_active &&
+            <button className="btn btn-secondary" disabled={busy} onClick={() => updateBranch(b.id, { is_active: true }, 'Branch reactivated.')}>Reactivate</button>}
+        </>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="section" style={{marginBottom:14}}>
+      <div className="section-title">Branches &amp; Sites</div>
+      <div style={{fontSize:12,color:'var(--t2)',marginBottom:12}}>
+        Add each location your organisation operates from. Staff, tasks, incidents and complaints can then be linked to a branch, and reports can be filtered by it. Until a branch is added, everything stays organisation-wide.
+      </div>
+      {msg && <div style={{fontSize:13,marginBottom:10,color:msg.startsWith('\u2713') ? 'var(--green)' : 'var(--red)'}}>{msg}</div>}
+      {canEdit && (
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+          <input className="form-input" style={{flex:'1 1 200px'}} placeholder="New branch name, e.g. Fort Portal"
+            value={newName} onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addBranch() }}/>
+          <button className="btn btn-primary" disabled={busy || !newName.trim() || !orgId} onClick={addBranch}>Add branch</button>
+        </div>
+      )}
+      {rows === null ? (
+        <div style={{fontSize:13,color:'var(--t2)'}}>Loading branches...</div>
+      ) : active.length === 0 && inactive.length === 0 ? (
+        <div style={{fontSize:13,color:'var(--t2)'}}>No branches yet.</div>
+      ) : (
+        <>
+          {active.map(row)}
+          {inactive.length > 0 && <>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginTop:16}}>Deactivated</div>
+            {inactive.map(row)}
+          </>}
+        </>
+      )}
+    </div>
+  )
+}
+
 function CompanySettingsView({ user, onSettingsSaved }) {
   const NOTIF_EVENTS = [
     { key:'task_submitted', label:'Task Submitted', sub:'When a worker submits a task for review' },
@@ -12499,6 +12713,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
 
   const save = async () => {
     if (activeTab==='team') return
+    if (activeTab==='branches') return // BRANCHES-TAB-V1
     if (activeTab==='company' && !form.name.trim()) { setMsg('✗ Company name is required'); return }
     setSaving(true); setMsg('')
     const updates = activeTab==='company' ? {
@@ -12586,7 +12801,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
   const filled = COMPANY_COMPLETENESS_FIELDS.filter(f=>form[f.key]&&String(form[f.key]).trim())
   const pct = Math.round((filled.length/COMPANY_COMPLETENESS_FIELDS.length)*100)
   const pctColor = pct===100?'var(--green)':pct>=60?'var(--amber)':'var(--red)'
-  const TABS = [['company','Company'],['notifications','Notifications'],['tasks','Tasks'],['compliance','Compliance'],['branding','Branding'],['templates','Templates'],['data','Data & Privacy'],...(['client_admin','super_admin'].includes(user?.role)?[['team','Team Management']]:[])]
+  const TABS = [['company','Company'],['notifications','Notifications'],['tasks','Tasks'],['compliance','Compliance'],['branding','Branding'],['templates','Templates'],['data','Data & Privacy'],...(['client_admin','super_admin'].includes(user?.role)?[['branches','Branches'],['team','Team Management']]:[])]
 
   return (
     <div className="anim">
@@ -12597,7 +12812,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
       )}
       <div className="ph">
         <div><div className="ph-title">Company Settings</div><div className="ph-sub">Configure your organisation, workflows and compliance</div></div>
-        {activeTab!=='data'&&activeTab!=='templates'&&activeTab!=='team'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
+        {activeTab!=='data'&&activeTab!=='templates'&&activeTab!=='team'&&activeTab!=='branches'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
       </div>
 
       <MsgBanner/>
@@ -13135,6 +13350,9 @@ function CompanySettingsView({ user, onSettingsSaved }) {
       </>}
 
       {/* ── DATA & PRIVACY ──────────────────────── */}
+      {/* BRANCHES-TAB-V1 */}
+      {activeTab==='branches'&&<BranchesPanel orgId={orgId} canEdit={['client_admin','super_admin'].includes(user?.role)}/>}
+
       {activeTab==='data'&&(()=>{
         const PLAN_RETENTION = {
           personal:     { days:30,    label:'30 days',  display:'Personal' },
