@@ -17675,6 +17675,10 @@ function IncidentReportView({ user }) {
   // loader below, so every vocabulary on this form follows the choice.
   const [ORG_INDUSTRIES, setOrgIndustries] = useState([])
   const [industryId, setIndustryId] = useState('')
+  // BRANCH-INCIDENT-V1: [[branch_id, name], ...] active branches, and the
+  // chosen one. Required once the org has any active branch.
+  const [ORG_BRANCHES, setOrgBranches] = useState([])
+  const [branchId, setBranchId] = useState('')
   // AFFECTED TYPES — per-industry labels over the three REGISTER keys.
   // The form shows the LABEL, the database stores the KEY. Confirmed
   // 6 Aug, do not reverse: 14461 buckets the trend report by key, and
@@ -17902,6 +17906,33 @@ function IncidentReportView({ user }) {
       } catch(e) { console.error('IND industries effect failed:', e); setOrgIndustries([]); setIndustryId('') }
     })()
   }, [orgId, orgResolved])
+  // BRANCH-INCIDENT-V1: all active branches are offered. The reporter's own
+  // branch is pre-selected when they have exactly one (or the org has only
+  // one). A failed load hides the picker; create_incident then refuses the
+  // report with a BRANCH message, so this fails closed.
+  useEffect(() => {
+    if (!orgResolved || !orgId || !isConfigured()) { setOrgBranches([]); setBranchId(''); return }
+    let alive = true
+    ;(async()=>{
+      try {
+        // BRANCH-INCIDENT-V2: no pre-selection from the reporter's own
+        // branches. Only an org with exactly one active branch is auto-set.
+        const b = await supabase.from('org_branches').select('id,name')
+          .eq('org_id', orgId).eq('is_active', true).order('name')
+        if (!alive) return
+        if (b.error) throw b.error
+        const rows = (b.data || []).map(r => [r.id, r.name])
+        setOrgBranches(rows)
+        setBranchId(prev => (prev && rows.some(r => r[0] === prev)) ? prev
+          : rows.length === 1 ? rows[0][0]
+          : '')
+      } catch(e) {
+        console.error('BRANCH-INCIDENT-V1 branches effect failed:', e)
+        if (alive) { setOrgBranches([]); setBranchId('') }
+      }
+    })()
+    return () => { alive = false }
+  }, [orgId, orgResolved])
   // CATEGORY PACKS — load once the org ID is known. Resolves the org's
   // industry_id, then reads packs ∪ org categories. source='category'
   // excludes outcome rows (report-only) and legacy rows.
@@ -18081,6 +18112,7 @@ function IncidentReportView({ user }) {
     (affectedKnown === 'unknown') ||
     (affectedKnown === 'known' && (affectedPerson || (noMatch && unmatchedName.trim())))
   const canSubmit = (ORG_INDUSTRIES.length < 2 || industryId) &&
+    (ORG_BRANCHES.length === 0 || branchId) &&
     incTitle.trim() && category && outcomes.length && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
@@ -18090,6 +18122,7 @@ function IncidentReportView({ user }) {
   // so the message cannot drift away from the condition it explains.
   const missingField =
     (ORG_INDUSTRIES.length > 1 && !industryId)  ? 'Choose which service this relates to'
+    : (ORG_BRANCHES.length > 0 && !branchId)     ? 'Choose the branch where this happened'
     : !incTitle.trim()                          ? 'Give this incident a short title'
     : !category                                 ? 'Choose what happened'
     : !outcomes.length                          ? 'Choose the outcome'
@@ -18150,6 +18183,9 @@ function IncidentReportView({ user }) {
       // create_incident validates it against org_industry_links and
       // rejects one the org is not registered for.
       industry_id: industryId || null,
+      // BRANCH-INCIDENT-V1: create_incident requires this once the org has
+      // an active branch; trg_check_branch confirms it is this org's.
+      branch_id: branchId || null,
       // Read by create_incident as p_payload->>"title", trimmed there too.
       title: incTitle.trim() || null,
     }
@@ -18189,6 +18225,7 @@ function IncidentReportView({ user }) {
           setOverrideReason(''); setAffectedType(''); setAffectedInitials(''); setShift('')
           setDepartment(''); setLocationText(''); setGps(null); setFacts(''); setImmediateActions('')
           setHazardPresent(false); setClinicalNote(''); setEvidence([])
+          if (ORG_BRANCHES.length !== 1) setBranchId('') // BRANCH-INCIDENT-V2
         }}>Report another incident</button>
       </div>
     )
@@ -18217,6 +18254,24 @@ function IncidentReportView({ user }) {
           style={{width:"100%",padding:"10px",borderRadius:8,border:"1px solid var(--border2)",background:"var(--card)",color:"var(--text)",boxSizing:"border-box"}}/>
         <div style={{fontSize:11,color:"var(--t3)",marginTop:6}}>{incTitle.length}/80</div>
       </div>
+      {/* BRANCH-INCIDENT-V1: where it happened. Hidden when the org has no
+          active branches. */}
+      {ORG_BRANCHES.length > 0 && (
+        <div style={card}>
+          <span style={lbl}>Which branch did this happen at? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {ORG_BRANCHES.map(([bid,bname]) => (
+              <button key={bid} type="button" onClick={()=>setBranchId(bid)}
+                style={{padding:'8px 14px',borderRadius:8,cursor:'pointer',
+                        border:'1px solid '+(branchId===bid?'var(--brand)':'var(--border)'),
+                        background:branchId===bid?'var(--brand-lt)':'transparent',
+                        fontWeight:branchId===bid?700:400}}>
+                {bname}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Step 1 — category */}
       <div style={card}>
         <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
@@ -18240,7 +18295,13 @@ function IncidentReportView({ user }) {
           </div>
         )}
         {CATEGORIES.map(([k,title,sub]) => (
-          <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcomes([]); setSeverity(0)}}
+          <button key={k} onClick={()=>{
+              // BRANCH-INCIDENT-V2: branch first, then what happened.
+              if (ORG_BRANCHES.length > 0 && !branchId) {
+                alert('Please choose the branch where this happened first.')
+                return
+              }
+              setCategory(k); setHarmType(''); setOutcomes([]); setSeverity(0)}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:8,borderRadius:12,
               border: category===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.12)',
               background: category===k ? 'rgba(79,70,229,.06)' : 'transparent', cursor:'pointer'}}>
