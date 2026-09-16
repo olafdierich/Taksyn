@@ -8458,6 +8458,32 @@ function UsersView({ user, setAuditLog }) {
     }).catch(e => { if (alive) setEditBranchErr(e?.message || 'unknown error') })
     return () => { alive = false }
   }, [editingUser?.id, editingOrgId, workforceOrgId])
+  // INDUSTRY-ASSIGN-V1: industry tick boxes in Edit Team Member, alongside
+  // Additional Positions. Same load / save pattern as the branch ticks.
+  const [editIndList, setEditIndList] = useState([])      // [{id, name}]
+  const [editIndIds, setEditIndIds] = useState(null)      // null = not loaded
+  const [editIndOrig, setEditIndOrig] = useState([])
+  const [editIndOrgId, setEditIndOrgId] = useState(null)
+  const [editIndErr, setEditIndErr] = useState('')
+  useEffect(() => {
+    setEditIndList([]); setEditIndIds(null); setEditIndOrig([]); setEditIndOrgId(null); setEditIndErr('')
+    const iOrg = editingOrgId || workforceOrgId
+    if (!editingUser?.id || !iOrg || !isConfigured()) return
+    let alive = true
+    Promise.all([
+      supabase.from('org_industry_links').select('industry_id,is_primary,global_industries(name)').eq('org', iOrg),
+      supabase.from('member_industries').select('industry_id').eq('org_id', iOrg).eq('user_id', editingUser.id)
+    ]).then(([l, m]) => {
+      if (!alive) return
+      if (l.error || m.error) { setEditIndErr((l.error || m.error).message); return }
+      const list = (l.data || [])
+        .map(r => ({ id: r.industry_id, name: r.global_industries?.name || '', primary: !!r.is_primary }))
+        .sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0) || a.name.localeCompare(b.name))
+      const ids = (m.data || []).map(r => r.industry_id)
+      setEditIndList(list); setEditIndIds(ids); setEditIndOrig(ids); setEditIndOrgId(iOrg)
+    }).catch(e => { if (alive) setEditIndErr(e?.message || 'unknown error') })
+    return () => { alive = false }
+  }, [editingUser?.id, editingOrgId, workforceOrgId])
 
   const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
   const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
@@ -8851,6 +8877,39 @@ function UsersView({ user, setAuditLog }) {
       if (_bFail) alert('Profile details were saved, but the branch changes could not be applied (' + _bFail + ').')
     } else if (isConfigured() && _bChanged) {
       alert('Profile details were saved, but the branch changes were not: the branch list was loaded for a different organisation. Please reopen this member and try again.')
+    }
+    // INDUSTRY-ASSIGN-V1: apply industry ticks. Diff against the database
+    // as it is now, ignore duplicates, then prove the result by reading back.
+    const _iChanged = !!editIndIds && [...editIndIds].sort().join() !== [...editIndOrig].sort().join()
+    if (isConfigured() && _iChanged && editIndOrgId && editIndOrgId === orgId) {
+      let _iFail = ''
+      const { data: _iCur, error: _ice } = await supabase.from('member_industries')
+        .select('industry_id').eq('org_id', orgId).eq('user_id', id)
+      if (_ice) _iFail = 'could not read current industries: ' + _ice.message
+      const _icur = (_iCur || []).map(r => r.industry_id)
+      const _iadd = _iFail ? [] : editIndIds.filter(x => !_icur.includes(x))
+      const _idel = _iFail ? [] : _icur.filter(x => !editIndIds.includes(x))
+      if (_iadd.length) {
+        const { error: _iie } = await supabase.from('member_industries')
+          .upsert(_iadd.map(x => ({ org_id: orgId, user_id: id, industry_id: x })),
+                  { onConflict: 'user_id,org_id,industry_id', ignoreDuplicates: true })
+        if (_iie) _iFail = _iie.message
+      }
+      if (!_iFail && _idel.length) {
+        const { error: _ide } = await supabase.from('member_industries')
+          .delete().eq('org_id', orgId).eq('user_id', id).in('industry_id', _idel)
+        if (_ide) _iFail = _ide.message
+      }
+      if (!_iFail) {
+        const { data: _iNow, error: _ire } = await supabase.from('member_industries')
+          .select('industry_id').eq('org_id', orgId).eq('user_id', id)
+        if (_ire) _iFail = 'could not confirm the result: ' + _ire.message
+        else if ((_iNow || []).map(r => r.industry_id).sort().join() !== [...editIndIds].sort().join())
+          _iFail = 'permission denied, or changed elsewhere at the same time'
+      }
+      if (_iFail) alert('Profile details were saved, but the industry changes could not be applied (' + _iFail + ').')
+    } else if (isConfigured() && _iChanged) {
+      alert('Profile details were saved, but the industry changes were not: the industry list was loaded for a different organisation. Please reopen this member and try again.')
     }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
     const addedPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
@@ -9258,6 +9317,28 @@ function UsersView({ user, setAuditLog }) {
                     </div>
                   )}
                   <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>No ticks = works across all branches.</div>
+                </div>
+              )}
+              {/* INDUSTRY-ASSIGN-V1: only for orgs with two or more industries */}
+              {(editIndErr || editIndList.length > 1) && (
+                <div className="form-field">
+                  <label className="form-label">Industries</label>
+                  {editIndErr ? (
+                    <div style={{fontSize:12,color:'var(--red)'}}>Could not load industries: {editIndErr}</div>
+                  ) : editIndIds === null ? (
+                    <div style={{fontSize:12,color:'var(--t2)'}}>Loading industries...</div>
+                  ) : (
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'6px 16px'}}>
+                      {editIndList.map(ind => (
+                        <label key={ind.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:13,cursor:'pointer'}}>
+                          <input type="checkbox" checked={editIndIds.includes(ind.id)}
+                            onChange={e => { const on = e.target.checked; setEditIndIds(prev => on ? [...(prev || []), ind.id] : (prev || []).filter(x => x !== ind.id)) }}/>
+                          <span>{ind.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>The services this person works in. Only this organisation's industries are listed.</div>
                 </div>
               )}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--s3)',borderRadius:8,marginBottom:10}}>
