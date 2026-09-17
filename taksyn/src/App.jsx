@@ -18795,6 +18795,26 @@ function ReportIssueView({ user, embedded }) {
   // primary first. Empty or single -> no picker, resolved silently.
   const [cmpInds, setCmpInds] = useState([])
   const [cmpInd, setCmpInd] = useState('')
+  // COMPLAINT-BRANCH-V1: [[branch_id, name], ...] active branches, and the choice.
+  const [cmpBranches, setCmpBranches] = useState([])
+  const [cmpBranch, setCmpBranch] = useState('')
+  useEffect(() => {
+    if (!isConfigured() || !user?.org) return
+    let alive = true
+    ;(async () => {
+      try {
+        const oid = await resolveTaskOrgId({ org: user.org })
+        if (!alive || !oid) return
+        const { data, error } = await supabase.from('org_branches')
+          .select('id,name').eq('org_id', oid).eq('is_active', true).order('name')
+        if (!alive || error) return
+        const rows = (data || []).map(r => [r.id, r.name])
+        setCmpBranches(rows)
+        if (rows.length === 1) setCmpBranch(rows[0][0])
+      } catch (e) { console.error('COMPLAINT-BRANCH-V1 load failed:', e) }
+    })()
+    return () => { alive = false }
+  }, [user?.org])
 
   useEffect(()=>{
     if(!isConfigured()) return
@@ -18829,7 +18849,9 @@ function ReportIssueView({ user, embedded }) {
     if(!title.trim()||!desc.trim()) return
     // Required where there is a choice: a defaulted service reads exactly
     // like a recorded one, which is the thing the picker exists to prevent.
-    if (cmpInds.length > 1 && !cmpInd) return
+    // COMPLAINT-BRANCH-V2: branch first, and every missing choice says so.
+    if (cmpBranches.length > 0 && !cmpBranch) { alert('Please choose the branch this is about first.'); return }
+    if (cmpInds.length > 1 && !cmpInd) { alert('Please choose which service this is about.'); return }
     setSubmitting(true)
     const now = new Date().toISOString()
     const payload = {
@@ -18843,12 +18865,15 @@ function ReportIssueView({ user, embedded }) {
       is_anonymous: anon,
     }
     if (cmpInd) payload.industry_id = cmpInd
+    if (cmpBranch) payload.branch_id = cmpBranch // COMPLAINT-BRANCH-V1
     if(photo) payload.photo_url = photo
     if(isConfigured()) {
       try {
         const { error } = await supabase.from('issue_reports').insert(payload)
         if(error) throw error
       } catch(err) {
+        // COMPLAINT-BRANCH-V1: say why, instead of failing silently
+        alert('Could not submit: ' + (err?.message || 'unknown error'))
         setSubmitting(false)
         return
       }
@@ -18887,6 +18912,7 @@ function ReportIssueView({ user, embedded }) {
     }
     if(!anon) setIssues(prev=>[{...payload, id:'local_'+Date.now(), created_at:now},...prev])
     setTitle(''); setDesc(''); setPriority('medium'); setPhoto(null); setRtype('request'); setAnon(false)
+    if (cmpBranches.length !== 1) setCmpBranch('') // COMPLAINT-BRANCH-V1
     setSubmitted(true); setSubmitting(false)
     setTimeout(()=>setSubmitted(false), 4000)
   }
@@ -18904,6 +18930,25 @@ function ReportIssueView({ user, embedded }) {
           <textarea className="form-input" rows={4} placeholder="Describe the issue in detail — what happened, where, and when" value={desc} onChange={e=>setDesc(e.target.value)} style={{resize:'vertical'}}/>
           <MicChip setValue={setDesc}/>
         </div>
+        {/* COMPLAINT-BRANCH-V1: required once the org has an active branch */}
+        {cmpBranches.length > 0 && (
+          <div className="form-group">
+            <label className="form-label">Which branch is this about? *</label>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {cmpBranches.map(([id,name])=>(
+                <button key={id} onClick={()=>setCmpBranch(id)}
+                  style={{padding:'7px 16px',borderRadius:20,
+                    border:`2px solid ${cmpBranch===id?'var(--brand)':'var(--border)'}`,
+                    background:cmpBranch===id?'rgba(99,102,241,.1)':'none',
+                    color:cmpBranch===id?'var(--brand)':'var(--t2)',
+                    fontWeight:cmpBranch===id?700:400,cursor:'pointer',fontSize:13,
+                    fontFamily:'inherit',transition:'all .15s'}}>
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {cmpInds.length > 1 && (
           <div className="form-group">
             <label className="form-label">Which service is this about? *</label>
@@ -18975,7 +19020,18 @@ function ReportIssueView({ user, embedded }) {
           )}
         </div>
         {submitted && <div style={{padding:'10px 14px',borderRadius:8,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.3)',color:'#059669',fontWeight:600,marginBottom:12}}>✓ Request logged successfully</div>}
-        <button className="btn btn-primary" disabled={!title.trim()||!desc.trim()||submitting} onClick={submit} style={{width:'100%'}}>
+        {/* COMPLAINT-BRANCH-V3: greyed out until every required choice is made */}
+        {(() => {
+          const _need = !title.trim() ? 'Add a title'
+            : !desc.trim() ? 'Add a description'
+            : (cmpBranches.length > 0 && !cmpBranch) ? 'Choose the branch this is about'
+            : (cmpInds.length > 1 && !cmpInd) ? 'Choose which service this is about'
+            : ''
+          return _need && !submitting
+            ? <div style={{fontSize:12,color:'var(--t3)',marginBottom:6,textAlign:'center'}}>{_need} to submit.</div>
+            : null
+        })()}
+        <button className="btn btn-primary" disabled={!title.trim()||!desc.trim()||submitting||(cmpBranches.length>0&&!cmpBranch)||(cmpInds.length>1&&!cmpInd)} onClick={submit} style={{width:'100%'}}>
           {submitting?'Submitting…':'Submit Issue Report'}
         </button>
       </div>
