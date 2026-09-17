@@ -58,6 +58,13 @@ const CSS = `
   .b2{background:var(--band-2)}.b3{background:var(--band-3)}
   .b4{background:var(--band-4)}.b5{background:var(--band-5)}
   .delta{font-size:11.5px;font-weight:600;white-space:nowrap}
+  /* REPORT-SPARK-V1: six-month bars. Slate, not green or amber: colour in
+     this table already means severity. Height is set inline per bar. */
+  th.spark,td.spark{border-left:1px solid var(--rule);width:74px}
+  .spark-b{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:22px}
+  .spark-b i{display:block;width:6px;background:#C4CBD5}
+  .spark-b i.now{background:#64748B}
+  .spark-b i.z{background:var(--rule)}
   .up{color:var(--flag)}.down{color:var(--good)}.flat{color:var(--ink-3)}
   .key{display:flex;flex-wrap:wrap;border:1px solid var(--rule);margin:12px 0 2px}
   .key div{flex:1 1 0;min-width:88px;padding:6px 8px 7px;
@@ -122,7 +129,7 @@ const CSS = `
        Browsers drop backgrounds at print unless told not to. Deliberately
        a list, not *: a blanket rule would also print screen-only fills. */
     .b0,.b1,.b2,.b3,.b4,.b5,.yoy,.r-low,.r-mod,.r-high,.r-ext,
-    .flagbox,.goodbox,.gapbox,.sbar span{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .flagbox,.goodbox,.gapbox,.sbar span,.spark-b i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .sheet{margin:0;padding:0;box-shadow:none;max-width:none}
     h2{break-after:avoid}
     .subs,.stats,table,.mx,.flagbox,.goodbox,.gapbox,.stat,.two{break-inside:avoid}
@@ -330,16 +337,29 @@ export function openBoardReport(o) {
     H.push('<h2>Category by month</h2>')
     H.push('<p>Each cell is shaded by the <em>worst severity recorded in it</em>, not by how many incidents it holds. One critical incident darkens a cell more than nine minor ones. The last column compares '+esc(last.label)+' against the months before it: a percentage where there is enough history to carry one, and otherwise the two counts side by side \u2014 this month against the total of the five before.</p>')
     H.push('<div class="key"><div class="b0">— none</div><div class="b1">1 minor</div><div class="b2">2 moderate</div><div class="b3">3 major</div><div class="b4">4 severe</div><div class="b5">5 critical</div></div>')
+    // REPORT-SPARK-V1: one bar per month on ONE scale for the whole table,
+    // so a single incident never draws as tall as twenty. The cells beside
+    // it carry the exact counts; the bars carry only the shape.
+    const sparkMax = Math.max(1, ...cats.map(c =>
+      Math.max(0, ...months.map(m => cell(c, m).n))))
+    const spark = (c) => '<div class="spark-b">' + months.map((m, k) => {
+      const n = cell(c, m).n
+      const cls = [k === months.length - 1 ? 'now' : '', n ? '' : 'z']
+        .filter(Boolean).join(' ')
+      const h = n ? Math.max(3, Math.round(n / sparkMax * 22)) : 1
+      return '<i' + (cls ? ' class="' + cls + '"' : '') + ' style="height:' + h + 'px"></i>'
+    }).join('') + '</div>'
     H.push('<table><thead><tr><th class="cat">Category</th>')
     H.push('<th class="yoy">'+esc(yoyLabel)+'</th>')
     months.forEach(m => H.push('<th>'+esc(String(m.label).split(' ')[0])+'</th>'))
-    H.push('<th class="sep">Total</th><th class="sep">vs before</th></tr></thead><tbody>')
+    H.push('<th class="spark">'+months.length+' months</th><th class="sep">Total</th><th class="sep">vs before</th></tr></thead><tbody>')
     cats.forEach(c => {
       H.push('<tr><td class="cat">'+esc(catLabel(c))+'</td>')
       const y = yoyCell(c)
       H.push('<td class="yoy">'+(y||'—')+'</td>')
       months.forEach(m => { const x = cell(c,m)
         H.push('<td><span class="cell b'+x.worst+'">'+(x.n||'—')+'</span></td>') })
+      H.push('<td class="spark">'+spark(c)+'</td>')
       const t = trend(c)
       H.push('<td class="tot">'+catMap[c]+'</td><td class="trend"><span class="delta '+t.d+'">'+t.t+'</span></td></tr>')
     })
