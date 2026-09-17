@@ -12,11 +12,11 @@
 
 const CSS = `
   :root{
-    --paper:#FBFAF7; --ink:#151E2D; --ink-2:#4A5568; --ink-3:#8A94A6;
+    --paper:#FBFAF7; --ink:#1A2033; --ink-2:#4A5568; --ink-3:#8A94A6;
     --rule:#D8D4CB; --rule-2:#EDEAE3;
-    --band-0:#FFF; --band-1:#EAF2EE; --band-2:#FDF3D4;
-    --band-3:#FBDFC3; --band-4:#F7C7C4; --band-5:#E2D3EC;
-    --accent:#1F5E58; --flag:#A3341F; --good:#2E6B4F;
+    --band-0:#FFF; --band-1:#A7E8D0; --band-2:#FBD89B;
+    --band-3:#FCC49A; --band-4:#FCA5A5; --band-5:#CDBDF9;
+    --accent:#00A87E; --flag:#A32D2D; --good:#0F6E56;--accent-ink:#0F6E56;--band-ok:#E7F7F0;--band-warn:#FEF3C7;--band-high:#FFEDD5;--band-bad:#FEE2E2;
   }
   *{box-sizing:border-box}
   body{margin:0;background:#E9E6DF;color:var(--ink);
@@ -34,7 +34,7 @@ const CSS = `
     color:var(--ink-2);margin:22px 0 7px}
   p{margin:0 0 12px;max-width:68ch}
   .lede{font-size:17px;color:var(--ink-2)}
-  .eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+  .eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--accent-ink)}
   .note{font-size:13px;color:var(--ink-2)}
   .masthead{border-bottom:3px solid var(--ink);padding-bottom:20px}
   .runline{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
@@ -90,13 +90,13 @@ const CSS = `
   .mx .mx-l{font-family:'Bricolage Grotesque',sans-serif;font-size:9px;font-weight:600;
     letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);background:#F3F1EB;
     display:flex;align-items:center;justify-content:center;line-height:1.2}
-  .r-low{background:#E7F0E9}.r-mod{background:#FDF3D4}
-  .r-high{background:#FBDFC3}.r-ext{background:#F7C7C4}
+  .r-low{background:var(--band-ok)}.r-mod{background:var(--band-warn)}
+  .r-high{background:var(--band-high)}.r-ext{background:var(--band-bad)}
   .r-none{background:#fff;color:var(--ink-3)}
   .two{display:grid;grid-template-columns:1fr 1fr;gap:28px}
-  .flagbox{border-left:4px solid var(--flag);background:#FCF3F1;padding:14px 17px 15px;margin:18px 0}
+  .flagbox{border-left:4px solid var(--flag);background:var(--band-bad);padding:14px 17px 15px;margin:18px 0}
   .flagbox h3{color:var(--flag)}
-  .goodbox{border-left:4px solid var(--good);background:#EFF5F1;padding:14px 17px 15px;margin:18px 0}
+  .goodbox{border-left:4px solid var(--good);background:var(--band-ok);padding:14px 17px 15px;margin:18px 0}
   .goodbox h3{color:var(--good)}
   .gapbox{border:1px dashed var(--ink-3);background:#F5F3EE;padding:14px 17px 15px;margin:16px 0}
   .gapbox h3{color:var(--ink-2)}
@@ -682,13 +682,14 @@ export function openBoardReport(o) {
     // print-color-adjust below is load-bearing: without it printed pages drop
     // the background entirely and the band prints as grey text with no
     // divider -- in the PDF that gets handed over, while the screen looks fine.
+    // REPORT-COLOURS-V1: palette aligned to projectReport.js; bright band, dark writing.
     // IRN-BAND-V3: verdant sea. Was #1F5E58, which read as pine.
-    const bandBase = 'margin:56px 0 16px;padding:22px 26px;background:#1B7A5A;color:#FBFAF7;'
-      + 'border-left:8px solid #151E2D;border-radius:4px;line-height:1.15;'
+    const bandBase = 'margin:56px 0 16px;padding:22px 26px;background:#00A87E;color:#1A2033;'
+      + 'border-left:8px solid #1A2033;border-radius:4px;line-height:1.15;'
       + '-webkit-print-color-adjust:exact;print-color-adjust:exact'
     const sectionBand = (eyebrow, label, extra) =>
       '<div style="'+bandBase+(extra||'')+'">'
-      + '<div style="font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;opacity:.72;margin-bottom:7px">'+esc(eyebrow)+'</div>'
+      + '<div style="font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin-bottom:7px">'+esc(eyebrow)+'</div>'
       + '<div style="font-size:38px;font-weight:800;letter-spacing:-.4px">'+esc(label)+'</div></div>'
     // REPORT-BRANCH-V2: organisation total, then each branch, and inside
     // each branch one page per service. Without branches, the organisation
@@ -704,7 +705,7 @@ export function openBoardReport(o) {
       // even with no incidents, so each branch reads the same way.
       industries.forEach(([sid, sname]) => {
         const sub = serviceOf(list, sid)
-        H.push(sectionBand(label, sname, ';page-break-before:always;background:#2E8C6B'))
+        H.push(sectionBand(label, sname, ';page-break-before:always;background:#A7E8D0'))
         H.push('<p class="note">Incidents ' + esc(where) + ' reported under ' + esc(sname) + ' only.'
           + (sid === primaryId ? ' Includes incidents recorded before a service was chosen, which resolve to this one.' : '')
           + '</p>')
