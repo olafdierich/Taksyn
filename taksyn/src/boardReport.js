@@ -12,11 +12,11 @@
 
 const CSS = `
   :root{
-    --paper:#FBFAF7; --ink:#151E2D; --ink-2:#4A5568; --ink-3:#8A94A6;
+    --paper:#FBFAF7; --ink:#1A2033; --ink-2:#4A5568; --ink-3:#8A94A6;
     --rule:#D8D4CB; --rule-2:#EDEAE3;
-    --band-0:#FFF; --band-1:#EAF2EE; --band-2:#FDF3D4;
-    --band-3:#FBDFC3; --band-4:#F7C7C4; --band-5:#E2D3EC;
-    --accent:#1F5E58; --flag:#A3341F; --good:#2E6B4F;
+    --band-0:#FFF; --band-1:#A7E8D0; --band-2:#FBD89B;
+    --band-3:#FCC49A; --band-4:#FCA5A5; --band-5:#CDBDF9;
+    --accent:#00A87E; --flag:#A32D2D; --good:#0F6E56;--accent-ink:#0F6E56;--band-ok:#E7F7F0;--band-warn:#FEF3C7;--band-high:#FFEDD5;--band-bad:#FEE2E2;
   }
   *{box-sizing:border-box}
   body{margin:0;background:#E9E6DF;color:var(--ink);
@@ -34,7 +34,7 @@ const CSS = `
     color:var(--ink-2);margin:22px 0 7px}
   p{margin:0 0 12px;max-width:68ch}
   .lede{font-size:17px;color:var(--ink-2)}
-  .eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+  .eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--accent-ink)}
   .note{font-size:13px;color:var(--ink-2)}
   .masthead{border-bottom:3px solid var(--ink);padding-bottom:20px}
   .runline{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
@@ -58,6 +58,24 @@ const CSS = `
   .b2{background:var(--band-2)}.b3{background:var(--band-3)}
   .b4{background:var(--band-4)}.b5{background:var(--band-5)}
   .delta{font-size:11.5px;font-weight:600;white-space:nowrap}
+  /* REPORT-SPARK-V1: six-month bars. Slate, not green or amber: colour in
+     this table already means severity. Height is set inline per bar. */
+  th.spark,td.spark{border-left:1px solid var(--rule);width:74px}
+  .spark-b{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:22px}
+  .spark-b i{display:block;width:8px;background:#94A3B8}
+  .spark-b i.now{background:#334155}
+  .spark-b i.z{background:var(--rule)}
+  /* REPORT-CARDS-V1: category cards. Two across on paper, one on a phone. */
+  .catcards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 8px}
+  .catcard{border:1px solid var(--rule-2);border-left:4px solid var(--accent);border-radius:6px;
+    padding:11px 14px 12px;background:#fff;break-inside:avoid}
+  .catcard-h{display:flex;align-items:center;gap:10px}
+  .catcard-i{width:34px;height:34px;border-radius:50%;background:var(--band-ok);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .catcard-n{display:block;font-size:22px;font-weight:700;line-height:1.05;color:var(--ink)}
+  .catcard-t{display:block;font-size:12px;color:var(--ink-2)}
+  .catcard p{margin:8px 0 0;font-size:13px;line-height:1.5}
+  @media screen and (max-width:760px){ .catcards{grid-template-columns:1fr} }
   .up{color:var(--flag)}.down{color:var(--good)}.flat{color:var(--ink-3)}
   .key{display:flex;flex-wrap:wrap;border:1px solid var(--rule);margin:12px 0 2px}
   .key div{flex:1 1 0;min-width:88px;padding:6px 8px 7px;
@@ -90,13 +108,13 @@ const CSS = `
   .mx .mx-l{font-family:'Bricolage Grotesque',sans-serif;font-size:9px;font-weight:600;
     letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);background:#F3F1EB;
     display:flex;align-items:center;justify-content:center;line-height:1.2}
-  .r-low{background:#E7F0E9}.r-mod{background:#FDF3D4}
-  .r-high{background:#FBDFC3}.r-ext{background:#F7C7C4}
+  .r-low{background:var(--band-ok)}.r-mod{background:var(--band-warn)}
+  .r-high{background:var(--band-high)}.r-ext{background:var(--band-bad)}
   .r-none{background:#fff;color:var(--ink-3)}
   .two{display:grid;grid-template-columns:1fr 1fr;gap:28px}
-  .flagbox{border-left:4px solid var(--flag);background:#FCF3F1;padding:14px 17px 15px;margin:18px 0}
+  .flagbox{border-left:4px solid var(--flag);background:var(--band-bad);padding:14px 17px 15px;margin:18px 0}
   .flagbox h3{color:var(--flag)}
-  .goodbox{border-left:4px solid var(--good);background:#EFF5F1;padding:14px 17px 15px;margin:18px 0}
+  .goodbox{border-left:4px solid var(--good);background:var(--band-ok);padding:14px 17px 15px;margin:18px 0}
   .goodbox h3{color:var(--good)}
   .gapbox{border:1px dashed var(--ink-3);background:#F5F3EE;padding:14px 17px 15px;margin:16px 0}
   .gapbox h3{color:var(--ink-2)}
@@ -117,6 +135,12 @@ const CSS = `
   @media print{ .noprint{display:none} }
   @media print{
     body{background:#fff}
+    /* REPORT-PRINT-V1: this shading carries meaning (severity cells and key,
+       risk rows, flag/good/gap boxes, last year's column, stat bars).
+       Browsers drop backgrounds at print unless told not to. Deliberately
+       a list, not *: a blanket rule would also print screen-only fills. */
+    .b0,.b1,.b2,.b3,.b4,.b5,.yoy,.r-low,.r-mod,.r-high,.r-ext,
+    .flagbox,.goodbox,.gapbox,.sbar span,.spark-b i,.catcard-i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .sheet{margin:0;padding:0;box-shadow:none;max-width:none}
     h2{break-after:avoid}
     .subs,.stats,table,.mx,.flagbox,.goodbox,.gapbox,.stat,.two{break-inside:avoid}
@@ -324,16 +348,29 @@ export function openBoardReport(o) {
     H.push('<h2>Category by month</h2>')
     H.push('<p>Each cell is shaded by the <em>worst severity recorded in it</em>, not by how many incidents it holds. One critical incident darkens a cell more than nine minor ones. The last column compares '+esc(last.label)+' against the months before it: a percentage where there is enough history to carry one, and otherwise the two counts side by side \u2014 this month against the total of the five before.</p>')
     H.push('<div class="key"><div class="b0">— none</div><div class="b1">1 minor</div><div class="b2">2 moderate</div><div class="b3">3 major</div><div class="b4">4 severe</div><div class="b5">5 critical</div></div>')
+    // REPORT-SPARK-V1: one bar per month on ONE scale for the whole table,
+    // so a single incident never draws as tall as twenty. The cells beside
+    // it carry the exact counts; the bars carry only the shape.
+    const sparkMax = Math.max(1, ...cats.map(c =>
+      Math.max(0, ...months.map(m => cell(c, m).n))))
+    const spark = (c) => '<div class="spark-b">' + months.map((m, k) => {
+      const n = cell(c, m).n
+      const cls = [k === months.length - 1 ? 'now' : '', n ? '' : 'z']
+        .filter(Boolean).join(' ')
+      const h = n ? Math.max(3, Math.round(n / sparkMax * 22)) : 1
+      return '<i' + (cls ? ' class="' + cls + '"' : '') + ' style="height:' + h + 'px"></i>'
+    }).join('') + '</div>'
     H.push('<table><thead><tr><th class="cat">Category</th>')
     H.push('<th class="yoy">'+esc(yoyLabel)+'</th>')
     months.forEach(m => H.push('<th>'+esc(String(m.label).split(' ')[0])+'</th>'))
-    H.push('<th class="sep">Total</th><th class="sep">vs before</th></tr></thead><tbody>')
+    H.push('<th class="spark">'+months.length+' months</th><th class="sep">Total</th><th class="sep">vs before</th></tr></thead><tbody>')
     cats.forEach(c => {
       H.push('<tr><td class="cat">'+esc(catLabel(c))+'</td>')
       const y = yoyCell(c)
       H.push('<td class="yoy">'+(y||'—')+'</td>')
       months.forEach(m => { const x = cell(c,m)
         H.push('<td><span class="cell b'+x.worst+'">'+(x.n||'—')+'</span></td>') })
+      H.push('<td class="spark">'+spark(c)+'</td>')
       const t = trend(c)
       H.push('<td class="tot">'+catMap[c]+'</td><td class="trend"><span class="delta '+t.d+'">'+t.t+'</span></td></tr>')
     })
@@ -341,6 +378,80 @@ export function openBoardReport(o) {
     // Raw pair, not a percentage: with a small base month an arrow overstates.
     H.push('<p class="note"><b>'+inc.length+'</b> incidents across '+esc(periodLabel)
       +', against <b>'+yoyWindow+'</b> in the same six months a year earlier.</p>')
+    // REPORT-CARDS-V1: a card for each category with two or more incidents,
+    // most first, at most six. Counts and months only, never a judgement --
+    // the reader draws the conclusion. Numbers come from cell(), as the table.
+    const kcMonthFull = { jan:'January', feb:'February', mar:'March', apr:'April',
+      may:'May', jun:'June', jul:'July', aug:'August', sep:'September',
+      oct:'October', nov:'November', dec:'December' }
+    const kcKey = (m) => String(m.label).slice(0, 3).toLowerCase()
+    const kcName = (m) => kcMonthFull[kcKey(m)] || String(m.label).split(' ')[0]
+    const kcWords = ['no','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve']
+    // The last month is still running if it is this calendar month: say
+    // 'has ... so far', not 'had'.
+    const kcRunning = last.year === new Date().getFullYear() &&
+      kcKey(last) === Object.keys(kcMonthFull)[new Date().getMonth()]
+    const kcText = (c) => {
+      const L = months.length
+      const counts = months.map(m => cell(c, m).n)
+      const total = counts.reduce((a, b) => a + b, 0)
+      const used = months.filter((m, k) => counts[k] > 0)
+      const onlyOne = used.length === 1
+      const out = []
+      let s1 = total + ' in the last ' + (kcWords[L] || L) + ' months'
+      if (onlyOne) s1 += ', ' + (total === 2 ? 'both' : 'all') + ' in ' + kcName(used[0])
+      out.push(s1 + '.')
+      if (L >= 2) {
+        const cur = counts[L - 1], prev = counts[L - 2]
+        const nowName = kcName(months[L - 1]), prevName = kcName(months[L - 2])
+        const amt = (n) => n ? String(n) : 'none'
+        let s2 = nowName + (kcRunning ? ' has ' : ' had ') + amt(cur) + (kcRunning ? ' so far' : '')
+        if (cur === prev) s2 += ', the same as ' + prevName
+        // "both in August. September has none so far." -- the first sentence
+        // already said where they were, so no "down from" repeat.
+        else if (!(cur === 0 && onlyOne && used[0] === months[L - 2]))
+          s2 += ', ' + (cur > prev ? 'up' : 'down') + ' from ' + amt(prev) + ' in ' + prevName
+        out.push(s2 + '.')
+        // Busiest month only when it is news: earlier than the last two.
+        const early = counts.slice(0, L - 2)
+        const peak = early.length ? Math.max(...early) : 0
+        if (!onlyOne && peak >= 2 && peak > Math.max(cur, prev)) {
+          const pm = months.slice(0, L - 2).filter((m, k) => early[k] === peak)
+          if (pm.length === 1) out.push('Busiest month: ' + kcName(pm[0]) + ', with ' + peak + '.')
+          else if (pm.length === 2) out.push('Busiest months: ' + kcName(pm[0]) + ' and '
+            + kcName(pm[1]) + ', with ' + peak + ' each.')
+        }
+      }
+      return out.join(' ')
+    }
+    const kcIcons = [
+      [/skin|pressure/, '<path d="M12 4l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/>'],
+      [/medication|medicine|drug/, '<rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)"/><path d="M10 10l4 4"/>'],
+      [/\bfall/, '<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>'],
+      [/behav|aggress/, '<circle cx="10" cy="7" r="3"/><path d="M4 20c0-3.5 2.7-6 6-6s6 2.5 6 6M19 8v5M19 16v.5"/>'],
+      [/property|security|theft|damage/, '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'],
+      [/infect|outbreak/, '<circle cx="12" cy="12" r="5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.9 2.9M15.5 15.5l2.9 2.9M5.6 18.4l2.9-2.9M15.5 8.5l2.9-2.9"/>'],
+      [/restrict/, '<path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z"/><path d="M8 12h8"/>'],
+      [/missing|abscond|unaccounted/, '<circle cx="10" cy="10" r="6"/><path d="M14.5 14.5L20 20"/>'],
+      [/injur|wound/, '<rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(45 12 12)"/><path d="M11 11h.01M13 13h.01M11 13h.01M13 11h.01"/>'],
+      [/medical|clinical|health/, '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'],
+      [/environment|safety|hazard/, '<path d="M12 4L21 20H3z"/><path d="M12 10v4M12 17v.5"/>'],
+    ]
+    const kcIcon = (c) => {
+      const s = (String(c) + ' ' + catLabel(c)).toLowerCase()
+      const hit = kcIcons.find(([re]) => re.test(s))
+      return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0F6E56"'
+        + ' stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        + (hit ? hit[1] : '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/>') + '</svg>'
+    }
+    const kcCats = cats.filter(c => catMap[c] >= 2).slice(0, 6)
+    if (kcCats.length) {
+      H.push('<h4>Categories with two or more incidents</h4><div class="catcards">')
+      kcCats.forEach(c => H.push('<div class="catcard"><div class="catcard-h"><span class="catcard-i">'
+        + kcIcon(c) + '</span><div><b class="catcard-n">' + catMap[c] + '</b><span class="catcard-t">'
+        + esc(catLabel(c)) + '</span></div></div><p>' + esc(kcText(c)) + '</p></div>'))
+      H.push('</div>')
+    }
     if (dormant.length) {
       H.push('<div class="flagbox"><h3>'+dormant.length+' categor'
         +(dormant.length===1?'y that was appearing regularly has stopped':'ies that were appearing regularly have stopped')+'</h3>')
@@ -682,13 +793,14 @@ export function openBoardReport(o) {
     // print-color-adjust below is load-bearing: without it printed pages drop
     // the background entirely and the band prints as grey text with no
     // divider -- in the PDF that gets handed over, while the screen looks fine.
+    // REPORT-COLOURS-V1: palette aligned to projectReport.js; bright band, dark writing.
     // IRN-BAND-V3: verdant sea. Was #1F5E58, which read as pine.
-    const bandBase = 'margin:56px 0 16px;padding:22px 26px;background:#1B7A5A;color:#FBFAF7;'
-      + 'border-left:8px solid #151E2D;border-radius:4px;line-height:1.15;'
+    const bandBase = 'margin:56px 0 16px;padding:22px 26px;background:#00A87E;color:#1A2033;'
+      + 'border-left:8px solid #1A2033;border-radius:4px;line-height:1.15;'
       + '-webkit-print-color-adjust:exact;print-color-adjust:exact'
     const sectionBand = (eyebrow, label, extra) =>
       '<div style="'+bandBase+(extra||'')+'">'
-      + '<div style="font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;opacity:.72;margin-bottom:7px">'+esc(eyebrow)+'</div>'
+      + '<div style="font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin-bottom:7px">'+esc(eyebrow)+'</div>'
       + '<div style="font-size:38px;font-weight:800;letter-spacing:-.4px">'+esc(label)+'</div></div>'
     // REPORT-BRANCH-V2: organisation total, then each branch, and inside
     // each branch one page per service. Without branches, the organisation
@@ -704,7 +816,7 @@ export function openBoardReport(o) {
       // even with no incidents, so each branch reads the same way.
       industries.forEach(([sid, sname]) => {
         const sub = serviceOf(list, sid)
-        H.push(sectionBand(label, sname, ';page-break-before:always;background:#2E8C6B'))
+        H.push(sectionBand(label, sname, ';page-break-before:always;background:#A7E8D0'))
         H.push('<p class="note">Incidents ' + esc(where) + ' reported under ' + esc(sname) + ' only.'
           + (sid === primaryId ? ' Includes incidents recorded before a service was chosen, which resolve to this one.' : '')
           + '</p>')
