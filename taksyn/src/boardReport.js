@@ -117,6 +117,12 @@ const CSS = `
   @media print{ .noprint{display:none} }
   @media print{
     body{background:#fff}
+    /* REPORT-PRINT-V1: this shading carries meaning (severity cells and key,
+       risk rows, flag/good/gap boxes, last year's column, stat bars).
+       Browsers drop backgrounds at print unless told not to. Deliberately
+       a list, not *: a blanket rule would also print screen-only fills. */
+    .b0,.b1,.b2,.b3,.b4,.b5,.yoy,.r-low,.r-mod,.r-high,.r-ext,
+    .flagbox,.goodbox,.gapbox,.sbar span{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .sheet{margin:0;padding:0;box-shadow:none;max-width:none}
     h2{break-after:avoid}
     .subs,.stats,table,.mx,.flagbox,.goodbox,.gapbox,.stat,.two{break-inside:avoid}
