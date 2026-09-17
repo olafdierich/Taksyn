@@ -1,14 +1,15 @@
 -- 2026-09-16-branches.sql
 -- Branches / sites: tables, record columns, access rules, save-time check.
 -- Applied to SANDBOX (buqlbmgxevuldahhdbxo) 16 Sep 2026. BR-T PASSED.
--- NOT YET ON LIVE.
+-- LIVE: applied 17 Sep 2026 (see the v90 handover).
 --
 -- Decisions:
 --   * Empty branch_id = "All branches" = organisation-wide.
 --   * Manager/supervisor with no branches assigned = organisation-wide.
 --   * Deactivate, never delete (no cascade on the record FKs).
---   * tasks.industry_id already existed (uuid, with FK, 0 of 64 filled on
---     sandbox), so it is NOT added here. Empty = "General (any industry)".
+--   * tasks.industry_id: existed on SANDBOX (uuid, with FK) but was MISSING on
+--     LIVE (LV-04, 17 Sep), so it is added here "if not exists" -- a no-op on
+--     sandbox. Empty = "General (any industry)".
 --   * incidents.org stores the org ID; tasks.org and issue_reports.org store
 --     the org NAME. check_record_branch handles both.
 --
@@ -57,6 +58,9 @@ create unique index if not exists member_industries_one_primary
 alter table public.tasks         add column if not exists branch_id uuid references public.org_branches(id);
 alter table public.incidents     add column if not exists branch_id uuid references public.org_branches(id);
 alter table public.issue_reports add column if not exists branch_id uuid references public.org_branches(id);
+
+-- Industry on tasks (missing on LIVE, present on sandbox); empty = General
+alter table public.tasks add column if not exists industry_id uuid references public.global_industries(id);
 
 alter table public.org_branches      enable row level security;
 alter table public.member_branches   enable row level security;
