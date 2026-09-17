@@ -3784,6 +3784,31 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   const [taskTeamMembers, setTaskTeamMembers] = useState([]) // members of the selected team
   const [assignAll, setAssignAll] = useState(true)
   const [userTeamIds, setUserTeamIds] = useState([]) // team IDs the logged-in user belongs to
+  // TASK-BRANCH-V1: branch and industry choices for the task forms.
+  const [taskBranches, setTaskBranches] = useState([])       // [{id, name}] active
+  const [taskIndustries, setTaskIndustries] = useState([])   // [{id, name}]
+  const [taskBranchNames, setTaskBranchNames] = useState({}) // TASK-BRANCH-V2: id -> name, incl. deactivated
+  useEffect(() => {
+    if (!isConfigured() || !user?.org) return
+    let alive = true
+    ;(async () => {
+      try {
+        const oid = await resolveOrgId(user)
+        if (!alive || !oid) return
+        const [b, l] = await Promise.all([
+          supabase.from('org_branches').select('id,name,is_active').eq('org_id', oid).order('name'),
+          supabase.from('org_industry_links').select('industry_id,is_primary,global_industries(name)').eq('org', oid),
+        ])
+        if (!alive) return
+        setTaskBranches(b.error ? [] : (b.data || []).filter(x => x.is_active))
+        setTaskBranchNames(b.error ? {} : Object.fromEntries((b.data || []).map(x => [x.id, x.name + (x.is_active ? '' : ' (deactivated)')])))
+        setTaskIndustries(l.error ? [] : (l.data || [])
+          .map(r => ({ id: r.industry_id, name: r.global_industries?.name || '', primary: !!r.is_primary }))
+          .sort((x, y) => (y.primary ? 1 : 0) - (x.primary ? 1 : 0) || x.name.localeCompare(y.name)))
+      } catch (e) { console.error('TASK-BRANCH-V1 load failed:', e) }
+    })()
+    return () => { alive = false }
+  }, [user?.org])
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
@@ -4831,6 +4856,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
     }
     // CA-HANDOFF-V1: incident ref appended to the title, never doubled.
     if (caDraft) { const _b = String(taskData.title||'').trim(); const _sfx = ' - ' + caDraft.ref; taskData.title = _b.endsWith(_sfx) ? _b : _b + _sfx; taskData.category = 'Corrective action' }
+    taskData.branch_id = taskData.branch_id || null; taskData.industry_id = taskData.industry_id || null // TASK-BRANCH-V1: '' is not a uuid
     const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, created_by_id:user.id, requires_approval:(taskData.assigned_user_id===user.id?false:true), org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
@@ -5194,6 +5220,22 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                 <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={editTask.category||''} onChange={e=>setEditTask({...editTask,category:e.target.value,department:''})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Department</label><select className="form-select" value={editTask.department||''} onChange={e=>setEditTask({...editTask,department:e.target.value})}><option value="">— Select —</option>{(DEPARTMENTS[editTask.category||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={editTask.priority||''} onChange={e=>setEditTask({...editTask,priority:e.target.value})}>{/* SUP-LOW-V2: supervisors are offered Low only */}{(user.role==='supervisor'?[['low','Low']]:[['critical','Critical'],['high','High'],['medium','Medium'],['low','Low']]).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>
+                {/* TASK-BRANCH-V1 */}
+                {taskIndustries.length > 1 && (
+                  <div className="form-field"><label className="form-label">Industry</label>
+                    <select className="form-select" value={editTask.industry_id||''} onChange={e=>setEditTask({...editTask,industry_id:e.target.value})}>
+                      <option value="">General (any industry)</option>
+                      {taskIndustries.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}
+                    </select></div>
+                )}
+                {(taskBranches.length > 0 || editTask.branch_id) && (
+                  <div className="form-field"><label className="form-label">Branch</label>
+                    <select className="form-select" value={editTask.branch_id||''} onChange={e=>setEditTask({...editTask,branch_id:e.target.value})}>
+                      <option value="">All branches</option>
+                      {taskBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+                      {editTask.branch_id && !taskBranches.some(b=>b.id===editTask.branch_id) && <option value={editTask.branch_id}>{taskBranchNames[editTask.branch_id] || '(deactivated branch)'}</option>}
+                    </select></div>
+                )}
               </div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={editTask.due_date||''} onChange={e=>setEditTask({...editTask,due_date:e.target.value})}/></div>
@@ -5279,7 +5321,10 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowEdit(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={()=>{ const {evidence, comments, ...editable}=editTask; update(sel.id,{...editable,due_time:(editable.compliance&&editable.due_time)?editable.due_time:null}); setShowEdit(false) }}>Save Changes</button>
+                <button className="btn btn-primary" onClick={()=>{ const {evidence, comments, ...editable}=editTask; update(sel.id,{...editable,due_time:(editable.compliance&&editable.due_time)?editable.due_time:null,
+                  /* TASK-BRANCH-V1: '' -> null; only written when the row carries the column */
+                  ...('branch_id' in editable ? { branch_id: editable.branch_id || null } : {}),
+                  ...('industry_id' in editable ? { industry_id: editable.industry_id || null } : {})}); setShowEdit(false) }}>Save Changes</button>
               </div>
             </div>
           </div>
@@ -5350,8 +5395,25 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/>{/* PRIVACY-NOTE-V1: titles and checklists become templates others reuse. */}<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>{'\u26A0\uFE0F'} No names or personal details in the title or checklist items.</div></div>
               <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={newTask.recurrence} onChange={e=>setNewTask({...newTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               <div className="two-col">
+                {/* TASK-BRANCH-V1: industry choice for multi-industry orgs, branch when the org has any */}
+                {taskIndustries.length > 1 ? (
+                  <div className="form-field"><label className="form-label">Industry</label>
+                    <select className="form-select" value={newTask.industry_id||''} onChange={e=>setNewTask({...newTask,industry_id:e.target.value})}>
+                      <option value="">General (any industry)</option>
+                      {taskIndustries.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}
+                    </select></div>
+                ) : (
+                  <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={taskOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
+                )}
+                {taskBranches.length > 0 && (
+                  <div className="form-field"><label className="form-label">Branch</label>
+                    <select className="form-select" value={newTask.branch_id||''} onChange={e=>setNewTask({...newTask,branch_id:e.target.value})}>
+                      <option value="">All branches</option>
+                      {taskBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select></div>
+                )}
+                {/* TASK-BRANCH-V2: Role now follows Industry / Branch */}
                 <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={newTask.assigned_user_id===user.id?'__self':newTask.assigned_role} onChange={e=>{ if(e.target.value==='__self'){ setTaskTeamMembers([]); setNewTask(prev=>({...prev,assigned_role:user.role,position:'',team_id:'',team_name:'',assigned_user_id:user.id,assigned_user_name:user.name,assigned_user_email:user.email||'',assigned_user_ids:[user.id],assigned_user_names:[user.name],approver_id:prev.approver_id||user.id,approver_name:prev.approver_name||user.name})) } else { const wasSelf=newTask.assigned_user_id===user.id; setNewTask(prev=>({...prev,assigned_role:e.target.value,position:'',assigned_user_id:wasSelf?'':prev.assigned_user_id,assigned_user_name:wasSelf?'':prev.assigned_user_name,assigned_user_email:wasSelf?'':prev.assigned_user_email,assigned_user_ids:wasSelf?[]:prev.assigned_user_ids,assigned_user_names:wasSelf?[]:prev.assigned_user_names})) } }}><option value="__self">Myself ({user.name})</option>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
-                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={taskOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
                 {!newTask.team_id&&<div className="form-field"><label className="form-label">Position</label><select className="form-select" value={newTask.position||''} onChange={e=>setNewTask({...newTask,position:e.target.value})}><option value="">— Select —</option>{getPositionsForIndustry(taskOrgIndustryNames.length?taskOrgIndustryNames:(taskOrgIndustry||newTask.industry),newTask.assigned_role,taskOrgCustomPositions,taskOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}</select></div>}
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
@@ -6107,6 +6169,9 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               })()}
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
               {sel.approver_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Approver:</span> {sel.approver_name}{/* SUP-LOW-V2: only say "your review" when this viewer can actually approve */}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&!canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--t2)'}}>Awaiting manager / admin review</span>}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--brand)'}}>⏳ Awaiting your review</span>}</div>}
+              {/* TASK-BRANCH-V2: industry and branch in the details card */}
+              {(taskIndustries.length > 1 || sel.industry_id) && <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Industry:</span> {sel.industry_id ? ((taskIndustries.find(i=>i.id===sel.industry_id)||{}).name || '\u2014') : 'General (any industry)'}</div>}
+              {(taskBranches.length > 0 || sel.branch_id) && <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Branch:</span> {sel.branch_id ? (taskBranchNames[sel.branch_id] || '\u2014') : 'All branches'}</div>}
               {sel.project&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Project:</span> <span style={{color:'#3B82F6',fontWeight:600}}>📁 {sel.project}</span></div>}
             </div>
           </div>
