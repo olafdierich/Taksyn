@@ -3656,6 +3656,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   const [regCycle, setRegCycle] = useState('')
   const [regAssigned, setRegAssigned] = useState('')
   const [regApprover, setRegApprover] = useState('')
+  const [regBranch, setRegBranch] = useState('') // REG-BRANCH-V1: '' all, '__none' = All branches, else branch id
   const [archiveSearch, setArchiveSearch] = useState('')
   const [archiveDateFrom, setArchiveDateFrom] = useState('')
   const [archiveDateTo, setArchiveDateTo] = useState('')
@@ -3788,6 +3789,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   const [taskBranches, setTaskBranches] = useState([])       // [{id, name}] active
   const [taskIndustries, setTaskIndustries] = useState([])   // [{id, name}]
   const [taskBranchNames, setTaskBranchNames] = useState({}) // TASK-BRANCH-V2: id -> name, incl. deactivated
+  const [taskMemberBranches, setTaskMemberBranches] = useState({}) // ACCESS-BRANCH-V1: user_id -> [branch_id]
   useEffect(() => {
     if (!isConfigured() || !user?.org) return
     let alive = true
@@ -3802,6 +3804,12 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
         if (!alive) return
         setTaskBranches(b.error ? [] : (b.data || []).filter(x => x.is_active))
         setTaskBranchNames(b.error ? {} : Object.fromEntries((b.data || []).map(x => [x.id, x.name + (x.is_active ? '' : ' (deactivated)')])))
+        // ACCESS-BRANCH-V1: who is in which branch (a worker only sees their own rows).
+        const { data: mbr } = await supabase.from('member_branches').select('user_id,branch_id').eq('org_id', oid)
+        if (!alive) return
+        const mmap = {}
+        ;(mbr || []).forEach(r => { (mmap[r.user_id] = mmap[r.user_id] || []).push(r.branch_id) })
+        setTaskMemberBranches(mmap)
         setTaskIndustries(l.error ? [] : (l.data || [])
           .map(r => ({ id: r.industry_id, name: r.global_industries?.name || '', primary: !!r.is_primary }))
           .sort((x, y) => (y.primary ? 1 : 0) - (x.primary ? 1 : 0) || x.name.localeCompare(y.name)))
@@ -4979,7 +4987,25 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   // NARROW-VISIBLE-TASKS-V3: the register reads org tasks DIRECTLY, not through
   // orgFiltered (which derives from visible, which now excludes tasks that
   // supervisors and managers are not personally involved in).
-  const _regSource = tasks.filter(t=>t.org?.toLowerCase()===user.org?.toLowerCase())
+  // ACCESS-BRANCH-V1: a manager / supervisor ticked to branches sees tasks in
+  // those branches, "All branches" tasks, and anything they are involved in.
+  // Client admins and people with no branches: unchanged.
+  const _myBr = ['manager','supervisor'].includes(user.role) ? (taskMemberBranches[user.id] || []) : []
+  const _limited = _myBr.length > 0
+  const _brOk = (bid) => !_limited || !bid || _myBr.includes(bid)
+  const _involved = (t) => t.assigned_user_id===user.id || (t.assigned_user_ids||[]).includes(user.id)
+    || t.approver_id===user.id || t.created_by_id===user.id
+  // Assignee / approver pickers: people in the task's branch (when one is chosen),
+  // within the viewer's branches (when limited). Staff with no branch, and the
+  // viewer themselves, are always offered.
+  const _accPeopleOk = (u) => {
+    const bs = taskMemberBranches[u.id] || []
+    if (u.id === user.id || bs.length === 0) return true
+    if (_limited && !bs.some(b => _myBr.includes(b))) return false
+    if (newTask.branch_id && !bs.includes(newTask.branch_id)) return false
+    return true
+  }
+  const _regSource = tasks.filter(t=>t.org?.toLowerCase()===user.org?.toLowerCase() && (_brOk(t.branch_id) || _involved(t)))
   // TASK-REGISTER-V1: rendered below the task list. Additive -- visibleTasks is
   // untouched, so every role keeps the list it has today.
   const renderTaskRegister = () => {
@@ -5035,16 +5061,19 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
       return { t, display, inScope, missed: missedByTask[t.id]||0, next: _regNextDate(t),
         created: _cre, occDates: _occD, duePast: _dueP, recent: _recent }
     }).filter(r=>r.inScope)
-      .sort((a,b)=>(b.missed-a.missed) || String(a.t.title||'').localeCompare(String(b.t.title||'')))
+      // REG-NEWEST-V1 (17 Sep, Olaf): newest task first by default, oldest last.
+      // Replaces the missed-count order; the missed count is still shown per row.
+      .sort((a,b)=>String(b.t.created_at||'').localeCompare(String(a.t.created_at||'')) || String(a.t.title||'').localeCompare(String(b.t.title||'')))
     // REGISTER-FILTERBAR-V1: structured filters. registerSearch is title only;
     // other columns handled by their own controls.
     const _regQ = registerSearch.trim().toLowerCase()
-    const _regActive = _regQ || regDateFrom || regDateTo || regCycle || regAssigned || regApprover
+    const _regActive = _regQ || regDateFrom || regDateTo || regCycle || regAssigned || regApprover || regBranch
     const _regShown = rows.filter(r=>{
       if(_regQ && !String(r.t.title||'').toLowerCase().includes(_regQ)) return false
       if(regCycle && (r.t.recurrence||'')!==regCycle) return false
       if(regAssigned && r.display!==regAssigned) return false
       if(regApprover && (r.t.approver_name||'')!==regApprover) return false
+      if(regBranch && (regBranch==='__none' ? !!r.t.branch_id : r.t.branch_id!==regBranch)) return false // REG-BRANCH-V1
       // REGISTER-DATE-V2: in range if CREATED in the window or ACTUALLY DUE in it.
       // The old code guarded on r.next being truthy, so every one-off task (blank
       // next date) short-circuited the test and survived any range that was set.
@@ -5054,8 +5083,8 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
       }
       return true
     })
-    // Chronological, newest first, ONLY when a range is set. Unfiltered, the
-    // missed-count sort stands: it is what keeps 37 misses at the top of the page.
+    // With a date range set, order by the most recent date in the range,
+    // newest first. Without one, the newest-created order above stands.
     if(regDateFrom || regDateTo) _regShown.sort((a,b)=>String(b.recent||'').localeCompare(String(a.recent||'')))
     // Option lists built from scoped rows so they reflect the role tier.
     const _regCycles = [...new Set(rows.map(r=>r.t.recurrence).filter(Boolean))]
@@ -5099,7 +5128,19 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   <option value="">All</option>
                   {_regApprovers.map(n=><option key={n} value={n}>{n}</option>)}
                 </select></div>
-              {_regActive&&<button className="btn btn-secondary btn-sm" style={{alignSelf:'flex-end'}} onClick={()=>{setRegisterSearch('');setRegDateFrom('');setRegDateTo('');setRegCycle('');setRegAssigned('');setRegApprover('')}}>Clear all</button>}
+              {/* REG-BRANCH-V1: branches present in the rows this viewer can see */}
+              {(() => {
+                const _bids = [...new Set(rows.map(r=>r.t.branch_id).filter(Boolean))]
+                  .sort((x,y)=>String(taskBranchNames[x]||'').localeCompare(String(taskBranchNames[y]||'')))
+                if (!_bids.length && !taskBranches.length) return null
+                return <div><div style={_regLbl}>Branch</div>
+                  <select style={_regCtrl} value={regBranch} onChange={e=>setRegBranch(e.target.value)}>
+                    <option value="">All</option>
+                    {_bids.map(id=><option key={id} value={id}>{taskBranchNames[id]||'Unknown branch'}</option>)}
+                    <option value="__none">All branches (no branch set)</option>
+                  </select></div>
+              })()}
+              {_regActive&&<button className="btn btn-secondary btn-sm" style={{alignSelf:'flex-end'}} onClick={()=>{setRegisterSearch('');setRegDateFrom('');setRegDateTo('');setRegCycle('');setRegAssigned('');setRegApprover('');setRegBranch('')}}>Clear all</button>}
             </div>
           </div>
         )}
@@ -5232,7 +5273,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   <div className="form-field"><label className="form-label">Branch</label>
                     <select className="form-select" value={editTask.branch_id||''} onChange={e=>setEditTask({...editTask,branch_id:e.target.value})}>
                       <option value="">All branches</option>
-                      {taskBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+                      {taskBranches.filter(b=>_brOk(b.id)||b.id===editTask.branch_id).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
                       {editTask.branch_id && !taskBranches.some(b=>b.id===editTask.branch_id) && <option value={editTask.branch_id}>{taskBranchNames[editTask.branch_id] || '(deactivated branch)'}</option>}
                     </select></div>
                 )}
@@ -5409,7 +5450,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   <div className="form-field"><label className="form-label">Branch</label>
                     <select className="form-select" value={newTask.branch_id||''} onChange={e=>setNewTask({...newTask,branch_id:e.target.value})}>
                       <option value="">All branches</option>
-                      {taskBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+                      {taskBranches.filter(b=>_brOk(b.id)).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
                     </select></div>
                 )}
                 {/* TASK-BRANCH-V2: Role now follows Industry / Branch */}
@@ -5486,7 +5527,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                       <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ if(e.target.value===user.id){ setNewTask(prev=>({...prev,assigned_user_id:user.id,assigned_user_name:user.name,assigned_user_email:user.email||'',assigned_role:user.role,assigned_user_ids:[user.id],assigned_user_names:[user.name],approver_id:prev.approver_id||user.id,approver_name:prev.approver_name||user.name})); return } const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
                         <option value="">— Select a staff member —</option>
                         <option value={user.id}>Myself ({user.name})</option>
-                        {teamUsers.filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position)&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
+                        {teamUsers.filter(u=>_accPeopleOk(u)&&assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position)&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
                       </select>
                       {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
                       {teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
@@ -5517,7 +5558,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                       name already appears in the list below when they are a valid
                       approver -- do not reintroduce a self sentinel here. */}
                   <option value="">— Click here to select —</option>
-                  {teamUsers.filter(u=>(ROLE_LEVEL[u.role]||0)>(ROLE_LEVEL[newTask.assigned_role]||0)||(u.id===newTask.assigned_user_id&&(ROLE_LEVEL[newTask.assigned_role]||0)>=3)||(u.id===newTask.assigned_user_id&&newTask.assigned_user_id===user.id)).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
+                  {teamUsers.filter(u=>_accPeopleOk(u)&&((ROLE_LEVEL[u.role]||0)>(ROLE_LEVEL[newTask.assigned_role]||0)||(u.id===newTask.assigned_user_id&&(ROLE_LEVEL[newTask.assigned_role]||0)>=3)||(u.id===newTask.assigned_user_id&&newTask.assigned_user_id===user.id))).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
                 </select>
               </div>
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
@@ -8507,6 +8548,24 @@ function UsersView({ user, setAuditLog }) {
       .then(({ data, error }) => { if (alive && !error) setInviteBranchList(data || []) })
     return () => { alive = false }
   }, [showInvite, workforceOrgId, inviteOrg, orgsList.length, user.role])
+  // ACCESS-BRANCH-V1: a manager or supervisor ticked to branches sees staff in
+  // those branches (any number of them), staff with no branch, and themselves.
+  // No branches ticked = organisation-wide, as before. Client admins: everyone.
+  const [wfMyBranches, setWfMyBranches] = useState([])
+  const [wfMemberBranches, setWfMemberBranches] = useState({})
+  useEffect(() => {
+    if (!isConfigured() || !workforceOrgId || !['manager','supervisor'].includes(user.role)) { setWfMyBranches([]); setWfMemberBranches({}); return }
+    let alive = true
+    supabase.from('member_branches').select('user_id,branch_id').eq('org_id', workforceOrgId)
+      .then(({ data, error }) => {
+        if (!alive || error) return
+        const map = {}
+        ;(data || []).forEach(r => { (map[r.user_id] = map[r.user_id] || []).push(r.branch_id) })
+        setWfMemberBranches(map)
+        setWfMyBranches(map[user.id] || [])
+      })
+    return () => { alive = false }
+  }, [workforceOrgId, user.role, user.id])
   const [inviteOrgTeams, setInviteOrgTeams] = useState([])
   const [duplicateInvite, setDuplicateInvite] = useState(null) // {existingId, linkOrgId, ...} when duplicate detected
   const [inviteSending, setInviteSending] = useState(false)
@@ -8536,32 +8595,6 @@ function UsersView({ user, setAuditLog }) {
       const ids = (m.data || []).map(r => r.branch_id)
       setEditBranchList(b.data || []); setEditBranchIds(ids); setEditBranchOrig(ids); setEditBranchOrgId(bOrg)
     }).catch(e => { if (alive) setEditBranchErr(e?.message || 'unknown error') })
-    return () => { alive = false }
-  }, [editingUser?.id, editingOrgId, workforceOrgId])
-  // INDUSTRY-ASSIGN-V1: industry tick boxes in Edit Team Member, alongside
-  // Additional Positions. Same load / save pattern as the branch ticks.
-  const [editIndList, setEditIndList] = useState([])      // [{id, name}]
-  const [editIndIds, setEditIndIds] = useState(null)      // null = not loaded
-  const [editIndOrig, setEditIndOrig] = useState([])
-  const [editIndOrgId, setEditIndOrgId] = useState(null)
-  const [editIndErr, setEditIndErr] = useState('')
-  useEffect(() => {
-    setEditIndList([]); setEditIndIds(null); setEditIndOrig([]); setEditIndOrgId(null); setEditIndErr('')
-    const iOrg = editingOrgId || workforceOrgId
-    if (!editingUser?.id || !iOrg || !isConfigured()) return
-    let alive = true
-    Promise.all([
-      supabase.from('org_industry_links').select('industry_id,is_primary,global_industries(name)').eq('org', iOrg),
-      supabase.from('member_industries').select('industry_id').eq('org_id', iOrg).eq('user_id', editingUser.id)
-    ]).then(([l, m]) => {
-      if (!alive) return
-      if (l.error || m.error) { setEditIndErr((l.error || m.error).message); return }
-      const list = (l.data || [])
-        .map(r => ({ id: r.industry_id, name: r.global_industries?.name || '', primary: !!r.is_primary }))
-        .sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0) || a.name.localeCompare(b.name))
-      const ids = (m.data || []).map(r => r.industry_id)
-      setEditIndList(list); setEditIndIds(ids); setEditIndOrig(ids); setEditIndOrgId(iOrg)
-    }).catch(e => { if (alive) setEditIndErr(e?.message || 'unknown error') })
     return () => { alive = false }
   }, [editingUser?.id, editingOrgId, workforceOrgId])
 
@@ -8958,39 +8991,6 @@ function UsersView({ user, setAuditLog }) {
     } else if (isConfigured() && _bChanged) {
       alert('Profile details were saved, but the branch changes were not: the branch list was loaded for a different organisation. Please reopen this member and try again.')
     }
-    // INDUSTRY-ASSIGN-V1: apply industry ticks. Diff against the database
-    // as it is now, ignore duplicates, then prove the result by reading back.
-    const _iChanged = !!editIndIds && [...editIndIds].sort().join() !== [...editIndOrig].sort().join()
-    if (isConfigured() && _iChanged && editIndOrgId && editIndOrgId === orgId) {
-      let _iFail = ''
-      const { data: _iCur, error: _ice } = await supabase.from('member_industries')
-        .select('industry_id').eq('org_id', orgId).eq('user_id', id)
-      if (_ice) _iFail = 'could not read current industries: ' + _ice.message
-      const _icur = (_iCur || []).map(r => r.industry_id)
-      const _iadd = _iFail ? [] : editIndIds.filter(x => !_icur.includes(x))
-      const _idel = _iFail ? [] : _icur.filter(x => !editIndIds.includes(x))
-      if (_iadd.length) {
-        const { error: _iie } = await supabase.from('member_industries')
-          .upsert(_iadd.map(x => ({ org_id: orgId, user_id: id, industry_id: x })),
-                  { onConflict: 'user_id,org_id,industry_id', ignoreDuplicates: true })
-        if (_iie) _iFail = _iie.message
-      }
-      if (!_iFail && _idel.length) {
-        const { error: _ide } = await supabase.from('member_industries')
-          .delete().eq('org_id', orgId).eq('user_id', id).in('industry_id', _idel)
-        if (_ide) _iFail = _ide.message
-      }
-      if (!_iFail) {
-        const { data: _iNow, error: _ire } = await supabase.from('member_industries')
-          .select('industry_id').eq('org_id', orgId).eq('user_id', id)
-        if (_ire) _iFail = 'could not confirm the result: ' + _ire.message
-        else if ((_iNow || []).map(r => r.industry_id).sort().join() !== [...editIndIds].sort().join())
-          _iFail = 'permission denied, or changed elsewhere at the same time'
-      }
-      if (_iFail) alert('Profile details were saved, but the industry changes could not be applied (' + _iFail + ').')
-    } else if (isConfigured() && _iChanged) {
-      alert('Profile details were saved, but the industry changes were not: the industry list was loaded for a different organisation. Please reopen this member and try again.')
-    }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
     const addedPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
     const _attemptedFirst = {role:editForm.role, industry:editForm.industry||'', position:editForm.position||''}
@@ -9237,7 +9237,11 @@ function UsersView({ user, setAuditLog }) {
     return !em || !realUsers.some(u => u.email?.toLowerCase() === em)
   })
   // Split workforce into confirmed (active) and pending (invited but not yet confirmed)
-  const confirmedRealUsers = realUsers.filter(u => !pendingEmailSet.has(u.email?.toLowerCase()))
+  // ACCESS-BRANCH-V1: branch limit for managers / supervisors (see the effect above).
+  const _wfPersonOk = (uid) => wfMyBranches.length === 0 || uid === user.id
+    || !(wfMemberBranches[uid] || []).length
+    || (wfMemberBranches[uid] || []).some(b => wfMyBranches.includes(b))
+  const confirmedRealUsers = realUsers.filter(u => !pendingEmailSet.has(u.email?.toLowerCase()) && _wfPersonOk(u.id))
   const pendingRealUsers = realUsers.filter(u => pendingEmailSet.has(u.email?.toLowerCase()))
 
   return (
@@ -9399,28 +9403,6 @@ function UsersView({ user, setAuditLog }) {
                     </div>
                   )}
                   <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>No ticks = works across all branches.</div>
-                </div>
-              )}
-              {/* INDUSTRY-ASSIGN-V1: only for orgs with two or more industries */}
-              {(editIndErr || editIndList.length > 1) && (
-                <div className="form-field">
-                  <label className="form-label">Industries</label>
-                  {editIndErr ? (
-                    <div style={{fontSize:12,color:'var(--red)'}}>Could not load industries: {editIndErr}</div>
-                  ) : editIndIds === null ? (
-                    <div style={{fontSize:12,color:'var(--t2)'}}>Loading industries...</div>
-                  ) : (
-                    <div style={{display:'flex',flexWrap:'wrap',gap:'6px 16px'}}>
-                      {editIndList.map(ind => (
-                        <label key={ind.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:13,cursor:'pointer'}}>
-                          <input type="checkbox" checked={editIndIds.includes(ind.id)}
-                            onChange={e => { const on = e.target.checked; setEditIndIds(prev => on ? [...(prev || []), ind.id] : (prev || []).filter(x => x !== ind.id)) }}/>
-                          <span>{ind.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>The services this person works in. Only this organisation's industries are listed.</div>
                 </div>
               )}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--s3)',borderRadius:8,marginBottom:10}}>
@@ -22302,9 +22284,32 @@ export default function App() {
   useEffect(()=>{ tasksRef.current = tasks },[tasks])
   useEffect(()=>{
     if(!showProfile||!user?.org||!isConfigured()) return
-    supabase.from('organisations').select('industry').eq('name',user.org).maybeSingle()
-      .then(({data})=>{ setProfileOrgIndustry(data?.industry||'') })
-      .catch(()=>{})
+    // MEMBER-IND-PROFILE-V1: the industries this person is ticked to in Edit
+    // Member, falling back to the organisation's industry when none are ticked.
+    ;(async () => {
+      try {
+        const { data: org } = await supabase.from('organisations').select('id,industry').eq('name',user.org).maybeSingle()
+        let label = org?.industry || ''
+        // INDUSTRY-FROM-POSITIONS-V1: the industries come from the person's
+        // positions -- their main industry in this org plus the industries on
+        // their Additional Positions. additional_positions is not org-scoped,
+        // so only industries this org is registered for are counted.
+        if (org?.id && user?.id) {
+          const [{ data: om }, { data: pr }, { data: li }] = await Promise.all([
+            supabase.from('org_members').select('industry').eq('org', org.id).eq('user_id', user.id).maybeSingle(),
+            supabase.from('profiles').select('additional_positions').eq('id', user.id).maybeSingle(),
+            supabase.from('org_industry_links').select('global_industries(name)').eq('org', org.id),
+          ])
+          const orgNames = (li || []).map(r => r.global_industries?.name).filter(Boolean)
+          let extra = []
+          try { const ap = pr?.additional_positions; extra = Array.isArray(ap) ? ap : (ap ? JSON.parse(ap) : []) } catch (e) { extra = [] }
+          const mine = [om?.industry, ...extra.map(p => p && p.industry)].filter(Boolean)
+          const names = [...new Set(mine)].filter(n => !orgNames.length || orgNames.includes(n)).sort()
+          if (names.length) label = names.join(' \u00b7 ')
+        }
+        setProfileOrgIndustry(label)
+      } catch (e) { /* leave the field as it was */ }
+    })()
   },[showProfile, user?.org])
   // Load appointed positions for the current user, scoped to the organisation they are signed into.
   // Only org_members and invite_links are used (both filtered to the current org). profiles.additional_positions
@@ -23572,7 +23577,7 @@ export default function App() {
                 <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
 
                 <div className="form-field"><label className="form-label">Organisation</label><input className="form-input" value={user.org||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
-                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={profileOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
+                <div className="form-field"><label className="form-label">{String(profileOrgIndustry).includes('\u00b7') ? 'Industries' : 'Industry'}</label><input className="form-input" value={profileOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
 
                 {(() => {
                   const positionsList = appointedPositions.length ? appointedPositions : [user.position].filter(Boolean)
