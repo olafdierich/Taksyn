@@ -62,9 +62,20 @@ const CSS = `
      this table already means severity. Height is set inline per bar. */
   th.spark,td.spark{border-left:1px solid var(--rule);width:74px}
   .spark-b{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:22px}
-  .spark-b i{display:block;width:6px;background:#C4CBD5}
-  .spark-b i.now{background:#64748B}
+  .spark-b i{display:block;width:8px;background:#94A3B8}
+  .spark-b i.now{background:#334155}
   .spark-b i.z{background:var(--rule)}
+  /* REPORT-CARDS-V1: category cards. Two across on paper, one on a phone. */
+  .catcards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 8px}
+  .catcard{border:1px solid var(--rule-2);border-left:4px solid var(--accent);border-radius:6px;
+    padding:11px 14px 12px;background:#fff;break-inside:avoid}
+  .catcard-h{display:flex;align-items:center;gap:10px}
+  .catcard-i{width:34px;height:34px;border-radius:50%;background:var(--band-ok);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .catcard-n{display:block;font-size:22px;font-weight:700;line-height:1.05;color:var(--ink)}
+  .catcard-t{display:block;font-size:12px;color:var(--ink-2)}
+  .catcard p{margin:8px 0 0;font-size:13px;line-height:1.5}
+  @media screen and (max-width:760px){ .catcards{grid-template-columns:1fr} }
   .up{color:var(--flag)}.down{color:var(--good)}.flat{color:var(--ink-3)}
   .key{display:flex;flex-wrap:wrap;border:1px solid var(--rule);margin:12px 0 2px}
   .key div{flex:1 1 0;min-width:88px;padding:6px 8px 7px;
@@ -129,7 +140,7 @@ const CSS = `
        Browsers drop backgrounds at print unless told not to. Deliberately
        a list, not *: a blanket rule would also print screen-only fills. */
     .b0,.b1,.b2,.b3,.b4,.b5,.yoy,.r-low,.r-mod,.r-high,.r-ext,
-    .flagbox,.goodbox,.gapbox,.sbar span,.spark-b i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .flagbox,.goodbox,.gapbox,.sbar span,.spark-b i,.catcard-i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .sheet{margin:0;padding:0;box-shadow:none;max-width:none}
     h2{break-after:avoid}
     .subs,.stats,table,.mx,.flagbox,.goodbox,.gapbox,.stat,.two{break-inside:avoid}
@@ -367,6 +378,80 @@ export function openBoardReport(o) {
     // Raw pair, not a percentage: with a small base month an arrow overstates.
     H.push('<p class="note"><b>'+inc.length+'</b> incidents across '+esc(periodLabel)
       +', against <b>'+yoyWindow+'</b> in the same six months a year earlier.</p>')
+    // REPORT-CARDS-V1: a card for each category with two or more incidents,
+    // most first, at most six. Counts and months only, never a judgement --
+    // the reader draws the conclusion. Numbers come from cell(), as the table.
+    const kcMonthFull = { jan:'January', feb:'February', mar:'March', apr:'April',
+      may:'May', jun:'June', jul:'July', aug:'August', sep:'September',
+      oct:'October', nov:'November', dec:'December' }
+    const kcKey = (m) => String(m.label).slice(0, 3).toLowerCase()
+    const kcName = (m) => kcMonthFull[kcKey(m)] || String(m.label).split(' ')[0]
+    const kcWords = ['no','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve']
+    // The last month is still running if it is this calendar month: say
+    // 'has ... so far', not 'had'.
+    const kcRunning = last.year === new Date().getFullYear() &&
+      kcKey(last) === Object.keys(kcMonthFull)[new Date().getMonth()]
+    const kcText = (c) => {
+      const L = months.length
+      const counts = months.map(m => cell(c, m).n)
+      const total = counts.reduce((a, b) => a + b, 0)
+      const used = months.filter((m, k) => counts[k] > 0)
+      const onlyOne = used.length === 1
+      const out = []
+      let s1 = total + ' in the last ' + (kcWords[L] || L) + ' months'
+      if (onlyOne) s1 += ', ' + (total === 2 ? 'both' : 'all') + ' in ' + kcName(used[0])
+      out.push(s1 + '.')
+      if (L >= 2) {
+        const cur = counts[L - 1], prev = counts[L - 2]
+        const nowName = kcName(months[L - 1]), prevName = kcName(months[L - 2])
+        const amt = (n) => n ? String(n) : 'none'
+        let s2 = nowName + (kcRunning ? ' has ' : ' had ') + amt(cur) + (kcRunning ? ' so far' : '')
+        if (cur === prev) s2 += ', the same as ' + prevName
+        // "both in August. September has none so far." -- the first sentence
+        // already said where they were, so no "down from" repeat.
+        else if (!(cur === 0 && onlyOne && used[0] === months[L - 2]))
+          s2 += ', ' + (cur > prev ? 'up' : 'down') + ' from ' + amt(prev) + ' in ' + prevName
+        out.push(s2 + '.')
+        // Busiest month only when it is news: earlier than the last two.
+        const early = counts.slice(0, L - 2)
+        const peak = early.length ? Math.max(...early) : 0
+        if (!onlyOne && peak >= 2 && peak > Math.max(cur, prev)) {
+          const pm = months.slice(0, L - 2).filter((m, k) => early[k] === peak)
+          if (pm.length === 1) out.push('Busiest month: ' + kcName(pm[0]) + ', with ' + peak + '.')
+          else if (pm.length === 2) out.push('Busiest months: ' + kcName(pm[0]) + ' and '
+            + kcName(pm[1]) + ', with ' + peak + ' each.')
+        }
+      }
+      return out.join(' ')
+    }
+    const kcIcons = [
+      [/skin|pressure/, '<path d="M12 4l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/>'],
+      [/medication|medicine|drug/, '<rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)"/><path d="M10 10l4 4"/>'],
+      [/\bfall/, '<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>'],
+      [/behav|aggress/, '<circle cx="10" cy="7" r="3"/><path d="M4 20c0-3.5 2.7-6 6-6s6 2.5 6 6M19 8v5M19 16v.5"/>'],
+      [/property|security|theft|damage/, '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'],
+      [/infect|outbreak/, '<circle cx="12" cy="12" r="5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.9 2.9M15.5 15.5l2.9 2.9M5.6 18.4l2.9-2.9M15.5 8.5l2.9-2.9"/>'],
+      [/restrict/, '<path d="M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z"/><path d="M8 12h8"/>'],
+      [/missing|abscond|unaccounted/, '<circle cx="10" cy="10" r="6"/><path d="M14.5 14.5L20 20"/>'],
+      [/injur|wound/, '<rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(45 12 12)"/><path d="M11 11h.01M13 13h.01M11 13h.01M13 11h.01"/>'],
+      [/medical|clinical|health/, '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'],
+      [/environment|safety|hazard/, '<path d="M12 4L21 20H3z"/><path d="M12 10v4M12 17v.5"/>'],
+    ]
+    const kcIcon = (c) => {
+      const s = (String(c) + ' ' + catLabel(c)).toLowerCase()
+      const hit = kcIcons.find(([re]) => re.test(s))
+      return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0F6E56"'
+        + ' stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        + (hit ? hit[1] : '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/>') + '</svg>'
+    }
+    const kcCats = cats.filter(c => catMap[c] >= 2).slice(0, 6)
+    if (kcCats.length) {
+      H.push('<h4>Categories with two or more incidents</h4><div class="catcards">')
+      kcCats.forEach(c => H.push('<div class="catcard"><div class="catcard-h"><span class="catcard-i">'
+        + kcIcon(c) + '</span><div><b class="catcard-n">' + catMap[c] + '</b><span class="catcard-t">'
+        + esc(catLabel(c)) + '</span></div></div><p>' + esc(kcText(c)) + '</p></div>'))
+      H.push('</div>')
+    }
     if (dormant.length) {
       H.push('<div class="flagbox"><h3>'+dormant.length+' categor'
         +(dormant.length===1?'y that was appearing regularly has stopped':'ies that were appearing regularly have stopped')+'</h3>')
