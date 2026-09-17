@@ -8492,6 +8492,21 @@ function UsersView({ user, setAuditLog }) {
   // what invite rows write.
   const [workforceOrgIndustries, setWorkforceOrgIndustries] = useState([])
   const [inviteTeamId, setInviteTeamId] = useState('')
+  // INVITE-BRANCH-V1: branch ticks on the invite form (client admin / super admin).
+  const [inviteBranchList, setInviteBranchList] = useState([])
+  const [inviteBranchIds, setInviteBranchIds] = useState([])
+  useEffect(() => {
+    setInviteBranchList([]); setInviteBranchIds([])
+    if (!showInvite || !isConfigured() || !['client_admin','super_admin'].includes(user.role)) return
+    const oid = user.role === 'super_admin'
+      ? ((orgsList.find(o => o.name === inviteOrg) || {}).id || '')
+      : workforceOrgId
+    if (!oid) return
+    let alive = true
+    supabase.from('org_branches').select('id,name').eq('org_id', oid).eq('is_active', true).order('name')
+      .then(({ data, error }) => { if (alive && !error) setInviteBranchList(data || []) })
+    return () => { alive = false }
+  }, [showInvite, workforceOrgId, inviteOrg, orgsList.length, user.role])
   const [inviteOrgTeams, setInviteOrgTeams] = useState([])
   const [duplicateInvite, setDuplicateInvite] = useState(null) // {existingId, linkOrgId, ...} when duplicate detected
   const [inviteSending, setInviteSending] = useState(false)
@@ -9097,6 +9112,8 @@ function UsersView({ user, setAuditLog }) {
         const { error } = await supabase.from('invite_links').insert({
           organisation_id: orgId,
           team_id: inviteTeamId || null,
+          // INVITE-BRANCH-V1: only sent when ticked; the use-time trigger re-checks org and active.
+          ...(inviteBranchIds.length ? { branch_ids: inviteBranchIds.filter(id => inviteBranchList.some(b => b.id === id)) } : {}),
           role: systemRole,
           position: validRows.find(p=>p.position)?.position || null,
           secret: linkId,
@@ -9554,6 +9571,22 @@ function UsersView({ user, setAuditLog }) {
                   {inviteOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
+              {/* INVITE-BRANCH-V1 */}
+              {inviteBranchList.length > 0 && (
+                <div className="form-field">
+                  <label className="form-label" style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px'}}>Branches <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none',letterSpacing:0}}>(optional)</span></label>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'6px 16px'}}>
+                    {inviteBranchList.map(b => (
+                      <label key={b.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:13,cursor:'pointer'}}>
+                        <input type="checkbox" checked={inviteBranchIds.includes(b.id)}
+                          onChange={e => { const on = e.target.checked; setInviteBranchIds(prev => on ? [...prev, b.id] : prev.filter(x => x !== b.id)) }}/>
+                        <span>{b.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>No ticks = works across all branches. Applied when they register.</div>
+                </div>
+              )}
               {(inviteFirstName.trim()||inviteLastName.trim())&&invitePositions.some(p=>p.role||p.position)&&(
                 <div style={{background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--text)',lineHeight:1.5}}>
                   <div style={{fontSize:10,fontWeight:700,color:'var(--brand)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.8px'}}>Invite Summary</div>
