@@ -19406,6 +19406,11 @@ function IncidentRegisterView({ user, setPage }) {
   const [fSeverity, setFSeverity] = useState('all')
   const [fStatus, setFStatus] = useState('all')
   const [breachedOnly, setBreachedOnly] = useState(false)
+  // REPORT-BRANCH-V1: branch and service filters. [[id, name, active]] / [[id, name]], primary service first.
+  const [fBranch, setFBranch] = useState('all')
+  const [fService, setFService] = useState('all')
+  const [regBranches, setRegBranches] = useState([])
+  const [regIndustries, setRegIndustries] = useState([])
   const [categoryLabels, setCategoryLabels] = useState({}) // category_key -> label
   // domain -> { level: label }, for the ladders that live in the packs
   // table. The medical ladder is hardcoded below and is not in here.
@@ -19447,6 +19452,16 @@ function IncidentRegisterView({ user, setPage }) {
       .select("incident_id,section,state").eq("org", id).eq("section", "rca")
     const rc={}; (fnds||[]).forEach(f=>{ const c=rc[f.incident_id]||{total:0,notExamined:0}; c.total++; if(f.state==="not_examined") c.notExamined++; rc[f.incident_id]=c })
     setRcaCounts(rc)
+    // REPORT-BRANCH-V1: filter choices. A failure leaves them empty, which hides the filters.
+    try {
+      const [{ data: bl }, { data: li }] = await Promise.all([
+        supabase.from('org_branches').select('id,name,is_active').eq('org_id', id).order('name'),
+        supabase.from('org_industry_links').select('industry_id,is_primary,global_industries(name)').eq('org', id),
+      ])
+      setRegBranches((bl||[]).map(b=>[b.id, b.name, b.is_active]))
+      setRegIndustries((li||[]).slice().sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+        .map(r=>[r.industry_id, r.global_industries?.name]).filter(r=>r[1]))
+    } catch(e) { setRegBranches([]); setRegIndustries([]) }
     // category labels — load packs union for this org's industry so real
     // pack keys resolve to human labels in the trend report and register
     try {
@@ -19472,6 +19487,10 @@ function IncidentRegisterView({ user, setPage }) {
     if(fCategory!=='all' && i.category!==fCategory) return false
     if(fSeverity!=='all' && String(i.severity)!==fSeverity) return false
     if(fStatus!=='all' && i.status!==fStatus) return false
+    // REPORT-BRANCH-V1: 'none' = no branch recorded. A service with no industry_id
+    // resolves to the primary, as everywhere else in the product.
+    if(fBranch!=='all' && (fBranch==='none' ? !!i.branch_id : i.branch_id!==fBranch)) return false
+    if(fService!=='all' && !(i.industry_id===fService || (!i.industry_id && regIndustries[0] && regIndustries[0][0]===fService))) return false
     // Catches BOTH late states: someone filtering for problems wants the
     // overdue ones too, not only the abandoned ones.
     if(breachedOnly && incTimeliness(i)==='met') return false
@@ -19770,6 +19789,18 @@ function IncidentRegisterView({ user, setPage }) {
           <select style={sel} value={fSeverity} onChange={e=>setFSeverity(e.target.value)}>
             <option value="all">All</option>{[1,2,3,4,5].map(s=><option key={s} value={String(s)}>{s} {(INC_SEVERITY_CFG[s]||{}).label}</option>)}
           </select></div>
+        {/* REPORT-BRANCH-V1 */}
+        {regBranches.length>0&&<div><div style={{fontSize:10,color:'var(--t3)'}}>Branch</div>
+          <select style={sel} value={fBranch} onChange={e=>setFBranch(e.target.value)}>
+            <option value="all">All</option>
+            {regBranches.map(([bid,bname,bact])=><option key={bid} value={bid}>{bname}{bact?'':' (deactivated)'}</option>)}
+            <option value="none">No branch recorded</option>
+          </select></div>}
+        {regIndustries.length>1&&<div><div style={{fontSize:10,color:'var(--t3)'}}>Service</div>
+          <select style={sel} value={fService} onChange={e=>setFService(e.target.value)}>
+            <option value="all">All</option>
+            {regIndustries.map(([iid,iname])=><option key={iid} value={iid}>{iname}</option>)}
+          </select></div>}
         <div><div style={{fontSize:10,color:'var(--t3)'}}>Status</div>
           <select style={sel} value={fStatus} onChange={e=>setFStatus(e.target.value)}>
             <option value="all">All</option>{Object.entries(INC_STATUS_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
@@ -19832,6 +19863,15 @@ function IncidentRegisterView({ user, setPage }) {
               issueNoteRows = inotes || []
             }
           } catch(e) { issuesRows = []; issueNoteRows = [] }
+          // REPORT-BRANCH-V1: every branch, deactivated included, so older incidents
+          // still land in a named section. A failure leaves the list empty, which
+          // draws the report without branch pages.
+          let brs = []
+          try {
+            const { data: bl } = await supabase.from('org_branches')
+              .select('id,name,is_active').eq('org_id', orgId).order('name')
+            brs = (bl||[]).map(b=>[b.id, b.name, b.is_active])
+          } catch(e) { brs = [] }
           openBoardReport({
             orgName: user.org, incidents, months: tMonths, inMonth: tInMonth,
             issues: issuesRows, issueNotes: issueNoteRows,
@@ -19839,6 +19879,7 @@ function IncidentRegisterView({ user, setPage }) {
             repeatPeople: tRepeatPeople, isLate: incIsLate,
             severityLabels: Object.fromEntries(Object.entries(INC_SEVERITY_CFG).map(([k,v])=>[k,v.label])),
             industries: inds,
+            branches: brs,
             actions: acts, findings: finds, findingLabels: INC_FINDING_LABEL,
           })
         }}>📊 Trend Analysis Report</button>

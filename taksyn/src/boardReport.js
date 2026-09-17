@@ -153,6 +153,9 @@ export function openBoardReport(o) {
     // single entry means the report is drawn exactly as it always was --
     // one pass, no headings.
     industries = [],
+    // REPORT-BRANCH-V1: [[branch_id, name, is_active], ...]. Empty means no
+    // branch pages at all.
+    branches = [],
   } = o
   const last = months[months.length - 1] || { year: 0, month: 0, label: '' }
   const catLabel = k => categoryLabels[k] || k
@@ -632,6 +635,17 @@ export function openBoardReport(o) {
   const primaryId = industries.length ? industries[0][0] : null
   const forIndustry = (id) => incidents.filter(i =>
     i.industry_id === id || (id === primaryId && !i.industry_id))
+  // REPORT-BRANCH-V1: a page per branch, after the organisation total and
+  // before the services. Active branches always get a page; a deactivated
+  // one only when an incident still names it. Incidents with no branch get
+  // their own page when any fall in the period, so the branch pages add up.
+  const inPeriod = i => !i.excluded_at && months.some(m => inMonth(i, m.year, m.month))
+  const branchPages = branches
+    .filter(([id, , active]) => active || incidents.some(i => i.branch_id === id))
+    .map(([id, name, active]) => [id, active ? name : name + ' (deactivated)'])
+  const hasBranches = branchPages.length > 0
+  const unbranched = incidents.filter(i => !i.branch_id)
+  const showUnbranched = hasBranches && unbranched.some(inPeriod)
 
   const H = []
   H.push('<!DOCTYPE html><html lang="en-AU"><head><meta charset="utf-8">')
@@ -650,11 +664,12 @@ export function openBoardReport(o) {
   H.push('<span>Generated <b>'+new Date().toLocaleString('en-AU')+'</b></span>')
   H.push('<span><b>'+excludedCount+'</b> excluded reports omitted</span>')
   if (multi) H.push('<span>Services <b>'+esc(industries.map(x=>x[1]).join(' · '))+'</b></span>')
+  if (hasBranches) H.push('<span>Branches <b>'+esc(branchPages.map(x=>x[1]).join(' · '))+'</b></span>')
   H.push('</div></header>')
 
   // A single-service organisation gets exactly the report it always got:
   // one pass, no heading, nothing to say about services.
-  if (!multi) {
+  if (!multi && !hasBranches) {
     H.push(section(incidents, true))
   } else {
     // IND: print-color-adjust is not decoration. Browsers drop background
@@ -675,18 +690,55 @@ export function openBoardReport(o) {
       '<div style="'+bandBase+(extra||'')+'">'
       + '<div style="font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;opacity:.72;margin-bottom:7px">'+esc(eyebrow)+'</div>'
       + '<div style="font-size:38px;font-weight:800;letter-spacing:-.4px">'+esc(label)+'</div></div>'
-    H.push(sectionBand('Whole organisation', 'All services combined'))
-    H.push('<p class="note">Every incident in the period, whichever service it was reported under. Each service is then repeated on its own below, in the same format.</p>')
-    H.push(section(incidents, true))
-    industries.forEach(([id, name]) => {
-      // page-break-before so a single service's section can be handed to the
-      // body that governs it without the others on the reverse.
-      H.push(sectionBand('Service', name, ';page-break-before:always'))
-      H.push('<p class="note">Incidents reported under '+esc(name)+' only.'
-        + (id === primaryId ? ' Includes incidents recorded before a service was chosen, which resolve to this one.' : '')
-        + '</p>')
-      H.push(section(forIndustry(id), false))
-    })
+    // REPORT-BRANCH-V2: organisation total, then each branch, and inside
+    // each branch one page per service. Without branches, the organisation
+    // total is followed by the service pages exactly as before.
+    const serviceOf = (list, id) => list.filter(i =>
+      i.industry_id === id || (id === primaryId && !i.industry_id))
+    const branchBlock = (label, list, note, where) => {
+      H.push(sectionBand('Branch', label, ';page-break-before:always'))
+      H.push('<p class="note">' + note + '</p>')
+      H.push(section(list, false))
+      if (!multi) return
+      // REPORT-BRANCH-V3: every service gets its page under every branch,
+      // even with no incidents, so each branch reads the same way.
+      industries.forEach(([sid, sname]) => {
+        const sub = serviceOf(list, sid)
+        H.push(sectionBand(label, sname, ';page-break-before:always;background:#2E8C6B'))
+        H.push('<p class="note">Incidents ' + esc(where) + ' reported under ' + esc(sname) + ' only.'
+          + (sid === primaryId ? ' Includes incidents recorded before a service was chosen, which resolve to this one.' : '')
+          + '</p>')
+        H.push(section(sub, false))
+      })
+    }
+    if (hasBranches) {
+      H.push(sectionBand('Whole organisation', multi ? 'All branches and services' : 'All branches combined'))
+      H.push('<p class="note">Every incident in the period. Each branch follows on its own'
+        + (multi ? ', broken down by service,' : '')
+        + ' in the same format. The branch pages add up to this total.</p>')
+      H.push(section(incidents, true))
+      branchPages.forEach(([id, name]) => {
+        branchBlock(name, incidents.filter(i => i.branch_id === id),
+          'Incidents recorded at ' + esc(name) + ', all services.', 'at ' + name)
+      })
+      if (showUnbranched) {
+        branchBlock('No branch recorded', unbranched,
+          'Incidents reported before branches were set up. Shown so the branch pages add up to the organisation total.', 'with no branch recorded')
+      }
+    } else {
+      H.push(sectionBand('Whole organisation', 'All services combined'))
+      H.push('<p class="note">Every incident in the period, whichever service it was reported under. Each service is then repeated on its own below, in the same format.</p>')
+      H.push(section(incidents, true))
+      industries.forEach(([id, name]) => {
+        // page-break-before so a single service's section can be handed to the
+        // body that governs it without the others on the reverse.
+        H.push(sectionBand('Service', name, ';page-break-before:always'))
+        H.push('<p class="note">Incidents reported under '+esc(name)+' only.'
+          + (id === primaryId ? ' Includes incidents recorded before a service was chosen, which resolve to this one.' : '')
+          + '</p>')
+        H.push(section(forIndustry(id), false))
+      })
+    }
   }
 
   H.push('<p class="note noprint" style="margin-top:32px"><b>Before you save:</b> in the print dialogue, open More settings and untick “Headers and footers”. Otherwise the browser prints its own URL and date across the top of the page.</p>')
