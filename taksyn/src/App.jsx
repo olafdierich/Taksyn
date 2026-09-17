@@ -3656,6 +3656,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   const [regCycle, setRegCycle] = useState('')
   const [regAssigned, setRegAssigned] = useState('')
   const [regApprover, setRegApprover] = useState('')
+  const [regBranch, setRegBranch] = useState('') // REG-BRANCH-V1: '' all, '__none' = All branches, else branch id
   const [archiveSearch, setArchiveSearch] = useState('')
   const [archiveDateFrom, setArchiveDateFrom] = useState('')
   const [archiveDateTo, setArchiveDateTo] = useState('')
@@ -3784,6 +3785,38 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   const [taskTeamMembers, setTaskTeamMembers] = useState([]) // members of the selected team
   const [assignAll, setAssignAll] = useState(true)
   const [userTeamIds, setUserTeamIds] = useState([]) // team IDs the logged-in user belongs to
+  // TASK-BRANCH-V1: branch and industry choices for the task forms.
+  const [taskBranches, setTaskBranches] = useState([])       // [{id, name}] active
+  const [taskIndustries, setTaskIndustries] = useState([])   // [{id, name}]
+  const [taskBranchNames, setTaskBranchNames] = useState({}) // TASK-BRANCH-V2: id -> name, incl. deactivated
+  const [taskMemberBranches, setTaskMemberBranches] = useState({}) // ACCESS-BRANCH-V1: user_id -> [branch_id]
+  useEffect(() => {
+    if (!isConfigured() || !user?.org) return
+    let alive = true
+    ;(async () => {
+      try {
+        const oid = await resolveOrgId(user)
+        if (!alive || !oid) return
+        const [b, l] = await Promise.all([
+          supabase.from('org_branches').select('id,name,is_active').eq('org_id', oid).order('name'),
+          supabase.from('org_industry_links').select('industry_id,is_primary,global_industries(name)').eq('org', oid),
+        ])
+        if (!alive) return
+        setTaskBranches(b.error ? [] : (b.data || []).filter(x => x.is_active))
+        setTaskBranchNames(b.error ? {} : Object.fromEntries((b.data || []).map(x => [x.id, x.name + (x.is_active ? '' : ' (deactivated)')])))
+        // ACCESS-BRANCH-V1: who is in which branch (a worker only sees their own rows).
+        const { data: mbr } = await supabase.from('member_branches').select('user_id,branch_id').eq('org_id', oid)
+        if (!alive) return
+        const mmap = {}
+        ;(mbr || []).forEach(r => { (mmap[r.user_id] = mmap[r.user_id] || []).push(r.branch_id) })
+        setTaskMemberBranches(mmap)
+        setTaskIndustries(l.error ? [] : (l.data || [])
+          .map(r => ({ id: r.industry_id, name: r.global_industries?.name || '', primary: !!r.is_primary }))
+          .sort((x, y) => (y.primary ? 1 : 0) - (x.primary ? 1 : 0) || x.name.localeCompare(y.name)))
+      } catch (e) { console.error('TASK-BRANCH-V1 load failed:', e) }
+    })()
+    return () => { alive = false }
+  }, [user?.org])
 
   useEffect(()=>{
     if(!isConfigured()||!user.org) return
@@ -4831,6 +4864,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
     }
     // CA-HANDOFF-V1: incident ref appended to the title, never doubled.
     if (caDraft) { const _b = String(taskData.title||'').trim(); const _sfx = ' - ' + caDraft.ref; taskData.title = _b.endsWith(_sfx) ? _b : _b + _sfx; taskData.category = 'Corrective action' }
+    taskData.branch_id = taskData.branch_id || null; taskData.industry_id = taskData.industry_id || null // TASK-BRANCH-V1: '' is not a uuid
     const t = { id:'T'+Date.now(), ...taskData, due_time:(taskData.compliance&&taskData.due_time)?taskData.due_time:null, status:'pending', subtasks:taskData.subtasks||[], evidence:[], comments:[], escalation:false, created_by:user.name, created_by_id:user.id, requires_approval:(taskData.assigned_user_id===user.id?false:true), org:user.org, created_at:new Date().toISOString() }
     if (isConfigured()) {
       const payload = { ...t, subtasks:JSON.stringify(t.subtasks), evidence:'[]', comments:'[]' }
@@ -4953,7 +4987,25 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   // NARROW-VISIBLE-TASKS-V3: the register reads org tasks DIRECTLY, not through
   // orgFiltered (which derives from visible, which now excludes tasks that
   // supervisors and managers are not personally involved in).
-  const _regSource = tasks.filter(t=>t.org?.toLowerCase()===user.org?.toLowerCase())
+  // ACCESS-BRANCH-V1: a manager / supervisor ticked to branches sees tasks in
+  // those branches, "All branches" tasks, and anything they are involved in.
+  // Client admins and people with no branches: unchanged.
+  const _myBr = ['manager','supervisor'].includes(user.role) ? (taskMemberBranches[user.id] || []) : []
+  const _limited = _myBr.length > 0
+  const _brOk = (bid) => !_limited || !bid || _myBr.includes(bid)
+  const _involved = (t) => t.assigned_user_id===user.id || (t.assigned_user_ids||[]).includes(user.id)
+    || t.approver_id===user.id || t.created_by_id===user.id
+  // Assignee / approver pickers: people in the task's branch (when one is chosen),
+  // within the viewer's branches (when limited). Staff with no branch, and the
+  // viewer themselves, are always offered.
+  const _accPeopleOk = (u) => {
+    const bs = taskMemberBranches[u.id] || []
+    if (u.id === user.id || bs.length === 0) return true
+    if (_limited && !bs.some(b => _myBr.includes(b))) return false
+    if (newTask.branch_id && !bs.includes(newTask.branch_id)) return false
+    return true
+  }
+  const _regSource = tasks.filter(t=>t.org?.toLowerCase()===user.org?.toLowerCase() && (_brOk(t.branch_id) || _involved(t)))
   // TASK-REGISTER-V1: rendered below the task list. Additive -- visibleTasks is
   // untouched, so every role keeps the list it has today.
   const renderTaskRegister = () => {
@@ -5009,16 +5061,19 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
       return { t, display, inScope, missed: missedByTask[t.id]||0, next: _regNextDate(t),
         created: _cre, occDates: _occD, duePast: _dueP, recent: _recent }
     }).filter(r=>r.inScope)
-      .sort((a,b)=>(b.missed-a.missed) || String(a.t.title||'').localeCompare(String(b.t.title||'')))
+      // REG-NEWEST-V1 (17 Sep, Olaf): newest task first by default, oldest last.
+      // Replaces the missed-count order; the missed count is still shown per row.
+      .sort((a,b)=>String(b.t.created_at||'').localeCompare(String(a.t.created_at||'')) || String(a.t.title||'').localeCompare(String(b.t.title||'')))
     // REGISTER-FILTERBAR-V1: structured filters. registerSearch is title only;
     // other columns handled by their own controls.
     const _regQ = registerSearch.trim().toLowerCase()
-    const _regActive = _regQ || regDateFrom || regDateTo || regCycle || regAssigned || regApprover
+    const _regActive = _regQ || regDateFrom || regDateTo || regCycle || regAssigned || regApprover || regBranch
     const _regShown = rows.filter(r=>{
       if(_regQ && !String(r.t.title||'').toLowerCase().includes(_regQ)) return false
       if(regCycle && (r.t.recurrence||'')!==regCycle) return false
       if(regAssigned && r.display!==regAssigned) return false
       if(regApprover && (r.t.approver_name||'')!==regApprover) return false
+      if(regBranch && (regBranch==='__none' ? !!r.t.branch_id : r.t.branch_id!==regBranch)) return false // REG-BRANCH-V1
       // REGISTER-DATE-V2: in range if CREATED in the window or ACTUALLY DUE in it.
       // The old code guarded on r.next being truthy, so every one-off task (blank
       // next date) short-circuited the test and survived any range that was set.
@@ -5028,8 +5083,8 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
       }
       return true
     })
-    // Chronological, newest first, ONLY when a range is set. Unfiltered, the
-    // missed-count sort stands: it is what keeps 37 misses at the top of the page.
+    // With a date range set, order by the most recent date in the range,
+    // newest first. Without one, the newest-created order above stands.
     if(regDateFrom || regDateTo) _regShown.sort((a,b)=>String(b.recent||'').localeCompare(String(a.recent||'')))
     // Option lists built from scoped rows so they reflect the role tier.
     const _regCycles = [...new Set(rows.map(r=>r.t.recurrence).filter(Boolean))]
@@ -5073,7 +5128,19 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   <option value="">All</option>
                   {_regApprovers.map(n=><option key={n} value={n}>{n}</option>)}
                 </select></div>
-              {_regActive&&<button className="btn btn-secondary btn-sm" style={{alignSelf:'flex-end'}} onClick={()=>{setRegisterSearch('');setRegDateFrom('');setRegDateTo('');setRegCycle('');setRegAssigned('');setRegApprover('')}}>Clear all</button>}
+              {/* REG-BRANCH-V1: branches present in the rows this viewer can see */}
+              {(() => {
+                const _bids = [...new Set(rows.map(r=>r.t.branch_id).filter(Boolean))]
+                  .sort((x,y)=>String(taskBranchNames[x]||'').localeCompare(String(taskBranchNames[y]||'')))
+                if (!_bids.length && !taskBranches.length) return null
+                return <div><div style={_regLbl}>Branch</div>
+                  <select style={_regCtrl} value={regBranch} onChange={e=>setRegBranch(e.target.value)}>
+                    <option value="">All</option>
+                    {_bids.map(id=><option key={id} value={id}>{taskBranchNames[id]||'Unknown branch'}</option>)}
+                    <option value="__none">All branches (no branch set)</option>
+                  </select></div>
+              })()}
+              {_regActive&&<button className="btn btn-secondary btn-sm" style={{alignSelf:'flex-end'}} onClick={()=>{setRegisterSearch('');setRegDateFrom('');setRegDateTo('');setRegCycle('');setRegAssigned('');setRegApprover('');setRegBranch('')}}>Clear all</button>}
             </div>
           </div>
         )}
@@ -5194,6 +5261,22 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                 <div className="form-field"><label className="form-label">Category</label><select className="form-select" value={editTask.category||''} onChange={e=>setEditTask({...editTask,category:e.target.value,department:''})}>{Object.keys(CAT_ICONS).map(c=><option key={c}>{c}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Department</label><select className="form-select" value={editTask.department||''} onChange={e=>setEditTask({...editTask,department:e.target.value})}><option value="">— Select —</option>{(DEPARTMENTS[editTask.category||'General']||DEPARTMENTS.General).map(d=><option key={d} value={d}>{d}</option>)}</select></div>
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={editTask.priority||''} onChange={e=>setEditTask({...editTask,priority:e.target.value})}>{/* SUP-LOW-V2: supervisors are offered Low only */}{(user.role==='supervisor'?[['low','Low']]:[['critical','Critical'],['high','High'],['medium','Medium'],['low','Low']]).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>
+                {/* TASK-BRANCH-V1 */}
+                {taskIndustries.length > 1 && (
+                  <div className="form-field"><label className="form-label">Industry</label>
+                    <select className="form-select" value={editTask.industry_id||''} onChange={e=>setEditTask({...editTask,industry_id:e.target.value})}>
+                      <option value="">General (any industry)</option>
+                      {taskIndustries.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}
+                    </select></div>
+                )}
+                {(taskBranches.length > 0 || editTask.branch_id) && (
+                  <div className="form-field"><label className="form-label">Branch</label>
+                    <select className="form-select" value={editTask.branch_id||''} onChange={e=>setEditTask({...editTask,branch_id:e.target.value})}>
+                      <option value="">All branches</option>
+                      {taskBranches.filter(b=>_brOk(b.id)||b.id===editTask.branch_id).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+                      {editTask.branch_id && !taskBranches.some(b=>b.id===editTask.branch_id) && <option value={editTask.branch_id}>{taskBranchNames[editTask.branch_id] || '(deactivated branch)'}</option>}
+                    </select></div>
+                )}
               </div>
               <div className="two-col">
                 <div className="form-field"><label className="form-label">Due Date</label><input className="form-input" type="date" value={editTask.due_date||''} onChange={e=>setEditTask({...editTask,due_date:e.target.value})}/></div>
@@ -5279,7 +5362,10 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               </div>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>setShowEdit(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={()=>{ const {evidence, comments, ...editable}=editTask; update(sel.id,{...editable,due_time:(editable.compliance&&editable.due_time)?editable.due_time:null}); setShowEdit(false) }}>Save Changes</button>
+                <button className="btn btn-primary" onClick={()=>{ const {evidence, comments, ...editable}=editTask; update(sel.id,{...editable,due_time:(editable.compliance&&editable.due_time)?editable.due_time:null,
+                  /* TASK-BRANCH-V1: '' -> null; only written when the row carries the column */
+                  ...('branch_id' in editable ? { branch_id: editable.branch_id || null } : {}),
+                  ...('industry_id' in editable ? { industry_id: editable.industry_id || null } : {})}); setShowEdit(false) }}>Save Changes</button>
               </div>
             </div>
           </div>
@@ -5350,8 +5436,25 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               <div className="form-field"><label className="form-label">Task Title</label><input className="form-input" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Daily Safety Inspection"/>{/* PRIVACY-NOTE-V1: titles and checklists become templates others reuse. */}<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>{'\u26A0\uFE0F'} No names or personal details in the title or checklist items.</div></div>
               <div className="form-field"><label className="form-label">Schedule</label><select className="form-select" value={newTask.recurrence} onChange={e=>setNewTask({...newTask,recurrence:e.target.value})}>{RECURRENCE_OPTS.map(r=><option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></div>
               <div className="two-col">
+                {/* TASK-BRANCH-V1: industry choice for multi-industry orgs, branch when the org has any */}
+                {taskIndustries.length > 1 ? (
+                  <div className="form-field"><label className="form-label">Industry</label>
+                    <select className="form-select" value={newTask.industry_id||''} onChange={e=>setNewTask({...newTask,industry_id:e.target.value})}>
+                      <option value="">General (any industry)</option>
+                      {taskIndustries.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}
+                    </select></div>
+                ) : (
+                  <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={taskOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
+                )}
+                {taskBranches.length > 0 && (
+                  <div className="form-field"><label className="form-label">Branch</label>
+                    <select className="form-select" value={newTask.branch_id||''} onChange={e=>setNewTask({...newTask,branch_id:e.target.value})}>
+                      <option value="">All branches</option>
+                      {taskBranches.filter(b=>_brOk(b.id)).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select></div>
+                )}
+                {/* TASK-BRANCH-V2: Role now follows Industry / Branch */}
                 <div className="form-field"><label className="form-label">Role</label><select className="form-select" value={newTask.assigned_user_id===user.id?'__self':newTask.assigned_role} onChange={e=>{ if(e.target.value==='__self'){ setTaskTeamMembers([]); setNewTask(prev=>({...prev,assigned_role:user.role,position:'',team_id:'',team_name:'',assigned_user_id:user.id,assigned_user_name:user.name,assigned_user_email:user.email||'',assigned_user_ids:[user.id],assigned_user_names:[user.name],approver_id:prev.approver_id||user.id,approver_name:prev.approver_name||user.name})) } else { const wasSelf=newTask.assigned_user_id===user.id; setNewTask(prev=>({...prev,assigned_role:e.target.value,position:'',assigned_user_id:wasSelf?'':prev.assigned_user_id,assigned_user_name:wasSelf?'':prev.assigned_user_name,assigned_user_email:wasSelf?'':prev.assigned_user_email,assigned_user_ids:wasSelf?[]:prev.assigned_user_ids,assigned_user_names:wasSelf?[]:prev.assigned_user_names})) } }}><option value="__self">Myself ({user.name})</option>{assignableRoles.map(r=><option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></div>
-                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={taskOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
                 {!newTask.team_id&&<div className="form-field"><label className="form-label">Position</label><select className="form-select" value={newTask.position||''} onChange={e=>setNewTask({...newTask,position:e.target.value})}><option value="">— Select —</option>{getPositionsForIndustry(taskOrgIndustryNames.length?taskOrgIndustryNames:(taskOrgIndustry||newTask.industry),newTask.assigned_role,taskOrgCustomPositions,taskOrgCustomRoles).map(p=><option key={p} value={p}>{p}</option>)}</select></div>}
                 <div className="form-field"><label className="form-label">Priority</label><select className="form-select" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               </div>
@@ -5424,7 +5527,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                       <select className="form-select" value={newTask.assigned_user_id} onChange={e=>{ if(e.target.value===user.id){ setNewTask(prev=>({...prev,assigned_user_id:user.id,assigned_user_name:user.name,assigned_user_email:user.email||'',assigned_role:user.role,assigned_user_ids:[user.id],assigned_user_names:[user.name],approver_id:prev.approver_id||user.id,approver_name:prev.approver_name||user.name})); return } const u=teamUsers.find(u=>u.id===e.target.value); if(u) setNewTask({...newTask,assigned_user_id:u.id,assigned_user_name:u.name,assigned_user_email:u.email||'',assigned_role:u.role}); else setNewTask({...newTask,assigned_user_id:'',assigned_user_name:'',assigned_user_email:''}) }}>
                         <option value="">— Select a staff member —</option>
                         <option value={user.id}>Myself ({user.name})</option>
-                        {teamUsers.filter(u=>assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position)&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
+                        {teamUsers.filter(u=>_accPeopleOk(u)&&assignableRoles.includes(u.role)&&(!newTask.position||u.orgPosition===newTask.position)&&(!userSearch||u.name?.toLowerCase().includes(userSearch.toLowerCase()))).map(u=><option key={u.id} value={u.id}>{u.name} — {u.orgPosition||ROLE_LABELS[u.role]||u.role}</option>)}
                       </select>
                       {newTask.assigned_user_name&&<div style={{fontSize:11,color:'var(--brand)',marginTop:4,fontWeight:600}}>✓ {newTask.assigned_user_name}</div>}
                       {teamUsers.length>0&&!newTask.assigned_user_id&&<div style={{fontSize:11,color:'#F59E0B',marginTop:4}}>⚠️ Please select a staff member to assign this task</div>}
@@ -5455,7 +5558,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                       name already appears in the list below when they are a valid
                       approver -- do not reintroduce a self sentinel here. */}
                   <option value="">— Click here to select —</option>
-                  {teamUsers.filter(u=>(ROLE_LEVEL[u.role]||0)>(ROLE_LEVEL[newTask.assigned_role]||0)||(u.id===newTask.assigned_user_id&&(ROLE_LEVEL[newTask.assigned_role]||0)>=3)||(u.id===newTask.assigned_user_id&&newTask.assigned_user_id===user.id)).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
+                  {teamUsers.filter(u=>_accPeopleOk(u)&&((ROLE_LEVEL[u.role]||0)>(ROLE_LEVEL[newTask.assigned_role]||0)||(u.id===newTask.assigned_user_id&&(ROLE_LEVEL[newTask.assigned_role]||0)>=3)||(u.id===newTask.assigned_user_id&&newTask.assigned_user_id===user.id))).map(u=><option key={u.id} value={u.id}>{u.name} ({ROLE_LABELS[u.role]||u.role})</option>)}
                 </select>
               </div>
               <div className="form-field" style={{display:'flex',alignItems:'center',gap:10}}>
@@ -6107,6 +6210,9 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               })()}
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
               {sel.approver_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Approver:</span> {sel.approver_name}{/* SUP-LOW-V2: only say "your review" when this viewer can actually approve */}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&!canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--t2)'}}>Awaiting manager / admin review</span>}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--brand)'}}>⏳ Awaiting your review</span>}</div>}
+              {/* TASK-BRANCH-V2: industry and branch in the details card */}
+              {(taskIndustries.length > 1 || sel.industry_id) && <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Industry:</span> {sel.industry_id ? ((taskIndustries.find(i=>i.id===sel.industry_id)||{}).name || '\u2014') : 'General (any industry)'}</div>}
+              {(taskBranches.length > 0 || sel.branch_id) && <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Branch:</span> {sel.branch_id ? (taskBranchNames[sel.branch_id] || '\u2014') : 'All branches'}</div>}
               {sel.project&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Project:</span> <span style={{color:'#3B82F6',fontWeight:600}}>📁 {sel.project}</span></div>}
             </div>
           </div>
@@ -8427,6 +8533,39 @@ function UsersView({ user, setAuditLog }) {
   // what invite rows write.
   const [workforceOrgIndustries, setWorkforceOrgIndustries] = useState([])
   const [inviteTeamId, setInviteTeamId] = useState('')
+  // INVITE-BRANCH-V1: branch ticks on the invite form (client admin / super admin).
+  const [inviteBranchList, setInviteBranchList] = useState([])
+  const [inviteBranchIds, setInviteBranchIds] = useState([])
+  useEffect(() => {
+    setInviteBranchList([]); setInviteBranchIds([])
+    if (!showInvite || !isConfigured() || !['client_admin','super_admin'].includes(user.role)) return
+    const oid = user.role === 'super_admin'
+      ? ((orgsList.find(o => o.name === inviteOrg) || {}).id || '')
+      : workforceOrgId
+    if (!oid) return
+    let alive = true
+    supabase.from('org_branches').select('id,name').eq('org_id', oid).eq('is_active', true).order('name')
+      .then(({ data, error }) => { if (alive && !error) setInviteBranchList(data || []) })
+    return () => { alive = false }
+  }, [showInvite, workforceOrgId, inviteOrg, orgsList.length, user.role])
+  // ACCESS-BRANCH-V1: a manager or supervisor ticked to branches sees staff in
+  // those branches (any number of them), staff with no branch, and themselves.
+  // No branches ticked = organisation-wide, as before. Client admins: everyone.
+  const [wfMyBranches, setWfMyBranches] = useState([])
+  const [wfMemberBranches, setWfMemberBranches] = useState({})
+  useEffect(() => {
+    if (!isConfigured() || !workforceOrgId || !['manager','supervisor'].includes(user.role)) { setWfMyBranches([]); setWfMemberBranches({}); return }
+    let alive = true
+    supabase.from('member_branches').select('user_id,branch_id').eq('org_id', workforceOrgId)
+      .then(({ data, error }) => {
+        if (!alive || error) return
+        const map = {}
+        ;(data || []).forEach(r => { (map[r.user_id] = map[r.user_id] || []).push(r.branch_id) })
+        setWfMemberBranches(map)
+        setWfMyBranches(map[user.id] || [])
+      })
+    return () => { alive = false }
+  }, [workforceOrgId, user.role, user.id])
   const [inviteOrgTeams, setInviteOrgTeams] = useState([])
   const [duplicateInvite, setDuplicateInvite] = useState(null) // {existingId, linkOrgId, ...} when duplicate detected
   const [inviteSending, setInviteSending] = useState(false)
@@ -8434,6 +8573,30 @@ function UsersView({ user, setAuditLog }) {
   const [showArchived, setShowArchived] = useState(false)
   const [archiveOrgAssignments, setArchiveOrgAssignments] = useState({})
   const [resendInviteMsg, setResendInviteMsg] = useState('')
+  // BRANCH-ASSIGN-V1: branch tick boxes in Edit Team Member.
+  // editBranchOrgId records which org the lists were loaded for; save refuses
+  // to write if that differs from the org being saved.
+  const [editBranchList, setEditBranchList] = useState([])
+  const [editBranchIds, setEditBranchIds] = useState(null)   // null = not loaded
+  const [editBranchOrig, setEditBranchOrig] = useState([])
+  const [editBranchOrgId, setEditBranchOrgId] = useState(null)
+  const [editBranchErr, setEditBranchErr] = useState('')
+  useEffect(() => {
+    setEditBranchList([]); setEditBranchIds(null); setEditBranchOrig([]); setEditBranchOrgId(null); setEditBranchErr('')
+    const bOrg = editingOrgId || workforceOrgId
+    if (!editingUser?.id || !bOrg || !isConfigured()) return
+    let alive = true
+    Promise.all([
+      supabase.from('org_branches').select('id,name,is_active').eq('org_id', bOrg).order('name'),
+      supabase.from('member_branches').select('branch_id').eq('org_id', bOrg).eq('user_id', editingUser.id)
+    ]).then(([b, m]) => {
+      if (!alive) return
+      if (b.error || m.error) { setEditBranchErr((b.error || m.error).message); return }
+      const ids = (m.data || []).map(r => r.branch_id)
+      setEditBranchList(b.data || []); setEditBranchIds(ids); setEditBranchOrig(ids); setEditBranchOrgId(bOrg)
+    }).catch(e => { if (alive) setEditBranchErr(e?.message || 'unknown error') })
+    return () => { alive = false }
+  }, [editingUser?.id, editingOrgId, workforceOrgId])
 
   const baseIndustries = globalIndustries.length ? globalIndustries : PRESET_INDUSTRIES
   const allIndustries = [...baseIndustries, ...orgCustomDepts.filter(d=>!baseIndustries.includes(d))]
@@ -8789,6 +8952,45 @@ function UsersView({ user, setAuditLog }) {
         }
       }
     }
+    // BRANCH-ASSIGN-V1: apply branch ticks. Only when the lists were loaded
+    // for this same org. Checked by rows returned: RLS refusals are zero
+    // rows, not errors.
+    const _bChanged = !!editBranchIds && [...editBranchIds].sort().join() !== [...editBranchOrig].sort().join()
+    if (isConfigured() && _bChanged && editBranchOrgId && editBranchOrgId === orgId) {
+      let _bFail = ''
+      // BRANCH-ASSIGN-V2: work out what to add and remove from what the
+      // database holds NOW, not from what the modal loaded (which can be
+      // stale). Adding a branch the member already has is ignored rather than
+      // an error (double click). The outcome is then proven by reading back:
+      // RLS refusals on delete are silent.
+      const { data: _bCur, error: _bce } = await supabase.from('member_branches')
+        .select('branch_id').eq('org_id', orgId).eq('user_id', id)
+      if (_bce) _bFail = 'could not read current branches: ' + _bce.message
+      const _cur = (_bCur || []).map(r => r.branch_id)
+      const _add = _bFail ? [] : editBranchIds.filter(b => !_cur.includes(b))
+      const _del = _bFail ? [] : _cur.filter(b => !editBranchIds.includes(b))
+      if (_add.length) {
+        const { error: _bie } = await supabase.from('member_branches')
+          .upsert(_add.map(b => ({ org_id: orgId, user_id: id, branch_id: b })),
+                  { onConflict: 'user_id,branch_id', ignoreDuplicates: true })
+        if (_bie) _bFail = _bie.message
+      }
+      if (!_bFail && _del.length) {
+        const { error: _bde } = await supabase.from('member_branches')
+          .delete().eq('org_id', orgId).eq('user_id', id).in('branch_id', _del)
+        if (_bde) _bFail = _bde.message
+      }
+      if (!_bFail) {
+        const { data: _bNow, error: _bre } = await supabase.from('member_branches')
+          .select('branch_id').eq('org_id', orgId).eq('user_id', id)
+        if (_bre) _bFail = 'could not confirm the result: ' + _bre.message
+        else if ((_bNow || []).map(r => r.branch_id).sort().join() !== [...editBranchIds].sort().join())
+          _bFail = 'permission denied, or changed elsewhere at the same time'
+      }
+      if (_bFail) alert('Profile details were saved, but the branch changes could not be applied (' + _bFail + ').')
+    } else if (isConfigured() && _bChanged) {
+      alert('Profile details were saved, but the branch changes were not: the branch list was loaded for a different organisation. Please reopen this member and try again.')
+    }
     setRealUsers(prev=>prev.map(u=>u.id===id?{...u,...profileUpdates}:u))
     const addedPositions = editPositions.filter(p=>p.role||p.industry||p.position).map(p=>({role:p.role||'worker',industry:p.industry||'',position:p.position||''}))
     const _attemptedFirst = {role:editForm.role, industry:editForm.industry||'', position:editForm.position||''}
@@ -8910,6 +9112,8 @@ function UsersView({ user, setAuditLog }) {
         const { error } = await supabase.from('invite_links').insert({
           organisation_id: orgId,
           team_id: inviteTeamId || null,
+          // INVITE-BRANCH-V1: only sent when ticked; the use-time trigger re-checks org and active.
+          ...(inviteBranchIds.length ? { branch_ids: inviteBranchIds.filter(id => inviteBranchList.some(b => b.id === id)) } : {}),
           role: systemRole,
           position: validRows.find(p=>p.position)?.position || null,
           secret: linkId,
@@ -9033,7 +9237,11 @@ function UsersView({ user, setAuditLog }) {
     return !em || !realUsers.some(u => u.email?.toLowerCase() === em)
   })
   // Split workforce into confirmed (active) and pending (invited but not yet confirmed)
-  const confirmedRealUsers = realUsers.filter(u => !pendingEmailSet.has(u.email?.toLowerCase()))
+  // ACCESS-BRANCH-V1: branch limit for managers / supervisors (see the effect above).
+  const _wfPersonOk = (uid) => wfMyBranches.length === 0 || uid === user.id
+    || !(wfMemberBranches[uid] || []).length
+    || (wfMemberBranches[uid] || []).some(b => wfMyBranches.includes(b))
+  const confirmedRealUsers = realUsers.filter(u => !pendingEmailSet.has(u.email?.toLowerCase()) && _wfPersonOk(u.id))
   const pendingRealUsers = realUsers.filter(u => pendingEmailSet.has(u.email?.toLowerCase()))
 
   return (
@@ -9175,6 +9383,28 @@ function UsersView({ user, setAuditLog }) {
               <div style={{marginBottom:12}}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>setEditPositions(prev=>[...prev,{industry:'',role:'worker',position:''}])}>+ Add Position</button>
               </div>
+              {/* BRANCH-ASSIGN-V1 */}
+              {(editBranchErr || editBranchList.length > 0) && (
+                <div className="form-field">
+                  <label className="form-label">Branches</label>
+                  {editBranchErr ? (
+                    <div style={{fontSize:12,color:'var(--red)'}}>Could not load branches: {editBranchErr}</div>
+                  ) : editBranchIds === null ? (
+                    <div style={{fontSize:12,color:'var(--t2)'}}>Loading branches...</div>
+                  ) : (
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'6px 16px'}}>
+                      {editBranchList.filter(b => b.is_active || editBranchOrig.includes(b.id)).map(b => (
+                        <label key={b.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:13,cursor:'pointer'}}>
+                          <input type="checkbox" checked={editBranchIds.includes(b.id)}
+                            onChange={e => { const on = e.target.checked; setEditBranchIds(prev => on ? [...(prev || []), b.id] : (prev || []).filter(x => x !== b.id)) }}/>
+                          <span>{b.name}{!b.is_active && <span style={{fontSize:11,color:'var(--t2)'}}> (deactivated)</span>}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>No ticks = works across all branches.</div>
+                </div>
+              )}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--s3)',borderRadius:8,marginBottom:10}}>
                 <div style={{flex:1,minWidth:0,marginRight:12}}>
                   <div style={{fontSize:13,fontWeight:600}}>Regularly Rostered</div>
@@ -9323,6 +9553,22 @@ function UsersView({ user, setAuditLog }) {
                   {inviteOrgTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
+              {/* INVITE-BRANCH-V1 */}
+              {inviteBranchList.length > 0 && (
+                <div className="form-field">
+                  <label className="form-label" style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px'}}>Branches <span style={{fontSize:10,color:'var(--t2)',fontWeight:400,textTransform:'none',letterSpacing:0}}>(optional)</span></label>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'6px 16px'}}>
+                    {inviteBranchList.map(b => (
+                      <label key={b.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:13,cursor:'pointer'}}>
+                        <input type="checkbox" checked={inviteBranchIds.includes(b.id)}
+                          onChange={e => { const on = e.target.checked; setInviteBranchIds(prev => on ? [...prev, b.id] : prev.filter(x => x !== b.id)) }}/>
+                        <span>{b.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{fontSize:10,color:'var(--t2)',marginTop:4}}>No ticks = works across all branches. Applied when they register.</div>
+                </div>
+              )}
               {(inviteFirstName.trim()||inviteLastName.trim())&&invitePositions.some(p=>p.role||p.position)&&(
                 <div style={{background:'rgba(0,168,126,.06)',border:'1px solid rgba(0,168,126,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:'var(--text)',lineHeight:1.5}}>
                   <div style={{fontSize:10,fontWeight:700,color:'var(--brand)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.8px'}}>Invite Summary</div>
@@ -11837,6 +12083,135 @@ function RolesPositionsView({ user }) {
   )
 }
 
+// BRANCHES-TAB-V1 ---------------------------------------------------------
+// Organisation branches / sites. Managed by client admin (and super admin).
+// Deactivate, never delete: records keep their branch, and the database
+// refuses to delete a branch that is in use. Who may write is enforced by
+// the br_insert / br_update policies; canEdit only hides the controls.
+function BranchesPanel({ orgId, canEdit }) {
+  const [rows, setRows] = useState(null)
+  const [newName, setNewName] = useState('')
+  const [editId, setEditId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    if (!isConfigured() || !orgId) { setRows(null); return }
+    let alive = true
+    supabase.from('org_branches').select('id,name,is_active,created_at')
+      .eq('org_id', orgId).order('name')
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.error('BRANCHES-TAB-V1 load', error)
+          setMsg('\u2717 Could not load branches: ' + error.message)
+          setRows([])
+          return
+        }
+        setRows(data || [])
+      })
+    return () => { alive = false }
+  }, [orgId, reload])
+
+  const friendly = (e) => (e && e.code === '23505')
+    ? 'A branch with that name already exists.'
+    : (e?.message || 'Unknown error')
+
+  const addBranch = async () => {
+    const name = newName.trim()
+    if (!name || !orgId) return
+    setBusy(true); setMsg('')
+    const { data, error } = await supabase.from('org_branches')
+      .insert({ org_id: orgId, name }).select('id')
+    if (error) setMsg('\u2717 ' + friendly(error))
+    else if (!data || data.length !== 1) setMsg('\u2717 Branch not saved. You may not have permission to add branches.')
+    else { setNewName(''); setMsg('\u2713 Branch added.'); setReload(n => n + 1) }
+    setBusy(false)
+  }
+
+  const updateBranch = async (id, patch, okText) => {
+    setBusy(true); setMsg('')
+    const { data, error } = await supabase.from('org_branches')
+      .update(patch).eq('id', id).eq('org_id', orgId).select('id')
+    if (error) setMsg('\u2717 ' + friendly(error))
+    else if (!data || data.length !== 1) setMsg('\u2717 Change not saved. You may not have permission to edit branches.')
+    else { setEditId(null); setEditName(''); setMsg('\u2713 ' + okText); setReload(n => n + 1) }
+    setBusy(false)
+  }
+
+  const saveRename = (b) => {
+    const name = editName.trim()
+    if (!name) { setMsg('\u2717 Branch name cannot be blank.'); return }
+    if (name === b.name) { setEditId(null); return }
+    updateBranch(b.id, { name }, 'Branch renamed.')
+  }
+
+  const deactivate = (b) => {
+    if (!window.confirm('Deactivate "' + b.name + '"?\n\nIt will no longer be offered for new staff, tasks or incidents. Existing records keep it. You can reactivate it later.')) return
+    updateBranch(b.id, { is_active: false }, 'Branch deactivated.')
+  }
+
+  const active = (rows || []).filter(b => b.is_active)
+  const inactive = (rows || []).filter(b => !b.is_active)
+
+  const row = (b) => (
+    <div key={b.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'1px solid var(--s3)',flexWrap:'wrap'}}>
+      {editId === b.id ? (
+        <>
+          <input className="form-input" style={{flex:'1 1 160px'}} value={editName} autoFocus
+            onChange={e => setEditName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveRename(b); if (e.key === 'Escape') setEditId(null) }}/>
+          <button className="btn btn-primary" disabled={busy} onClick={() => saveRename(b)}>Save</button>
+          <button className="btn btn-secondary" disabled={busy} onClick={() => setEditId(null)}>Cancel</button>
+        </>
+      ) : (
+        <>
+          <div style={{flex:'1 1 160px',fontSize:14,color:b.is_active ? 'var(--text)' : 'var(--t2)'}}>{b.name}</div>
+          {canEdit && b.is_active && <>
+            <button className="btn btn-secondary" disabled={busy} onClick={() => { setEditId(b.id); setEditName(b.name); setMsg('') }}>Rename</button>
+            <button className="btn btn-secondary" disabled={busy} onClick={() => deactivate(b)}>Deactivate</button>
+          </>}
+          {canEdit && !b.is_active &&
+            <button className="btn btn-secondary" disabled={busy} onClick={() => updateBranch(b.id, { is_active: true }, 'Branch reactivated.')}>Reactivate</button>}
+        </>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="section" style={{marginBottom:14}}>
+      <div className="section-title">Branches &amp; Sites</div>
+      <div style={{fontSize:12,color:'var(--t2)',marginBottom:12}}>
+        Add each location your organisation operates from. Staff, tasks, incidents and complaints can then be linked to a branch, and reports can be filtered by it. Until a branch is added, everything stays organisation-wide.
+      </div>
+      {msg && <div style={{fontSize:13,marginBottom:10,color:msg.startsWith('\u2713') ? 'var(--green)' : 'var(--red)'}}>{msg}</div>}
+      {canEdit && (
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+          <input className="form-input" style={{flex:'1 1 200px'}} placeholder="New branch name, e.g. Fort Portal"
+            value={newName} onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addBranch() }}/>
+          <button className="btn btn-primary" disabled={busy || !newName.trim() || !orgId} onClick={addBranch}>Add branch</button>
+        </div>
+      )}
+      {rows === null ? (
+        <div style={{fontSize:13,color:'var(--t2)'}}>Loading branches...</div>
+      ) : active.length === 0 && inactive.length === 0 ? (
+        <div style={{fontSize:13,color:'var(--t2)'}}>No branches yet.</div>
+      ) : (
+        <>
+          {active.map(row)}
+          {inactive.length > 0 && <>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginTop:16}}>Deactivated</div>
+            {inactive.map(row)}
+          </>}
+        </>
+      )}
+    </div>
+  )
+}
+
 function CompanySettingsView({ user, onSettingsSaved }) {
   const NOTIF_EVENTS = [
     { key:'task_submitted', label:'Task Submitted', sub:'When a worker submits a task for review' },
@@ -12499,6 +12874,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
 
   const save = async () => {
     if (activeTab==='team') return
+    if (activeTab==='branches') return // BRANCHES-TAB-V1
     if (activeTab==='company' && !form.name.trim()) { setMsg('✗ Company name is required'); return }
     setSaving(true); setMsg('')
     const updates = activeTab==='company' ? {
@@ -12586,7 +12962,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
   const filled = COMPANY_COMPLETENESS_FIELDS.filter(f=>form[f.key]&&String(form[f.key]).trim())
   const pct = Math.round((filled.length/COMPANY_COMPLETENESS_FIELDS.length)*100)
   const pctColor = pct===100?'var(--green)':pct>=60?'var(--amber)':'var(--red)'
-  const TABS = [['company','Company'],['notifications','Notifications'],['tasks','Tasks'],['compliance','Compliance'],['branding','Branding'],['templates','Templates'],['data','Data & Privacy'],...(['client_admin','super_admin'].includes(user?.role)?[['team','Team Management']]:[])]
+  const TABS = [['company','Company'],['notifications','Notifications'],['tasks','Tasks'],['compliance','Compliance'],['branding','Branding'],['templates','Templates'],['data','Data & Privacy'],...(['client_admin','super_admin'].includes(user?.role)?[['branches','Branches'],['team','Team Management']]:[])]
 
   return (
     <div className="anim">
@@ -12597,7 +12973,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
       )}
       <div className="ph">
         <div><div className="ph-title">Company Settings</div><div className="ph-sub">Configure your organisation, workflows and compliance</div></div>
-        {activeTab!=='data'&&activeTab!=='templates'&&activeTab!=='team'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
+        {activeTab!=='data'&&activeTab!=='templates'&&activeTab!=='team'&&activeTab!=='branches'&&<button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving...':'Save Changes'}</button>}
       </div>
 
       <MsgBanner/>
@@ -13135,6 +13511,9 @@ function CompanySettingsView({ user, onSettingsSaved }) {
       </>}
 
       {/* ── DATA & PRIVACY ──────────────────────── */}
+      {/* BRANCHES-TAB-V1 */}
+      {activeTab==='branches'&&<BranchesPanel orgId={orgId} canEdit={['client_admin','super_admin'].includes(user?.role)}/>}
+
       {activeTab==='data'&&(()=>{
         const PLAN_RETENTION = {
           personal:     { days:30,    label:'30 days',  display:'Personal' },
@@ -17457,6 +17836,10 @@ function IncidentReportView({ user }) {
   // loader below, so every vocabulary on this form follows the choice.
   const [ORG_INDUSTRIES, setOrgIndustries] = useState([])
   const [industryId, setIndustryId] = useState('')
+  // BRANCH-INCIDENT-V1: [[branch_id, name], ...] active branches, and the
+  // chosen one. Required once the org has any active branch.
+  const [ORG_BRANCHES, setOrgBranches] = useState([])
+  const [branchId, setBranchId] = useState('')
   // AFFECTED TYPES — per-industry labels over the three REGISTER keys.
   // The form shows the LABEL, the database stores the KEY. Confirmed
   // 6 Aug, do not reverse: 14461 buckets the trend report by key, and
@@ -17684,6 +18067,33 @@ function IncidentReportView({ user }) {
       } catch(e) { console.error('IND industries effect failed:', e); setOrgIndustries([]); setIndustryId('') }
     })()
   }, [orgId, orgResolved])
+  // BRANCH-INCIDENT-V1: all active branches are offered. The reporter's own
+  // branch is pre-selected when they have exactly one (or the org has only
+  // one). A failed load hides the picker; create_incident then refuses the
+  // report with a BRANCH message, so this fails closed.
+  useEffect(() => {
+    if (!orgResolved || !orgId || !isConfigured()) { setOrgBranches([]); setBranchId(''); return }
+    let alive = true
+    ;(async()=>{
+      try {
+        // BRANCH-INCIDENT-V2: no pre-selection from the reporter's own
+        // branches. Only an org with exactly one active branch is auto-set.
+        const b = await supabase.from('org_branches').select('id,name')
+          .eq('org_id', orgId).eq('is_active', true).order('name')
+        if (!alive) return
+        if (b.error) throw b.error
+        const rows = (b.data || []).map(r => [r.id, r.name])
+        setOrgBranches(rows)
+        setBranchId(prev => (prev && rows.some(r => r[0] === prev)) ? prev
+          : rows.length === 1 ? rows[0][0]
+          : '')
+      } catch(e) {
+        console.error('BRANCH-INCIDENT-V1 branches effect failed:', e)
+        if (alive) { setOrgBranches([]); setBranchId('') }
+      }
+    })()
+    return () => { alive = false }
+  }, [orgId, orgResolved])
   // CATEGORY PACKS — load once the org ID is known. Resolves the org's
   // industry_id, then reads packs ∪ org categories. source='category'
   // excludes outcome rows (report-only) and legacy rows.
@@ -17863,6 +18273,7 @@ function IncidentReportView({ user }) {
     (affectedKnown === 'unknown') ||
     (affectedKnown === 'known' && (affectedPerson || (noMatch && unmatchedName.trim())))
   const canSubmit = (ORG_INDUSTRIES.length < 2 || industryId) &&
+    (ORG_BRANCHES.length === 0 || branchId) &&
     incTitle.trim() && category && outcomes.length && effectiveSeverity && facts.trim() &&
     occurredAt && immediateActions.trim() &&
     (!overrideNeeded || overrideReason.trim()) &&
@@ -17872,6 +18283,7 @@ function IncidentReportView({ user }) {
   // so the message cannot drift away from the condition it explains.
   const missingField =
     (ORG_INDUSTRIES.length > 1 && !industryId)  ? 'Choose which service this relates to'
+    : (ORG_BRANCHES.length > 0 && !branchId)     ? 'Choose the branch where this happened'
     : !incTitle.trim()                          ? 'Give this incident a short title'
     : !category                                 ? 'Choose what happened'
     : !outcomes.length                          ? 'Choose the outcome'
@@ -17932,6 +18344,9 @@ function IncidentReportView({ user }) {
       // create_incident validates it against org_industry_links and
       // rejects one the org is not registered for.
       industry_id: industryId || null,
+      // BRANCH-INCIDENT-V1: create_incident requires this once the org has
+      // an active branch; trg_check_branch confirms it is this org's.
+      branch_id: branchId || null,
       // Read by create_incident as p_payload->>"title", trimmed there too.
       title: incTitle.trim() || null,
     }
@@ -17971,6 +18386,7 @@ function IncidentReportView({ user }) {
           setOverrideReason(''); setAffectedType(''); setAffectedInitials(''); setShift('')
           setDepartment(''); setLocationText(''); setGps(null); setFacts(''); setImmediateActions('')
           setHazardPresent(false); setClinicalNote(''); setEvidence([])
+          if (ORG_BRANCHES.length !== 1) setBranchId('') // BRANCH-INCIDENT-V2
         }}>Report another incident</button>
       </div>
     )
@@ -17999,6 +18415,24 @@ function IncidentReportView({ user }) {
           style={{width:"100%",padding:"10px",borderRadius:8,border:"1px solid var(--border2)",background:"var(--card)",color:"var(--text)",boxSizing:"border-box"}}/>
         <div style={{fontSize:11,color:"var(--t3)",marginTop:6}}>{incTitle.length}/80</div>
       </div>
+      {/* BRANCH-INCIDENT-V1: where it happened. Hidden when the org has no
+          active branches. */}
+      {ORG_BRANCHES.length > 0 && (
+        <div style={card}>
+          <span style={lbl}>Which branch did this happen at? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {ORG_BRANCHES.map(([bid,bname]) => (
+              <button key={bid} type="button" onClick={()=>setBranchId(bid)}
+                style={{padding:'8px 14px',borderRadius:8,cursor:'pointer',
+                        border:'1px solid '+(branchId===bid?'var(--brand)':'var(--border)'),
+                        background:branchId===bid?'var(--brand-lt)':'transparent',
+                        fontWeight:branchId===bid?700:400}}>
+                {bname}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Step 1 — category */}
       <div style={card}>
         <span style={lbl}>What happened? <span style={{fontWeight:400,color:'#9CA3AF'}}>(required)</span></span>
@@ -18022,7 +18456,13 @@ function IncidentReportView({ user }) {
           </div>
         )}
         {CATEGORIES.map(([k,title,sub]) => (
-          <button key={k} onClick={()=>{setCategory(k); setHarmType(''); setOutcomes([]); setSeverity(0)}}
+          <button key={k} onClick={()=>{
+              // BRANCH-INCIDENT-V2: branch first, then what happened.
+              if (ORG_BRANCHES.length > 0 && !branchId) {
+                alert('Please choose the branch where this happened first.')
+                return
+              }
+              setCategory(k); setHarmType(''); setOutcomes([]); setSeverity(0)}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:8,borderRadius:12,
               border: category===k ? '2px solid var(--brand,#4F46E5)' : '1px solid rgba(0,0,0,.12)',
               background: category===k ? 'rgba(79,70,229,.06)' : 'transparent', cursor:'pointer'}}>
@@ -18370,6 +18810,26 @@ function ReportIssueView({ user, embedded }) {
   // primary first. Empty or single -> no picker, resolved silently.
   const [cmpInds, setCmpInds] = useState([])
   const [cmpInd, setCmpInd] = useState('')
+  // COMPLAINT-BRANCH-V1: [[branch_id, name], ...] active branches, and the choice.
+  const [cmpBranches, setCmpBranches] = useState([])
+  const [cmpBranch, setCmpBranch] = useState('')
+  useEffect(() => {
+    if (!isConfigured() || !user?.org) return
+    let alive = true
+    ;(async () => {
+      try {
+        const oid = await resolveTaskOrgId({ org: user.org })
+        if (!alive || !oid) return
+        const { data, error } = await supabase.from('org_branches')
+          .select('id,name').eq('org_id', oid).eq('is_active', true).order('name')
+        if (!alive || error) return
+        const rows = (data || []).map(r => [r.id, r.name])
+        setCmpBranches(rows)
+        if (rows.length === 1) setCmpBranch(rows[0][0])
+      } catch (e) { console.error('COMPLAINT-BRANCH-V1 load failed:', e) }
+    })()
+    return () => { alive = false }
+  }, [user?.org])
 
   useEffect(()=>{
     if(!isConfigured()) return
@@ -18404,7 +18864,9 @@ function ReportIssueView({ user, embedded }) {
     if(!title.trim()||!desc.trim()) return
     // Required where there is a choice: a defaulted service reads exactly
     // like a recorded one, which is the thing the picker exists to prevent.
-    if (cmpInds.length > 1 && !cmpInd) return
+    // COMPLAINT-BRANCH-V2: branch first, and every missing choice says so.
+    if (cmpBranches.length > 0 && !cmpBranch) { alert('Please choose the branch this is about first.'); return }
+    if (cmpInds.length > 1 && !cmpInd) { alert('Please choose which service this is about.'); return }
     setSubmitting(true)
     const now = new Date().toISOString()
     const payload = {
@@ -18418,12 +18880,15 @@ function ReportIssueView({ user, embedded }) {
       is_anonymous: anon,
     }
     if (cmpInd) payload.industry_id = cmpInd
+    if (cmpBranch) payload.branch_id = cmpBranch // COMPLAINT-BRANCH-V1
     if(photo) payload.photo_url = photo
     if(isConfigured()) {
       try {
         const { error } = await supabase.from('issue_reports').insert(payload)
         if(error) throw error
       } catch(err) {
+        // COMPLAINT-BRANCH-V1: say why, instead of failing silently
+        alert('Could not submit: ' + (err?.message || 'unknown error'))
         setSubmitting(false)
         return
       }
@@ -18462,6 +18927,7 @@ function ReportIssueView({ user, embedded }) {
     }
     if(!anon) setIssues(prev=>[{...payload, id:'local_'+Date.now(), created_at:now},...prev])
     setTitle(''); setDesc(''); setPriority('medium'); setPhoto(null); setRtype('request'); setAnon(false)
+    if (cmpBranches.length !== 1) setCmpBranch('') // COMPLAINT-BRANCH-V1
     setSubmitted(true); setSubmitting(false)
     setTimeout(()=>setSubmitted(false), 4000)
   }
@@ -18479,6 +18945,25 @@ function ReportIssueView({ user, embedded }) {
           <textarea className="form-input" rows={4} placeholder="Describe the issue in detail — what happened, where, and when" value={desc} onChange={e=>setDesc(e.target.value)} style={{resize:'vertical'}}/>
           <MicChip setValue={setDesc}/>
         </div>
+        {/* COMPLAINT-BRANCH-V1: required once the org has an active branch */}
+        {cmpBranches.length > 0 && (
+          <div className="form-group">
+            <label className="form-label">Which branch is this about? *</label>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {cmpBranches.map(([id,name])=>(
+                <button key={id} onClick={()=>setCmpBranch(id)}
+                  style={{padding:'7px 16px',borderRadius:20,
+                    border:`2px solid ${cmpBranch===id?'var(--brand)':'var(--border)'}`,
+                    background:cmpBranch===id?'rgba(99,102,241,.1)':'none',
+                    color:cmpBranch===id?'var(--brand)':'var(--t2)',
+                    fontWeight:cmpBranch===id?700:400,cursor:'pointer',fontSize:13,
+                    fontFamily:'inherit',transition:'all .15s'}}>
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {cmpInds.length > 1 && (
           <div className="form-group">
             <label className="form-label">Which service is this about? *</label>
@@ -18550,7 +19035,18 @@ function ReportIssueView({ user, embedded }) {
           )}
         </div>
         {submitted && <div style={{padding:'10px 14px',borderRadius:8,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.3)',color:'#059669',fontWeight:600,marginBottom:12}}>✓ Request logged successfully</div>}
-        <button className="btn btn-primary" disabled={!title.trim()||!desc.trim()||submitting} onClick={submit} style={{width:'100%'}}>
+        {/* COMPLAINT-BRANCH-V3: greyed out until every required choice is made */}
+        {(() => {
+          const _need = !title.trim() ? 'Add a title'
+            : !desc.trim() ? 'Add a description'
+            : (cmpBranches.length > 0 && !cmpBranch) ? 'Choose the branch this is about'
+            : (cmpInds.length > 1 && !cmpInd) ? 'Choose which service this is about'
+            : ''
+          return _need && !submitting
+            ? <div style={{fontSize:12,color:'var(--t3)',marginBottom:6,textAlign:'center'}}>{_need} to submit.</div>
+            : null
+        })()}
+        <button className="btn btn-primary" disabled={!title.trim()||!desc.trim()||submitting||(cmpBranches.length>0&&!cmpBranch)||(cmpInds.length>1&&!cmpInd)} onClick={submit} style={{width:'100%'}}>
           {submitting?'Submitting…':'Submit Issue Report'}
         </button>
       </div>
@@ -18892,6 +19388,11 @@ function IncidentRegisterView({ user, setPage }) {
   const [fSeverity, setFSeverity] = useState('all')
   const [fStatus, setFStatus] = useState('all')
   const [breachedOnly, setBreachedOnly] = useState(false)
+  // REPORT-BRANCH-V1: branch and service filters. [[id, name, active]] / [[id, name]], primary service first.
+  const [fBranch, setFBranch] = useState('all')
+  const [fService, setFService] = useState('all')
+  const [regBranches, setRegBranches] = useState([])
+  const [regIndustries, setRegIndustries] = useState([])
   const [categoryLabels, setCategoryLabels] = useState({}) // category_key -> label
   // domain -> { level: label }, for the ladders that live in the packs
   // table. The medical ladder is hardcoded below and is not in here.
@@ -18933,6 +19434,16 @@ function IncidentRegisterView({ user, setPage }) {
       .select("incident_id,section,state").eq("org", id).eq("section", "rca")
     const rc={}; (fnds||[]).forEach(f=>{ const c=rc[f.incident_id]||{total:0,notExamined:0}; c.total++; if(f.state==="not_examined") c.notExamined++; rc[f.incident_id]=c })
     setRcaCounts(rc)
+    // REPORT-BRANCH-V1: filter choices. A failure leaves them empty, which hides the filters.
+    try {
+      const [{ data: bl }, { data: li }] = await Promise.all([
+        supabase.from('org_branches').select('id,name,is_active').eq('org_id', id).order('name'),
+        supabase.from('org_industry_links').select('industry_id,is_primary,global_industries(name)').eq('org', id),
+      ])
+      setRegBranches((bl||[]).map(b=>[b.id, b.name, b.is_active]))
+      setRegIndustries((li||[]).slice().sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0))
+        .map(r=>[r.industry_id, r.global_industries?.name]).filter(r=>r[1]))
+    } catch(e) { setRegBranches([]); setRegIndustries([]) }
     // category labels — load packs union for this org's industry so real
     // pack keys resolve to human labels in the trend report and register
     try {
@@ -18958,6 +19469,10 @@ function IncidentRegisterView({ user, setPage }) {
     if(fCategory!=='all' && i.category!==fCategory) return false
     if(fSeverity!=='all' && String(i.severity)!==fSeverity) return false
     if(fStatus!=='all' && i.status!==fStatus) return false
+    // REPORT-BRANCH-V1: 'none' = no branch recorded. A service with no industry_id
+    // resolves to the primary, as everywhere else in the product.
+    if(fBranch!=='all' && (fBranch==='none' ? !!i.branch_id : i.branch_id!==fBranch)) return false
+    if(fService!=='all' && !(i.industry_id===fService || (!i.industry_id && regIndustries[0] && regIndustries[0][0]===fService))) return false
     // Catches BOTH late states: someone filtering for problems wants the
     // overdue ones too, not only the abandoned ones.
     if(breachedOnly && incTimeliness(i)==='met') return false
@@ -19256,6 +19771,18 @@ function IncidentRegisterView({ user, setPage }) {
           <select style={sel} value={fSeverity} onChange={e=>setFSeverity(e.target.value)}>
             <option value="all">All</option>{[1,2,3,4,5].map(s=><option key={s} value={String(s)}>{s} {(INC_SEVERITY_CFG[s]||{}).label}</option>)}
           </select></div>
+        {/* REPORT-BRANCH-V1 */}
+        {regBranches.length>0&&<div><div style={{fontSize:10,color:'var(--t3)'}}>Branch</div>
+          <select style={sel} value={fBranch} onChange={e=>setFBranch(e.target.value)}>
+            <option value="all">All</option>
+            {regBranches.map(([bid,bname,bact])=><option key={bid} value={bid}>{bname}{bact?'':' (deactivated)'}</option>)}
+            <option value="none">No branch recorded</option>
+          </select></div>}
+        {regIndustries.length>1&&<div><div style={{fontSize:10,color:'var(--t3)'}}>Service</div>
+          <select style={sel} value={fService} onChange={e=>setFService(e.target.value)}>
+            <option value="all">All</option>
+            {regIndustries.map(([iid,iname])=><option key={iid} value={iid}>{iname}</option>)}
+          </select></div>}
         <div><div style={{fontSize:10,color:'var(--t3)'}}>Status</div>
           <select style={sel} value={fStatus} onChange={e=>setFStatus(e.target.value)}>
             <option value="all">All</option>{Object.entries(INC_STATUS_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
@@ -19318,6 +19845,15 @@ function IncidentRegisterView({ user, setPage }) {
               issueNoteRows = inotes || []
             }
           } catch(e) { issuesRows = []; issueNoteRows = [] }
+          // REPORT-BRANCH-V1: every branch, deactivated included, so older incidents
+          // still land in a named section. A failure leaves the list empty, which
+          // draws the report without branch pages.
+          let brs = []
+          try {
+            const { data: bl } = await supabase.from('org_branches')
+              .select('id,name,is_active').eq('org_id', orgId).order('name')
+            brs = (bl||[]).map(b=>[b.id, b.name, b.is_active])
+          } catch(e) { brs = [] }
           openBoardReport({
             orgName: user.org, incidents, months: tMonths, inMonth: tInMonth,
             issues: issuesRows, issueNotes: issueNoteRows,
@@ -19325,6 +19861,7 @@ function IncidentRegisterView({ user, setPage }) {
             repeatPeople: tRepeatPeople, isLate: incIsLate,
             severityLabels: Object.fromEntries(Object.entries(INC_SEVERITY_CFG).map(([k,v])=>[k,v.label])),
             industries: inds,
+            branches: brs,
             actions: acts, findings: finds, findingLabels: INC_FINDING_LABEL,
           })
         }}>📊 Trend Analysis Report</button>
@@ -21747,9 +22284,32 @@ export default function App() {
   useEffect(()=>{ tasksRef.current = tasks },[tasks])
   useEffect(()=>{
     if(!showProfile||!user?.org||!isConfigured()) return
-    supabase.from('organisations').select('industry').eq('name',user.org).maybeSingle()
-      .then(({data})=>{ setProfileOrgIndustry(data?.industry||'') })
-      .catch(()=>{})
+    // MEMBER-IND-PROFILE-V1: the industries this person is ticked to in Edit
+    // Member, falling back to the organisation's industry when none are ticked.
+    ;(async () => {
+      try {
+        const { data: org } = await supabase.from('organisations').select('id,industry').eq('name',user.org).maybeSingle()
+        let label = org?.industry || ''
+        // INDUSTRY-FROM-POSITIONS-V1: the industries come from the person's
+        // positions -- their main industry in this org plus the industries on
+        // their Additional Positions. additional_positions is not org-scoped,
+        // so only industries this org is registered for are counted.
+        if (org?.id && user?.id) {
+          const [{ data: om }, { data: pr }, { data: li }] = await Promise.all([
+            supabase.from('org_members').select('industry').eq('org', org.id).eq('user_id', user.id).maybeSingle(),
+            supabase.from('profiles').select('additional_positions').eq('id', user.id).maybeSingle(),
+            supabase.from('org_industry_links').select('global_industries(name)').eq('org', org.id),
+          ])
+          const orgNames = (li || []).map(r => r.global_industries?.name).filter(Boolean)
+          let extra = []
+          try { const ap = pr?.additional_positions; extra = Array.isArray(ap) ? ap : (ap ? JSON.parse(ap) : []) } catch (e) { extra = [] }
+          const mine = [om?.industry, ...extra.map(p => p && p.industry)].filter(Boolean)
+          const names = [...new Set(mine)].filter(n => !orgNames.length || orgNames.includes(n)).sort()
+          if (names.length) label = names.join(' \u00b7 ')
+        }
+        setProfileOrgIndustry(label)
+      } catch (e) { /* leave the field as it was */ }
+    })()
   },[showProfile, user?.org])
   // Load appointed positions for the current user, scoped to the organisation they are signed into.
   // Only org_members and invite_links are used (both filtered to the current org). profiles.additional_positions
@@ -23017,7 +23577,7 @@ export default function App() {
                 <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
 
                 <div className="form-field"><label className="form-label">Organisation</label><input className="form-input" value={user.org||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
-                <div className="form-field"><label className="form-label">Industry</label><input className="form-input" value={profileOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
+                <div className="form-field"><label className="form-label">{String(profileOrgIndustry).includes('\u00b7') ? 'Industries' : 'Industry'}</label><input className="form-input" value={profileOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
 
                 {(() => {
                   const positionsList = appointedPositions.length ? appointedPositions : [user.position].filter(Boolean)
