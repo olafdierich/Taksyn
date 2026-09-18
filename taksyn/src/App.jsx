@@ -3698,6 +3698,13 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   const [showEdit, setShowEdit] = useState(false)
   const [editTask, setEditTask] = useState({})
   const [showReject, setShowReject] = useState(null)
+  // [RATING-V1-TASKDETAIL] quality rating on approval. Mandatory: the guard
+  // refuses an approval with a null rating, so the button stays disabled
+  // until a value is chosen. A reason is required below 3 -- the DB check
+  // constraint enforces the same rule, this only avoids a raw error.
+  const [showRate, setShowRate] = useState(null)
+  const [rateValue, setRateValue] = useState(0)
+  const [rateNote, setRateNote] = useState('')
   const [rejectNote, setRejectNote] = useState('')
   const [showEscalate, setShowEscalate] = useState(null)
   const [escalateReason, setEscalateReason] = useState('')
@@ -4966,6 +4973,15 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
   )
   // SUP-LOW-V1: supervisors approve Low priority only. Missing priority = not Low (fails closed).
   const canReviewTask = (t) => canApprove && !(isAssignedTo(t) && t.created_by !== user.name) && !(user.role==='supervisor' && t?.priority!=='low')
+  // [RATING-V1-TASKDETAIL] Mirrors the DB rule so the UI never offers an action
+  // the database refuses. tasks_supervisor_scope_guard permits the named
+  // approver, an org admin (client_admin or manager) or a super admin.
+  // The gap this closes: a supervisor could approve a Low task they are
+  // NOT the named approver of, and the guard would reject the write.
+  const canRateTask = (t) => canReviewTask(t) && (
+    String(t?.approver_id||'') === String(user.id) ||
+    ['client_admin','manager','super_admin'].includes(user.role)
+  )
   // SUP-LOW-V2: opening the edit form (Edit, Reassign) follows the same Low-only
   // rule for supervisors. Missing priority = not Low (fails closed).
   const canEditTask = (t) => canApprove && !(user.role==='supervisor' && t?.priority!=='low')
@@ -5387,6 +5403,51 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   update(showReject,{status:'rejected',reviewed_at:new Date().toISOString(),comments:[...parseSafe(task.comments,[]),rejectEntry]})
                   setShowReject(null); setRejectNote('')
                 }}>Reject Task</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* [RATING-V1-TASKDETAIL] rating modal. Follows the Reject modal pattern above:
+          same overlay, same classes, MicChip on the note box as that one uses. */}
+      {showRate&&(
+        <div className="modal-overlay" onClick={()=>{setShowRate(null);setRateValue(0);setRateNote('')}}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-hdr"><div className="modal-title">Approve &amp; rate</div><button className="modal-close" onClick={()=>{setShowRate(null);setRateValue(0);setRateNote('')}}>×</button></div>
+            <div className="modal-body">
+              <div style={{fontSize:13,color:'var(--t2)',marginBottom:14}}>How was the quality of this work? Your name is recorded with the rating and the staff member can see it.</div>
+              <div style={{display:'flex',gap:6,marginBottom:6}}>
+                {[1,2,3,4,5].map(v=>(
+                  <button key={v} type="button" aria-label={v+' of 5'} aria-pressed={rateValue===v}
+                    onMouseDown={e=>e.preventDefault()}
+                    onClick={()=>setRateValue(v)}
+                    style={{width:44,height:44,borderRadius:10,cursor:'pointer',fontSize:20,lineHeight:1,
+                      border:'1px solid '+(v<=rateValue?'var(--brand)':'var(--border)'),
+                      background:v<=rateValue?'var(--brand)':'transparent',
+                      color:v<=rateValue?'#fff':'var(--t2)'}}>✓</button>
+                ))}
+              </div>
+              <div style={{fontSize:12,color:'var(--t2)',marginBottom:14}}>
+                {rateValue===0?'Choose a rating to continue.':(rateValue<3?'A 1 or 2 means the work was accepted but fell short. Please say why.':rateValue+' of 5')}
+              </div>
+              {rateValue>0&&rateValue<3&&(
+                <div className="form-field"><label className="form-label">Why was this below standard?</label>
+                  <textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Bathroom mirror and floor were missed…"
+                    value={rateNote} onChange={e=>setRateNote(e.target.value)}/><MicChip setValue={setRateNote}/></div>
+              )}
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button className="btn btn-secondary" onClick={()=>{setShowRate(null);setRateValue(0);setRateNote('')}}>Cancel</button>
+                <button className="btn btn-primary"
+                  disabled={rateValue===0||(rateValue<3&&!rateNote.trim())}
+                  onClick={()=>{
+                    update(showRate,{status:'approved',reviewed_at:new Date().toISOString(),
+                      quality_rating:rateValue,
+                      rating_reason:rateNote.trim()||null,
+                      rated_by_id:user.id, rated_by_name:user.name,
+                      rated_at:new Date().toISOString()})
+                    setShowRate(null); setRateValue(0); setRateNote('')
+                  }}>Approve</button>
               </div>
             </div>
           </div>
@@ -6218,7 +6279,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
           </div>
           <div className="btn-row">
             {canEditTask(sel)&&['pending','in_progress','overdue','escalated','rejected'].includes(sel.status)&&<button className="btn btn-secondary" onClick={async()=>{ const full=await loadTaskById(sel.id); const src=full||sel; setEditTask({...src,subtasks:parseSafe(src.subtasks)}); setAssignAll(!(src.assigned_user_ids&&src.assigned_user_ids.length)); setTaskTeamMembers([]); if(src.team_id&&isConfigured()){ supabase.from('team_members').select('user_id,user_name,role').eq('team_id',src.team_id).then(({data:tms})=>{ if(!tms||!tms.length)return; const ids=tms.map(m=>m.user_id); supabase.from('profiles').select('id,name,email,role,position').in('id',ids).then(({data:profs})=>{ if(profs) setTaskTeamMembers(profs.map(p=>({...p,role:tms.find(m=>m.user_id===p.id)?.role||p.role}))) }).catch(()=>{}) }).catch(()=>{}) } setShowEdit(true) }}><IC n="pencil" s={13}/> Edit</button>}
-            {canReviewTask(sel)&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>update(sel.id,{status:'approved',reviewed_at:new Date().toISOString()})}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
+            {/* [RATING-V1-TASKDETAIL] approve now opens the rating step; it no longer writes directly */}{canRateTask(sel)&&sel.status==='awaiting_review'&&<><button className="btn btn-primary" onClick={()=>{setRateValue(0);setRateNote('');setShowRate(sel.id)}}>✅ Approve</button><button className="btn btn-danger" onClick={()=>setShowReject(sel.id)}>✗ Send Back</button></>}
             {canApprove&&!sel.escalation&&!['completed','approved'].includes(sel.status)&&<>
               <span style={{width:1,alignSelf:'stretch',minHeight:28,background:'var(--border)',margin:'0 4px'}}/>
               {/* Escalate button hidden (path 2): pathway retained in code, not user-reachable */}
