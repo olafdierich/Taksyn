@@ -792,6 +792,63 @@ const fmtAvg = mins => {
   return avg<60?avg+'m':Math.floor(avg/60)+'h '+(avg%60)+'m'
 }
 
+// [RATING-STATS-V1]
+// Quality ratings, in ONE place. The Performance card, the staff report and
+// the approver table all read this -- a second copy is how the two existing
+// people-tallies drifted apart in the first place.
+//
+// Three reasons a row carries no rating, and they must not collapse:
+//   na_at set        -> not applicable, never completed. OUT of the denominator.
+//   approved_at null -> never reviewed, so there was no rating moment. OUT.
+//   approved, rating null -> approved before the feature existed. UNRATED, counted.
+//
+// mean is null and never 0 when nothing is rated. Rendered as an em dash by
+// fmtRating below, so one place decides what "nothing to show" looks like.
+const ratingRows = (occ, from, to) => (Array.isArray(occ)?occ:[]).filter(o =>
+  !o.na_at && o.approved_at &&
+  (!from || o.occurrence_date >= from) && (!to || o.occurrence_date <= to))
+
+const ratingStats = rows => {
+  const list = Array.isArray(rows) ? rows : []
+  const rated = list.filter(r => r.quality_rating != null)
+  const dist = [0,0,0,0,0]
+  rated.forEach(r => { const v = Number(r.quality_rating); if(v>=1&&v<=5) dist[v-1] += 1 })
+  const sum = rated.reduce((a,r) => a + Number(r.quality_rating), 0)
+  return { n: rated.length, unrated: list.length - rated.length,
+           mean: rated.length ? sum/rated.length : null, dist }
+}
+
+// Group by any key. Rows whose key is missing are dropped rather than pooled
+// into an "unknown" bucket -- one legacy occurrence holds a name in
+// completed_by instead of a uuid and will not appear. That is correct.
+const ratingStatsBy = (rows, keyField) => {
+  const out = {}
+  ;(Array.isArray(rows)?rows:[]).forEach(r => {
+    const k = r[keyField]
+    if(!k) return
+    ;(out[k] = out[k] || []).push(r)
+  })
+  return Object.fromEntries(Object.entries(out).map(([k,v]) => [k, ratingStats(v)]))
+}
+
+const fmtRating = st => (!st || st.mean == null) ? '—' : st.mean.toFixed(1)
+
+// [RATING-TICKMARK-V1] The Taksyn tick, drawn as SVG so a partial rating clips cleanly.
+// The character was rounded to half steps, which made 3.8 and 4.0 identical
+// on screen. A proportional clip shows the real value.
+const TickRow5 = ({ grad=false }) => (
+  <svg width="78" height="16" viewBox="0 0 120 24" style={{verticalAlign:'middle',display:'block'}}>
+    {grad&&<defs><linearGradient id="tkTickGrad" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stopColor="#1746A2"/><stop offset="100%" stopColor="#2FC5D2"/>
+    </linearGradient></defs>}
+    {[0,24,48,72,96].map(x=>(
+      <path key={x} transform={'translate('+x+',0)'} d="M4.5 12.6 L9.8 18.4 L20 4.6"
+        fill="none" stroke={grad?'url(#tkTickGrad)':'var(--border)'}
+        strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"/>
+    ))}
+  </svg>
+)
+
 // PATCH-USEORGLOGO-V1
 // The org's logo, for report headers. One definition rather than a copy
 // per component: this query was hand-rolled twice before, and the two
@@ -2046,21 +2103,21 @@ const RISK_INFO = {
   likelihood: {
     title: 'Likelihood',
     rows: [
-      ['5 \u00b7 Certain', '>50% — expected to occur in most circumstances'],
-      ['4 \u00b7 Likely', '21\u201350% — will probably occur in most circumstances'],
-      ['3 \u00b7 Possible', '6\u201320% — might occur at some time'],
-      ['2 \u00b7 Unlikely', '2\u20135% — could occur at some time'],
-      ['1 \u00b7 Rare', '<2% — may occur only in exceptional circumstances'],
+      ['5 · Certain', '>50% — expected to occur in most circumstances'],
+      ['4 · Likely', '21\u201350% — will probably occur in most circumstances'],
+      ['3 · Possible', '6\u201320% — might occur at some time'],
+      ['2 · Unlikely', '2\u20135% — could occur at some time'],
+      ['1 · Rare', '<2% — may occur only in exceptional circumstances'],
     ],
   },
   consequence: {
     title: 'Consequence',
     rows: [
-      ['5 \u00b7 Catastrophic', 'Serious/fatal harm, or a near miss needing immediate correction. Business: risk of closure, loss of accreditation, huge financial loss.'],
-      ['4 \u00b7 Major', 'Major harm or impact. Business: extensive financial and accreditation implications.'],
-      ['3 \u00b7 Moderate', 'Moderate effect; a near miss with important lessons. Business: high financial impact, some external assistance needed.'],
-      ['2 \u00b7 Minor', 'Inconvenience or minor effect; a near miss with some lessons. Business: medium financial impact, investigation.'],
-      ['1 \u00b7 Insignificant', 'Little or no impact; a near miss with slight lessons. Business: little or no financial loss.'],
+      ['5 · Catastrophic', 'Serious/fatal harm, or a near miss needing immediate correction. Business: risk of closure, loss of accreditation, huge financial loss.'],
+      ['4 · Major', 'Major harm or impact. Business: extensive financial and accreditation implications.'],
+      ['3 · Moderate', 'Moderate effect; a near miss with important lessons. Business: high financial impact, some external assistance needed.'],
+      ['2 · Minor', 'Inconvenience or minor effect; a near miss with some lessons. Business: medium financial impact, investigation.'],
+      ['1 · Insignificant', 'Little or no impact; a near miss with slight lessons. Business: little or no financial loss.'],
     ],
   },
 };
@@ -3335,7 +3392,7 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         <div className="ph-sub">{isWkr?'Hello '+user.name.split(' ')[0]+' — your tasks for today':user.org+(user.industry?' · 🏭 '+user.industry:'')+' · '+visible.length+' tasks'}</div>
       </div>
       <div className="stat-grid">
-        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋" onClick={()=>go('all')}/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Completion" val={occRate===null?'—':occRate+"%"} sub={occRate===null?'loading\u2026':occDone+" of "+occClosed+", 30 days"} color={occRate===null?'#6B7280':occRate>=80?'#10B981':occRate>=50?'#F59E0B':'#EF4444'} bg={occRate===null?'rgba(107,114,128,.1)':occRate>=80?'rgba(16,185,129,.1)':occRate>=50?'rgba(245,158,11,.1)':'rgba(239,68,68,.1)'} icon="✅" onClick={()=>setPage('reports')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Missed" val={missedCount===null?'—':missedCount} sub={missedCount===null?'loading…':'last 30 days'} color={missedCount===null?'#6B7280':missedCount>0?'#EF4444':'#10B981'} bg={missedCount===null?'rgba(107,114,128,.1)':missedCount>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="🔴" onClick={()=>setPage('reports')}/><Stat label="Late" val={lateCount===null?'—':lateCount} sub={lateCount===null?'loading…':'outside grace, 30 days'} color={lateCount===null?'#6B7280':lateCount>0?'#F59E0B':'#10B981'} bg={lateCount===null?'rgba(107,114,128,.1)':lateCount>0?'rgba(245,158,11,.1)':'rgba(16,185,129,.1)'} icon="🟡" onClick={()=>setPage('reports')}/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨" onClick={()=>setPage('users')}/>{/* SUP-SCOPE-CARD-V1: manager / supervisor created, rolling 30 days. No click-through: the task list is scoped per role and would not show these. */}<div className="stat-card"><div className="sc-top"><span className="sc-label">Tasks Created</span><div className="sc-icon" style={{background:'rgba(107,114,128,.1)',color:'#6B7280'}}>{'\u{1F465}'}</div></div><div className="sc-val" style={{color:'var(--text)'}}>{createdSplit ? createdSplit.m+' / '+createdSplit.s : '\u2014'}</div><div className="sc-sub">{createdSplit ? 'manager / supervisor, 30 days' : 'loading\u2026'}</div></div>{isCA&&<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div>}<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">Open Incidents</span><div className="sc-icon" style={{background:openIncidents>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIncidents>0?'#EF4444':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:openIncidents>0?'#EF4444':'#6B7280'}}>{openIncidents}</div><div className="sc-sub">being handled</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incident_register')}><div className="sc-top"><span className="sc-label">Breached</span><div className="sc-icon" style={{background:breachedIncidents>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)',color:breachedIncidents>0?'#EF4444':'#10B981'}}>⏱</div></div><div className="sc-val" style={{color:breachedIncidents>0?'#EF4444':overdueIncidents>0?'#EA580C':'#10B981'}}>{breachedIncidents}<span style={{fontSize:'0.5em',fontWeight:500,color:'var(--t3)'}}> / {overdueIncidents}</span></div><div className="sc-sub">breached / overdue</div></div></>}
+        {(isCA||isMgr)&&<><Stat label="Total Tasks" val={visible.length} sub={pending+" pending"} icon="📋" onClick={()=>go('all')}/><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={visible.filter(t=>t.status==='approved').length} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/><Stat label="Completion" val={occRate===null?'—':occRate+"%"} sub={occRate===null?'loading\u2026':occDone+" of "+occClosed+", 30 days"} color={occRate===null?'#6B7280':occRate>=80?'#10B981':occRate>=50?'#F59E0B':'#EF4444'} bg={occRate===null?'rgba(107,114,128,.1)':occRate>=80?'rgba(16,185,129,.1)':occRate>=50?'rgba(245,158,11,.1)':'rgba(239,68,68,.1)'} icon="✅" onClick={()=>setPage('reports')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Action needed':'On track'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Missed" val={missedCount===null?'—':missedCount} sub={missedCount===null?'loading…':'last 30 days'} color={missedCount===null?'#6B7280':missedCount>0?'#EF4444':'#10B981'} bg={missedCount===null?'rgba(107,114,128,.1)':missedCount>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="🔴" onClick={()=>setPage('reports')}/><Stat label="Late" val={lateCount===null?'—':lateCount} sub={lateCount===null?'loading…':'outside grace, 30 days'} color={lateCount===null?'#6B7280':lateCount>0?'#F59E0B':'#10B981'} bg={lateCount===null?'rgba(107,114,128,.1)':lateCount>0?'rgba(245,158,11,.1)':'rgba(16,185,129,.1)'} icon="🟡" onClick={()=>setPage('reports')}/><Stat label="Pending Invites" val={pendingInvites.length} sub={pendingInvites.length>0?'Awaiting sign-up':'All joined'} color={pendingInvites.length>0?'#F59E0B':'#6B7280'} bg={pendingInvites.length>0?'rgba(245,158,11,.1)':'rgba(107,114,128,.1)'} icon="📨" onClick={()=>setPage('users')}/>{/* SUP-SCOPE-CARD-V1: manager / supervisor created, rolling 30 days. No click-through: the task list is scoped per role and would not show these. */}<div className="stat-card"><div className="sc-top"><span className="sc-label">Tasks Created</span><div className="sc-icon" style={{background:'rgba(107,114,128,.1)',color:'#6B7280'}}>{'\u{1F465}'}</div></div><div className="sc-val" style={{color:'var(--text)'}}>{createdSplit ? createdSplit.m+' / '+createdSplit.s : '—'}</div><div className="sc-sub">{createdSplit ? 'manager / supervisor, 30 days' : 'loading\u2026'}</div></div>{isCA&&<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('issue_reports')}><div className="sc-top"><span className="sc-label">Open Requests</span><div className="sc-icon" style={{background:openIssuesCount>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIssuesCount>0?'#EF4444':'#6B7280'}}>⚠️</div></div><div className="sc-val" style={{color:openIssuesCount>0?'#EF4444':'#6B7280'}}>{openIssuesCount}</div><div className="sc-sub">need attention</div></div>}<div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incidents')}><div className="sc-top"><span className="sc-label">Open Incidents</span><div className="sc-icon" style={{background:openIncidents>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)',color:openIncidents>0?'#EF4444':'#6B7280'}}>🚨</div></div><div className="sc-val" style={{color:openIncidents>0?'#EF4444':'#6B7280'}}>{openIncidents}</div><div className="sc-sub">being handled</div></div><div className="stat-card" style={{cursor:'pointer'}} onClick={()=>setPage('incident_register')}><div className="sc-top"><span className="sc-label">Breached</span><div className="sc-icon" style={{background:breachedIncidents>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)',color:breachedIncidents>0?'#EF4444':'#10B981'}}>⏱</div></div><div className="sc-val" style={{color:breachedIncidents>0?'#EF4444':overdueIncidents>0?'#EA580C':'#10B981'}}>{breachedIncidents}<span style={{fontSize:'0.5em',fontWeight:500,color:'var(--t3)'}}> / {overdueIncidents}</span></div><div className="sc-sub">breached / overdue</div></div></>}
         {isSup&&<><Stat label="To Review" val={review} sub="Awaiting approval" color="#F59E0B" bg="rgba(245,158,11,.1)" icon="🔍" onClick={()=>go('awaiting_review')}/><Stat label="Approved" val={done} sub="Validated" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('approved')}/>{/* SUP-DASH-V3: Escalated card removed for supervisors */}<Stat label="Overdue" val={overdue} sub="Needs attention" color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/>{/* SUP-DASH-V1: My Incidents card removed -- supervisors report incidents, they do not see them */}</>}
         {isWkr&&<><Stat label="My Tasks" val={visible.filter(t=>!['awaiting_review','approved','completed'].includes(t.status)||isRecurring(t)).length} sub="remaining to do" icon="📋" onClick={()=>go('all')}/><Stat label="Submitted" val={visible.filter(t=>['awaiting_review','approved','completed'].includes(t.status)).length} sub="done or in review" color="#10B981" bg="rgba(16,185,129,.1)" icon="✅" onClick={()=>go('awaiting_review')}/><Stat label="Overdue" val={overdue} sub={overdue>0?'Complete soon':'All good'} color={overdue>0?'#EF4444':'#10B981'} bg={overdue>0?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)'} icon="⏰" onClick={()=>go('overdue')}/><Stat label="Rejected" val={rejected} sub={rejected>0?'Action needed':'All good'} color={rejected>0?'#EF4444':'#6B7280'} bg={rejected>0?'rgba(239,68,68,.1)':'rgba(107,114,128,.1)'} icon="✗" onClick={()=>go('rejected')}/></>}
       </div>
@@ -6163,7 +6220,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                   {priorPhotos.map((p,i)=>{
                     const tsStr=p.ts?fmtDateTime(p.ts,''):''
                     const roleLbl=p.role?(ROLE_LABELS[p.role]||p.role):''
-                    const cap=p.by?`Added by ${p.by}${roleLbl?' ('+roleLbl+')':''}${tsStr?' \u00b7 '+tsStr:''}`:tsStr
+                    const cap=p.by?`Added by ${p.by}${roleLbl?' ('+roleLbl+')':''}${tsStr?' · '+tsStr:''}`:tsStr
                     return (
                       <div key={'prior'+i} style={{position:'relative',marginBottom:4}}>
                         <EvidenceThumb entry={p} className="ev-thumb" imgStyle={{width:'100%',height:'100%',objectFit:'cover'}} onImgClick={setLightboxUrl}/>
@@ -6272,8 +6329,8 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Schedule:</span> {RECURRENCE_LABELS[sel.recurrence||'once']}</div>
               {sel.approver_name&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Approver:</span> {sel.approver_name}{/* SUP-LOW-V2: only say "your review" when this viewer can actually approve */}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&!canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--t2)'}}>Awaiting manager / admin review</span>}{sel.status==='awaiting_review'&&user.id===sel.approver_id&&canReviewTask(sel)&&<span style={{marginLeft:6,fontSize:11,fontWeight:700,color:'var(--brand)'}}>⏳ Awaiting your review</span>}</div>}
               {/* TASK-BRANCH-V2: industry and branch in the details card */}
-              {(taskIndustries.length > 1 || sel.industry_id) && <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Industry:</span> {sel.industry_id ? ((taskIndustries.find(i=>i.id===sel.industry_id)||{}).name || '\u2014') : 'General (any industry)'}</div>}
-              {(taskBranches.length > 0 || sel.branch_id) && <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Branch:</span> {sel.branch_id ? (taskBranchNames[sel.branch_id] || '\u2014') : 'All branches'}</div>}
+              {(taskIndustries.length > 1 || sel.industry_id) && <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Industry:</span> {sel.industry_id ? ((taskIndustries.find(i=>i.id===sel.industry_id)||{}).name || '—') : 'General (any industry)'}</div>}
+              {(taskBranches.length > 0 || sel.branch_id) && <div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Branch:</span> {sel.branch_id ? (taskBranchNames[sel.branch_id] || '—') : 'All branches'}</div>}
               {sel.project&&<div style={{fontSize:13}}><span style={{color:'var(--t2)'}}>Project:</span> <span style={{color:'#3B82F6',fontWeight:600}}>📁 {sel.project}</span></div>}
             </div>
           </div>
@@ -6548,7 +6605,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                           </div>
                           {p.label&&<div style={{fontSize:11,fontWeight:600,marginTop:4}}>{p.label}</div>}
                           <div style={{fontSize:10,color:'var(--t2)',marginTop:2}}>
-                            {p.by||'Unknown'}{p.ts?' \u00b7 '+fmtDateTime(p.ts):''}
+                            {p.by||'Unknown'}{p.ts?' · '+fmtDateTime(p.ts):''}
                           </div>
                         </div>
                       )
@@ -6573,7 +6630,7 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                           </div>
                           <div style={{fontSize:12,color:'var(--t2)',marginBottom:14}}>
                             Cycle of {o.occurrence_date}
-                            {o.recurrence&&o.recurrence!=='once'?' \u00b7 '+(RECURRENCE_LABELS[o.recurrence]||o.recurrence):''}
+                            {o.recurrence&&o.recurrence!=='once'?' · '+(RECURRENCE_LABELS[o.recurrence]||o.recurrence):''}
                           </div>
                           <div style={{background:'var(--s3)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:12}}>
                             <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.8px',marginBottom:10}}>This cycle</div>
@@ -6581,8 +6638,8 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                               {o.completed_by_name&&<div><span style={{color:'var(--t2)'}}>Completed by:</span> {o.completed_by_name}</div>}
                               {o.completed_at&&<div><span style={{color:'var(--t2)'}}>Completed at:</span> {fmtDateTime(o.completed_at)}</div>}
                               {o.completed_late&&<div style={{color:'#F59E0B',fontWeight:600}}>\u26a0 Completed late</div>}
-                              {o.approved_by_name&&<div><span style={{color:'var(--t2)'}}>Approved by:</span> {o.approved_by_name}{o.approved_at?' \u00b7 '+fmtDateTime(o.approved_at):''}</div>}
-                              {o.na_by_name&&<div><span style={{color:'var(--t2)'}}>Marked not applicable by:</span> {o.na_by_name}{o.na_at?' \u00b7 '+fmtDateTime(o.na_at):''}</div>}
+                              {o.approved_by_name&&<div><span style={{color:'var(--t2)'}}>Approved by:</span> {o.approved_by_name}{o.approved_at?' · '+fmtDateTime(o.approved_at):''}</div>}
+                              {o.na_by_name&&<div><span style={{color:'var(--t2)'}}>Marked not applicable by:</span> {o.na_by_name}{o.na_at?' · '+fmtDateTime(o.na_at):''}</div>}
                             </div>
                           </div>
                           <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:14,marginBottom:12}}>
@@ -6600,8 +6657,8 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                       <div>
                         <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>
                           {archived.length} occurrence{archived.length===1?'':'s'}
-                          {' \u00b7 '}{archived.filter(o=>o.status==='completed').length} completed
-                          {' \u00b7 '}{archived.filter(o=>o.status==='missed').length} missed
+                          {' · '}{archived.filter(o=>o.status==='completed').length} completed
+                          {' · '}{archived.filter(o=>o.status==='missed').length} missed
                         </div>
                         <div style={{fontSize:11,color:'var(--t2)',background:'var(--s3)',border:'1px solid var(--border)',borderRadius:8,padding:'8px 10px',marginBottom:10}}>
                           Photo evidence has been recorded against each cycle since 1 August 2026.
@@ -8293,10 +8350,10 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                   const _c = _rec ? trailCounts(occByTask[t.id], _rsStr, _reStr) : null
                   const _open = !!trailOpen[t.id]
                   const _timing = _rec
-                    ? (_c.expected===0 ? '\u2014' : _c.onTime+'/'+_c.expected+' on time'
-                        + (_c.late?' \u00b7 '+_c.late+' late':'')
-                        + (_c.missed?' \u00b7 '+_c.missed+' missed':'')
-                        + (_c.na?' \u00b7 '+_c.na+' N/A':''))
+                    ? (_c.expected===0 ? '—' : _c.onTime+'/'+_c.expected+' on time'
+                        + (_c.late?' · '+_c.late+' late':'')
+                        + (_c.missed?' · '+_c.missed+' missed':'')
+                        + (_c.na?' · '+_c.na+' N/A':''))
                     : trailOneOff(t)
                   const _bad = _rec ? (_c.late>0||_c.missed>0) : (_timing==='Late'||_timing==='Missed')
                   const _cell = {padding:8,borderBottom:'1px solid rgba(128,128,128,.15)',verticalAlign:'top'}
@@ -8307,23 +8364,23 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                           <span style={{color:'var(--t2)',marginRight:6}}>{_open?'\u25be':'\u25b8'}</span>
                           <strong style={{fontWeight:600}}>{t.title}</strong>
                         </td>
-                        <td style={_cell}>{t.created_by||'\u2014'}</td>
-                        <td style={_cell}>{assigneeFull(t)||t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'\u2014'}</td>
-                        <td style={_cell}>{t.approver_name||'\u2014'}</td>
+                        <td style={_cell}>{t.created_by||'—'}</td>
+                        <td style={_cell}>{assigneeFull(t)||t.assigned_user_name||ROLE_LABELS[t.assigned_role]||'—'}</td>
+                        <td style={_cell}>{t.approver_name||'—'}</td>
                         <td style={Object.assign({},_cell,{color:_bad?'#D97706':'var(--text)',whiteSpace:'nowrap'})}>{_timing}</td>
                         <td style={_cell}>
                           {t.extended_from
                             ? <span title={'Extended from '+t.extended_from+(t.extended_by?' by '+t.extended_by:'')}
                                     style={{fontSize:11,color:'#D97706',background:'rgba(217,119,6,.08)',padding:'2px 6px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap'}}>
-                                from {t.extended_from}{t.extended_by?' \u00b7 '+t.extended_by:''}
+                                from {t.extended_from}{t.extended_by?' · '+t.extended_by:''}
                               </span>
-                            : '\u2014'}
+                            : '—'}
                         </td>
                       </tr>
                       {_open && (
                         <tr key={t.id+'-occ'}>
                           <td colSpan={6} style={{padding:'4px 8px 12px 26px',borderBottom:'1px solid rgba(128,128,128,.15)'}}>
-                            {!_rec && <div style={{fontSize:12,color:'var(--t2)'}}>One-off task &mdash; due {t.due_date||'\u2014'}{t.completed_at?', completed '+fmtTime(t.completed_at):''}</div>}
+                            {!_rec && <div style={{fontSize:12,color:'var(--t2)'}}>One-off task &mdash; due {t.due_date||'—'}{t.completed_at?', completed '+fmtTime(t.completed_at):''}</div>}
                             {_rec && _c.rows.length===0 && <div style={{fontSize:12,color:'var(--t2)'}}>No occurrences recorded in this period.</div>}
                             {_rec && _c.rows.length>0 && (
                               <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
@@ -8331,14 +8388,14 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                                   {_c.rows.map(o=>{
                                     const _lbl = o.status==='completed' ? (o.late?'Late':'On time')
                                       : o.status==='missed' ? 'Missed'
-                                      : o.status===OCC_NOT_APPLICABLE ? 'N/A' : String(o.status||'\u2014')
+                                      : o.status===OCC_NOT_APPLICABLE ? 'N/A' : String(o.status||'—')
                                     const _col = _lbl==='On time' ? '#10B981' : _lbl==='Missed' ? '#EF4444' : _lbl==='Late' ? '#D97706' : 'var(--t2)'
                                     return (
                                       <tr key={o.d}>
                                         <td style={{padding:'3px 8px 3px 0',whiteSpace:'nowrap',color:'var(--t2)'}}>{o.d}</td>
                                         <td style={{padding:'3px 8px',whiteSpace:'nowrap',color:_col,fontWeight:600}}>{_lbl}</td>
-                                        <td style={{padding:'3px 8px',color:'var(--t2)'}}>{o.by||'\u2014'}</td>
-                                        <td style={{padding:'3px 0',color:'var(--t2)',whiteSpace:'nowrap'}}>{o.at?fmtTime(o.at):'\u2014'}</td>
+                                        <td style={{padding:'3px 8px',color:'var(--t2)'}}>{o.by||'—'}</td>
+                                        <td style={{padding:'3px 0',color:'var(--t2)',whiteSpace:'nowrap'}}>{o.at?fmtTime(o.at):'—'}</td>
                                       </tr>
                                     )
                                   })}
@@ -10727,7 +10784,7 @@ const [inviteEmailExistsMsg, setInviteEmailExistsMsg] = useState('')
             {selectedOrgView.logo&&<img src={selectedOrgView.logo} alt={selectedOrgView.name} style={{height:28,objectFit:'contain',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>}
             <div style={{minWidth:0}}>
               <div style={{fontWeight:800,fontSize:16,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedOrgView.name}</div>
-              <div style={{fontSize:11,color:'var(--t2)'}}>{(orgHdrIndustries.length?orgHdrIndustries.join(' \u00b7 '):selectedOrgView.industry)||'—'} · <span style={{color:TIERS[planTier(selectedOrgView.plan)]?.color||'var(--t2)',fontWeight:600}}>{planTier(selectedOrgView.plan)||'—'}</span></div>
+              <div style={{fontSize:11,color:'var(--t2)'}}>{(orgHdrIndustries.length?orgHdrIndustries.join(' · '):selectedOrgView.industry)||'—'} · <span style={{color:TIERS[planTier(selectedOrgView.plan)]?.color||'var(--t2)',fontWeight:600}}>{planTier(selectedOrgView.plan)||'—'}</span></div>
             </div>
           </div>
         </div>
@@ -12193,7 +12250,7 @@ function BranchesPanel({ orgId, canEdit }) {
       .insert({ org_id: orgId, name }).select('id')
     if (error) setMsg('\u2717 ' + friendly(error))
     else if (!data || data.length !== 1) setMsg('\u2717 Branch not saved. You may not have permission to add branches.')
-    else { setNewName(''); setMsg('\u2713 Branch added.'); setReload(n => n + 1) }
+    else { setNewName(''); setMsg('✓ Branch added.'); setReload(n => n + 1) }
     setBusy(false)
   }
 
@@ -12203,7 +12260,7 @@ function BranchesPanel({ orgId, canEdit }) {
       .update(patch).eq('id', id).eq('org_id', orgId).select('id')
     if (error) setMsg('\u2717 ' + friendly(error))
     else if (!data || data.length !== 1) setMsg('\u2717 Change not saved. You may not have permission to edit branches.')
-    else { setEditId(null); setEditName(''); setMsg('\u2713 ' + okText); setReload(n => n + 1) }
+    else { setEditId(null); setEditName(''); setMsg('✓ ' + okText); setReload(n => n + 1) }
     setBusy(false)
   }
 
@@ -12252,7 +12309,7 @@ function BranchesPanel({ orgId, canEdit }) {
       <div style={{fontSize:12,color:'var(--t2)',marginBottom:12}}>
         Add each location your organisation operates from. Staff, tasks, incidents and complaints can then be linked to a branch, and reports can be filtered by it. Until a branch is added, everything stays organisation-wide.
       </div>
-      {msg && <div style={{fontSize:13,marginBottom:10,color:msg.startsWith('\u2713') ? 'var(--green)' : 'var(--red)'}}>{msg}</div>}
+      {msg && <div style={{fontSize:13,marginBottom:10,color:msg.startsWith('✓') ? 'var(--green)' : 'var(--red)'}}>{msg}</div>}
       {canEdit && (
         <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
           <input className="form-input" style={{flex:'1 1 200px'}} placeholder="New branch name, e.g. Fort Portal"
@@ -12372,7 +12429,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
       if (error) throw new Error(error.message)
       if (!data || data.length !== 1) throw new Error('The request could not be declined.')
       setSubDeclineOpen(false); setSubDeclineNote('')
-      setSubReqMsg('\u2713 Request declined.')
+      setSubReqMsg('✓ Request declined.')
       setSubReload(n=>n+1)
     } catch(e) { setSubReqMsg('Error: ' + e.message) }
     setSubReqBusy(false)
@@ -12406,7 +12463,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
         throw new Error('The request was not saved. You may not have permission to raise one for this organisation.')
       }
       setSubReqPlan(''); setSubReqWhy('')
-      setSubReqMsg('\u2713 Request sent to Taksyn.')
+      setSubReqMsg('✓ Request sent to Taksyn.')
       setSubReload(n=>n+1)
     } catch(e) { setSubReqMsg('Error: ' + e.message) }
     setSubReqBusy(false)
@@ -12420,7 +12477,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
         .select('id')
       if (error) throw new Error(error.message)
       if (!data || data.length !== 1) throw new Error('The request could not be withdrawn.')
-      setSubReqMsg('\u2713 Request withdrawn.')
+      setSubReqMsg('✓ Request withdrawn.')
       setSubReload(n=>n+1)
     } catch(e) { setSubReqMsg('Error: ' + e.message) }
     setSubReqBusy(false)
@@ -12452,7 +12509,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
         throw new Error(m)
       }
       if (!data?.success) throw new Error(data?.error || 'Request failed')
-      setSubMsg('\u2713 ' + data.org + ': ' + data.oldPlan + ' \u2192 ' + data.newPlan)
+      setSubMsg('✓ ' + data.org + ': ' + data.oldPlan + ' \u2192 ' + data.newPlan)
       // [PLAN-REQUEST-DECIDE] tie the request to the change it produced. A
       // failure here leaves the request open rather than marking it done on
       // a guess; the plan change itself is already in plan_change_log.
@@ -13070,7 +13127,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                 <div className="form-field"><label className="form-label">ABN / Business Number</label><input className="form-input" placeholder="12 345 678 901" {...fld('abn')}/></div>
               </div>
               <div className="two-col">
-                <div className="form-field"><label className="form-label">Industries</label><input className="form-input" {...fld("industry")} value={orgIndustryNames.length?orgIndustryNames.join(' \u00b7 '):(form.industry||'—')} disabled readOnly/><div style={{fontSize:12,color:"var(--t2)",marginTop:4}}>Every service your organisation runs, primary first. These decide which incident categories you get — contact support to add or change one.</div></div>
+                <div className="form-field"><label className="form-label">Industries</label><input className="form-input" {...fld("industry")} value={orgIndustryNames.length?orgIndustryNames.join(' · '):(form.industry||'—')} disabled readOnly/><div style={{fontSize:12,color:"var(--t2)",marginTop:4}}>Every service your organisation runs, primary first. These decide which incident categories you get — contact support to add or change one.</div></div>
                 <div className="form-field"><label className="form-label">Website</label><input className="form-input" placeholder="https://example.com" {...fld('website')}/></div>
               </div>
               <div className="form-field"><label className="form-label">Timezone</label><select className="form-input" {...fld('timezone')}><option value="">— Select timezone —</option>{TIMEZONES.map(tz=><option key={tz} value={tz}>{tz==='UTC'?'UTC (Coordinated Universal Time)':tz.split('/').pop().replace(/_/g,' ')+' — '+tz}</option>)}</select></div>
@@ -13163,7 +13220,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
 
                 {!subIsSuper&&(
                   <>
-                    {subReqMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,fontSize:13,background:subReqMsg.startsWith('\u2713')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subReqMsg.startsWith('\u2713')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subReqMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subReqMsg}</div>}
+                    {subReqMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,fontSize:13,background:subReqMsg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subReqMsg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subReqMsg.startsWith('✓')?'var(--green)':'var(--red)'}}>{subReqMsg}</div>}
                     {subIsClientAdmin&&(!subReq||subReq.status!=='open')?(
                       <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
                         <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:8}}>Request a plan change</div>
@@ -13204,7 +13261,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                         <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>Open request: move to {planTier(subReq.requested_plan)}</div>
                         <div style={{fontSize:12,color:'var(--t2)'}}>{subReq.reason}</div>
                         <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>Raised {new Date(subReq.requested_at).toLocaleDateString('en-AU')}</div>
-                        {subReqMsg&&<div style={{marginTop:8,fontSize:12,color:subReqMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subReqMsg}</div>}
+                        {subReqMsg&&<div style={{marginTop:8,fontSize:12,color:subReqMsg.startsWith('✓')?'var(--green)':'var(--red)'}}>{subReqMsg}</div>}
                         {!subDeclineOpen&&(
                           <div style={{display:'flex',gap:6,marginTop:8}}>
                             <button className="btn btn-primary btn-sm" style={{fontSize:11}} disabled={subReqBusy} onClick={subApproveRequest}>Approve</button>
@@ -13225,7 +13282,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                       </div>
                     )}
                     <div style={{fontSize:11,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:8}}>Change plan &middot; super admin</div>
-                    {subMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,fontSize:13,background:subMsg.startsWith('\u2713')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subMsg.startsWith('\u2713')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subMsg.startsWith('\u2713')?'var(--green)':'var(--red)'}}>{subMsg}</div>}
+                    {subMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,fontSize:13,background:subMsg.startsWith('✓')?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(subMsg.startsWith('✓')?'rgba(16,185,129,.2)':'rgba(239,68,68,.2)'),color:subMsg.startsWith('✓')?'var(--green)':'var(--red)'}}>{subMsg}</div>}
                     <div className="two-col">
                       <div className="form-field">
                         <label className="form-label">New plan</label>
@@ -13263,7 +13320,7 @@ function CompanySettingsView({ user, onSettingsSaved }) {
                           {subHist.map(h=>(
                             <div key={h.id} style={{fontSize:12,padding:'6px 10px',borderRadius:4,background:'var(--s3)'}}>
                               <div><strong>{planTier(h.old_plan)||h.old_plan||'—'} {'\u2192'} {planTier(h.new_plan)||h.new_plan}</strong> <span style={{color:'var(--t2)'}}>&middot; {h.source}</span></div>
-                              <div style={{color:'var(--t2)'}}>{new Date(h.created_at).toLocaleString()}{h.note?' \u00b7 '+h.note:''}</div>
+                              <div style={{color:'var(--t2)'}}>{new Date(h.created_at).toLocaleString()}{h.note?' · '+h.note:''}</div>
                             </div>
                           ))}
                         </div>
@@ -14698,7 +14755,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   // opposite direction (their own work reviewed by someone above them), which is
   // why the two labels differ on the card.
   const _median = arr => { if(!arr.length) return null; const s=[...arr].sort((x,y)=>x-y); const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2 }
-  const _fmtMins = m => m===null ? '\u2014' : (m<60 ? Math.round(m)+'m' : (m<1440 ? (m/60).toFixed(1)+'h' : (m/1440).toFixed(1)+'d'))
+  const _fmtMins = m => m===null ? '—' : (m<60 ? Math.round(m)+'m' : (m<1440 ? (m/60).toFixed(1)+'h' : (m/1440).toFixed(1)+'d'))
   const approverMap = {}
   const _nowMs = Date.now()
   orgTasks.forEach(t=>{
@@ -14724,6 +14781,14 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
       }
     }
   })
+  // [RATING-PERF-V1] Ratings, from the module-level ratingStats -- one definition, so the
+  // staff report can read the same thing instead of growing a second copy.
+  // Windowed on the same range as the tiles: a lifetime average beside
+  // period-scoped figures is the kind of mismatch a client spots first.
+  const _ratedOcc  = ratingRows(occurrences, _rsStr, _reStr)
+  const _rateByWho = ratingStatsBy(_ratedOcc, 'completed_by')   // work rated
+  const _rateByRtr = ratingStatsBy(_ratedOcc, 'rated_by_id')    // ratings given
+
   // CA-APPROVER-SORT-V1: a client admin needs the approver roll-up, not to scroll
   // every card hunting for panels. Three tiers: biggest review queue first, then
   // other approvers, then everyone else by volume. Other roles keep the old order -
@@ -14839,7 +14904,22 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                 <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
                   <div style={{width:44,height:44,borderRadius:'50%',background:color+'22',color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:800,flexShrink:0}}>{grade}</div>
                   <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:14}}>{p.name}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                      <div style={{fontWeight:700,fontSize:14}}>{p.name}</div>
+                      {/* [RATING-PERF-V1] Nothing rated shows an em dash and NO ticks. Five empty
+                          ticks would read as "rated zero", which is the false-zero the
+                          report already hit once with 0m for an unmeasured duration. */}
+                      {(()=>{ const st=_rateByWho[p.id]
+                        if(!st||st.mean==null) return <span style={{fontSize:12,color:'var(--t2)'}}>—</span>
+                        return <span style={{display:'inline-flex',alignItems:'center',gap:5}}>
+                          <span style={{fontSize:13,fontWeight:700}}>{st.mean.toFixed(1)}</span>
+                          <span style={{position:'relative',display:'inline-block',lineHeight:0}}>
+                            <TickRow5/>
+                            <span style={{position:'absolute',left:0,top:0,overflow:'hidden',width:(st.mean/5*100)+'%'}}><TickRow5 grad/></span>
+                          </span>
+                          <span style={{fontSize:11,color:'var(--t2)'}}>{st.n} rated{st.unrated?' · '+st.unrated+' unrated':''}</span>
+                        </span> })()}
+                    </div>
                     <div style={{fontSize:11,color:'var(--t2)',marginTop:1}}><RolePill role={p.role}/></div>
                   </div>
                   <div style={{textAlign:'right'}}>
@@ -14869,15 +14949,19 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
                   <div style={{marginTop:12,border:'1px solid #C7D2FE',background:'rgba(99,102,241,.05)',borderRadius:12,padding:10}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                       <span style={{fontSize:11,fontWeight:700,color:'#4F46E5',textTransform:'uppercase',letterSpacing:'.5px'}}>As approver</span>
-                      {a.awaiting>0&&<span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:12,background:'rgba(239,68,68,.1)',color:'var(--red)'}}>{a.awaiting} awaiting{a.oldestDays>0?' \u00b7 oldest '+a.oldestDays+'d':''}</span>}
+                      {a.awaiting>0&&<span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:12,background:'rgba(239,68,68,.1)',color:'var(--red)'}}>{a.awaiting} awaiting{a.oldestDays>0?' · oldest '+a.oldestDays+'d':''}</span>}
                     </div>
                     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(95px,1fr))',gap:8}}>
                       {[
+                        /* [RATING-PERF-V1] Their OWN average as a rater, beside turnaround.
+                           This is the leniency check: a reviewer whose every rating is
+                           a 5 becomes visible, the same way 100% approved does. */
+                        ['Avg given', fmtRating(_rateByRtr[p.id]), '#6B7280'],
                         ['Awaiting',a.awaiting,a.awaiting>0?'#EF4444':'#6B7280'],
-                        ['Reviewed on time',_ot===null?'\u2014':_ot+'%',_ot===null?'#6B7280':_ot>=80?'#10B981':'#EF4444'],
+                        ['Reviewed on time',_ot===null?'—':_ot+'%',_ot===null?'#6B7280':_ot>=80?'#10B981':'#EF4444'],
                         ['Median response',_fmtMins(_median(a.mins)),'#8B5CF6'],
-                        ['Decisions',a.decided>0?a.approved+' / '+a.sentBack:'\u2014','#5BC8C0'],
-                        ['Send-back rate',_sb===null?'\u2014':_sb+'%','#6B7280'],
+                        ['Decisions',a.decided>0?a.approved+' / '+a.sentBack:'—','#5BC8C0'],
+                        ['Send-back rate',_sb===null?'—':_sb+'%','#6B7280'],
                       ].map(([l,v,c])=>(
                         <div key={l} style={{background:'var(--card)',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
                           <div style={{fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
@@ -21743,7 +21827,7 @@ function IncidentsAdminView({ user, setPage }) {
                       </div>
                       <div style={{fontSize:13,marginBottom:4}}>
                         {inc.title && <span style={{fontWeight:600,color:"var(--text)"}}>{inc.title}</span>}
-                        <span style={{color:"var(--t2)",marginLeft:inc.title?8:0}}>{inc.title ? "\u00b7 " : ""}{catLabels[inc.category]||inc.category}</span>
+                        <span style={{color:"var(--t2)",marginLeft:inc.title?8:0}}>{inc.title ? "· " : ""}{catLabels[inc.category]||inc.category}</span>
                       </div>
                       <div style={{fontSize:11,color:'var(--t3)',display:'flex',gap:10,flexWrap:'wrap'}}>
                         <span>📅 {fmtDay(inc.occurred_at)}</span>
@@ -22094,7 +22178,7 @@ function IssueReportsAdminView({ user }) {
                                       {/* IRN-NOTES-V1B: literal character, NOT an escape. In JSX text
                                           an escape renders verbatim; it only resolves inside quotes. */}
                                       {n.author_name} · {new Date(n.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}
-                                      {n.status_to?' \u00b7 '+n.status_from+' \u2192 '+n.status_to:''}
+                                      {n.status_to?' · '+n.status_from+' \u2192 '+n.status_to:''}
                                     </div>
                                     <div style={{whiteSpace:'pre-wrap'}}>{n.body}</div>
                                   </div>
@@ -22371,7 +22455,7 @@ export default function App() {
           try { const ap = pr?.additional_positions; extra = Array.isArray(ap) ? ap : (ap ? JSON.parse(ap) : []) } catch (e) { extra = [] }
           const mine = [om?.industry, ...extra.map(p => p && p.industry)].filter(Boolean)
           const names = [...new Set(mine)].filter(n => !orgNames.length || orgNames.includes(n)).sort()
-          if (names.length) label = names.join(' \u00b7 ')
+          if (names.length) label = names.join(' · ')
         }
         setProfileOrgIndustry(label)
       } catch (e) { /* leave the field as it was */ }
@@ -22965,7 +23049,7 @@ export default function App() {
       // Errors are logged rather than swallowed: this now backs three surfaces, and a
       // silent failure would render zeros on all of them at once.
       if(isConfigured()&&user.org&&user.role!=='super_admin') {
-        supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by_name,recurrence,evidence').eq('org',user.org)
+        supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by,completed_by_name,recurrence,evidence,approved_at,na_at,quality_rating,rating_reason,rated_by_id,rated_by_name,rated_at')/*[RATING-V1-OCCFETCH] approval and rating fields. The list previously carried no approval data at all, so no view fed by orgOccurrences could report on approvals. na_at is needed to exclude not-applicable rows from the rating denominator. [RATING-V1-OCCKEY] completed_by holds the member uuid, so ratings key by id rather than by name -- one legacy row holds a name instead and will be dropped, which is correct.*/.eq('org',user.org)
           .then(({data,error})=>{
             if(error){ console.warn('task_occurrences load failed - occurrence surfaces will show unknown, not zero:', error.message); return }
             setOrgOccurrences(data||[])
@@ -23643,7 +23727,7 @@ export default function App() {
                 <button className="btn btn-secondary btn-sm" style={{marginBottom:16}} onClick={async()=>{ if(!profileName.trim()) return; if(isConfigured()) await supabase.from('profiles').update({name:profileName.trim()}).eq('id',user.id); setUser(prev=>({...prev,name:profileName.trim()})); setProfileMsg('✓ Name updated') }}>Update Name</button>
 
                 <div className="form-field"><label className="form-label">Organisation</label><input className="form-input" value={user.org||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
-                <div className="form-field"><label className="form-label">{String(profileOrgIndustry).includes('\u00b7') ? 'Industries' : 'Industry'}</label><input className="form-input" value={profileOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
+                <div className="form-field"><label className="form-label">{String(profileOrgIndustry).includes('·') ? 'Industries' : 'Industry'}</label><input className="form-input" value={profileOrgIndustry||'—'} readOnly style={{background:'var(--s3)',cursor:'default'}}/></div>
 
                 {(() => {
                   const positionsList = appointedPositions.length ? appointedPositions : [user.position].filter(Boolean)
