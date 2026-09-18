@@ -3,6 +3,14 @@
 -- Written 18 September 2026. Applied to SANDBOX buqlbmgxevuldahhdbxo
 -- by hand the same night; this file reproduces that state exactly.
 --
+-- v2 of this file. The first version carried worker_reply /
+-- worker_reply_at columns for a right of reply. That was Claude's
+-- proposal, not a ruling, and it was dropped on 18 Sep: a rating is the
+-- approver's judgement, and a disagreement is a conversation with a
+-- manager rather than a comment field in a compliance system. The
+-- columns were created and dropped on sandbox the same night; they never
+-- reached live. Do not reinstate them without a decision.
+--
 -- Idempotent: IF NOT EXISTS / CREATE OR REPLACE / DROP POLICY IF EXISTS.
 -- Safe to re-run.
 --
@@ -16,8 +24,12 @@
 --   psql -v ON_ERROR_STOP=1 -f 2026-09-18-task-quality-rating.sql
 --
 -- EXPECTED FINGERPRINTS AFTER APPLYING (see verification at the foot)
---   task_occurrences_approval_guard  0811cf34e6
---   tasks_supervisor_scope_guard     7e0427eb1e
+--   task_occurrences_approval_guard  9f64eb2cab
+--   tasks_supervisor_scope_guard     fca63ca112
+--
+--   SUPERSEDED, MATCHES NOTHING: 0811cf34e6 and 7e0427eb1e, quoted in
+--   commit c424409. Those were the v1 guards, before the reply columns
+--   were dropped. Verify against the pair above, not that one.
 --
 -- ORDER MATTERS AGAINST THE APP
 --   Once this is applied, approving from a browser session REQUIRES a
@@ -40,9 +52,7 @@ alter table public.tasks
   add column if not exists rated_by_id      uuid,
   add column if not exists rated_by_name    text,
   add column if not exists rated_at         timestamptz,
-  add column if not exists rating_source    text,
-  add column if not exists worker_reply     text,
-  add column if not exists worker_reply_at  timestamptz;
+  add column if not exists rating_source    text;
 
 alter table public.task_occurrences
   add column if not exists quality_rating   smallint,
@@ -50,9 +60,16 @@ alter table public.task_occurrences
   add column if not exists rated_by_id      uuid,
   add column if not exists rated_by_name    text,
   add column if not exists rated_at         timestamptz,
-  add column if not exists rating_source    text,
-  add column if not exists worker_reply     text,
-  add column if not exists worker_reply_at  timestamptz;
+  add column if not exists rating_source    text;
+
+-- Reply path dropped (see header). Harmless where it never existed.
+alter table public.tasks
+  drop column if exists worker_reply,
+  drop column if exists worker_reply_at;
+
+alter table public.task_occurrences
+  drop column if exists worker_reply,
+  drop column if exists worker_reply_at;
 
 -- ---------------------------------------------------------------------
 -- 2. Constraints. ADD CONSTRAINT has no IF NOT EXISTS, so each is wrapped.
@@ -105,6 +122,10 @@ end $$;
 --
 --    subject_id is TEXT because tasks.id is text. An occurrence uuid casts
 --    into text cleanly; the reverse does not.
+--
+--    'replied' remains in the event_kind list although the reply path was
+--    dropped. Removing it would require rewriting the check constraint for
+--    no benefit, and it costs nothing to leave room.
 -- ---------------------------------------------------------------------
 
 create table if not exists public.task_rating_events (
@@ -127,9 +148,9 @@ create index if not exists task_rating_events_subject_idx
 
 alter table public.task_rating_events enable row level security;
 
--- INSERT admits any org member, NOT admins only: 'replied' events are
--- written by the worker about their own rating, and an admin-only policy
--- would silently block every right of reply. Self-attribution does the work.
+-- INSERT admits any org member rather than admins only. The guards decide
+-- who may rate; this policy only decides who may record history, and a
+-- narrower rule here would have to be kept in step with the guards by hand.
 -- No UPDATE policy and no DELETE policy -- append-only by absence.
 drop policy if exists task_rating_events_select on public.task_rating_events;
 create policy task_rating_events_select
@@ -182,9 +203,7 @@ BEGIN
                   OR NEW.rated_by_id     IS NOT NULL
                   OR NEW.rated_by_name   IS NOT NULL
                   OR NEW.rated_at        IS NOT NULL
-                  OR NEW.rating_source   IS NOT NULL
-                  OR NEW.worker_reply    IS NOT NULL
-                  OR NEW.worker_reply_at IS NOT NULL);
+                  OR NEW.rating_source   IS NOT NULL);
     became_appr   := (NEW.approved_at IS NOT NULL
                    OR NEW.approval_batch_id IS NOT NULL);
     became_unappr := false;
@@ -204,9 +223,7 @@ BEGIN
                   OR NEW.rated_by_id     IS DISTINCT FROM OLD.rated_by_id
                   OR NEW.rated_by_name   IS DISTINCT FROM OLD.rated_by_name
                   OR NEW.rated_at        IS DISTINCT FROM OLD.rated_at
-                  OR NEW.rating_source   IS DISTINCT FROM OLD.rating_source
-                  OR NEW.worker_reply    IS DISTINCT FROM OLD.worker_reply
-                  OR NEW.worker_reply_at IS DISTINCT FROM OLD.worker_reply_at);
+                  OR NEW.rating_source   IS DISTINCT FROM OLD.rating_source);
     -- Transition tests, NOT touch tests. Both environments already hold
     -- July approvals; a touch test would demand a rating from every one.
     became_appr   := (OLD.approved_at IS NULL AND OLD.approval_batch_id IS NULL)
@@ -336,8 +353,7 @@ begin
   if tg_op = 'INSERT' then
     rate_touched := (new.quality_rating is not null or new.rating_reason is not null
                   or new.rated_by_id is not null  or new.rated_by_name is not null
-                  or new.rated_at is not null     or new.rating_source is not null
-                  or new.worker_reply is not null or new.worker_reply_at is not null);
+                  or new.rated_at is not null     or new.rating_source is not null);
     became_appr   := coalesce(new.status,'') = 'approved';
     became_unappr := false;
   else
@@ -346,9 +362,7 @@ begin
                   or new.rated_by_id    is distinct from old.rated_by_id
                   or new.rated_by_name  is distinct from old.rated_by_name
                   or new.rated_at       is distinct from old.rated_at
-                  or new.rating_source  is distinct from old.rating_source
-                  or new.worker_reply   is distinct from old.worker_reply
-                  or new.worker_reply_at is distinct from old.worker_reply_at);
+                  or new.rating_source  is distinct from old.rating_source);
     became_appr   := new.status is distinct from old.status and new.status = 'approved';
     became_unappr := coalesce(old.status,'') = 'approved'
                      and new.status is distinct from old.status;
@@ -442,8 +456,8 @@ commit;
 
 -- =====================================================================
 -- VERIFICATION -- run separately after the transaction commits.
--- Expect 4 columns rows (8 each side), 4 constraints, 2 policies,
--- RLS true, and both fingerprints matching the header.
+-- Expect 6 rating columns per table, 4 constraints, 2 policies,
+-- RLS true, both fingerprints matching, and stale_ref 0.
 -- =====================================================================
 
 -- select 'VERIFY-1' as marker, table_name, count(*) as rating_columns
@@ -451,8 +465,7 @@ commit;
 -- where table_schema='public'
 --   and table_name in ('tasks','task_occurrences')
 --   and column_name in ('quality_rating','rating_reason','rated_by_id',
---                       'rated_by_name','rated_at','rating_source',
---                       'worker_reply','worker_reply_at')
+--                       'rated_by_name','rated_at','rating_source')
 -- group by table_name;
 
 -- select 'VERIFY-2' as marker, conrelid::regclass::text as tbl, conname
@@ -470,7 +483,8 @@ commit;
 -- from pg_class where oid = 'public.task_rating_events'::regclass;
 
 -- select 'VERIFY-5' as marker, proname, prosecdef, proconfig,
---        left(md5(prosrc),10) as fingerprint
+--        left(md5(prosrc),10) as fingerprint,
+--        position('worker_repl' in prosrc) as stale_ref
 -- from pg_proc
 -- where pronamespace='public'::regnamespace
 --   and proname in ('task_occurrences_approval_guard',
