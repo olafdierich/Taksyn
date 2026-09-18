@@ -7146,7 +7146,12 @@ function EvidenceView({ tasks, setTasks, user, setAuditLog }) {
             </div>
             {hasAccess(user.role,2)&&t.status==='awaiting_review'&&(
               <div style={{display:'flex',gap:7,marginTop:10}}>
-                {!(user.role==='supervisor'&&t.priority!=='low')&&<button className="btn btn-primary btn-sm" onClick={()=>approve(t.id)}>✅ Approve</button>}
+                {/* [RATING-V1-EVIDENCE] Approve removed: wrote status='approved' with no
+                    rating, which the tasks guard now refuses, and was gated only
+                    on the supervisor/Low rule -- no canReviewTask, no approver
+                    check, no self-review exclusion. Approval happens in task
+                    detail. approve() above is now unreferenced. */}
+                <span style={{fontSize:11,color:'var(--t2)',alignSelf:'center'}}>Approve from the task</span>
                 <button className="btn btn-danger btn-sm" onClick={()=>reject(t.id)}>✗ Reject</button>
               </div>
             )}
