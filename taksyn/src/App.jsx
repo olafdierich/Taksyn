@@ -14785,9 +14785,35 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   // staff report can read the same thing instead of growing a second copy.
   // Windowed on the same range as the tiles: a lifetime average beside
   // period-scoped figures is the kind of mismatch a client spots first.
+  // [RATING-TASKSRC-V1] Ratings come from BOTH tables and the card must read both.
+  // The first version read occurrences only, which was wrong in the worst
+  // way: occurrence approval has no UI at all, so the only ratings it could
+  // ever show were ones a script had written, while every rating a real
+  // approver gives -- which lands on tasks -- was silently ignored. The card
+  // showed an em dash for someone who had just been rated.
+  //
+  // Both sources are normalised to the same shape and run through the same
+  // ratingStatsBy, so there is still one definition of the maths.
+  //
+  // Task rows carry no occurrence_date. reviewed_at is the moment the rating
+  // was given, so that is what the window filters on -- due_date would put a
+  // rating in the period the work was due rather than when it was judged.
   const _ratedOcc  = ratingRows(occurrences, _rsStr, _reStr)
-  const _rateByWho = ratingStatsBy(_ratedOcc, 'completed_by')   // work rated
-  const _rateByRtr = ratingStatsBy(_ratedOcc, 'rated_by_id')    // ratings given
+  const _ratedTask = orgTasks.filter(t => {
+    if (t.status !== 'approved') return false
+    const d = (t.reviewed_at||'').slice(0,10)
+    if (!d) return false
+    return (!_rsStr || d >= _rsStr) && (!_reStr || d <= _reStr)
+  }).map(t => {
+    const ids = assigneeIds(t)
+    const who = ids.find(id => memberIdSet.has(id))
+              || memberNameMap[(t.assigned_user_name||'').toLowerCase().trim()]
+    return { quality_rating: t.quality_rating, completed_by: who,
+             rated_by_id: t.rated_by_id }
+  })
+  const _ratedAll  = _ratedOcc.concat(_ratedTask)
+  const _rateByWho = ratingStatsBy(_ratedAll, 'completed_by')   // work rated
+  const _rateByRtr = ratingStatsBy(_ratedAll.filter(r=>r.quality_rating!=null), 'rated_by_id')
 
   // CA-APPROVER-SORT-V1: a client admin needs the approver roll-up, not to scroll
   // every card hunting for panels. Three tiers: biggest review queue first, then
