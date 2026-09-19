@@ -14888,6 +14888,12 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   const _ratedAll  = _ratedOcc.concat(_ratedTask)
   const _rateByWho = ratingStatsBy(_ratedAll, 'completed_by')   // work rated
   const _rateByRtr = ratingStatsBy(_ratedAll.filter(r=>r.quality_rating!=null), 'rated_by_id')
+  // [RATING-MEMBERPDF-V1] Attach onto the person objects themselves, not at export time.
+  // p, _allPeople and people are all views of the same peopleMap entries, so
+  // one assignment reaches the member PDF's row AND both of its average rows.
+  // Patching the export instead would give a rated person beside an em-dash
+  // average, which reads as a bug rather than as missing data.
+  Object.values(peopleMap).forEach(_p => { _p.rating = _rateByWho[_p.id] || null })
 
   // CA-APPROVER-SORT-V1: a client admin needs the approver roll-up, not to scroll
   // every card hunting for panels. Three tiers: biggest review queue first, then
