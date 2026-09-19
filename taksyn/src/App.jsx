@@ -5500,7 +5500,10 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               {rateValue>0&&rateValue<3&&(
                 <div className="form-field"><label className="form-label">Why was this below standard?</label>
                   <textarea className="comment-box" style={{minHeight:80}} placeholder="e.g. Bathroom mirror and floor were missed…"
-                    value={rateNote} onChange={e=>setRateNote(e.target.value)}/><MicChip setValue={setRateNote}/></div>
+                    value={rateNote} onChange={e=>setRateNote(e.target.value)}/><MicChip setValue={setRateNote}/>
+                  {/* [RATING-SHOW-V1] The subject of the rating reads this, with your name on it.
+                      Saying so changes how it gets written. */}
+                  <div style={{fontSize:11,color:'var(--t2)',marginTop:6}}>The staff member will see this, and your name with it.</div></div>
               )}
               <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                 <button className="btn btn-secondary" onClick={()=>{setShowRate(null);setRateValue(0);setRateNote('')}}>Cancel</button>
@@ -6055,6 +6058,42 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
               })}
             </div>
           )}
+          {/* [RATING-SHOW-V1] The rating, shown to the person it is about.
+              Capture, the Performance card and the staff report were all built
+              first, and none of them is reachable by a worker -- Performance is
+              gated at tier 4. Without this the rating is a record KEPT about
+              someone rather than feedback GIVEN to them, which is the hidden
+              review the Performance module design ruled out.
+              Visible to: the assignee, the named approver, the client admin.
+              NOT super_admin -- platform-level sight of individual criticism at
+              a client is not justifiable when the client's own admin has it. */}
+          {sel.quality_rating!=null&&(()=>{
+            const _mine = isAssignedTo(sel)
+            const _appr = String(sel.approver_id||'')===String(user.id)
+            // The person who SET the work sees the judgement on it too. Usually
+            // the same as the approver, not always: a manager can create a task
+            // and name someone else to review it.
+            const _set  = String(sel.created_by_id||'')===String(user.id)
+            const _adm  = user.role==='client_admin'
+            if(!_mine && !_appr && !_set && !_adm) return null
+            const _v = Number(sel.quality_rating)
+            return (
+              <div style={{background:'rgba(99,102,241,.05)',border:'1px solid rgba(99,102,241,.2)',borderRadius:8,padding:12,marginBottom:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                  <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase',color:'var(--t2)',letterSpacing:.4}}>Review rating</span>
+                  <span style={{fontSize:15,fontWeight:700}}>{_v.toFixed(1)}/5</span>
+                  <span style={{position:'relative',display:'inline-block',lineHeight:0}}>
+                    <TickRow5/>
+                    <span style={{position:'absolute',left:0,top:0,overflow:'hidden',display:'inline-block',width:(_v/5*100)+'%'}}><TickRow5 grad/></span>
+                  </span>
+                </div>
+                {sel.rating_reason&&<div style={{fontSize:13,marginTop:8}}><NoteText t={sel.rating_reason}/></div>}
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:8}}>
+                  {(sel.rated_by_name||'—')}{sel.rated_at?' · '+fmtDateTime(sel.rated_at):''}
+                </div>
+              </div>
+            )
+          })()}
           {sel.escalation&&<div className="esc-banner"><span style={{fontSize:18}}>🚨</span><div className="esc-banner-body"><div className="esc-banner-title">Escalated</div></div></div>}
           {sel.lastIntervention&&<div style={{background:'rgba(245,158,11,.06)',border:'1px solid rgba(245,158,11,.2)',borderRadius:8,padding:10,marginBottom:12,fontSize:12}}><span style={{color:'#F59E0B',fontWeight:700}}>🔧 Platform Intervention</span> by {sel.lastIntervention.by} — {sel.lastIntervention.reason}</div>}
           {(()=>{
