@@ -891,10 +891,19 @@ const _avgRowStyle = 'background:#EEF2FF;font-weight:700'
 // org so a single person can be read against the org average.
 // avgLabel: names that population, because an average row whose
 // denominator is not stated cannot be reconciled by hand later.
+// [RATING-REPORT-V2] Pooled, not a mean of means: averaging five people's averages
+// weights someone with 2 ratings the same as someone with 100. Total
+// points over total ratings, matching how _pooled treats completion rate.
+const _pooledRating = src => {
+  let pts=0, n=0
+  src.forEach(w=>{ const r=w.rating; if(r&&r.n){ pts+=r.mean*r.n; n+=r.n } })
+  return n ? (pts/n).toFixed(1)+'/5' : '—'   // [RATING-REPORT-V3] out of five, stated
+}
+
 const _staffAvgRow = (src, label) => {
   if (!src.length) return ''
   const withMins = src.filter(w=>w.avgMins && w.avgMins.length)
-  return '<tr style="'+_avgRowStyle+'"><td>Average · '+(label||(src.length+' staff'))+'</td><td></td><td>'+_avgCount(src,w=>w.total)+'</td><td>'+_avgCount(src,w=>w.done)+'</td><td>'+_pooled(src,w=>w.done,w=>w.total)+'%</td><td>'+(withMins.length?fmtAvg([].concat.apply([],withMins.map(w=>w.avgMins))):'—')+'</td><td>'+_avgCount(src,w=>w.reviewedInTime)+'</td></tr>'
+  return '<tr style="'+_avgRowStyle+'"><td>Average · '+(label||(src.length+' staff'))+'</td><td></td><td>'+_avgCount(src,w=>w.total)+'</td><td>'+_avgCount(src,w=>w.done)+'</td><td>'+_pooled(src,w=>w.done,w=>w.total)+'%</td><td>'+(withMins.length?fmtAvg([].concat.apply([],withMins.map(w=>w.avgMins))):'—')+'</td><td>'+_avgCount(src,w=>w.reviewedInTime)+'</td><td>'+_pooledRating(src)+'</td></tr>'
 }
 
 // avgSpecs: [{rows, label}, ...] — one average row per entry, in order.
@@ -907,9 +916,9 @@ const buildStaffTable = (rows, avgSpecs) => {
   const bodyHtml = rows.map(w => {
     const compPct = pct(w.done,w.total)
     const avgStr = fmtAvg(w.avgMins)
-    return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td></tr>'
+    return '<tr><td><strong>'+w.name+'</strong></td><td>'+ROLE_LABELS[w.role]+'</td><td>'+w.total+'</td><td>'+w.done+'</td><td style="color:'+(compPct>=80?'#10B981':compPct>=50?'#F59E0B':'#EF4444')+'">'+compPct+'%</td><td>'+avgStr+'</td><td>'+w.reviewedInTime+'</td><td>'+(w.rating&&w.rating.mean!=null ? w.rating.mean.toFixed(1)+'/5 ('+w.rating.n+')' : '—')+'</td></tr>'
   }).join('')
-  return '<table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>Avg Duration</th><th>Reviews in 24h</th></tr></thead><tbody>'+avgHtml+bodyHtml+'</tbody></table>'
+  return '<table><thead><tr><th>Name</th><th>Role</th><th>Assigned</th><th>Completed</th><th>Completion Rate</th><th>Avg Duration</th><th>Reviews in 24h</th><th>Review Rating</th></tr></thead><tbody>'+avgHtml+bodyHtml+'</tbody></table>'
 }
 
 // PATCH-HOIST-HEADER-FOOTER-V1
@@ -7683,7 +7692,9 @@ const trailOneOff = (t) => {
   return new Date(t.completed_at) <= new Date(t.due_date) ? 'On time' : 'Late'
 }
 
-function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=null, orgSLA=DEFAULT_SLA }) {
+function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=null, orgSLA=DEFAULT_SLA, orgMembers: _orgMembersProp=null }) {
+  // [RATING-REPORT-V1] orgMembers was already in pageProps, just never destructured here.
+  const _rptMembers = _orgMembersProp || []
   const [reportType, setReportType] = useState('compliance')
   const [trailOpen, setTrailOpen] = useState({})  // PATCH-MARKER-ACCOUNTABILITY-TRAIL-V1
   const [period, setPeriod] = useState('weekly')
@@ -7950,6 +7961,26 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       if (['awaiting_review','approved','rejected'].includes(t.status)) workerMap[key].toReview++
       if (t.reviewed_at && t.submitted_at && (new Date(t.reviewed_at)-new Date(t.submitted_at))<=getSLAMinutes(t.priority,orgSLA)*60000) workerMap[key].reviewedInTime++
     })
+  })
+  // [RATING-REPORT-V1] Ratings onto each row, from the module-level ratingStats -- the
+  // same function the Performance card reads, so the two cannot drift.
+  // workerMap keys on whatever a task carried (a name array, a single name,
+  // sometimes a uuid), so each row is matched back to a member id by name
+  // here. A row that resolves to nothing keeps its existing behaviour and
+  // simply shows no rating -- it is NOT dropped from a client report.
+  const _rptNameToId = {}
+  _rptMembers.forEach(m => { if(m && m.name) _rptNameToId[String(m.name).toLowerCase().trim()] = m.id })
+  const _rptOcc = ratingRows(occurrences, _rsStr, _reStr)
+  const _rptTask = filteredPt.filter(t => t.status === 'approved').map(t => {
+    const ids = assigneeIds(t)
+    const who = ids.find(id => _rptMembers.some(m => m.id === id))
+              || _rptNameToId[(t.assigned_user_name||'').toLowerCase().trim()]
+    return { quality_rating: t.quality_rating, completed_by: who }
+  })
+  const _rptRate = ratingStatsBy(_rptOcc.concat(_rptTask), 'completed_by')
+  Object.values(workerMap).forEach(w => {
+    const id = _rptNameToId[String(w.name||'').toLowerCase().trim()]
+    w.rating = id ? _rptRate[id] : null
   })
   const workerRows = Object.values(workerMap).sort((a,b) => b.total-a.total)
   const memberTeams={}; teamMembers.forEach(m=>{ (memberTeams[m.user_id]=memberTeams[m.user_id]||[]).push(m.team_id) })
@@ -8476,13 +8507,13 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
               <thead>
                 <tr style={{background:'var(--s3)'}}>
-                  {['Name','Role','Tasks','Done','Rate','Avg Duration','Reviews 24h'].map(h=>(
+                  {['Name','Role','Tasks','Done','Rate','Avg Duration','Reviews 24h','Review Rating'].map(h=>(
                     <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,textTransform:'uppercase',color:'var(--t2)',fontWeight:600,whiteSpace:'nowrap'}}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {workerRows.length===0 && <tr><td colSpan={7} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No worker data for this period</td></tr>}
+                {workerRows.length===0 && <tr><td colSpan={8} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No worker data for this period</td></tr>}
                 {workerRows.length>0 && (()=>{ /* PATCH-AVERAGE-ROWS-V2 */
                   const _am = workerRows.filter(w=>w.avgMins&&w.avgMins.length)
                   const _cell = {padding:'8px 10px',fontWeight:700}
@@ -8495,6 +8526,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                       <td style={_cell}>{_pooled(workerRows,w=>w.done,w=>w.total)}%</td>
                       <td style={_cell}>{_am.length?fmtAvg([].concat.apply([],_am.map(w=>w.avgMins))):'—'}</td>
                       <td style={_cell}>{_avgCount(workerRows,w=>w.reviewedInTime)}</td>
+                      <td style={_cell}>{_pooledRating(workerRows)}</td>
                     </tr>
                   )
                 })()}
@@ -8510,6 +8542,9 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
                       <td style={{padding:'8px 10px',fontWeight:700,color:cp>=80?'var(--green)':cp>=50?'#F59E0B':'var(--red)'}}>{cp}%</td>
                       <td style={{padding:'8px 10px',color:'var(--t2)'}}>{avgStr}</td>
                       <td style={{padding:'8px 10px'}}>{w.reviewedInTime}</td>
+                      {/* [RATING-REPORT-V1] No ticks here: jsPDF cannot be relied on for inline SVG,
+                          so the screen and the PDF both show the number and the count. */}
+                      <td style={{padding:'8px 10px'}}>{w.rating&&w.rating.mean!=null?fmtRating(w.rating)+'/5':'—'}{w.rating&&w.rating.n?<span style={{color:'var(--t2)',fontSize:11}}>{' ('+w.rating.n+')'}</span>:null}</td>
                     </tr>
                   )
                 })}
