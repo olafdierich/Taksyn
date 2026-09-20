@@ -626,6 +626,42 @@ const RECUR_WINDOW_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:4, monthl
 // Occurrence status for a cycle declared NOT APPLICABLE (F70). THE single source:
 // task_occurrences.status has NO CHECK constraint, so a typo here becomes a silent
 // third status that no reader knows about. Never type this literal at a call site.
+// [OCCHELPERS-HOIST-V1]
+// The occurrence helpers, ONCE. They existed twice, character-identical,
+// about 6700 lines apart in ReportsView and PerformanceView, kept in step
+// by hand. missedDaysFor existed only in PerformanceView -- that asymmetry
+// is why the staff report cannot count missed cycles and the card can.
+// Hoisting makes it available to both; WIRING it into the report would
+// change a number and belongs to the accumulator merge, not here.
+//
+// A factory rather than five three-argument functions: the call sites keep
+// their existing shape, so this refactor changes no arithmetic anywhere.
+// Every figure in every report must be byte-identical afterwards.
+const occHelpers = (occByTask, from, to) => {
+  const rows = tid => (occByTask[tid]||[]).filter(o=>o.d>=from&&o.d<=to)
+  return {
+    // EXPECTED-ROWS-V1: COUNT the occurrence rows in the window. This used to
+    // divide the window by the cadence, which made the denominator arithmetic
+    // while every numerator beside it (done/na/missed) was a row count -- two
+    // units in one card, never reconcilable. Sharon Kengozi read 30 TASKS /
+    // 9 MISSED against ONE daily task holding TEN rows (LIVE, CHK-PERF-01/02,
+    // 6 Sep 2026). No status test, by design: every row in the window is an
+    // expected cycle whatever its state.
+    expectedFor:    t   => rows(t.id).length,
+    doneDaysFor:    tid => rows(tid).filter(o=>o.status==='completed').length,
+    // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
+    // completed_late null means nothing was ever written there (July migration
+    // residue) and is read as on-time.
+    onTimeDaysFor:  tid => rows(tid).filter(o=>o.status==='completed'&&!o.late).length,
+    // F70/D7: cycles declared not applicable leave the denominator entirely --
+    // not counted as done, not counted as missed.
+    naDaysFor:      tid => rows(tid).filter(o=>o.status===OCC_NOT_APPLICABLE).length,
+    // PERF-MISSED-V1: recurring misses only. The miss writer filters on
+    // isRecurring and LIVE holds zero occurrence rows with recurrence 'once'.
+    missedDaysFor:  tid => rows(tid).filter(o=>o.status==='missed').length
+  }
+}
+
 const OCC_NOT_APPLICABLE = 'not_applicable'
 // SCHED-V1: the cycle the miss-writer walk breaks on -- neither missed nor
 // done. Exists so expectedFor can COUNT rows instead of dividing a window
@@ -7923,15 +7959,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   // whatever its state, so the strip's CYCLES column and these tiles agree by
   // construction. The Math.max(1,...) floor is gone with the arithmetic -- a
   // cadence longer than the window now reads 0 expected, not a manufactured 1.
-  const expectedFor=t=>(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr).length
-  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
-  // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
-  // completed_late null means nothing was ever written there (July migration
-  // residue) and is read as on-time - see the script header for the ruling.
-  const onTimeDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&!o.late&&o.d>=_rsStr&&o.d<=_reStr).length
-  // F70/D7: cycles declared not applicable leave the denominator entirely -
-  // not counted as done, not counted as missed. See TaskDetail N/A copy.
-  const naDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status===OCC_NOT_APPLICABLE&&o.d>=_rsStr&&o.d<=_reStr).length
+  const {expectedFor,doneDaysFor,onTimeDaysFor,naDaysFor,missedDaysFor}=occHelpers(occByTask,_rsStr,_reStr)  // [OCCHELPERS-HOIST-V1]
   // --- Occurrence history (READ-ONLY display). Chips are SCHEDULED cycles, never completion dates.
   // 'late' means the completion landed outside its own grace window, so currentOccurrenceDate
   // credited it to a LATER cycle than the one being attempted (proven 29 Jul 2026: work done
@@ -14644,22 +14672,13 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   // whatever its state, so the strip's CYCLES column and these tiles agree by
   // construction. The Math.max(1,...) floor is gone with the arithmetic -- a
   // cadence longer than the window now reads 0 expected, not a manufactured 1.
-  const expectedFor=t=>(occByTask[t.id]||[]).filter(o=>o.d>=_rsStr&&o.d<=_reStr).length
-  const doneDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&o.d>=_rsStr&&o.d<=_reStr).length
-  // ONTIME-LATE-V1: completions that landed INSIDE their grace window.
-  // completed_late null means nothing was ever written there (July migration
-  // residue) and is read as on-time - see the script header for the ruling.
-  const onTimeDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='completed'&&!o.late&&o.d>=_rsStr&&o.d<=_reStr).length
-  // F70/D7: cycles declared not applicable leave the denominator entirely -
-  // not counted as done, not counted as missed. See TaskDetail N/A copy.
-  const naDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status===OCC_NOT_APPLICABLE&&o.d>=_rsStr&&o.d<=_reStr).length
+  const {expectedFor,doneDaysFor,onTimeDaysFor,naDaysFor,missedDaysFor}=occHelpers(occByTask,_rsStr,_reStr)  // [OCCHELPERS-HOIST-V1]
 
   // Build leave day lookup per user
   // PERF-MISSED-V1: recurring misses only. The miss writer (~20982) filters
   // on isRecurring, and LIVE holds zero occurrence rows with recurrence
   // 'once', so there is nothing else to count. A missed one-off is not a
   // state the system detects - it belongs to the expiry design (v68).
-  const missedDaysFor=tid=>(occByTask[tid]||[]).filter(o=>o.status==='missed'&&o.d>=_rsStr&&o.d<=_reStr).length
   const leaveDaysByUser = {}
   leaveRecords.forEach(l=>{
     if(!leaveDaysByUser[l.user_id]) leaveDaysByUser[l.user_id]=new Set()
