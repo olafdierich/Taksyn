@@ -640,6 +640,29 @@ const RECUR_WINDOW_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:4, monthl
 // [RPT-LEAVE-V1] Leave days per user, ONCE. The loop lived inside PerformanceView
 // only; the report needs the same Sets, and a second copy of this loop is
 // exactly how the two tallies drifted in the first place.
+// [TEAM-TALLY-MERGE-V1] The team tally, ONCE. Identical in ReportsView and PerformanceView
+// except that the card resolved name-only assignees and the report did not.
+// Takes the card's behaviour. Deliberately applies NO leave (ruled 21 Sep):
+// a team's rate asks whether the team's work got done, and when one person
+// is away someone should cover. A task counts once per team.
+const buildTeamTally = (tasks, teamsList, memberTeams, nameToId, h) => {
+  const teamMap = {}
+  ;(teamsList||[]).forEach(t=>{ teamMap[t.id]={id:t.id,name:t.name,total:0,done:0} })
+  ;(tasks||[]).forEach(t=>{
+    const tset=new Set()
+    if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
+    else {
+      let uids=[]
+      if(Array.isArray(t.assigned_user_ids)&&t.assigned_user_ids.length) uids=t.assigned_user_ids
+      else if(t.assigned_user_id) uids=[t.assigned_user_id]
+      else if(t.assigned_user_name){ const mid=(nameToId||{})[t.assigned_user_name.toLowerCase().trim()]; if(mid) uids=[mid] }
+      uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) }))
+    }
+    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,h.expectedFor(t)-h.naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(h.doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
+  })
+  return teamMap
+}
+
 const buildLeaveDays = (leaveRecords) => {
   const out = {}
   ;(leaveRecords||[]).forEach(l=>{
@@ -8147,13 +8170,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   })
   const workerRows = Object.values(workerMap).sort((a,b) => b.total-a.total)
   const memberTeams={}; teamMembers.forEach(m=>{ (memberTeams[m.user_id]=memberTeams[m.user_id]||[]).push(m.team_id) })
-  teamsList.forEach(t=>{ if(!teamMap[t.id]) teamMap[t.id]={name:t.name,total:0,done:0} })
-  filteredPt.forEach(t=>{
-    const tset=new Set()
-    if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
-    else { let uids=[]; if(Array.isArray(t.assigned_user_ids)&&t.assigned_user_ids.length) uids=t.assigned_user_ids; else if(t.assigned_user_id) uids=[t.assigned_user_id]; uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) })) }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
-  })
+  Object.assign(teamMap, buildTeamTally(filteredPt, teamsList, memberTeams, _rptN2I, {expectedFor,naDaysFor,doneDaysFor}))  // [TEAM-TALLY-MERGE-V1]
   const teamRows = Object.values(teamMap).sort((a,b)=>b.total-a.total)
   // --- Approver (review) performance stats ---
   const approverMap = {}
@@ -15067,19 +15084,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     const r = (approverMap[b.id]?1:0) - (approverMap[a.id]?1:0)
     return r || (b.total - a.total)
   })
-  const teamMap={}; teamsList.forEach(t=>{ teamMap[t.id]={id:t.id,name:t.name,total:0,done:0} })
-  pt.forEach(t=>{
-    const tset=new Set()
-    if(t.team_id && teamMap[t.team_id]) tset.add(t.team_id)
-    else {
-      let uids=[]
-      if(Array.isArray(t.assigned_user_ids)&&t.assigned_user_ids.length) uids=t.assigned_user_ids
-      else if(t.assigned_user_id) uids=[t.assigned_user_id]
-      else if(t.assigned_user_name){ const mid=memberNameMap[t.assigned_user_name.toLowerCase().trim()]; if(mid) uids=[mid] }
-      uids.forEach(uid=>(memberTeams[uid]||[]).forEach(tid=>{ if(teamMap[tid]) tset.add(tid) }))
-    }
-    tset.forEach(tid=>{ const tm=teamMap[tid]; if(isRecurring(t)){ const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); tm.total+=exp; tm.done+=Math.min(doneDaysFor(t.id),exp) } else { tm.total++; if(['completed','approved'].includes(t.status)) tm.done++ } })
-  })
+  const teamMap = buildTeamTally(pt, teamsList, memberTeams, memberNameMap, {expectedFor,naDaysFor,doneDaysFor})  // [TEAM-TALLY-MERGE-V1]
   const _teamIdsWithMatches = new Set()
   people.forEach(p=>{ (memberTeams[p.id]||[]).forEach(tid=>_teamIdsWithMatches.add(tid)) })
   const teams=Object.values(teamMap)
