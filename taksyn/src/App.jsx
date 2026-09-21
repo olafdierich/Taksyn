@@ -982,7 +982,14 @@ const _pooledRating = src => {
   return n ? (pts/n).toFixed(1)+'/5' : '—'   // [RATING-REPORT-V3] out of five, stated
 }
 
+// [STAFF-COUNT-EXCL-UNASSIGNED-V1] The Unassigned row is shown but is NOT a member of staff. It was
+// counted in the headcount and pulled into every average -- the staff
+// report has always read 'Average . 6 staff' with a row of 3 tasks / 0 done
+// among the six. One rule, used by every count.
+const _isStaffRow = w => !!w && w.id!=='__unassigned__' && w.name!=='Unassigned'
+
 const _staffAvgRow = (src, label) => {
+  src = (src||[]).filter(_isStaffRow)
   if (!src.length) return ''
   const withMins = src.filter(w=>w.avgMins && w.avgMins.length)
   return '<tr style="'+_avgRowStyle+'"><td>Average · '+(label||(src.length+' staff'))+'</td><td></td><td>'+_avgCount(src,w=>w.total)+'</td><td>'+_avgCount(src,w=>w.done)+'</td><td>'+_pooled(src,w=>w.done,w=>w.total)+'%</td><td>'+(withMins.length?fmtAvg([].concat.apply([],withMins.map(w=>w.avgMins))):'—')+'</td><td>'+_avgCount(src,w=>w.reviewedInTime)+'</td><td>'+_pooledRating(src)+'</td></tr>'
@@ -1143,7 +1150,9 @@ const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA, occurre
         const _mine = user.id===t.assigned_user_id || user.name===t.assigned_user_name
         const _msg = _mine
           ? `Your task is overdue: "${t.title}"${_leaveNote}`
-          : `Task overdue: "${t.title}" assigned to ${t.assigned_user_name||'staff member'}${_leaveNote}`
+          : `Task overdue: "${t.title}" ${(_alertIds.length||t.assigned_user_name)
+              ? 'assigned to '+(t.assigned_user_name||'staff member')
+              : 'not assigned to anyone'}${_leaveNote}`   // [PERF-UNASSIGNED-V1]
         alerts.push({ type:'overdue_worker', task:t, msg:_msg, level:'red' })
       }
     }
@@ -8668,19 +8677,19 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
               </thead>
               <tbody>
                 {workerRows.length===0 && <tr><td colSpan={8} style={{padding:20,textAlign:'center',color:'var(--t2)'}}>No worker data for this period</td></tr>}
-                {workerRows.length>0 && (()=>{ /* PATCH-AVERAGE-ROWS-V2 */
-                  const _am = workerRows.filter(w=>w.avgMins&&w.avgMins.length)
+                {workerRows.length>0 && (()=>{ /* PATCH-AVERAGE-ROWS-V2 */ const _staffRows = workerRows.filter(_isStaffRow) /* [STAFF-COUNT-EXCL-UNASSIGNED-V1] */
+                  const _am = _staffRows.filter(w=>w.avgMins&&w.avgMins.length)
                   const _cell = {padding:'8px 10px',fontWeight:700}
                   return (
                     <tr style={{background:'#EEF2FF',borderBottom:'1px solid var(--border)'}}>
-                      <td style={_cell}>Average · {workerRows.length} staff</td>
+                      <td style={_cell}>Average · {_staffRows.length} staff</td>
                       <td style={_cell}></td>
-                      <td style={_cell}>{_avgCount(workerRows,w=>w.total)}</td>
-                      <td style={_cell}>{_avgCount(workerRows,w=>w.done)}</td>
-                      <td style={_cell}>{_pooled(workerRows,w=>w.done,w=>w.total)}%</td>
+                      <td style={_cell}>{_avgCount(_staffRows,w=>w.total)}</td>
+                      <td style={_cell}>{_avgCount(_staffRows,w=>w.done)}</td>
+                      <td style={_cell}>{_pooled(_staffRows,w=>w.done,w=>w.total)}%</td>
                       <td style={_cell}>{_am.length?fmtAvg([].concat.apply([],_am.map(w=>w.avgMins))):'—'}</td>
-                      <td style={_cell}>{_avgCount(workerRows,w=>w.reviewedInTime)}</td>
-                      <td style={_cell}>{_pooledRating(workerRows)}</td>
+                      <td style={_cell}>{_avgCount(_staffRows,w=>w.reviewedInTime)}</td>
+                      <td style={_cell}>{_pooledRating(_staffRows)}</td>
                     </tr>
                   )
                 })()}
@@ -14817,11 +14826,26 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     // Deduplicated: a repeated id in assigned_user_ids would otherwise run the
     // body twice for the same person. The old .find() hid duplicates entirely.
     const _memberIds = [...new Set(_ids.filter(id => memberIdSet.has(id)))]
-    if (!_ids.length && !t.assigned_user_name) return
-    if (!_memberIds.length && (!t.assigned_user_name || t.assigned_user_name.trim().toLowerCase()==='unassigned')) return
+    // [PERF-UNASSIGNED-V1] Work assigned to NOBODY -- no id, no name, no team --
+    // was dropped here, so it never appeared on the card while the staff
+    // report showed it in an Unassigned row. Ruled 21 Sep: show it on both.
+    // Work sitting unassigned and undone is worth seeing; dropping it means a
+    // manager reviewing performance cannot know it exists. Team-owned tasks
+    // with no named person stay out, matching the report.
+    const _nm = (t.assigned_user_name||'').trim().toLowerCase()
+    const _nobody = !_ids.length && (!_nm || _nm==='unassigned') && !t.team_id
+    if (!_nobody && !_ids.length && !t.assigned_user_name) return
+    if (!_nobody && !_memberIds.length && (!t.assigned_user_name || _nm==='unassigned')) return
+
+    if (_nobody && !peopleMap.__unassigned__) peopleMap.__unassigned__ = {
+      id:'__unassigned__', name:'Unassigned', role:'worker',
+      roster:[], regularly_rostered:false,
+      total:0, done:0, onTime:0, rejected:0, overdue:0,
+      avgMins:[], submitted:0, reviewedInTime:0,
+      clDone:0, clTotal:0, slaTotal:0, slaOnTime:0, missed:0 }
 
     // Confirmed array members, else the legacy name lookup for name-only rows
-    const _resolved = _memberIds.length
+    const _resolved = _nobody ? ['__unassigned__'] : _memberIds.length
       ? _memberIds
       : [memberNameMap[t.assigned_user_name?.toLowerCase().trim()]].filter(Boolean)
 
@@ -14893,18 +14917,19 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   // the filtered subset the export was launched from. Showing both means
   // the sheet never silently disagrees with what was on screen.
   const orgLogo = useOrgLogo(user)  // PATCH-USEORGLOGO-V1
-  const _allPeople = Object.values(peopleMap)
+  const _allPeople = Object.values(peopleMap).filter(_isStaffRow)  // [STAFF-COUNT-EXCL-UNASSIGNED-V1]
   const _periodLabel = period==='weekly' ? 'This week' : period==='monthly' ? 'This month' : 'This quarter'
   const exportMemberPDF = (p) => {
     const specs = [{rows: _allPeople, label: _allPeople.length+' staff · whole org'}]
     // Only add the filtered row when it is actually a different population;
     // two identical rows would be noise, not information.
-    if (people.length !== _allPeople.length) {
+    const _staffPeople = people.filter(_isStaffRow)
+    if (_staffPeople.length !== _allPeople.length) {
       const bits = []
       if (selectedRole!=='all') bits.push(ROLE_LABELS[selectedRole]||selectedRole)
       if (selectedTeam!=='all') bits.push((teamMap[selectedTeam]||{}).name||'team')
       if (_nq) bits.push('search')
-      specs.push({rows: people, label: people.length+' staff · '+(bits.join(' · ')||'filtered')})
+      specs.push({rows: _staffPeople, label: _staffPeople.length+' staff · '+(bits.join(' · ')||'filtered')})
     }
     const ctx = {user, orgLogo: orgLogo, pl: _periodLabel}
     const title = 'Performance Report — '+(p.name||'Staff Member')
@@ -15107,7 +15132,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
           {/* Summary cards */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10,marginBottom:16}}>
             {[
-              {label:'Team Members',val:people.length,color:'#3B82F6'},
+              {label:'Team Members',val:people.filter(_isStaffRow).length,color:'#3B82F6'},
               {label:'Tasks Assigned',val:pt.length,color:'#5BC8C0'},
               {label:'Completed',val:pt.filter(t=>['completed','approved'].includes(t.status)).length,color:'#10B981'},
             ].map(s=>(
