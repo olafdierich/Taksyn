@@ -643,6 +643,12 @@ const RECUR_WINDOW_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:4, monthl
 const buildLeaveDays = (leaveRecords) => {
   const out = {}
   ;(leaveRecords||[]).forEach(l=>{
+    // Only APPROVED leave excuses work. A cancelled or pending request never
+    // happened, and until this filter it removed cycles from the person's
+    // record exactly as taken leave did -- LIVE held a cancelled Test Org
+    // record doing precisely that. Mattered little while leave touched only
+    // one-off tasks; it matters now that it excuses recurring cycles too.
+    if (l.status !== 'approved') return
     if(!out[l.user_id]) out[l.user_id]=new Set()
     const cur=new Date(l.date_from)
     while(cur.toISOString().split('T')[0]<=l.date_to){
