@@ -1122,7 +1122,19 @@ const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA, occurre
     // the 21 Sep ruling that a shared task belongs fully to everyone on it.
     const _alertIds = assigneeIds(t)
     const isAssigneeOnLeave = _alertIds.length>0 && _alertIds.every(id=>onLeaveToday.has(id))
-    if(isAssigneeOnLeave) return // skip — worker on leave
+    // [ALERT-LEAVE-NOTE-V1] Nothing is silenced any more. The old return sat above ALL
+    // alert types, so an assignee's leave also silenced REVIEW alerts --
+    // which concern the approver, not the assignee -- letting a manager
+    // sitting on a review off the hook because the worker was on holiday.
+    // Ruled 21 Sep: overdue work during leave is uncovered work, which is
+    // exactly when a supervisor needs to hear about it. The note says why.
+    const _cover = !isAssigneeOnLeave ? [] : [...new Set(leaveRecords
+      .filter(l=>l.status==='approved'&&l.date_from<=today&&l.date_to>=today
+        &&_alertIds.includes(l.user_id)&&l.replacement_name)
+      .map(l=>l.replacement_name))]
+    const _leaveNote = !isAssigneeOnLeave ? ''
+      : (_cover.length ? ' — on leave, covered by '+_cover.join(', ')
+                       : ' — assignee on leave, no cover')
 
     // Alert 1: any org task overdue on its due date — surfaced to supervisor and above.
     // Not limited to workers: a supervisor's, manager's or self-assigned task counts too.
@@ -1130,8 +1142,8 @@ const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA, occurre
       if(['supervisor','manager','client_admin'].includes(user.role)) {
         const _mine = user.id===t.assigned_user_id || user.name===t.assigned_user_name
         const _msg = _mine
-          ? `Your task is overdue: "${t.title}"`
-          : `Task overdue: "${t.title}" assigned to ${t.assigned_user_name||'staff member'}`
+          ? `Your task is overdue: "${t.title}"${_leaveNote}`
+          : `Task overdue: "${t.title}" assigned to ${t.assigned_user_name||'staff member'}${_leaveNote}`
         alerts.push({ type:'overdue_worker', task:t, msg:_msg, level:'red' })
       }
     }
