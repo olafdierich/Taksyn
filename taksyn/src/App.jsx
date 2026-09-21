@@ -672,8 +672,15 @@ const occHelpers = (occByTask, from, to) => {
     //
     // Same treatment as F70/D7 not-applicable: the cycle leaves the denominator
     // entirely. It is not done, and it is not a failure to do it.
+    // Only work NOT done is excused. A cycle completed during leave stays in
+    // BOTH expected and done -- removing it from the denominator while it
+    // stays in the numerator inflates the rate, and can push it past 100%.
+    // Not-applicable cycles are excluded here because naDaysFor already
+    // subtracts them; counting them in both would remove them twice.
     leaveDaysFor:   (tid, days) => !days || !days.size ? 0
-                      : rows(tid).filter(o=>days.has(o.d)).length,
+                      : rows(tid).filter(o=>days.has(o.d)
+                          && o.status!=='completed'
+                          && o.status!==OCC_NOT_APPLICABLE).length,
     leaveMissedFor: (tid, days) => !days || !days.size ? 0
                       : rows(tid).filter(o=>o.status==='missed'&&days.has(o.d)).length
   }
