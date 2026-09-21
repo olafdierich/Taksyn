@@ -3313,6 +3313,9 @@ async function resolveOrgId(user) {
 }
 
 function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgSLA=DEFAULT_SLA, orgOccurrences=null, orgTimezone=null }) {
+  // [ALERTS-EXPAND-V1] At component level: the alert list renders inside an inline
+  // function where a hook cannot live.
+  const [alertsOpen, setAlertsOpen] = useState(false)
   const isCA=user.role==='client_admin', isMgr=user.role==='manager', isSup=user.role==='supervisor', isWkr=user.role==='worker'
   const [dashOpen, setDashOpen] = useState({ active:true, invites:false })
   const go = (f) => { try{ sessionStorage.setItem('taksyn-task-filter', f) }catch(e){}; setPage('tasks') }
@@ -3523,13 +3526,15 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
         return (
           <div className="section" style={{marginBottom:14,border:'1px solid rgba(239,68,68,.2)',background:'rgba(239,68,68,.03)'}}>
             <div className="section-title" style={{color:'var(--red)'}}>⚠️ Action Required ({smartAlerts.length})</div>
-            {smartAlerts.slice(0,5).map((a,i)=>(
+            {(alertsOpen?smartAlerts:smartAlerts.slice(0,5)).map((a,i)=>(
               <div key={i} style={{display:'flex',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)',alignItems:'flex-start',cursor:'pointer'}} onClick={()=>setPage('tasks')}>
                 <span style={{fontSize:14,flexShrink:0}}>{a.level==='red'?'🔴':'🟡'}</span>
                 <div style={{flex:1,fontSize:12,color:'var(--text)',lineHeight:1.5}}>{a.msg}</div>
               </div>
             ))}
-            {smartAlerts.length>5&&<div style={{fontSize:11,color:'var(--t2)',marginTop:6,textAlign:'right'}}>{smartAlerts.length-5} more alerts</div>}
+            {/* [ALERTS-EXPAND-V1] Clickable. Nineteen alerts with fourteen unreachable meant
+                overdue work surfaced here and then could not be read. */}
+            {smartAlerts.length>5&&<div onClick={()=>setAlertsOpen(v=>!v)} style={{fontSize:11,color:'var(--brand)',fontWeight:600,marginTop:6,textAlign:'right',cursor:'pointer'}}>{alertsOpen?'Show fewer':(smartAlerts.length-5)+' more alerts'}</div>}
           </div>
         )
       })()}
