@@ -8081,7 +8081,9 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
       if (isRecurring(t)) { const _lv=_rptLeave[_rptKeyId(key)]; const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)-leaveDaysFor(t.id,_lv)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
       // [RPT-LEAVE-V1] One-off task due on a leave day is skipped, matching the card.
-      { const _lv=_rptLeave[_rptKeyId(key)]; if (t.due_date && _lv && _lv.has(t.due_date)) return }
+      // [LEAVE-ONEOFF-ACTED-V1] Same rule as the card: only untouched work is excused.
+      { const _lv=_rptLeave[_rptKeyId(key)]; if (t.due_date && _lv && _lv.has(t.due_date)
+          && !['completed','approved','awaiting_review','rejected'].includes(t.status)) return }
       workerMap[key].total++
       if (['completed','approved'].includes(t.status)) {
         workerMap[key].done++
@@ -14824,7 +14826,12 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     }
 
     // Skip tasks that fell on the worker's leave days
-    if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
+    // [LEAVE-ONEOFF-ACTED-V1] Leave excuses only work NOT acted on -- the same rule as the
+    // recurring branch. A one-off completed, submitted or sent back on a
+    // leave day is real work and stays on the record; previously it
+    // vanished from both numerator and denominator.
+    if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)
+        && !['completed','approved','awaiting_review','rejected'].includes(t.status)) return
 
     // Skip tasks not on a rostered day when regularly_rostered is enabled
     if (p.regularly_rostered && p.roster.length && t.due_date) {
