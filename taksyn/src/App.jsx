@@ -658,7 +658,24 @@ const occHelpers = (occByTask, from, to) => {
     naDaysFor:      tid => rows(tid).filter(o=>o.status===OCC_NOT_APPLICABLE).length,
     // PERF-MISSED-V1: recurring misses only. The miss writer filters on
     // isRecurring and LIVE holds zero occurrence rows with recurrence 'once'.
-    missedDaysFor:  tid => rows(tid).filter(o=>o.status==='missed').length
+    missedDaysFor:  tid => rows(tid).filter(o=>o.status==='missed').length,
+    // [OCC-LEAVE-V1] Cycles that fell on a person's leave day.
+    //
+    // PER PERSON, not per task: a shared task where only one assignee was away
+    // must lose those cycles from THAT person's counts and nobody else's, so
+    // the leave Set is passed in by the caller rather than known here.
+    //
+    // Subtracted from expected AND from missed, together. Taking a cycle out of
+    // the denominator while leaving it in the miss count makes the figure WORSE
+    // than before the exclusion -- fewer expected, same misses. The pair has to
+    // move as one or not at all.
+    //
+    // Same treatment as F70/D7 not-applicable: the cycle leaves the denominator
+    // entirely. It is not done, and it is not a failure to do it.
+    leaveDaysFor:   (tid, days) => !days || !days.size ? 0
+                      : rows(tid).filter(o=>days.has(o.d)).length,
+    leaveMissedFor: (tid, days) => !days || !days.size ? 0
+                      : rows(tid).filter(o=>o.status==='missed'&&days.has(o.d)).length
   }
 }
 
@@ -7959,7 +7976,7 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
   // whatever its state, so the strip's CYCLES column and these tiles agree by
   // construction. The Math.max(1,...) floor is gone with the arithmetic -- a
   // cadence longer than the window now reads 0 expected, not a manufactured 1.
-  const {expectedFor,doneDaysFor,onTimeDaysFor,naDaysFor,missedDaysFor}=occHelpers(occByTask,_rsStr,_reStr)  // [OCCHELPERS-HOIST-V1]
+  const {expectedFor,doneDaysFor,onTimeDaysFor,naDaysFor,missedDaysFor,leaveDaysFor,leaveMissedFor}=occHelpers(occByTask,_rsStr,_reStr)  // [OCCHELPERS-HOIST-V1]
   // --- Occurrence history (READ-ONLY display). Chips are SCHEDULED cycles, never completion dates.
   // 'late' means the completion landed outside its own grace window, so currentOccurrenceDate
   // credited it to a LATER cycle than the one being attempted (proven 29 Jul 2026: work done
@@ -14672,7 +14689,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   // whatever its state, so the strip's CYCLES column and these tiles agree by
   // construction. The Math.max(1,...) floor is gone with the arithmetic -- a
   // cadence longer than the window now reads 0 expected, not a manufactured 1.
-  const {expectedFor,doneDaysFor,onTimeDaysFor,naDaysFor,missedDaysFor}=occHelpers(occByTask,_rsStr,_reStr)  // [OCCHELPERS-HOIST-V1]
+  const {expectedFor,doneDaysFor,onTimeDaysFor,naDaysFor,missedDaysFor,leaveDaysFor,leaveMissedFor}=occHelpers(occByTask,_rsStr,_reStr)  // [OCCHELPERS-HOIST-V1]
 
   // Build leave day lookup per user
   // PERF-MISSED-V1: recurring misses only. The miss writer (~20982) filters
@@ -14752,7 +14769,21 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     _resolved.forEach(resolvedId => {
     const p = peopleMap[resolvedId]
     if (!p) return
-    if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); p.missed+=missedDaysFor(t.id); return }
+    // [PERF-LEAVE-RECUR-V1] Leave leaves the denominator, exactly as not-applicable does.
+    // Both numbers move together: taking cycles out of expected while leaving
+    // them in missed makes the figure WORSE than no exclusion at all.
+    // Per person -- on a shared task only the absent assignee loses them.
+    // Previously leave applied to one-off tasks only; the recurring branch
+    // returned before reaching the check, so a fortnight away still counted
+    // every daily cycle against the person.
+    if (isRecurring(t)) {
+      const _lv=leaveDaysByUser[resolvedId]
+      const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)-leaveDaysFor(t.id,_lv))
+      const dn=Math.min(doneDaysFor(t.id),exp)
+      p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn)
+      p.missed+=Math.max(0,missedDaysFor(t.id)-leaveMissedFor(t.id,_lv))
+      return
+    }
 
     // Skip tasks that fell on the worker's leave days
     if (t.due_date && leaveDaysByUser[resolvedId]?.has(t.due_date)) return
