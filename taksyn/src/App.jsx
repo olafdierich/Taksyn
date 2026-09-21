@@ -14721,17 +14721,35 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
     // First CONFIRMED member of the array wins: a stale UUID must not shadow a valid
     // one, or the task falls through to the same silent drop this patch removes.
     // Single-credit under SHARED semantics - multi-assignee crediting is a later step.
+    // [PERF-SHARED-CREDIT-V1] EVERY confirmed assignee is credited, not just the first.
+    // Single-credit was deliberate and is now superseded: Kemrose's "Cleaning
+    // Bathroom" is shared between two people, and the card showed Sharon 26
+    // tasks / 25 missed and Mary 0 / 0 while the staff report credited both in
+    // full. Two surfaces, two answers, about real people. Ruled 21 Sep: a
+    // shared task counts in full for everyone it is shared with -- both are
+    // accountable for it, which is what shared means on a compliance task.
+    //
+    // Consequence, stated because it is not obvious: org totals now exceed the
+    // task count wherever a task is shared. That is arithmetic, not inflation.
+    //
+    // A stale UUID still cannot shadow a valid one -- it simply is not in
+    // memberIdSet and drops out of the filter.
     const _ids = assigneeIds(t)
-    const _memberId = _ids.find(id => memberIdSet.has(id))
+    // Deduplicated: a repeated id in assigned_user_ids would otherwise run the
+    // body twice for the same person. The old .find() hid duplicates entirely.
+    const _memberIds = [...new Set(_ids.filter(id => memberIdSet.has(id)))]
     if (!_ids.length && !t.assigned_user_name) return
-    if (!_memberId && (!t.assigned_user_name || t.assigned_user_name.trim().toLowerCase()==='unassigned')) return
+    if (!_memberIds.length && (!t.assigned_user_name || t.assigned_user_name.trim().toLowerCase()==='unassigned')) return
 
-    // Resolve canonical member ID: confirmed array member, else name lookup
-    const resolvedId = _memberId || memberNameMap[t.assigned_user_name?.toLowerCase().trim()]
+    // Confirmed array members, else the legacy name lookup for name-only rows
+    const _resolved = _memberIds.length
+      ? _memberIds
+      : [memberNameMap[t.assigned_user_name?.toLowerCase().trim()]].filter(Boolean)
 
-    // Drop tasks not belonging to a confirmed org member
-    if (!resolvedId) return
+    // Drop tasks not belonging to any confirmed org member
+    if (!_resolved.length) return
 
+    _resolved.forEach(resolvedId => {
     const p = peopleMap[resolvedId]
     if (!p) return
     if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); p.total+=exp; p.done+=dn; p.onTime+=Math.min(onTimeDaysFor(t.id),dn); p.missed+=missedDaysFor(t.id); return }
@@ -14762,6 +14780,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
       if(reviewMinutes<=slaMinutes) p.slaOnTime++
     }
     if(t.reviewed_at&&t.submitted_at&&(new Date(t.reviewed_at)-new Date(t.submitted_at))<=getSLAMinutes(t.priority,orgSLA)*60000) p.reviewedInTime++
+    })  // [PERF-SHARED-CREDIT-V1] end per-assignee loop
   })
 
   const memberTeams={}; teamMembers.forEach(m=>{ (memberTeams[m.user_id]=memberTeams[m.user_id]||[]).push(m.team_id) })
