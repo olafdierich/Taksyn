@@ -637,6 +637,22 @@ const RECUR_WINDOW_DAYS = { daily:0, weekdays:0, weekly:2, fortnightly:4, monthl
 // A factory rather than five three-argument functions: the call sites keep
 // their existing shape, so this refactor changes no arithmetic anywhere.
 // Every figure in every report must be byte-identical afterwards.
+// [RPT-LEAVE-V1] Leave days per user, ONCE. The loop lived inside PerformanceView
+// only; the report needs the same Sets, and a second copy of this loop is
+// exactly how the two tallies drifted in the first place.
+const buildLeaveDays = (leaveRecords) => {
+  const out = {}
+  ;(leaveRecords||[]).forEach(l=>{
+    if(!out[l.user_id]) out[l.user_id]=new Set()
+    const cur=new Date(l.date_from)
+    while(cur.toISOString().split('T')[0]<=l.date_to){
+      out[l.user_id].add(cur.toISOString().split('T')[0])
+      cur.setDate(cur.getDate()+1)
+    }
+  })
+  return out
+}
+
 const occHelpers = (occByTask, from, to) => {
   const rows = tid => (occByTask[tid]||[]).filter(o=>o.d>=from&&o.d<=to)
   return {
@@ -7791,7 +7807,7 @@ const trailOneOff = (t) => {
   return new Date(t.completed_at) <= new Date(t.due_date) ? 'On time' : 'Late'
 }
 
-function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=null, orgSLA=DEFAULT_SLA, orgMembers: _orgMembersProp=null }) {
+function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=null, orgSLA=DEFAULT_SLA, orgMembers: _orgMembersProp=null, leaveRecords=[] }) {
   // [RATING-REPORT-V1] orgMembers was already in pageProps, just never destructured here.
   const _rptMembers = _orgMembersProp || []
   const [reportType, setReportType] = useState('compliance')
@@ -8030,6 +8046,14 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
       missed:cells.filter(c=>c.status==='missed').length,
       flagged:cells.filter(c=>c.late).length}
   }).filter(r=>r.cells.length>0).sort((a,b)=>(b.missed+b.flagged)-(a.missed+a.flagged))
+  // [RPT-LEAVE-V1] workerMap keys on a name, or sometimes a uuid, depending on
+  // which field a task carried. Leave Sets key on user_id, so each key is
+  // resolved back to a member id before its leave is looked up.
+  const _rptLeave  = buildLeaveDays(leaveRecords)
+  const _rptIdSet  = new Set(_rptMembers.map(m=>m.id))
+  const _rptN2I    = {}
+  _rptMembers.forEach(m=>{ if(m&&m.name) _rptN2I[String(m.name).toLowerCase().trim()]=m.id })
+  const _rptKeyId  = k => _rptIdSet.has(k) ? k : _rptN2I[String(k||'').toLowerCase().trim()]
   const workerMap = {}
   const teamMap = {}
   filteredPt.forEach(t => {
@@ -8042,7 +8066,9 @@ function ReportsView({ tasks, user, setAuditLog, orgTimezone, orgOccurrences=nul
     const role = t.assigned_role || 'worker'
     keys.forEach(key => {
       if (!workerMap[key]) workerMap[key] = { name:key, role, total:0, done:0, onTime:0, reviewedInTime:0, toReview:0, avgMins:[] }
-      if (isRecurring(t)) { const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
+      if (isRecurring(t)) { const _lv=_rptLeave[_rptKeyId(key)]; const exp=Math.max(0,expectedFor(t)-naDaysFor(t.id)-leaveDaysFor(t.id,_lv)); const dn=Math.min(doneDaysFor(t.id),exp); workerMap[key].total+=exp; workerMap[key].done+=dn; workerMap[key].onTime+=Math.min(onTimeDaysFor(t.id),dn); return }
+      // [RPT-LEAVE-V1] One-off task due on a leave day is skipped, matching the card.
+      { const _lv=_rptLeave[_rptKeyId(key)]; if (t.due_date && _lv && _lv.has(t.due_date)) return }
       workerMap[key].total++
       if (['completed','approved'].includes(t.status)) {
         workerMap[key].done++
@@ -14703,15 +14729,7 @@ function PerformanceView({ tasks, user, leaveRecords=[], orgOccurrences=null, or
   // on isRecurring, and LIVE holds zero occurrence rows with recurrence
   // 'once', so there is nothing else to count. A missed one-off is not a
   // state the system detects - it belongs to the expiry design (v68).
-  const leaveDaysByUser = {}
-  leaveRecords.forEach(l=>{
-    if(!leaveDaysByUser[l.user_id]) leaveDaysByUser[l.user_id]=new Set()
-    const cur=new Date(l.date_from)
-    while(cur.toISOString().split('T')[0]<=l.date_to){
-      leaveDaysByUser[l.user_id].add(cur.toISOString().split('T')[0])
-      cur.setDate(cur.getDate()+1)
-    }
-  })
+  const leaveDaysByUser = buildLeaveDays(leaveRecords)  // [RPT-LEAVE-V1]
 
   // Build a Set of confirmed org member IDs for fast lookup
   const memberIdSet = new Set(orgMembers.map(m=>m.id))
