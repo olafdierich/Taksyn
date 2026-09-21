@@ -1109,7 +1109,10 @@ const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA, occurre
   const orgTasks = tasks.filter(t=>t.org===user.org)
 
   // Get users on leave today
-  const onLeaveToday = new Set(leaveRecords.filter(l=>l.date_from<=today&&l.date_to>=today).map(l=>l.user_id))
+  // Only APPROVED leave counts as away. A cancelled request would otherwise
+  // mark someone on leave today -- and an alert suppressed for someone who
+  // is actually at work is invisible by construction.
+  const onLeaveToday = new Set(leaveRecords.filter(l=>l.status==='approved'&&l.date_from<=today&&l.date_to>=today).map(l=>l.user_id))
 
   orgTasks.forEach(t=>{
     if(!t.due_date) return
@@ -3204,7 +3207,11 @@ function visibleTasks(tasks, user, leaveRecords=[], userTeamIds=[]) {
 
   // Check if user is a replacement for someone on leave
   const today = new Date().toISOString().split('T')[0]
+  // Only APPROVED leave hands work to a replacement. A cancelled request
+  // naming cover would otherwise put an absent colleague's tasks in front of
+  // someone who was never asked to cover them.
   const coveringFor = leaveRecords.filter(l=>
+    l.status==='approved' &&
     l.replacement_id===user.id &&
     l.date_from<=today &&
     l.date_to>=today
