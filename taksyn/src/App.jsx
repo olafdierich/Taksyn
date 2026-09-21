@@ -1116,7 +1116,12 @@ const computeAlerts = (tasks, user, leaveRecords=[], orgSLA=DEFAULT_SLA, occurre
 
   orgTasks.forEach(t=>{
     if(!t.due_date) return
-    const isAssigneeOnLeave = onLeaveToday.has(t.assigned_user_id)
+    // [ALERT-SHARED-LEAVE-V1] Silent only when EVERY assignee is away. This checked the
+    // scalar assignee alone, so on a shared task one person's leave
+    // silenced the alert for the colleague still at work -- contradicting
+    // the 21 Sep ruling that a shared task belongs fully to everyone on it.
+    const _alertIds = assigneeIds(t)
+    const isAssigneeOnLeave = _alertIds.length>0 && _alertIds.every(id=>onLeaveToday.has(id))
     if(isAssigneeOnLeave) return // skip — worker on leave
 
     // Alert 1: any org task overdue on its due date — surfaced to supervisor and above.
