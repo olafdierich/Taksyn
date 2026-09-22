@@ -3851,7 +3851,7 @@ function SuperAdminDashboard({ user, setPage, tickets=[] }) {
   )
 }
 
-function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null, orgOccurrences=null, orgMembers=null }) {
+function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=async()=>null, search, pushUndo, setAuditLog, leaveRecords=[], orgSLA, gpsEnabled=true, setGpsEnabled=()=>{}, orgTz=null, orgOccurrences=null, orgMembers=null, reloadRatings=()=>{} }) {
   const [filter, setFilter] = useState('all')
   useEffect(()=>{ try{ const _f=sessionStorage.getItem('taksyn-task-filter'); if(_f){ setFilter(_f); sessionStorage.removeItem('taksyn-task-filter') } }catch(e){} },[])
   // CA-HANDOFF-V1: a corrective action hands its incident over via sessionStorage.
@@ -5676,13 +5676,18 @@ function TasksView({ tasks, setTasks, user, setPage, loadTasks, loadTaskById=asy
                 <button className="btn btn-secondary" onClick={()=>{setShowRate(null);setRateValue(0);setRateNote('')}}>Cancel</button>
                 <button className="btn btn-primary"
                   disabled={rateValue===0||(rateValue<3&&!rateNote.trim())}
-                  onClick={()=>{
-                    update(showRate,{status:'approved',reviewed_at:new Date().toISOString(),
-                      quality_rating:rateValue,
-                      rating_reason:rateNote.trim()||null,
-                      rated_by_id:user.id, rated_by_name:user.name,
-                      rated_at:new Date().toISOString()})
+                  onClick={async()=>{
+                    // [RATE-APPROVE-RPC-V1] Rate and approve in ONE database call. It records the
+                    // rating in history and approves together, so a task cannot be
+                    // approved without its rating, and only someone who may approve
+                    // can rate. The update() after it is bookkeeping only -- audit
+                    // entry and the local list -- and writes no rating.
+                    const _id=showRate, _v=rateValue, _n=rateNote.trim()||null
+                    const {error:_re}=await supabase.rpc('rate_and_approve_task',{p_task_id:_id,p_rating:_v,p_reason:_n})
+                    if(_re){ alert('Could not approve: '+_re.message); return }
                     setShowRate(null); setRateValue(0); setRateNote('')
+                    await update(_id,{status:'approved',reviewed_at:new Date().toISOString()})
+                    reloadRatings()
                   }}>Approve</button>
               </div>
             </div>
