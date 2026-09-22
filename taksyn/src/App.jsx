@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, createContext, useContext } from 'react'
+import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react'
 import { supabase, supabaseAdmin } from './supabase.js'
 import jsPDF from 'jspdf'
 import { openBoardReport } from './boardReport'
@@ -662,6 +662,30 @@ const buildTeamTally = (tasks, teamsList, memberTeams, nameToId, h) => {
   })
   return teamMap
 }
+
+// [RATINGS-FROM-HISTORY-V1] Ratings live in task_rating_events, read-restricted to client admins,
+// managers, and the assignee / setter / approver of each task. The current
+// rating is the latest rated|amended entry; a later 'cleared' removes it.
+const latestRatings = (events) => {
+  const by = {}
+  ;(events||[]).forEach(e=>{
+    if(!['rated','amended','cleared'].includes(e.event_kind)) return
+    const k = e.subject_kind+':'+e.subject_id
+    if(!by[k] || String(e.created_at) > String(by[k].created_at)) by[k]=e
+  })
+  const out = {}
+  Object.entries(by).forEach(([k,e])=>{ if(e.event_kind!=='cleared') out[k]=e })
+  return out
+}
+// Every row gets its rating fields REPLACED from history -- or emptied, when
+// no entry is visible to this user. The copy on the task row is never shown.
+const overlayRatings = (rows, kind, map) => (rows||[]).map(r => {
+  const e = map ? map[kind+':'+String(r.id)] : null
+  return {...r,
+    quality_rating: e ? e.rating : null, rating_reason: e ? e.reason : null,
+    rated_by_id: e ? e.actor_id : null, rated_by_name: e ? e.actor_name : null,
+    rated_at: e ? e.created_at : null, rating_source: e ? e.source : null }
+})
 
 const buildLeaveDays = (leaveRecords) => {
   const out = {}
@@ -22677,6 +22701,22 @@ export default function App() {
   // read, so [] can arrive with nothing to catch - rendering it as a confident 0 would
   // assert 'nothing was missed' on a compliance surface without knowing it.
   const [orgOccurrences, setOrgOccurrences] = useState(null)
+  // [RATINGS-FROM-HISTORY-V1] Loaded once, like occurrences. RLS decides what arrives, so a
+  // worker's screens never receive a colleague's rating. ratingsTick lets the
+  // approve path force a reload after a rating is written.
+  const [orgRatings, setOrgRatings] = useState(null)
+  const [ratingsTick, setRatingsTick] = useState(0)
+  useEffect(()=>{
+    if(!isConfigured()||!user||!user.org||user.role==='super_admin'){ setOrgRatings(null); return }
+    supabase.from('task_rating_events')
+      .select('subject_kind,subject_id,event_kind,rating,reason,actor_id,actor_name,source,created_at')
+      .then(({data,error})=>{
+        if(error){ console.warn('task_rating_events load failed - ratings will show as unrated:', error.message); setOrgRatings({}); return }
+        setOrgRatings(latestRatings(data||[]))
+      }).catch(e=>console.warn('task_rating_events load threw:', e&&e.message))
+  },[user?.id, user?.org, ratingsTick])
+  const tasksR = useMemo(()=>overlayRatings(tasks,'task',orgRatings),[tasks,orgRatings])
+  const orgOccurrencesR = useMemo(()=>orgOccurrences==null?null:overlayRatings(orgOccurrences,'occurrence',orgRatings),[orgOccurrences,orgRatings])
   // LIFT-ORGMEMBERS-V1: same null/[] contract as orgOccurrences above.
   // Was fetched twice -- once in Workforce, once in PerformanceView -- with
   // two different shapes. One fetch, one shape, org_members.role only.
@@ -23321,7 +23361,7 @@ export default function App() {
       // Errors are logged rather than swallowed: this now backs three surfaces, and a
       // silent failure would render zeros on all of them at once.
       if(isConfigured()&&user.org&&user.role!=='super_admin') {
-        supabase.from('task_occurrences').select('task_id,occurrence_date,status,completed_late,completed_at,completed_by,completed_by_name,recurrence,evidence,approved_at,na_at,quality_rating,rating_reason,rated_by_id,rated_by_name,rated_at')/*[RATING-V1-OCCFETCH] approval and rating fields. The list previously carried no approval data at all, so no view fed by orgOccurrences could report on approvals. na_at is needed to exclude not-applicable rows from the rating denominator. [RATING-V1-OCCKEY] completed_by holds the member uuid, so ratings key by id rather than by name -- one legacy row holds a name instead and will be dropped, which is correct.*/.eq('org',user.org)
+        supabase.from('task_occurrences').select('id,task_id,occurrence_date,status,completed_late,completed_at,completed_by,completed_by_name,recurrence,evidence,approved_at,na_at,quality_rating,rating_reason,rated_by_id,rated_by_name,rated_at')/*[RATING-V1-OCCFETCH] approval and rating fields. The list previously carried no approval data at all, so no view fed by orgOccurrences could report on approvals. na_at is needed to exclude not-applicable rows from the rating denominator. [RATING-V1-OCCKEY] completed_by holds the member uuid, so ratings key by id rather than by name -- one legacy row holds a name instead and will be dropped, which is correct.*/.eq('org',user.org)
           .then(({data,error})=>{
             if(error){ console.warn('task_occurrences load failed - occurrence surfaces will show unknown, not zero:', error.message); return }
             setOrgOccurrences(data||[])
@@ -23586,7 +23626,9 @@ export default function App() {
   const _tasksOpen = _visTasks.some(t=>['pending','in_progress','overdue','rejected','awaiting_review'].includes(t.status))
   const tasksBlob = _tasksOverdue ? 'warn' : (_tasksOpen ? 'ok' : 'none')
   const navItems = NAV[user.role]||NAV.worker
-  const pageProps = { tasks, setTasks, user, setPage, loadTasks, loadTaskById, search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgOccurrences, orgMembers, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
+  const pageProps = { tasks: tasksR, setTasks, user, setPage, loadTasks,
+    loadTaskById: async id => { const r = await loadTaskById(id); return r ? overlayRatings([r],'task',orgRatings)[0] : r },  // [RATINGS-FROM-HISTORY-V1]
+    reloadRatings: () => setRatingsTick(n=>n+1), search, pushUndo, auditLog, setAuditLog, tickets, setTickets, leaveRecords, orgOccurrences: orgOccurrencesR, orgMembers, orgSLA, setOrgSLA:updateOrgSLA, gpsEnabled, setGpsEnabled }
   const navigate = (key) => { setPage(key); setSidebarOpen(false) }
 
   return (
