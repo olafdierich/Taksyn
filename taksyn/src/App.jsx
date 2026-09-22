@@ -2338,7 +2338,7 @@ function Celebration({ onClose }) {
   )
 }
 
-const TaskCard = ({ task, onClick, today=null }) => {
+const TaskCard = ({ task, onClick, today=null, cycleDate=null }) => {  // [DASH-DONE-TODAY-V1] cycleDate: optional override
   const dur = fmtDuration(task.started_at, task.completed_at)
   // CYCLE-DATE-DISPLAY-V1: due_date on a recurring row is the ANCHOR the cycle walks
   // start from, not a deadline -- it never advances. Printing it raw put "2026-07-21"
@@ -2346,9 +2346,9 @@ const TaskCard = ({ task, onClick, today=null }) => {
   // ORG day (F14-ORGDAY): absent, the card falls back to due_date exactly as before,
   // which is why the other 35 call sites need no edit. Never resolve the day in here --
   // this component has no timezone and would reach for UTC.
-  const _cardDate = (today && isRecurring(task))
+  const _cardDate = cycleDate || ((today && isRecurring(task))
     ? (currentOccurrenceDate(task.due_date, task.recurrence, today) || task.due_date)
-    : task.due_date
+    : task.due_date)
   const isDone = ['awaiting_review','approved','completed'].includes(task.status)
   // CARD-DATE-BLOCK-V1: the date moves to a block on the left, replacing the 3px
   // priority stripe. Priority is already stated in words by PriBadge below; due state
@@ -3622,19 +3622,39 @@ function DashboardView({ tasks, user, setPage, tickets=[], leaveRecords=[], orgS
           // in July would sort into July while its card reads 4 Sep. The key is
           // the CYCLE date -- the same expression TaskCard uses to decide what to
           // print, so order and labels cannot disagree. Undated sorts last.
+          // [DASH-DONE-TODAY-V1] A recurring task whose CURRENT cycle is already done reads its
+          // NEXT date, in the Scheduled list. The calendar alone cannot tell: the
+          // completion reconcile resets the task and wipes completed_at, so only the
+          // filed occurrence remembers today was done. Done = the cycle is filed
+          // completed or not-applicable, or the task is approved/completed and not yet
+          // reset. Submitted-for-review is done for the WORKER but stays in today's list
+          // for the approver or an admin, who still has to act on it. A send-back
+          // (rejected) is not done -- it returns to today. Ruled 22 Sep.
+          const _occ = Array.isArray(orgOccurrences) ? orgOccurrences : []
+          const _canReview = t => String(t.approver_id||'')===String(user?.id||'') || ['client_admin','manager'].includes(user?.role)
+          const _curOf = t => currentOccurrenceDate(t.due_date, t.recurrence, today)
+          const _doneNow = t => {
+            if (!today || !isRecurring(t)) return false
+            const cur = _curOf(t); if (!cur) return false
+            if (_occ.some(o => o.task_id===t.id && o.occurrence_date===cur && (o.status==='completed' || o.status===OCC_NOT_APPLICABLE))) return true
+            if (['approved','completed'].includes(t.status)) return true
+            if (t.status==='awaiting_review' && !_canReview(t)) return true
+            return false
+          }
+          const _cycleOf = t => { const cur=_curOf(t); return (_doneNow(t) && cur) ? (nextOccurrenceDate(cur, t.recurrence) || cur) : cur }
           const _cycleKey = t => (today && isRecurring(t)
-            ? (currentOccurrenceDate(t.due_date, t.recurrence, today) || t.due_date || '9999')
+            ? (_cycleOf(t) || t.due_date || '9999')
             : (t.due_date || '9999'))
-          const activeNow = visible.filter(t=> isRecurring(t) ? recurringDueNow(t,today) : notDone(t))
+          const activeNow = visible.filter(t=> isRecurring(t) ? (recurringDueNow(t,today) && !_doneNow(t)) : notDone(t))
             .slice().sort((a,b)=> String(_cycleKey(a)).localeCompare(String(_cycleKey(b))))
-          const scheduled = visible.filter(t=> isRecurring(t) && !recurringDueNow(t,today))
+          const scheduled = visible.filter(t=> isRecurring(t) && !(recurringDueNow(t,today) && !_doneNow(t)))
           const openCard = id=>{ try{ sessionStorage.setItem('taksyn-open-task', id) }catch(e){}; setPage('tasks') }
           return <>
-            {activeNow.map(t=><TaskCard key={t.id} task={t} today={today} onClick={()=>openCard(t.id)}/>)}
+            {activeNow.map(t=><TaskCard key={t.id} task={t} today={today} cycleDate={isRecurring(t)?_cycleOf(t):null} onClick={()=>openCard(t.id)}/>)}
             {activeNow.length===0&&<div className="empty"><div className="empty-icon">🎉</div><div className="empty-text">Nothing due right now!</div></div>}
             {scheduled.length>0&&<>
               <div style={{fontSize:12,fontWeight:700,color:'var(--t2)',margin:'14px 0 8px',display:'flex',alignItems:'center',gap:6}}>🕓 Scheduled ({scheduled.length}) <span style={{fontWeight:400,fontSize:11}}>— recurring, not due yet</span></div>
-              {scheduled.slice(0,5).map(t=><TaskCard key={t.id} task={t} today={today} onClick={()=>openCard(t.id)}/>)}
+              {scheduled.slice(0,5).map(t=><TaskCard key={t.id} task={t} today={today} cycleDate={_cycleOf(t)} onClick={()=>openCard(t.id)}/>)}
             </>}
           </>
         })()}
