@@ -115,7 +115,7 @@ function DictateButton({ setValue, lang, inline }) {
       type="button"
       onMouseDown={e=>e.preventDefault()}
       onClick={()=>listening?stop():start()}
-      title={listening?'Stop dictating':'Dictate'}
+      title={listening?'Stop dictating':"Dictate — your browser's speech service turns speech into text"}
       aria-label={listening?'Stop dictating':'Dictate'}
       aria-pressed={listening}
       style={{position:inline?'static':'absolute',right:8,bottom:8,width:34,height:34,borderRadius:'50%',
@@ -13708,6 +13708,8 @@ function CompanySettingsView({ user, onSettingsSaved }) {
         <div className="section" style={{marginBottom:20}}>
           <div className="section-title">Voice Dictation on Sensitive Records</div>
           <div style={{fontSize:12,color:'var(--t2)',marginBottom:10}}>Controls whether voice dictation is available anywhere in this organisation — incidents, tasks, issue reports and task notes. This is an organisation-wide setting and applies to everyone.</div>
+          {/* [DICTATION-DISCLOSURE-V1] Where the voice goes, stated at the point of consent. */}
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:10,padding:'8px 10px',background:'var(--s3)',borderRadius:8}}>Dictation uses your browser's built-in speech recognition. While someone dictates, their voice is sent to the browser maker's speech service to be turned into text — Google in Chrome, Apple in Safari, Microsoft in Edge. Taksyn does not record or store the audio; only the resulting text is saved, in the box it was dictated into. Dictation is not available in Firefox.</div>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <Tog on={settings.compliance.allow_sensitive_dictation!==false} toggle={()=>setC('allow_sensitive_dictation',settings.compliance.allow_sensitive_dictation===false)}/>
             <div style={{fontSize:13}}>{settings.compliance.allow_sensitive_dictation!==false?'Allowed — dictation available to everyone in this organisation':'Disabled — dictation unavailable to everyone in this organisation'}</div>
